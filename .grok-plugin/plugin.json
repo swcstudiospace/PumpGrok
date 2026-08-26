@@ -1,0 +1,13 @@
+{
+  "name": "pumpgrok",
+  "description": "Eight-role Solana memecoin trading desk for Grok Build. Specialist agents, 21 skills, Global Security Constitution, and Jupiter execution. Open the repository and load the skills to run the desk.",
+  "version": "1.0.0",
+  "author": {
+    "name": "PumpGrok"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "rules": "./rules/",
+  "keywords": ["solana", "memecoin", "pump.fun", "trading-desk", "grok-bot", "jupiter"]
+}

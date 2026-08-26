@@ -1,0 +1,19 @@
+{
+  "name": "pumpgrok",
+  "owner": {
+    "name": "PumpGrok"
+  },
+  "plugins": [
+    {
+      "name": "pumpgrok",
+      "description": "Eight-role Solana memecoin trading desk with hard security constitution, RISK absolute veto, and Jupiter execution.",
+      "version": "1.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/your-org/pumpgrok.git"
+      },
+      "homepage": "https://github.com/your-org/pumpgrok",
+      "keywords": ["solana", "memecoin", "trading-desk", "agents"]
+    }
+  ]
+}

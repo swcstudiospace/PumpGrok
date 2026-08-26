@@ -1,0 +1,10 @@
+{
+  "name": "pumpgrok",
+  "description": "Eight-role Solana memecoin trading desk for Claude Code. Specialist agents (CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL), 21 skills, hard security constitution, and Jupiter-focused execution.",
+  "version": "1.0.0",
+  "author": {
+    "name": "PumpGrok"
+  },
+  "license": "MIT",
+  "keywords": ["solana", "memecoin", "trading-desk", "grok-bot", "agents"]
+}
