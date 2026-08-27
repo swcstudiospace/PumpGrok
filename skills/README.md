@@ -1,6 +1,6 @@
 # Skills
 
-Twenty-one portable skills that define how the PumpGrok desk operates.
+Twenty-three portable skills that define how the PumpGrok desk operates.
 
 ## Core / Bootstrap
 | Skill | Purpose | Primary users |

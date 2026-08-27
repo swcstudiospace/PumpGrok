@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "pumpgrok",
-      "description": "Eight-role Solana memecoin trading desk for Grok Build. Specialist agents, 21 skills, Global Security Constitution, Jupiter routing.",
+      "description": "Eight-role Solana memecoin trading desk for Grok Build. Specialist agents, 23 skills, Global Security Constitution, Jupiter routing.",
       "version": "1.0.0",
       "source": {
         "source": "url",

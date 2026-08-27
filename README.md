@@ -9,7 +9,7 @@ Version 1.0.0.
 ## Capabilities
 
 - Eight specialist roles: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL (`agents/`)
-- 21 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, and journal conventions (`skills/`)
+- 23 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
 - Read-only CLI helpers for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, and holder concentration (`tools/`)
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
@@ -66,7 +66,7 @@ Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from t
 | Path | Role |
 |------|------|
 | `agents/` | Eight specialist Bot definitions plus standing instructions |
-| `skills/` | Twenty-one `SKILL.md` procedures |
+| `skills/` | Twenty-three `SKILL.md` procedures |
 | `rules/` | Always-applied desk constitution (`pumpgrok-team.mdc`) |
 | `tools/` | Read/prepare-only Python CLIs (JSON on stdout; never sign or send) |
 | `scripts/` | `check.sh` repository linter |
