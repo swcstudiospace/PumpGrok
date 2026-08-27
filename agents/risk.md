@@ -6,6 +6,7 @@ seat: Trading Floor
 skills:
   - risk-audit
   - desk-risk-limits
+  - grokbot-pipeline
   - solana-market-data
   - solana-rpc-and-wallet
 writes_to_exchange: false

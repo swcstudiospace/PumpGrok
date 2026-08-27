@@ -116,7 +116,7 @@ if not os.path.exists("rules/pumpgrok-team.mdc"):
 # ------------------------------------------------------------------
 emoji_re = re.compile("[\U0001F300-\U0001FAFF☀-➿]")
 md_files = [p for p in glob.glob("**/*.md", recursive=True)
-            if not p.startswith(("node_modules", ".git"))]
+            if not p.startswith(("node_modules", ".git", "vendor/"))]
 for path in md_files + glob.glob("rules/*.mdc"):
     try:
         if emoji_re.search(open(path, encoding="utf-8").read()):
