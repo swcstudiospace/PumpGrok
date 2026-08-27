@@ -1,0 +1,73 @@
+# PumpGrok cron state machine
+# Jobs are installed INTO the owning profile's HERMES_HOME cron store.
+# Never schedule SNIPER or EXIT. Never raise engagement from a cron prompt.
+
+defaults:
+  engagement_required: [research, paper]
+  halt_file: desk.md
+  silent_token: "[SILENT]"
+  max_leads_per_run: 5
+
+jobs:
+  - id: scout-discover
+    owner: scout
+    enabled: true
+    schedule: "every 60m"
+    name: "[bot:scout] discover"
+    deliver: "bot-chat:chief"
+    skills: [discovery-tools, solana-market-data, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/scout-discover.md
+    writes: [leads]
+    may_notify_telegram: false
+
+  - id: risk-audit-open-leads
+    owner: risk
+    enabled: true
+    schedule: "every 15m"
+    name: "[bot:risk] audit-open-leads"
+    deliver: "bot-chat:chief"
+    skills: [risk-audit, desk-risk-limits, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/risk-audit.md
+    writes: [briefs]
+    may_notify_telegram: false
+
+  - id: chief-pickup
+    owner: chief
+    enabled: true
+    schedule: "every 15m"
+    name: "[bot:chief] pickup"
+    deliver: telegram
+    skills: [desk-operating-model, desk-trade-lifecycle, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/chief-pickup.md
+    writes: [proposals, journal, desk.md]
+    may_notify_telegram: true
+
+  - id: rug-watch-paper
+    owner: rug
+    enabled: true
+    schedule: "every 30m"
+    name: "[bot:rug] watch-paper"
+    deliver: telegram
+    skills: [desk-monitoring, position-monitoring, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/rug-watch.md
+    writes: [watch, incidents]
+    may_notify_telegram: true
+    require_open_positions: true
+
+  - id: chief-journal-rollup
+    owner: chief
+    enabled: true
+    schedule: "0 12 * * *"
+    name: "[bot:chief] journal-rollup"
+    deliver: telegram
+    skills: [desk-folders-and-journal, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/chief-journal.md
+    writes: [journal]
+    may_notify_telegram: true
+
+forbidden_owners: [sniper, exit]
+forbidden_actions:
+  - send_transaction
+  - sign
+  - store_key
+  - raise_engagement

@@ -1,0 +1,97 @@
+# PumpGrok Hermes profile isolation map
+# Each role is a separate HERMES_HOME: ~/.hermes/profiles/<id>/
+# Shared across profiles: PUMPGROK_ROOT (this repo) and PUMPGROK_DESK (file bus).
+# Isolated per profile: SOUL.md, MEMORY.md, sessions, skills copy, cron, .env, state.db
+
+desk_env:
+  PUMPGROK_ROOT: "${PUMPGROK_ROOT}"
+  PUMPGROK_DESK: "${PUMPGROK_DESK}"
+  PUMPGROK_ENGAGEMENT_DEFAULT: research
+
+isolation:
+  clone_from_default: false
+  clone_all: false
+  bundled_skills: opt-out
+  terminal_home_mode: profile
+  telegram_token_profile: chief
+  forbidden_env_keys:
+    - PRIVATE_KEY
+    - SECRET_KEY
+    - SEED
+    - MNEMONIC
+    - PHANTOM
+    - WALLET_SECRET
+
+profiles:
+  chief:
+    agent_file: agents/chief.md
+    telegram_inbound: true
+    cron_owner: true
+    skills:
+      - desk-operating-model
+      - desk-trade-lifecycle
+      - desk-folders-and-journal
+      - pumpgrok-setup
+      - hermes-cron-desk
+  scout:
+    agent_file: agents/scout.md
+    telegram_inbound: false
+    cron_owner: true
+    skills:
+      - discovery-tools
+      - solana-market-data
+      - social-sentiment
+      - desk-trade-lifecycle
+      - hermes-cron-desk
+  risk:
+    agent_file: agents/risk.md
+    telegram_inbound: false
+    cron_owner: true
+    skills:
+      - risk-audit
+      - desk-risk-limits
+      - holder-and-flow-analysis
+      - desk-incident-response
+      - hermes-cron-desk
+  whale:
+    agent_file: agents/whale.md
+    telegram_inbound: false
+    cron_owner: false
+    skills:
+      - holder-and-flow-analysis
+      - solana-market-data
+      - solana-api-reference
+  sniper:
+    agent_file: agents/sniper.md
+    telegram_inbound: false
+    cron_owner: false
+    skills:
+      - desk-execution-protocol
+      - jupiter-routing
+      - tool-connections
+  rug:
+    agent_file: agents/rug.md
+    telegram_inbound: false
+    cron_owner: true
+    skills:
+      - desk-monitoring
+      - risk-audit
+      - holder-and-flow-analysis
+      - position-monitoring
+      - hermes-cron-desk
+  exit:
+    agent_file: agents/exit.md
+    telegram_inbound: false
+    cron_owner: false
+    skills:
+      - position-monitoring
+      - desk-post-trade-review
+      - jupiter-routing
+  shill:
+    agent_file: agents/shill.md
+    telegram_inbound: false
+    cron_owner: false
+    skills:
+      - social-sentiment
+      - browser-ops
+      - discovery-tools
