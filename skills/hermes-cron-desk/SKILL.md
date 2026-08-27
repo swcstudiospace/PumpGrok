@@ -8,6 +8,8 @@ description: File-bus cron state machine and Hermes profile isolation rules for 
 ## Isolation
 Each role is `~/.hermes/profiles/<role>/` (its own HERMES_HOME). Memory, sessions, SOUL, cron, and `.env` do not cross roles. The only shared writable surface is `$PUMPGROK_DESK`.
 
+Bootstrap uses `hermes profile create <role> --no-skills` and writes `.no-bundled-skills`. Never `--clone` or `--clone-all`.
+
 ## File bus
 ```
 $PUMPGROK_DESK/
@@ -21,11 +23,14 @@ $PUMPGROK_DESK/
   watch/           RUG
 ```
 
+Ticket IDs are unique across every folder. Briefs and proposals reuse the lead ID.
+
 ## Commands
 ```bash
 python "$PUMPGROK_ROOT/tools/desk_state.py" status
 python "$PUMPGROK_ROOT/tools/desk_state.py" pending-leads
 python "$PUMPGROK_ROOT/tools/ticket_helper.py" next
+python "$PUMPGROK_ROOT/tools/ticket_helper.py" create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
 ```
 
 ## Cron owners

@@ -14,6 +14,7 @@ isolation:
   bundled_skills: opt-out
   terminal_home_mode: profile
   telegram_token_profile: chief
+  copy_provider_env: allowlist-only
   forbidden_env_keys:
     - PRIVATE_KEY
     - SECRET_KEY
