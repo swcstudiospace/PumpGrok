@@ -1,6 +1,6 @@
 # Skills
 
-Twenty-one portable skills that define how the PumpGrok desk operates.
+Twenty-three portable skills that define how the PumpGrok desk operates.
 
 ## Core / Bootstrap
 | Skill | Purpose | Primary users |
@@ -33,6 +33,7 @@ Twenty-one portable skills that define how the PumpGrok desk operates.
 | solana-market-data | Price, liquidity, volume | SCOUT, RISK, SNIPER |
 | solana-api-reference | Compact endpoint reference | SNIPER, RISK |
 | solana-rpc-and-wallet | Safe wallet and RPC patterns | SNIPER, RISK |
+| grokbot-pipeline | Dry-run screening engine output as desk evidence | SCOUT, RISK, CHIEF |
 | browser-ops | CAPTCHA / session hygiene | all |
 
 ## Conventions

@@ -12,6 +12,7 @@ skills:
   - desk-incident-response
   - pumpgrok-setup
   - tool-connections
+  - grokbot-pipeline
 writes_to_exchange: false
 ---
 

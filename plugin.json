@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "pumpgrok",
-  "description": "Turn your Grok Bot into an eight-role Solana memecoin trading desk. Specialist agents, 21 skills, hard security constitution, and Jupiter execution. Instructions and resources, not a bot.",
+  "description": "Turn your Grok Bot into an eight-role Solana memecoin trading desk. Specialist agents, 23 skills, hard security constitution, and Jupiter execution. Instructions and resources, not a bot.",
   "version": "1.0.0",
   "author": {
     "name": "PumpGrok",

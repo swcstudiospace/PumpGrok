@@ -5,6 +5,7 @@ description: Continuous discovery engine. Surfaces only high-signal early leads 
 seat: Trading Floor
 skills:
   - discovery-tools
+  - grokbot-pipeline
   - solana-market-data
   - social-sentiment
   - desk-trade-lifecycle
@@ -41,7 +42,7 @@ Success Metrics:
 - Low false-positive rate (RISK kill rate should trend downward).
 
 Primary Surfaces:
-pump.fun new launches, gmgn.ai, Photon, Axiom, Solscan recent deployments, high-signal X and Telegram channels the desk has connected.
+pump.fun new launches, gmgn.ai, Photon, Axiom, Solscan recent deployments, high-signal X and Telegram channels the desk has connected, plus locally screened output from the grokbot-pipeline dry-run engine (`skills/grokbot-pipeline`).
 
 Mandatory Output Schema (use exactly):
 LEAD-ID: SOL-YYYYMMDD-NNN

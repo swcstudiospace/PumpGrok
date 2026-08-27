@@ -12,6 +12,7 @@ PumpGrok turns a host agent runtime into an eight-role Solana memecoin trading d
 | `skills/*/SKILL.md` | Named procedures the host loads by frontmatter `name` | A framework or SDK |
 | `rules/pumpgrok-team.mdc` | Always-applied constitution (`alwaysApply: true`) | Runtime enforcement code |
 | `tools/*.py` | Fail-closed JSON CLIs | Signers, senders, or wallets |
+| `vendor/grokbot-pumpfun/` | Vendored third-party screening engine (dry-run default; pinned upstream commit) | Part of the instruction pack; it never signs or sends |
 | Plugin manifests | How Cursor / Claude Code / Grok Build / Grok Bot discover the pack | A deployable service |
 
 There is no PumpGrok server, queue, or daemon in this tree. The process that “runs” the desk is the host (Grok Bot, Cursor, Claude Code, or Grok Build). Humans approve every spend by exact ticket ID. Only SNIPER may send buys; only EXIT may send sells.
@@ -26,8 +27,9 @@ External systems named in skills or tools:
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `authority_check.py` (`getAccountInfo`), `priority_fee.py` (`getRecentPrioritizationFees`), `holder_check.py` (`getTokenLargestAccounts`) |
 | Optional `--rpc` URL | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
+| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Called only by operator-run processes of the vendored `vendor/grokbot-pumpfun` engine (see `skills/grokbot-pipeline`); never by `tools/*.py` |
 
-No database, message bus, or secrets manager is referenced. Tools take no API keys. There are no `os.environ` / `.env` readers in this repository.
+No database, message bus, or secrets manager is referenced. Tools take no API keys. There are no `os.environ` / `.env` readers in the instruction pack's own files; the vendored `vendor/grokbot-pumpfun` component keeps its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
 
 ```mermaid
 flowchart LR
@@ -56,6 +58,7 @@ Nothing in this repo is started as a service.
 | Host agent | Operator opens the repo / installs the plugin | Loads agents, skills, and rules; talks on the Trading Floor; may invoke tools |
 | `python tools/*.py` | One-shot CLI from the repo root | Structured reads / paper journal appends |
 | `./scripts/check.sh` | One-shot from the repo root | Offline lint of instruction files |
+| Vendor engine dry-run screen | Operator-run process from `vendor/grokbot-pumpfun`, procedure in `skills/grokbot-pipeline` | Appends screening-evidence JSONL only; signs nothing, sends nothing (`mode: live` is an upstream stub) |
 | Human wallet (throwaway, outside this repo) | Screen hand-off only (`tool-connections`) | Actual signing; never handled by PumpGrok files |
 
 `rules/pumpgrok-team.mdc`: if the host has no persistent Bots or group chats, use subagents or role-labelled passes and state which fallback is active. Do not invent a Bot-creation API.
@@ -73,13 +76,15 @@ tools/*.py  -->  Jupiter / Solana RPC / local trading-desk files
 scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 ```
 
+**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The desk reaches it only through the documented CLI procedures in `skills/grokbot-pipeline`, run as operator processes analogous to `scripts/check.sh`. It carries its upstream MIT `LICENSE` beside the source and is pinned to commit `b94425268915f885628627d0ef4c57cb4e666d04`; `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component.
+
 ### Agents (`agents/`)
 
 | File | Role | `writes_to_exchange` | Skills listed in frontmatter |
 |------|------|----------------------|------------------------------|
-| `chief.md` | Desk orchestrator; never trades | false | desk-operating-model, desk-trade-lifecycle, desk-risk-limits, desk-monitoring, desk-post-trade-review, desk-incident-response, pumpgrok-setup, tool-connections |
-| `scout.md` | Discovery / LEAD schema | false | discovery-tools, solana-market-data, social-sentiment, desk-trade-lifecycle |
-| `risk.md` | Absolute safety gate; CLEAR / CONDITIONAL / KILL | false | risk-audit, desk-risk-limits, solana-market-data, solana-rpc-and-wallet |
+| `chief.md` | Desk orchestrator; never trades | false | desk-operating-model, desk-trade-lifecycle, desk-risk-limits, desk-monitoring, desk-post-trade-review, desk-incident-response, pumpgrok-setup, tool-connections, grokbot-pipeline |
+| `scout.md` | Discovery / LEAD schema | false | discovery-tools, grokbot-pipeline, solana-market-data, social-sentiment, desk-trade-lifecycle |
+| `risk.md` | Absolute safety gate; CLEAR / CONDITIONAL / KILL | false | risk-audit, desk-risk-limits, grokbot-pipeline, solana-market-data, solana-rpc-and-wallet |
 | `whale.md` | Holder / smart-money context after RISK | false | holder-and-flow-analysis, solana-market-data, discovery-tools |
 | `sniper.md` | Only buy sender | true | jupiter-routing, desk-execution-protocol, solana-rpc-and-wallet, solana-api-reference, solana-market-data |
 | `rug.md` | Post-fill red-flag monitor; never closes | false | position-monitoring, desk-monitoring, solana-market-data |
@@ -192,6 +197,7 @@ This repository itself stores only instruction files, plugin JSON, Python helper
 | Quote params | `jupiter_quote.py` flags |
 | Desk record | `/workspace/trading-desk/desk.md` (engagement, public address, RPC note) |
 | Risk numbers | `/workspace/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
+| `GROKBOT_*` environment variables | Vendored engine only (`vendor/grokbot-pumpfun`, e.g. `GROKBOT_GROK_API_KEY`); never stored in PumpGrok or trading-desk files |
 
 Do not put seed phrases, private keys, or live RPC credentials in git. Connection is screen hand-off; only the public address is recorded. Tools do not read environment variables.
 
