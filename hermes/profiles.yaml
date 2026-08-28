@@ -34,6 +34,7 @@ profiles:
       - desk-folders-and-journal
       - pumpgrok-setup
       - hermes-cron-desk
+      - grokbot-pipeline
   scout:
     agent_file: agents/scout.md
     telegram_inbound: false
@@ -44,6 +45,7 @@ profiles:
       - social-sentiment
       - desk-trade-lifecycle
       - hermes-cron-desk
+      - grokbot-pipeline
   risk:
     agent_file: agents/risk.md
     telegram_inbound: false
@@ -54,6 +56,7 @@ profiles:
       - holder-and-flow-analysis
       - desk-incident-response
       - hermes-cron-desk
+      - grokbot-pipeline
   whale:
     agent_file: agents/whale.md
     telegram_inbound: false
@@ -62,6 +65,7 @@ profiles:
       - holder-and-flow-analysis
       - solana-market-data
       - solana-api-reference
+      - grokbot-pipeline
   sniper:
     agent_file: agents/sniper.md
     telegram_inbound: false
@@ -70,6 +74,7 @@ profiles:
       - desk-execution-protocol
       - jupiter-routing
       - tool-connections
+      - grokbot-pipeline
   rug:
     agent_file: agents/rug.md
     telegram_inbound: false
@@ -80,6 +85,7 @@ profiles:
       - holder-and-flow-analysis
       - position-monitoring
       - hermes-cron-desk
+      - grokbot-pipeline
   exit:
     agent_file: agents/exit.md
     telegram_inbound: false
@@ -88,6 +94,7 @@ profiles:
       - position-monitoring
       - desk-post-trade-review
       - jupiter-routing
+      - grokbot-pipeline
   shill:
     agent_file: agents/shill.md
     telegram_inbound: false
@@ -96,3 +103,4 @@ profiles:
       - social-sentiment
       - browser-ops
       - discovery-tools
+      - grokbot-pipeline

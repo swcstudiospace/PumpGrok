@@ -65,6 +65,17 @@ jobs:
     writes: [journal]
     may_notify_telegram: true
 
+  - id: scout-pipeline
+    owner: scout
+    enabled: true
+    schedule: "every 60m"
+    name: "[bot:scout] pipeline"
+    deliver: "bot-chat:chief"
+    skills: [grokbot-pipeline, discovery-tools, hermes-cron-desk]
+    prompt_file: hermes/cron/prompts/scout-pipeline.md
+    writes: [leads]
+    may_notify_telegram: false
+
 forbidden_owners: [sniper, exit]
 forbidden_actions:
   - send_transaction
