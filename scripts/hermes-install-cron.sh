@@ -108,7 +108,10 @@ if [[ ${REMOVE} -eq 1 ]]; then
 fi
 
 install_job scout "every 60m" "[bot:scout] discover" "bot-chat:chief" \
-  "scout-discover.md" discovery-tools solana-market-data hermes-cron-desk
+  "scout-discover.md" discovery-tools solana-market-data grokbot-pipeline hermes-cron-desk
+
+install_job scout "every 60m" "[bot:scout] pipeline" "bot-chat:chief" \
+  "scout-pipeline.md" grokbot-pipeline discovery-tools hermes-cron-desk
 
 install_job risk "every 15m" "[bot:risk] audit-open-leads" "bot-chat:chief" \
   "risk-audit.md" risk-audit desk-risk-limits hermes-cron-desk

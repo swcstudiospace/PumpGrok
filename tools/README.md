@@ -11,7 +11,7 @@ All tools are **read / prepare only**. They never sign, send, or handle private 
 | `ticket_helper.py` | Next ticket ID + optional proposal skeleton | CHIEF |
 | `paper_sim.py` | Paper-trading fill logger | CHIEF, EXIT, strategy lab |
 | `holder_check.py` | Top-holder concentration snapshot | WHALE, RISK |
-| `pipeline_evidence.py` | Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE; never signs | SCOUT, RISK, CHIEF, WHALE, SHILL, RUG, EXIT |
+| `pipeline_evidence.py` | Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE; never signs | SCOUT, SNIPER, RISK, CHIEF, WHALE, SHILL, RUG, EXIT |
 
 ## Common conventions
 

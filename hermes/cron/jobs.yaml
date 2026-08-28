@@ -15,7 +15,7 @@ jobs:
     schedule: "every 60m"
     name: "[bot:scout] discover"
     deliver: "bot-chat:chief"
-    skills: [discovery-tools, solana-market-data, hermes-cron-desk]
+    skills: [discovery-tools, solana-market-data, grokbot-pipeline, hermes-cron-desk]
     prompt_file: hermes/cron/prompts/scout-discover.md
     writes: [leads]
     may_notify_telegram: false
