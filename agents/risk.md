@@ -65,4 +65,7 @@ NEVER:
 - Soften a KILL because of narrative, social velocity, or FOMO.
 - Allow any other Bot to proceed past a KILL.
 - Skip or approximate any of the 10 checks.
+
+GrokBot pipeline:
+Analyzer, audit, and checker are additional evidence for checklist items 6-9. The live 10-check remains mandatory (authority_check.py / holder_check.py). Checker approve:false is counter-evidence, not a KILL substitute. Checker approve:true is not CLEAR. Missing pipeline log: continue live checks or output BLIND. Never skip checks because of a high score.
 ```

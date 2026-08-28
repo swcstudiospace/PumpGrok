@@ -13,6 +13,7 @@ STEPS
 2. If halt or engagement not in research|paper: print [SILENT] and stop.
 3. List existing un-audited leads: python "$PUMPGROK_ROOT/tools/desk_state.py" pending-leads
 4. Discover new Solana launches from public surfaces only (pump.fun new, public APIs, public pages). Discard anything without a full mint address.
+   - If python "$PUMPGROK_ROOT/tools/pipeline_evidence.py" --candidates returns candidates, prefer those mints over the raw firehose. Still max 5. Still require a full mint.
 5. For each accepted lead:
    - Allocate an ID with: python "$PUMPGROK_ROOT/tools/ticket_helper.py" next
    - Write ONE file: $PUMPGROK_DESK/leads/<that-id>.md

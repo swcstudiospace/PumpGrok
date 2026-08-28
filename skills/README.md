@@ -33,7 +33,7 @@ Twenty-three portable skills that define how the PumpGrok desk operates.
 | solana-market-data | Price, liquidity, volume | SCOUT, RISK, SNIPER |
 | solana-api-reference | Compact endpoint reference | SNIPER, RISK |
 | solana-rpc-and-wallet | Safe wallet and RPC patterns | SNIPER, RISK |
-| grokbot-pipeline | Dry-run screening engine output as desk evidence | SCOUT, RISK, CHIEF |
+| grokbot-pipeline | Dry-run screening engine output as desk evidence via the `tools/pipeline_evidence.py` bridge | all eight roles (CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL) |
 | browser-ops | CAPTCHA / session hygiene | all |
 
 ## Conventions

@@ -11,7 +11,7 @@ Version 1.0.0.
 - Eight specialist roles: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL (`agents/`)
 - 23 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
-- Read-only CLI helpers for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, and holder concentration (`tools/`)
+- Read-only CLI helpers for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence (`tools/pipeline_evidence.py`)
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
@@ -68,9 +68,9 @@ Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from t
 | `agents/` | Eight specialist Bot definitions plus standing instructions |
 | `skills/` | Twenty-three `SKILL.md` procedures |
 | `rules/` | Always-applied desk constitution (`pumpgrok-team.mdc`) |
-| `tools/` | Read/prepare-only Python CLIs (JSON on stdout; never sign or send) |
+| `tools/` | Read/prepare-only Python CLIs (JSON on stdout; never sign or send), including the JSONL desk bridge `tools/pipeline_evidence.py` |
 | `scripts/` | `check.sh` repository linter |
-| `vendor/grokbot-pumpfun/` | Vendored upstream screening pipeline (pinned commit, MIT license); desk-facing procedure in `skills/grokbot-pipeline` |
+| `vendor/grokbot-pumpfun/` | In-tree vendored screening pipeline (regular files, not a git submodule or gitlink; pin `409e74c905faa0e9de42e918efe2c604f206856e`); notes in `vendor/grokbot-pumpfun/PUMPGROK.md`; desk-facing procedure in `skills/grokbot-pipeline` |
 | `plugin.json` | Root agent-plugins manifest |
 | `.claude-plugin/`, `.cursor-plugin/`, `.grok-plugin/` | Host-specific plugin metadata |
 | `SETUP.md` | Step-by-step Grok Bot desk bootstrap |

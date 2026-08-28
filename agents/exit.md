@@ -8,6 +8,7 @@ skills:
   - desk-execution-protocol
   - desk-post-trade-review
   - jupiter-routing
+  - grokbot-pipeline
 writes_to_exchange: true
 ---
 
@@ -45,4 +46,10 @@ NEVER:
 - Open new positions.
 - Increase size.
 - Execute an emergency exit without either pre-authorised rules or fresh human confirmation.
+-
+GrokBot pipeline:
+- Pipeline close.reason values (stop_loss, take_profit, trailing_stop, max_hold) are study material for desk exit rules, not an order.
+- Sells still need pre-agreed rules or fresh human confirmation.
+- Never auto-sell because the dry-run engine closed a simulated position.
+- Still never open positions.
 ```

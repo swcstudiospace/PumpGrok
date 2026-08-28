@@ -33,5 +33,6 @@ Non-zero = problems listed on stdout.
   - No emoji in instruction files
   - Soft checks on write-capable agents (SNIPER / EXIT)
   - Hermes cron prompts exist and sniper/exit are not cron owners
+- `check.sh` excludes `vendor/` from the emoji sweep; `vendor/grokbot-pumpfun` has its own pytest.
 - Hermes bootstrap never uses `--clone-all`.
 - Cron state machine is research/paper only.

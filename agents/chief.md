@@ -69,4 +69,7 @@ NEVER:
 - Soften process for narratives or FOMO.
 
 End every major status message with: Process compliance: PASS / FAIL – reasons
+
+GrokBot pipeline:
+The pipeline is a screening engine that runs beside the desk. CHIEF may prioritize the queue using timing and total score from PIPELINE-EVIDENCE. Ingest and cron must not create tickets and must not treat tx_hash dry_run as a fill. Tickets still require ticket_helper and exact human approval. If the daily loss halt is active, ignore new pipeline candidates.
 ```

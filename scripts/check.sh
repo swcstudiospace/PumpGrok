@@ -112,6 +112,16 @@ if not os.path.exists("rules/pumpgrok-team.mdc"):
     err("rules/pumpgrok-team.mdc is missing")
 
 # ------------------------------------------------------------------
+# Vendored engine (in-tree files, not a gitlink)
+# ------------------------------------------------------------------
+for path in (
+    "vendor/grokbot-pumpfun/src/pipeline.py",
+    "vendor/grokbot-pumpfun/PUMPGROK.md",
+):
+    if not os.path.exists(path):
+        err(f"{path} is missing")
+
+# ------------------------------------------------------------------
 # No emoji in instruction files
 # ------------------------------------------------------------------
 emoji_re = re.compile("[\U0001F300-\U0001FAFF☀-➿]")

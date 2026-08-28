@@ -14,9 +14,10 @@ This path reuses the existing box. It does not require a Desktop-class VPS.
 | `hermes/cron/jobs.yaml` | Scheduler spec |
 | `hermes/cron/prompts/` | Self-contained cron prompts |
 | `scripts/hermes-bootstrap.sh` | Create 8 isolated HERMES_HOME trees |
-| `scripts/hermes-install-cron.sh` | Register scout/risk/chief/rug jobs |
+| `scripts/hermes-install-cron.sh` | Register scout/risk/chief/rug jobs including scout-pipeline |
 | `scripts/hermes-verify-isolation.sh` | Isolation and file-bus checks |
 | `tools/desk_state.py` | Disk status for the state machine |
+| `tools/pipeline_evidence.py` | Vendor JSONL to PIPELINE-EVIDENCE for scout-pipeline |
 | `skills/hermes-cron-desk/` | Skill the cron jobs load |
 
 ## Isolation model
@@ -27,7 +28,7 @@ cosmetic persona.
 ```
 ~/.hermes/                     existing personal assistant (leave it)
 ~/.hermes/profiles/chief/      inbound Telegram + pickup cron
-~/.hermes/profiles/scout/      discovery cron + own MEMORY
+~/.hermes/profiles/scout/      discovery + pipeline ingest cron + own MEMORY
 ~/.hermes/profiles/risk/       veto memory that survives restarts
 ~/.hermes/profiles/whale/      on-demand only
 ~/.hermes/profiles/sniper/     on-demand only, never cron
@@ -70,7 +71,8 @@ and a proposal reuse the lead ID. They do not allocate a second ID.
 ## State machine
 
 ```
-scout cron  -> leads/SOL-*.md
+scout cron          -> leads/SOL-*.md
+scout-pipeline cron -> leads/SOL-*.md from vendor JSONL via pipeline_evidence.py
 risk cron   -> briefs/SOL-*.md   CLEAR | CONDITIONAL | KILL | BLIND
 chief cron  -> proposals/<same-id>.md + Telegram PENDING_HUMAN
 human       -> approve TICKET mint size slippage
@@ -81,6 +83,18 @@ rug cron    -> incidents/ if a paper position exists
 If `desk.md` Halt is true, or engagement is not `research` or `paper`,
 cron jobs print `[SILENT]` and stop. Cron never raises engagement and
 never sends a live transaction.
+
+## Vendor pipeline ingest
+
+The grokbot-pumpfun vendor engine is a separate operator process. Hermes
+cron never starts it, and never starts it in live mode.
+
+The `scout-pipeline` job (every 60m, owner scout, deliver `bot-chat:chief`)
+only reads `vendor/grokbot-pumpfun/logs/trades.jsonl` through
+`tools/pipeline_evidence.py` and writes leads under `$PUMPGROK_DESK/leads/`.
+A missing log is normal before the first vendor dry-run. `tx_hash: dry_run`
+is not a fill. SNIPER and EXIT remain the only exchange writers after exact
+human approval.
 
 ## Install on the existing VPS
 
@@ -129,7 +143,7 @@ Smoke:
 ```bash
 PUMPGROK_DESK="$HOME/trading-desk" python3 tools/desk_state.py status
 hermes -p scout cron list
-hermes -p scout cron run <job_id>
+hermes -p scout cron run scout-pipeline
 ```
 
 ## Security
@@ -140,6 +154,8 @@ hermes -p scout cron run <job_id>
 - Engagement stays `research` until you edit `desk.md` by hand
 - Human approval is still required before any paper or live send
 - Files beat memory. Profile MEMORY.md is a seed, not the desk ledger
+- Never start the vendor engine from Hermes, live or otherwise
+- Pipeline JSONL is evidence only; dry_run is not a fill
 
 ## Operator commands
 
@@ -151,4 +167,5 @@ python3 tools/desk_state.py open-positions
 python3 tools/desk_state.py halt --reason "daily loss limit"
 python3 tools/ticket_helper.py next
 python3 tools/ticket_helper.py create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
+python3 tools/pipeline_evidence.py --candidates --block --limit 5
 ```

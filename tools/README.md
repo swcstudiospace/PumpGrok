@@ -11,6 +11,7 @@ All tools are **read / prepare only**. They never sign, send, or handle private 
 | `ticket_helper.py` | Next ticket ID + optional proposal skeleton | CHIEF |
 | `paper_sim.py` | Paper-trading fill logger | CHIEF, EXIT, strategy lab |
 | `holder_check.py` | Top-holder concentration snapshot | WHALE, RISK |
+| `pipeline_evidence.py` | Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE; never signs | SCOUT, SNIPER, RISK, CHIEF, WHALE, SHILL, RUG, EXIT |
 
 ## Common conventions
 
@@ -18,6 +19,7 @@ All tools are **read / prepare only**. They never sign, send, or handle private 
 - Fail closed (`"ok": false` + error message)
 - Prefer a paid / private RPC via `--rpc` when available
 - No private keys, no signing, no automatic sends
+- `pipeline_evidence.py` reads vendored JSONL only and never signs
 
 ## Quick examples
 
@@ -44,6 +46,10 @@ python tools/paper_sim.py --action buy --ticket SOL-20260827-001 \
 
 # Holder concentration
 python tools/holder_check.py --mint <TOKEN_MINT> --limit 20
+
+# Pipeline evidence (vendored JSONL only; never signs)
+python tools/pipeline_evidence.py --candidates --limit 5
+python tools/pipeline_evidence.py --mint <TOKEN_MINT> --type buy --block
 ```
 
 ## Dependency

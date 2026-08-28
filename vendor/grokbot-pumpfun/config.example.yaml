@@ -1,0 +1,100 @@
+# Пример конфига. Скопировать в config.yaml и подставить свои ключи.
+#   cp config.example.yaml config.yaml
+# config.yaml лежит в .gitignore и в репозиторий не попадает.
+#
+# Секреты можно не класть в файл вообще — переменные окружения важнее его:
+#   GROKBOT_GROK_API_KEY, GROKBOT_DATA_API_KEY, GROKBOT_WALLET_PRIVATE_KEY,
+#   GROKBOT_MODE, GROKBOT_RPC_URL, GROKBOT_LOG_PATH, GROKBOT_LOG_LEVEL,
+#   GROKBOT_STATE_PATH, GROKBOT_HEALTH_PORT
+# Так и сделано в Dockerfile: образ не содержит ни одного ключа.
+#
+# Конфиг проверяется на старте. Бессмысленные значения (нулевой лимит,
+# порог вне диапазона, live без ключа кошелька) — отказ запуска, а не
+# сюрприз через час торговли.
+
+mode: dry-run            # dry-run | live
+
+grok:
+  api_key: "xai-YOUR-KEY-HERE"
+  base_url: "https://api.x.ai/v1/chat/completions"
+  fast_model: "grok-4-fast"   # аудитор, нарратив, тайминг
+  checker_model: "grok-4"     # адверсариальный чекер, модель посильнее
+  timeout_seconds: 30
+  max_retries: 3
+  retry_base_delay: 1.0       # экспоненциальная задержка: base * 2**attempt
+
+solana:
+  rpc_url: "https://api.mainnet-beta.solana.com"
+  wallet_private_key: "YOUR-BASE58-PRIVATE-KEY"
+  jito:
+    enabled: true
+    block_engine_url: "https://mainnet.block-engine.jito.wtf/api/v1/bundles"
+    tip_lamports: 1000000     # чаевые за приоритет
+
+data:
+  api_key: "YOUR-DATA-PROVIDER-KEY"
+  rest_url: "https://frontend-api.pump.fun"
+  ws_url: "wss://pumpportal.fun/api/data"
+  request_timeout: 10
+
+risk:
+  max_sol_per_trade: 0.5        # потолок SOL на одну сделку
+  daily_loss_limit_sol: 2.0     # дневной лимит убытка, при достижении стоп
+  max_trades_per_day: 20        # максимум сделок в день
+  max_open_positions: 3         # максимум одновременно открытых позиций
+  stop_loss_pct: 30.0           # стоп-лосс в процентах, мониторится в фоне
+  stop_loss_poll_seconds: 15
+  # Выходы вверх и по времени. 0 в любом из них выключает правило.
+  take_profit_pct: 120.0        # зафиксировать прибыль на +120%
+  trailing_stop_pct: 35.0       # откат от пика; считается только выше цены входа
+  max_hold_seconds: 3600        # мемкоин, который час не поехал, не поедет
+
+filter:
+  min_unique_buyers: 5          # минимум уникальных покупателей
+  max_curve_progress: 0.40      # заполнение кривой меньше 40%
+  require_metadata: true        # есть имя и картинка
+  min_age_seconds: 120          # возраст больше 2 минут
+  max_risk_score: 7.0           # отсечка анализатора, 0..10
+  min_total_score: 0.65         # минимальный скоринг для похода к чекеру
+  # Память о создателях токенов, считается по собственным закрытым сделкам.
+  block_creator_after_rugs: 1   # столько сливов — и адрес отсекается; 0 выключает
+  rug_loss_pct: 60.0            # убыток от этого уровня засчитывается как слив
+  one_position_per_creator: true  # два токена одного деплойера — одна ставка
+  forget_creators_after_days: 30  # чистые адреса забываются, адреса со сливами нет
+
+scoring:
+  weights:
+    audit: 0.30                 # агент-аудитор: доля органики и отсутствие флагов
+    narrative: 0.25             # агент-нарратив: мем-потенциал
+    timing: 0.15                # агент-тайминг: состояние рынка
+    metrics: 0.30               # метрики анализатора кодом
+  timing_cache_seconds: 900     # кэш тайминг-агента, 15 минут
+
+logging:
+  path: "logs/trades.jsonl"
+  level: "INFO"
+  max_bytes: 50000000         # ротация JSONL при превышении, 0 — не ротировать
+  backups: 5                  # сколько .1 .2 .3 хранить
+
+alerts:
+  # Пусто — уведомления выключены. Формат сообщения понимают Slack (text)
+  # и Discord (content); для Telegram нужен промежуточный релей.
+  # URL обычно содержит токен, поэтому его лучше задавать через
+  # переменную GROKBOT_ALERT_WEBHOOK, а не хранить в файле.
+  webhook_url: ""
+  events: ["started", "buy", "close", "rug", "breaker", "halted", "blind"]
+  timeout_seconds: 10
+  max_per_minute: 20          # лишнее выбрасывается, а не копится в очереди
+
+ops:
+  state_path: "state/pipeline.json"   # позиции и счётчики дня, переживают рестарт
+  reputation_path: "state/creators.json"  # память о создателях токенов
+  health_port: 0                      # 0 — выключено; иначе GET /healthz и /metrics
+  health_host: "127.0.0.1"
+  heartbeat_seconds: 300              # строка живости в лог
+  shutdown_grace_seconds: 30          # сколько ждать токены в работе при остановке
+  max_grok_calls_per_day: 2000        # потолок расхода на агентов за сутки
+  grok_max_concurrency: 4             # одновременных запросов к Grok
+  grok_calls_per_minute: 60           # ограничитель частоты
+  breaker_failures: 8                 # столько сбоев подряд размыкают цепь
+  breaker_cooldown_seconds: 120       # и на столько пайплайн перестаёт звать Grok
