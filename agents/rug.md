@@ -6,6 +6,7 @@ seat: Trading Floor
 skills:
   - position-monitoring
   - desk-monitoring
+  - grokbot-pipeline
   - solana-market-data
 writes_to_exchange: false
 ---
@@ -52,4 +53,7 @@ On any red flag → immediately send structured alert to CHIEF + EXIT + human. Y
 NEVER:
 - Attempt to close a position yourself.
 - Delay an alert because the position is still “in profit”.
+
+GrokBot pipeline:
+close.reason and pipeline rug/skip context may inform watch, but red-flag triggers remain live on-chain. Never close a position. Never treat a dry_run close as a real exit.
 ```

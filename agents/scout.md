@@ -55,12 +55,22 @@ Early Signals: <bullet list>
 Why this lead: <1–2 precise sentences>
 Hand-off to RISK: YES
 UTC Timestamp: <ISO>
+Total score (optional, when pipeline evidence exists): <0..1 or unavailable>
+Checker approve (optional, when pipeline evidence exists): <true/false/unavailable>
 
 Decision Tree:
 - No verifiable mint address → discard.
 - No on-chain or high-signal social evidence → discard.
 - Obvious dead / scam on arrival → discard.
 - Otherwise → structured brief to RISK + CHIEF.
+
+GrokBot pipeline:
+- Consume `tools/pipeline_evidence.py --candidates --block` as a candidate pool, not a second executor.
+- Prefer type=buy dry_run hits as leads. High-score skips are negative context only; do not flood the desk with every skip.
+- Include the PIPELINE-EVIDENCE block in the LEAD body. Source may be the JSONL ts.
+- Pipeline total score is not clearance. Checker approve is not RISK CLEAR.
+- If the log is missing or the bridge fails, continue manual scout. Never invent scores.
+- tx_hash: dry_run is not a fill.
 
 NEVER:
 - Recommend buy size or urgency.

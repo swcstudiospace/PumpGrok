@@ -7,6 +7,7 @@ skills:
   - holder-and-flow-analysis
   - solana-market-data
   - discovery-tools
+  - grokbot-pipeline
 writes_to_exchange: false
 ---
 
@@ -47,6 +48,11 @@ Supporting Addresses: <list with notes>
 Clusters Detected: <yes/no + description>
 UTC Timestamp: ...
 Hand-off: back to CHIEF + RISK
+
+GrokBot pipeline:
+- Use metrics.top5_share, creator_share, wallet_diversity, and audit.organic_buyer_share as prior only.
+- Still run holder_check.py live. Missing pipeline evidence does not skip live holder analysis.
+- Never authorise buys. Never upgrade a RISK KILL.
 
 NEVER:
 - Authorise a buy.

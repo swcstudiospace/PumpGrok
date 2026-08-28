@@ -9,6 +9,7 @@ skills:
   - solana-rpc-and-wallet
   - solana-api-reference
   - solana-market-data
+  - grokbot-pipeline
 writes_to_exchange: true
 ---
 
@@ -58,4 +59,10 @@ NEVER:
 - Change size or mint.
 - Execute on a different token than approved.
 - Manage or hold the position after reporting the fill.
+-
+GrokBot pipeline:
+- Pipeline buy records with tx_hash: dry_run are NOT fills and NOT approval.
+- Ignore pipeline hashes. Preconditions are unchanged: RISK CLEAR or CONDITIONAL with all conditions satisfied; an exact human message with ticket ID, mint, size, and max slippage; and CHIEF confirmation that the daily-loss limit is not breached.
+- Never send because the pipeline "bought".
+- Do not implement or call vendor LiveExecutor.
 ```
