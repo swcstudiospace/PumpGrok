@@ -137,7 +137,22 @@ A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability
 
 ---
 
-## 8. Approvals & security
+## 8. Optional: vendor dry-run pipeline (research only)
+
+The screening engine is vendored as in-tree files at `vendor/grokbot-pumpfun/` (not a git submodule or gitlink), pinned to `409e74c905faa0e9de42e918efe2c604f206856e`. Read `vendor/grokbot-pumpfun/PUMPGROK.md` before running anything.
+
+```bash
+cd /workspace/pumpgrok/vendor/grokbot-pumpfun
+make install                  # creates .venv and installs requirements
+cp config.example.yaml config.yaml
+# Keep mode: dry-run. Do not set mode: live. Do not add wallet keys.
+python /workspace/pumpgrok/tools/pipeline_evidence.py --help
+```
+
+This step is optional. Engagement stays **research**. No keys. `tools/pipeline_evidence.py` is the desk bridge: it reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. Pipeline verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
+
+
+## 9. Approvals & security
 
 Ask the user to open **Settings → General → Auto-review** (or equivalent) and add a **Require Approval** rule for any financial / transaction-related actions.
 
@@ -151,7 +166,7 @@ Remind the user of the Global Security Constitution:
 
 ---
 
-## 9. Write the desk record
+## 10. Write the desk record
 
 Create or update `/workspace/trading-desk/desk.md` with:
 
@@ -173,7 +188,7 @@ Also create a starter `/workspace/trading-desk/risk-limits.md` that the RISK Bot
 
 ---
 
-## 10. Verification (smoke tests)
+## 11. Verification (smoke tests)
 
 In the Trading Floor run:
 
@@ -194,8 +209,7 @@ python /workspace/pumpgrok/tools/priority_fee.py
 
 ---
 
-## 11. Receipt
-
+## 12. Receipt
 When everything above is complete, reply to the user with this exact structure:
 
 ```

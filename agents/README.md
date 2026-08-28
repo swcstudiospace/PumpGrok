@@ -13,6 +13,8 @@ Eight specialist Bots that form the **PumpGrok** Solana memecoin trading desk.
 | exit.md    | EXIT   | Position Manager             | Yes                |
 | shill.md   | SHILL  | Sentiment & Velocity         | No                 |
 
+All eight roles consume grokbot-pipeline evidence via `tools/pipeline_evidence.py`. SNIPER and EXIT remain the only exchange writers.
+
 Each file contains:
 - YAML frontmatter (name, title, description, seat, skills, writes_to_exchange)
 - Bot profile

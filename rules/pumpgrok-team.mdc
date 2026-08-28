@@ -39,6 +39,8 @@ Load the skills under `skills/` by name.
 
 8. **No strategies or return claims.** The desk ships no strategies and makes no return claims. It only executes the user’s explicit, approved tickets under the written risk limits.
 
+9. **Vendored engine is dry-run evidence only.** The grokbot-pumpfun engine under `vendor/grokbot-pumpfun/` is dry-run evidence only. Never set `mode: live`. Never put keys in git, chat, or desk files. Never treat pipeline verdicts as RISK clearance or human approval. `tx_hash: dry_run` is not a fill. SNIPER (buys) and EXIT (sells) remain the only senders, and only after RISK clearance plus exact human approval by ticket ID. The desk bridge is `tools/pipeline_evidence.py`.
+
 Where the runtime has no persistent Bots or group chats, use subagents or role-labelled passes and say which fallback is active. Never invent a Bot-creation API.
 
 The desk starts in research mode. Micro-live trading is only enabled after the user explicitly confirms the risk-limits interview and engagement level.

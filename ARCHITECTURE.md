@@ -40,6 +40,9 @@ flowchart LR
   Jup[Jupiter quote API]
   Rpc[Solana JSON-RPC]
   Web[Browser sites]
+  Vendor[Vendor engine dry-run]
+  Jsonl[JSONL trades.jsonl]
+  Bridge[pipeline_evidence.py]
 
   Human --> Host
   Host --> Pack
@@ -47,6 +50,9 @@ flowchart LR
   Host --> Web
   Pack --> Jup
   Pack --> Rpc
+  Vendor --> Jsonl
+  Jsonl --> Bridge
+  Bridge --> Desk
 ```
 
 ## Containers or processes
@@ -73,10 +79,11 @@ rules/pumpgrok-team.mdc  -->  agents/*  (roles + hard constraints)
 agents/*.md  -->  skills/*  (frontmatter skills: lists)
 skills/*  -->  tools/*.py  (documented CLI, not Python imports)
 tools/*.py  -->  Jupiter / Solana RPC / local trading-desk files
+tools/pipeline_evidence.py  -->  vendor JSONL (read only; no Python import of vendor)
 scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 ```
 
-**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The desk reaches it only through the documented CLI procedures in `skills/grokbot-pipeline`, run as operator processes analogous to `scripts/check.sh`. It carries its upstream MIT `LICENSE` beside the source and is pinned to commit `b94425268915f885628627d0ef4c57cb4e666d04`; `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component.
+**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The files are vendored in-tree (regular files, not a git submodule or gitlink) and pinned to commit `409e74c905faa0e9de42e918efe2c604f206856e`; see `vendor/grokbot-pumpfun/PUMPGROK.md`. The desk reaches the engine through operator-run dry-run processes (procedure in `skills/grokbot-pipeline`) and the JSON evidence bridge `tools/pipeline_evidence.py`, which reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component. Pipeline verdicts are never RISK clearance or human approval. SNIPER and EXIT remain the only exchange writers.
 
 ### Agents (`agents/`)
 
@@ -85,11 +92,11 @@ scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 | `chief.md` | Desk orchestrator; never trades | false | desk-operating-model, desk-trade-lifecycle, desk-risk-limits, desk-monitoring, desk-post-trade-review, desk-incident-response, pumpgrok-setup, tool-connections, grokbot-pipeline |
 | `scout.md` | Discovery / LEAD schema | false | discovery-tools, grokbot-pipeline, solana-market-data, social-sentiment, desk-trade-lifecycle |
 | `risk.md` | Absolute safety gate; CLEAR / CONDITIONAL / KILL | false | risk-audit, desk-risk-limits, grokbot-pipeline, solana-market-data, solana-rpc-and-wallet |
-| `whale.md` | Holder / smart-money context after RISK | false | holder-and-flow-analysis, solana-market-data, discovery-tools |
-| `sniper.md` | Only buy sender | true | jupiter-routing, desk-execution-protocol, solana-rpc-and-wallet, solana-api-reference, solana-market-data |
-| `rug.md` | Post-fill red-flag monitor; never closes | false | position-monitoring, desk-monitoring, solana-market-data |
-| `exit.md` | Only sell sender | true | position-monitoring, desk-execution-protocol, desk-post-trade-review, jupiter-routing |
-| `shill.md` | Social velocity / quality | false | social-sentiment, discovery-tools |
+| `whale.md` | Holder / smart-money context after RISK | false | holder-and-flow-analysis, solana-market-data, discovery-tools, grokbot-pipeline |
+| `sniper.md` | Only buy sender | true | jupiter-routing, desk-execution-protocol, solana-rpc-and-wallet, solana-api-reference, solana-market-data, grokbot-pipeline |
+| `rug.md` | Post-fill red-flag monitor; never closes | false | position-monitoring, desk-monitoring, solana-market-data, grokbot-pipeline |
+| `exit.md` | Only sell sender | true | position-monitoring, desk-execution-protocol, desk-post-trade-review, jupiter-routing, grokbot-pipeline |
+| `shill.md` | Social velocity / quality | false | social-sentiment, discovery-tools, grokbot-pipeline |
 
 SETUP.md Trading Floor group: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG. EXIT and SHILL may be DMs if the host caps group size at six.
 
@@ -117,6 +124,7 @@ All tools: CLI, JSON on stdout, fail closed (`ok: false` + error), no private ke
 | `holder_check.py` | RPC `getTokenLargestAccounts` | `--mint` `--rpc` `--limit` |
 | `ticket_helper.py` | Local proposal files | subcommands `next`, `create --mint [--size] [--slippage]`, `list` |
 | `paper_sim.py` | Append journal markdown | `--desk` `--action` `--ticket` `--mint` `--size-usd` `--price` `--slippage-bps` `--reason` `--note` |
+| `pipeline_evidence.py` | Read vendor JSONL (`vendor/grokbot-pumpfun/logs/trades.jsonl`); no Python import of vendor | `--log` plus fail-closed JSON and a PIPELINE-EVIDENCE block |
 
 ### Plugin manifests
 
@@ -186,7 +194,7 @@ Desk files live **outside** the git tree, conventionally:
 
 Journal rules (`desk-folders-and-journal`): append-only; every entry needs ticket ID and UTC. `ticket_helper.py` uses `/workspace/trading-desk/proposals` when `/workspace` exists, else `./trading-desk/proposals`. `paper_sim.py` defaults `--desk /workspace/trading-desk`.
 
-This repository itself stores only instruction files, plugin JSON, Python helpers, `SETUP.md`, and `banner.jpg`.
+This repository itself stores instruction files, plugin JSON, Python helpers, the in-tree `vendor/grokbot-pumpfun/` engine, `SETUP.md`, and `banner.jpg`.
 
 ## Configuration and secrets
 
