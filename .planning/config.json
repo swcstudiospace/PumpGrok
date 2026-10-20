@@ -92,7 +92,6 @@
     "source_grounding_authority": "grep"
   },
   "resolve_model_ids": "omit",
-  "quick_branch_template": null,
   "intel": {
     "enabled": true
   },
