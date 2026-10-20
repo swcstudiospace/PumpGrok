@@ -199,7 +199,7 @@ Registration: the gateway maps `backend: <module>.<fn>` to
 - `src/desk/cli.py:207-244`: `argparse` parser `prog="desk"` with subcommands
   `doctor` (:212), `audit` (:218), `verify` (:226), `session` (:233), `run` (:242,
   "Supervised process execution", `command` as `argparse.REMAINDER`).
-- Gateway: `services/desk-gateway/pyproject.toml:27` `desk-gateway = "desk_gateway.server:main"`;
+- Gateway: `services/desk-gateway/pyproject.toml:26` `desk-gateway = "desk_gateway.server:main"`;
   `server.py:759-760` registers `/healthz`, `:804` registers `/metrics`, `:199`
   `logger = logging.getLogger("desk_gateway")`.
 - Supervisor precedent: `src/desk/supervision/process_supervisor.py:11` is
@@ -289,8 +289,8 @@ accidentally scope a UI.
   `tools/__pycache__/{authority_check,holder_check,jupiter_quote,paper_sim,priority_fee}.cpython-312.pyc`).
 - `.devcontainer.json` (whole file): `{"image":"mcr.microsoft.com/devcontainers/python:3"}`.
 - Vendor manifests: `vendor/grokbot-pumpfun/pyproject.toml` (`requires-python = ">=3.11"`
-  :9; deps :12-19; dev extras :22-29; `grokbot = "src.pipeline:main"` :32; ruff
-  `target-version = "py311"` :44; mypy `python_version = "3.11"` :59),
+  :10; deps :12-19; dev extras :22-29; `grokbot = "src.pipeline:main"` :32; ruff
+  `target-version = "py311"` :48; mypy `python_version = "3.11"` :63),
   `requirements.txt:1-8`, `requirements-dev.txt:1-5`, `Dockerfile`, `docker-compose.yml`,
   `Makefile`, `.env.example`, `.github/workflows/ci.yml` (matrix 3.11/3.12/3.13, `:18-19`).
   No lockfile anywhere.
@@ -397,7 +397,7 @@ Docs today: `README.md`, `SETUP.md`, `ARCHITECTURE.md`, `agents/README.md`,
 `skills/README.md`, `rules/README.md`, `tools/README.md`, `scripts/README.md`,
 `hermes/README.md`, `vendor/grokbot-pumpfun/{README,RUNBOOK,PUMPGROK}.md`. No `docs/`
 directory existed before this wave. Alert channels: Telegram via Hermes chief profile
-(`hermes/profiles.yaml:16,29`), vendor webhook (`models.py:356-368`), stdout JSON from
+(`hermes/profiles.yaml:16,29`), vendor webhook (`models.py:357-368`), stdout JSON from
 every tool.
 
 ## 4. Real-money risk surface
@@ -496,7 +496,7 @@ surface as above).
 | # | Item | Evidence | Severity | Fix location (target layout) |
 |---|---|---|---|---|
 | 1 | Jupiter `/v6/quote` still documented while code uses lite-api | `ARCHITECTURE.md:121` vs `tools/jupiter_quote.py:22` | low | `docs/TOOL_CATALOG.md`, regenerated `ARCHITECTURE.md` |
-| 2 | `--max-micro 50000` documented but not implemented | `skills/jupiter-routing/SKILL.md:18`, `tools/README.md:38`, acknowledged `ARCHITECTURE.md:242`; parser `tools/priority_fee.py:91` has only `--rpc --percentile --multiplier` | medium (operator follows a flag that fails) | `src/pumpgrok/tools/market/` fee tool gets a real `max_micro` cap; skill rewritten |
+| 2 | `--max-micro 50000` documented but not implemented | `skills/jupiter-routing/SKILL.md:18`, `tools/README.md:38`, acknowledged `ARCHITECTURE.md:242`; parser `tools/priority_fee.py:91` has only `--rpc --percentile --multiplier` | medium (operator follows a flag that fails) | `src/pumpgrok/tools/onchain/priority_fee.py` gets a real `max_micro_lamports` field; the flag phrasing is dropped from every doc and skill (R14, R40) |
 | 3 | `tools/README.md` table omits `desk_state.py` | `tools/README.md:8-14` lists 7 tools; `tools/desk_state.py` exists | low | `docs/TOOL_CATALOG.md` |
 | 4 | Manifests say MIT, LICENSE is AGPL-3.0 | `plugin.json:10`, `.claude-plugin/plugin.json:8`, `.grok-plugin/plugin.json:8`, `.cursor-plugin/plugin.json:8` vs `LICENSE:1-4` | high (legal) | the four manifests (`"license": "AGPL-3.0"`), per D2 |
 | 5 | `your-org` placeholders | `plugin.json:8,11`, `SETUP.md:16,17`, `ARCHITECTURE.md:241` | medium | manifests, `README.md`, `SETUP.md` -> `swcstudiospace/PumpGrok` (from `git remote -v`) |
@@ -526,8 +526,8 @@ surface as above).
 | Scheduler | `no precedent` for in-process async scheduling; `src/desk/supervision/process_supervisor.py:11` is `subprocess`-based; Hermes cron in pumpgrok (`hermes/cron/jobs.yaml`) | - |
 | Persistence | `no precedent` for sqlite (`grep -rln 'import sqlite3' src services/desk-gateway/src` = none); receipts are JSON files under `.receipts/<seat>/` | `.gitignore:5-6` |
 | HTTP / RPC client | `httpx>=0.28.1` | `services/desk-gateway/pyproject.toml:10` |
-| Validation | `pydantic>=2.11` (models), JSON Schema `input` blocks in rosters with `additionalProperties: false` | `pyproject.toml:12`; `contracts/tool-rosters/_core.yaml:18-24` |
-| Fixture tests | `pytest>=8.0`, `pytest-asyncio>=1.0`, `asgi-lifespan`, `asyncio_mode = "auto"`; `tests/conftest.py` sys.path shim | `pyproject.toml:32-41`; `tests/conftest.py:1-9` |
+| Validation | `pydantic>=2.11` (models), JSON Schema `input` blocks in rosters with `additionalProperties: false` | `services/desk-gateway/pyproject.toml:12` (programming-desk has no root `pyproject.toml`, section 2.8); `contracts/tool-rosters/_core.yaml:18-24` |
+| Fixture tests | `pytest>=8.0`, `pytest-asyncio>=1.0`, `asgi-lifespan`, `asyncio_mode = "auto"`; `tests/conftest.py` sys.path shim | `services/desk-gateway/pyproject.toml:32-41`; `tests/conftest.py:1-9` |
 | Lint / format / typecheck | `no precedent` (no ruff/mypy config anywhere; prose only in `skills/platforms/python/SKILL.md:33,58`) | section 2.8 |
 | CI + vuln scan | `gates.yml` (G-1..G-7 + gate self-test), `security-pr.yml` (gitleaks, semgrep, bandit, pip-audit, trivy, SARIF), Python 3.12 | section 2.9 |
 | Container | `no precedent` at root; systemd unit + nginx for the gateway (`infra/desk-gateway/desk-gateway.service`, `install.sh`); pumpgrok's vendor has `Dockerfile`/`docker-compose.yml` | `ls infra/desk-gateway` |
@@ -542,7 +542,10 @@ stated explicitly in `FOUNDATION_STACK.md`.
 ## 8. Old-to-new module mapping skeleton
 
 Decisions keep/move/rewrite belong to `docs/MIGRATION_MAP.md`; this table only fixes
-the destination under D2 so n2/n3/n5 share one vocabulary.
+the destination under D2 so n2/n3/n5 share one vocabulary. Where a row below and
+`docs/MIGRATION_MAP.md` section 1 differ, MIGRATION_MAP (which applies resolution R31,
+the single module-placement truth) wins; the rows for the eight root tools and the
+vendor executor/risk modules were re-aligned to R31 in the convergence pass.
 
 ### 8.1 pumpgrok top-level paths
 
@@ -572,14 +575,14 @@ the destination under D2 so n2/n3/n5 share one vocabulary.
 | `scripts/check.sh` | `scripts/check.sh` (thin) + `ci/gates/check_desk_integrity.py` | dead `pass` checks replaced |
 | `scripts/hermes-bootstrap.sh`, `hermes-install-cron.sh`, `hermes-verify-isolation.sh` | `scripts/hermes-*.sh` | kept; `skills_for()` reads rosters |
 | `scripts/README.md` | `scripts/README.md` | |
-| `tools/jupiter_quote.py` | `src/pumpgrok/tools/market/jupiter.py` (`market.quote`) | CLI `pumpgrok` wrapper |
-| `tools/authority_check.py` | `src/pumpgrok/tools/safety/authority.py` | |
-| `tools/holder_check.py` | `src/pumpgrok/tools/onchain/holders.py` | |
-| `tools/priority_fee.py` | `src/pumpgrok/tools/onchain/priority_fee.py` | adds real `max_micro` |
-| `tools/paper_sim.py` | `src/pumpgrok/execution/paper.py` + `pumpgrok paper buy\|sell` | writes the ledger, not markdown |
+| `tools/jupiter_quote.py` | `src/pumpgrok/tools/market/jupiter.py` (tool `exec.quote`; there is no `market.quote` tool in `docs/TOOL_CATALOG.md`) | CLI `pumpgrok` wrapper |
+| `tools/authority_check.py` | `src/pumpgrok/tools/onchain/authorities.py` (tool `onchain.authorities`) | |
+| `tools/holder_check.py` | `src/pumpgrok/tools/onchain/holders.py` (tool `onchain.top_holders`) | |
+| `tools/priority_fee.py` | `src/pumpgrok/tools/onchain/priority_fee.py` | adds a real `max_micro_lamports` cap |
+| `tools/paper_sim.py` | `src/pumpgrok/execution/paper_adapter.py` (`PaperAdapter`) + `pumpgrok paper buy\|sell` | writes the ledger, not markdown |
 | `tools/ticket_helper.py` | `src/pumpgrok/ledger/tickets.py` + `pumpgrok ticket next\|create\|list` | id allocation in sqlite txn |
-| `tools/desk_state.py` | `src/pumpgrok/supervisor/state.py` + `pumpgrok state status\|halt`, `pumpgrok killswitch set\|clear\|status` | |
-| `tools/pipeline_evidence.py` | `src/pumpgrok/replay/evidence.py` | reads ledger/JSONL export |
+| `tools/desk_state.py` | `pumpgrok state status\|halt` and `pumpgrok killswitch set\|status` over `src/pumpgrok/ledger/` views (`killswitch clear` is CLI-only with a human approval record, R22) | |
+| `tools/pipeline_evidence.py` | `src/pumpgrok/reporting/evidence.py` | reads ledger/JSONL export |
 | `tools/README.md` | `docs/TOOL_CATALOG.md` | |
 | `tests/test_tools_cli.py` | `tests/test_cli_contracts.py` (+ `tests/desk/`) | |
 | `tools/__pycache__/*.pyc`, `tests/__pycache__/*.pyc` (tracked) | deleted; `.gitignore` | |
@@ -603,11 +606,12 @@ the destination under D2 so n2/n3/n5 share one vocabulary.
 | `src/agents/narrative.py` | `engine/agents/narrative.py` | bot-07-shill |
 | `src/agents/timing.py` | `engine/agents/timing.py` | bot-08-signal |
 | `src/agents/checker.py` | `engine/agents/checker.py` | bot-08-signal |
-| `src/executor.py` `DryRunExecutor` | `execution/paper.py` `PaperAdapter` (adds fee/slippage/impact model) | bot-04-sniper / bot-06-exit |
-| `src/executor.py` `LiveExecutor` | `execution/live.py` disabled stub raising `LiveGateError` (D4) | bot-04-sniper |
-| `src/risk.py` `RiskManager` | `risk/manager.py` (+ D6 limits, breakers) | bot-02-risk |
-| `src/risk.py` `PositionWatcher`, `exit_signal` | `engine/exits.py` | bot-06-exit |
-| `src/reputation.py` | `risk/reputation.py` | bot-02-risk |
+| `src/executor.py` `DryRunExecutor` | `execution/paper_adapter.py` `PaperAdapter` (adds fee/slippage/impact model) | bot-04-sniper / bot-06-exit |
+| `src/executor.py` `LiveExecutor` | `execution/live/live_adapter.py` disabled stub raising `LiveGateError` (D4); gate in `execution/live/live_gate.py` | bot-02-risk (R31) |
+| `src/risk.py` `RiskManager` | `risk/engine.py` `RiskEngine` (+ D6 limits in `risk/limits.py`, `risk/breakers.py`, `risk/killswitch.py`) | bot-02-risk |
+| `src/risk.py` `exit_signal` | `engine/exits.py` | bot-06-exit |
+| `src/risk.py` `PositionWatcher` | `engine/watcher.py` | bot-05-rug |
+| `src/reputation.py` | `engine/reputation.py` | bot-05-rug |
 | `src/state.py` `StateStore` | `ledger/store.py` (sqlite WAL) + snapshots | bot-09-journal |
 | `src/log.py` `TradeLog` | `ledger/journal.py` (JSONL export) | bot-09-journal |
 | `src/alerts.py` `Notifier` | `tools/notify/` (abstract Notifier; stdout+file; telegram/webhook adapters) | bot-00-chief |
@@ -635,7 +639,7 @@ the destination under D2 so n2/n3/n5 share one vocabulary.
   other chain appears in any URL scan. Jito stays config-only and uncalled.
 - **q2 alert channel:** reuse existing. Telegram token profile on chief
   (`hermes/profiles.yaml:16,29`) and vendor `AlertsConfig.webhook_url`
-  (`vendor/.../src/models.py:356-368`, env `GROKBOT_ALERT_WEBHOOK` `:413`). D6's
+  (`vendor/.../src/models.py:357-368`, env `GROKBOT_ALERT_WEBHOOK` `:413`). D6's
   abstract Notifier wraps both plus stdout/file.
 - **q3 paper sizing:** no repo evidence for equity or per-trade caps in SOL
   (`risk-limits.md` is created empty by `tools/desk_state.py ensure`; vendor defaults
