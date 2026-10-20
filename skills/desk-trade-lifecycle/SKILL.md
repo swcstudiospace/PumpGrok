@@ -9,7 +9,7 @@ description: Defines the exact end-to-end stages every Solana memecoin ticket mu
 1. Lead (SCOUT)
 2. Audit (RISK)
 3. Context (optional WHALE + SHILL)
-4. Ticket Creation (CHIEF) – use `tools/ticket_helper.py --write`
+4. Ticket Creation (CHIEF) – allocate with `tools/ticket_helper.py next`, write the proposal with `create`
 5. Human Approval (exact phrase with ticket ID + mint + size + max slippage)
 6. Single Buy (SNIPER)
 7. Monitor (RUG)
@@ -20,7 +20,8 @@ description: Defines the exact end-to-end stages every Solana memecoin ticket mu
 `SOL-YYYYMMDD-NNN`  
 Generate only via:
 ```bash
-python /workspace/pumpgrok/tools/ticket_helper.py --write
+python /workspace/pumpgrok/tools/ticket_helper.py next
+python /workspace/pumpgrok/tools/ticket_helper.py create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
 ```
 
 ## Never

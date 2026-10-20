@@ -16,7 +16,7 @@ All tools are **read / prepare only**. They never sign, send, or handle private 
 ## Common conventions
 
 - CLI interface, clean JSON on stdout
-- Fail closed (`"ok": false` + error message)
+- Fail closed (`"ok": false` + error message, process exit 1)
 - Prefer a paid / private RPC via `--rpc` when available
 - No private keys, no signing, no automatic sends
 - `pipeline_evidence.py` reads vendored JSONL only and never signs
@@ -37,8 +37,9 @@ python tools/authority_check.py --mint <TOKEN_MINT>
 # Priority fee
 python tools/priority_fee.py --multiplier 1.25 --max-micro 50000
 
-# Next ticket
-python tools/ticket_helper.py --write
+# Next ticket / create proposal
+python tools/ticket_helper.py next
+python tools/ticket_helper.py create --mint <TOKEN_MINT> --size "25 USDC" --slippage 100
 
 # Paper fill
 python tools/paper_sim.py --action buy --ticket SOL-20260827-001 \

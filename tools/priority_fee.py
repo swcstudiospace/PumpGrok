@@ -93,6 +93,7 @@ def main():
 
     result = estimate_priority_fee(args.rpc, args.percentile, args.multiplier)
     print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get("ok") else 1)
 
 
 if __name__ == "__main__":

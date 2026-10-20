@@ -23,7 +23,7 @@ External systems named in skills or tools:
 
 | System | How PumpGrok uses it |
 |--------|----------------------|
-| Jupiter Quote API `https://quote-api.jup.ag/v6/quote` | `tools/jupiter_quote.py` GET; never swap/send |
+| Jupiter Quote API `https://lite-api.jup.ag/swap/v1/quote` | `tools/jupiter_quote.py` GET; never swap/send |
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `authority_check.py` (`getAccountInfo`), `priority_fee.py` (`getRecentPrioritizationFees`), `holder_check.py` (`getTokenLargestAccounts`) |
 | Optional `--rpc` URL | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
@@ -168,7 +168,7 @@ flowchart TD
 
 Retry behavior that **is** implemented as policy (instructions, not code): on unknown, timeout, or failed send, SNIPER/EXIT must not auto-retry; they report `UNKNOWN RESULT – reconcile by signature` and wait for a fresh human approval.
 
-Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON; process exits 0 after printing that JSON except missing `requests` (exit 1) and unknown `ticket_helper` command (exit 1).
+Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON and the process exits 1. `ticket_helper.py` also exits 1 on invalid ids, duplicate proposals, and unknown commands.
 
 Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`paper_sim.py`), **micro-live** (throwaway wallet after explicit confirmation). Daily loss ≥ 5% of wallet equity → CHIEF posts `FLOOR HALTED – DAILY LOSS LIMIT` and refuses new entries until the human resets.
 
@@ -221,7 +221,7 @@ Do not put seed phrases, private keys, or live RPC credentials in git. Connectio
 
 **Feature flags.** None. Engagement level in `desk.md` is the mode switch.
 
-**Validation.** `scripts/check.sh`: YAML frontmatter on agents and skills, skill `name` matches directory, constitution phrase spot-check, `rules/pumpgrok-team.mdc` exists, no emoji in markdown / `.mdc`. Stdlib Python only; no network.
+**Validation.** `scripts/check.sh`: YAML frontmatter on agents and skills, skill `name` matches directory, constitution phrase spot-check, `rules/pumpgrok-team.mdc` exists, Hermes helper scripts executable, no emoji in markdown / `.mdc`. Stdlib Python only; no network. `python3 -m unittest tests.test_tools_cli` covers tool CLI contracts.
 
 ## Change guidance
 
@@ -239,7 +239,5 @@ Keep tools read/prepare-only. Keep RISK KILL non-overridable. Keep SNIPER/EXIT a
 ## Unknowns
 
 - Plugin manifests still contain `"license": "MIT"` and placeholder `https://github.com/your-org/pumpgrok` URLs. The root [LICENSE](LICENSE) is GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace. Manifests were not changed in this documentation pass.
-- `skills/desk-trade-lifecycle/SKILL.md` and `tools/README.md` mention `ticket_helper.py --write`. The implemented CLI is subcommands `next` / `create` / `list`.
 - `jupiter-routing` and `tools/README.md` show `priority_fee.py --max-micro 50000`. The implemented flags are `--rpc`, `--percentile`, `--multiplier` (default 1.2).
 - Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
-- No automated tests exist beyond `scripts/check.sh`.

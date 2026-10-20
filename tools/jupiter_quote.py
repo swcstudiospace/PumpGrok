@@ -16,10 +16,10 @@ from typing import Any, Dict
 try:
     import requests
 except ImportError:
-    print(json.dumps({"error": "requests library required. Run: pip install requests"}))
+    print(json.dumps({"ok": False, "error": "requests library required. Run: pip install requests"}))
     sys.exit(1)
 
-JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
+JUPITER_QUOTE_URL = "https://lite-api.jup.ag/swap/v1/quote"
 
 
 def get_quote(input_mint: str, output_mint: str, amount: int, slippage_bps: int = 100) -> Dict[str, Any]:
@@ -69,6 +69,7 @@ def main():
 
     result = get_quote(args.input_mint, args.output_mint, args.amount, args.slippage_bps)
     print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get("ok") else 1)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ Appends a structured paper fill to the journal. Never touches real capital.
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
@@ -77,6 +78,7 @@ def main():
         record["error"] = str(e)
 
     print(json.dumps(record, indent=2))
+    sys.exit(0 if record.get("ok") else 1)
 
 
 if __name__ == "__main__":

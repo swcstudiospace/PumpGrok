@@ -218,7 +218,7 @@ def matches(
 
 def fail(error: str) -> int:
     print(json.dumps({"ok": False, "error": error}, indent=2))
-    return 0
+    return 1
 
 
 def main() -> int:

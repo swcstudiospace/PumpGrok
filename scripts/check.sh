@@ -122,6 +122,19 @@ for path in (
         err(f"{path} is missing")
 
 # ------------------------------------------------------------------
+# Hermes helper scripts must be executable (./scripts/...)
+# ------------------------------------------------------------------
+for path in (
+    "scripts/hermes-bootstrap.sh",
+    "scripts/hermes-install-cron.sh",
+    "scripts/hermes-verify-isolation.sh",
+):
+    if not os.path.exists(path):
+        err(f"{path} is missing")
+    elif not os.access(path, os.X_OK):
+        err(f"{path} is not executable")
+
+# ------------------------------------------------------------------
 # No emoji in instruction files
 # ------------------------------------------------------------------
 emoji_re = re.compile("[\U0001F300-\U0001FAFF☀-➿]")

@@ -84,6 +84,7 @@ def main():
 
     result = check_mint(args.mint, args.rpc)
     print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get("ok") else 1)
 
 
 if __name__ == "__main__":
