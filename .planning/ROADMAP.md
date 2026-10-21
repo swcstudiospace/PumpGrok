@@ -24,7 +24,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
   1. `uv sync --frozen && make lint typecheck test audit` exits 0 on a clean checkout (FOUND-001, FOUND-002)
   2. `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0, and `uv run python -c "import sqlite3; print(sqlite3.connect('var/replay/smoke/ledger.sqlite').execute(\"select count(*) from events where type='JournalNote' and source='replay'\").fetchone()[0])"` prints `1` (FOUND-013)
   3. `python3 ci/gates/check_ownership.py --validate-manifest`, `python3 ci/gates/check_desk_integrity.py --repo .`, `python3 ci/gates/check_secrets.py --base origin/main` and `python3 -m pytest ci/tests/ -q` each exit 0 (FOUND-006, FOUND-007, FOUND-008, SEC-001)
-  4. `docker compose up -d --build pumpgrok` followed by `docker compose ps pumpgrok` reports the service `healthy`, and `./scripts/check.sh` exits 0 (FOUND-003, FOUND-011)
+  4. `docker compose config --quiet` exits 0, `docker compose build pumpgrok` exits 0, `docker compose run --rm pumpgrok` exits 0 after one skip-only replay cycle, and `./scripts/check.sh` exits 0 (FOUND-003, FOUND-011)
   5. `uv run pytest -q` exits 0 including the static test that rejects direct `asyncio.sleep`, `asyncio.timeout`, `time.time` and `uuid` use in `src/pumpgrok`, and `! grep -rn -e JitoConfig -e wallet_private_key src/pumpgrok` prints nothing; `test ! -d config` succeeds (FOUND-004, FOUND-005, FOUND-012, STRUCT-008)
 
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` completes one cycle under skip-only semantics (`docs/upgrade-plan-desk-v2.md` section 6.1) and the canonical gates pass.
@@ -47,7 +47,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Depends on**: Phase 1
 **Requirements**: STRUCT-002, STRUCT-003, STRUCT-005, STRUCT-007, SEC-003
 **Success Criteria** (what must be TRUE):
-  1. `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` exits 0, reproducing the 11 root unittest cases (STRUCT-002)
+  1. `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` exits 0, reproducing the 6 root unittest cases that exercise these four ported tools (STRUCT-002)
   2. `cd vendor/grokbot-pumpfun && python3 -m pytest -q` exits 0, `uv run pytest -q tests/characterization/` exits 0, and `! grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` prints nothing (STRUCT-003)
   3. `test "$(grep -l '^bots:' skills/*/SKILL.md | wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md | wc -l)" -eq 23 && ! grep -rn -e lite-api -e '--max-micro' skills/` exits 0 (STRUCT-007)
   4. `uv run pumpgrok --help` exits 0, and `uv run pumpgrok paper buy --help` lists `--ticket`, `--mint`, `--size-sol`, `--slippage-bps` and `--approval-id` (STRUCT-005)
@@ -120,7 +120,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Success Criteria** (what must be TRUE):
   1. `uv run pytest -q tests/soak/test_soak_multiday_replay.py tests/degradation/` exits 0, covering the `soak-3d` memory bound, daily rollover and each degraded-mode fault row (AUTO-007, AUTO-008)
   2. `grep -rhoE "pumpgrok_(cycle_seconds|bot_crashes_total|orders_total|equity_sol|drawdown_pct|data_age_seconds|breaker_state|kill_switch|ledger_seq)" src/pumpgrok | sort -u | wc -l` prints `9`, and the metrics tests pass under `uv run pytest -q` (OBS-003)
-  3. `for f in setup engine start_stop kill_switch breaker_reset outage rollback reading_reports go_live; do test -f docs/runbooks/$f.md || exit 1; done && ./scripts/check.sh` exits 0, and `for p in 1 2 3 4 5; do grep -q "Phase $p" CHANGELOG.md || exit 1; done` exits 0 (OBS-004, OBS-005)
+  3. `for f in setup engine start_stop kill_switch breaker_reset outage rollback reading_reports go_live; do test -f docs/runbooks/$f.md || exit 1; done && ./scripts/check.sh` exits 0, `for p in 1 2 3 4 5; do grep -q "Phase $p" CHANGELOG.md || exit 1; done` exits 0, and `docker compose up -d --build pumpgrok && docker compose ps pumpgrok` reports the service `healthy` via the supervisor `/healthz` probe (OBS-004, OBS-005, FOUND-003)
   4. `uv run pytest -q tests/safety/test_no_manipulation_tools.py tests/execution/test_live_gate_fails_fast.py` exits 0, and `for f in src/pumpgrok/config/overlays/*.toml; do uv run python -c "import tomllib,sys; d=tomllib.load(open('$f','rb')); assert d.get('live',{}).get('enabled') is False, '$f'" || exit 1; done` exits 0 (RISK-007, GOLIVE-003)
   5. `gh run list --workflow security-pr.yml --branch main --limit 1 --json conclusion -q '.[0].conclusion'` prints `success`, or every non-green check is listed in `SECURITY.md` with an expiry date (SEC-005)
 
