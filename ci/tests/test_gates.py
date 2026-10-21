@@ -276,6 +276,21 @@ class TestG2Receipts:
         problems = receipt_gate.check(_receipt(loop_acks=[ack]), "bot-04-sniper")
         assert any("is a seat, not a human" in p for p in problems)
 
+# A git diff that cannot be computed must fail the gate, never print PASS on an unscanned tree.
+_UNRESOLVABLE_BASE = "refs/heads/no-such-base-ref-wr01"
+
+
+def test_secrets_gate_fails_closed_when_diff_fails():
+    r = run_gate("check_secrets.py", "--base", _UNRESOLVABLE_BASE)
+    assert r.returncode != 0
+    assert "PASS" not in r.stdout
+
+
+def test_contracts_gate_fails_closed_when_diff_fails():
+    r = run_gate("check_contracts.py", "--base", _UNRESOLVABLE_BASE)
+    assert r.returncode != 0
+    assert "PASS" not in r.stdout
+
 
 # ---------------------------------------------------------------------------
 # G-3 committed secrets

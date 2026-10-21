@@ -93,12 +93,17 @@ def _surface_match(pattern: str, path: str) -> bool:
 
 
 def changed_files(base: str) -> list[str]:
-    out = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
+    try:
+        out = subprocess.run(
+            ["git", "diff", "--name-only", f"{base}...HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
+        )
+    except subprocess.CalledProcessError as exc:
+        # A failed diff must not read as "no contract surfaces touched".
+        sys.exit(f"check_contracts: git diff failed: {exc.stderr}")
     return [l for l in out.stdout.splitlines() if l.strip()]
 
 

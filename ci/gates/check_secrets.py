@@ -235,24 +235,28 @@ def scan_file(path: Path, rel: str) -> list[dict]:
     return findings
 
 
-def changed_files(base: str) -> list[str]:
-    out = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
+def _git_lines(args: list[str]) -> list[str]:
+    try:
+        out = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
+        )
+    except subprocess.CalledProcessError as exc:
+        # A failed diff must not read as "no files to scan": that would print PASS on a tree
+        # that was never scanned.
+        sys.exit(f"check_secrets: git {' '.join(args[:2])} failed: {exc.stderr}")
     return [l for l in out.stdout.splitlines() if l.strip()]
+
+
+def changed_files(base: str) -> list[str]:
+    return _git_lines(["diff", "--name-only", f"{base}...HEAD"])
 
 
 def staged_files() -> list[str]:
-    out = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
-    return [l for l in out.stdout.splitlines() if l.strip()]
+    return _git_lines(["diff", "--cached", "--name-only", "--diff-filter=ACM"])
 
 
 def main() -> int:
