@@ -335,3 +335,71 @@ def test_register_all_duplicate_name_raises() -> None:
     probe = tool(_read_spec())(_read_call)
     with pytest.raises(ValueError, match="duplicate tool"):
         reg.register_all([probe, probe])
+
+
+def _retry_spec(attempts: int) -> ToolSpec:
+    return ToolSpec(
+        name="market.price",
+        description="Read-only price probe with a wired retry policy.",
+        input_model=_In,
+        output_model=_Out,
+        side_effect=SideEffect.READ,
+        timeout_s=5.0,
+        retry=RetryPolicy(attempts=attempts, base_s=0.01, max_s=0.02),
+        rate_limit_key="market",
+        backend="test",
+    )
+
+
+async def test_wrap_retries_read_timeouts_per_policy() -> None:
+    from pumpgrok.replay.clock import WallClock
+
+    audits: list[GrantAudit] = []
+    calls = 0
+
+    async def _allow(request: object, bot_id: str) -> bool:
+        return True
+
+    async def _flaky(payload: _In) -> _Out:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("transient")
+        return _Out(meta=_meta())
+
+    clock = WallClock()
+    reg = ToolRegistry(clock=clock, audit_sink=audits.append, limits_checker=_allow)
+    reg.register(tool(_retry_spec(3))(_flaky))
+    bot = _bot("bot-01-desk", [ToolGrant(name="market.price", side_effect=SideEffect.READ)])
+    factory = IdFactory(clock, random.Random(5))
+    with bind_correlation(CorrelationId.new(factory)):
+        resolved = reg.find("market.price", max_side_effect=SideEffect.READ, bot=bot)
+        out = await resolved(_In())
+    assert out.answer == "y"
+    assert calls == 2
+
+
+async def test_wrap_gives_up_after_attempts() -> None:
+    from pumpgrok.replay.clock import WallClock
+
+    audits: list[GrantAudit] = []
+    calls = 0
+
+    async def _allow(request: object, bot_id: str) -> bool:
+        return True
+
+    async def _down(payload: _In) -> _Out:
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("still down")
+
+    clock = WallClock()
+    reg = ToolRegistry(clock=clock, audit_sink=audits.append, limits_checker=_allow)
+    reg.register(tool(_retry_spec(2))(_down))
+    bot = _bot("bot-01-desk", [ToolGrant(name="market.price", side_effect=SideEffect.READ)])
+    factory = IdFactory(clock, random.Random(6))
+    with bind_correlation(CorrelationId.new(factory)):
+        resolved = reg.find("market.price", max_side_effect=SideEffect.READ, bot=bot)
+        with pytest.raises(TimeoutError):
+            await resolved(_In())
+    assert calls == 2

@@ -63,3 +63,23 @@ def derive_idempotency_key(
         canonical_json({"tool": tool, "bot": bot, "scope": scope, "payload": body}).encode()
     ).hexdigest()
     return digest[:32]
+
+
+def exec_place_key(ticket_id: str, side: str, decision_id: str) -> str:
+    """R23: exec.place idempotency over (ticket_id, side, decision_id) only.
+
+    Payload, tool and bot are excluded, so a repeat returns the first Fill.
+    `derive_idempotency_key` is unchanged (replay hash stability).
+    """
+    digest = hashlib.sha256(
+        canonical_json(
+            {"ticket_id": ticket_id, "side": str(side), "decision_id": decision_id}
+        ).encode()
+    ).hexdigest()
+    return digest[:32]
+
+
+def exec_cancel_key(order_id: str) -> str:
+    """exec.cancel idempotency over the order id only."""
+    digest = hashlib.sha256(canonical_json({"order_id": order_id}).encode()).hexdigest()
+    return digest[:32]

@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict
+from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt
 
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.bot import BotManifest
@@ -35,6 +36,31 @@ from pumpgrok.core.tool import Tool, ToolInput, ToolOutput
 from pumpgrok.replay.rng import make_rng
 
 _DEFAULT_PER_MINUTE = 60.0  # skeleton budget until config tools.* lands (Phase 3)
+
+log = logging.getLogger("pumpgrok.core")
+
+
+def _retriable_tool_error(exc: BaseException) -> bool:
+    """Retry only timeouts here; 5xx/429 retry at the transport client (rpc.py)."""
+    return isinstance(exc, TimeoutError)
+
+
+class _JitterWait:
+    """Exponential backoff from base_s capped at max_s, plus seeded jitter (R27).
+
+    Same shape as tools.onchain.rpc._SeededWait; kept separate so core never
+    imports from the tool layer. Never touches global ``random``.
+    """
+
+    def __init__(self, rng: random.Random, base: float, cap: float) -> None:
+        self._rng = rng
+        self._base = base
+        self._cap = cap
+
+    def __call__(self, retry_state: object) -> float:
+        attempt = max(int(getattr(retry_state, "attempt_number", 1)), 1)
+        ceiling = min(self._base * (2.0 ** (attempt - 1)), self._cap)
+        return ceiling + self._rng.uniform(0, ceiling)
 
 
 class GrantAudit(BaseModel):
@@ -143,9 +169,13 @@ class ToolRegistry:
                     self._refuse(bot, spec.name, spec.side_effect, "not_in_roster", str(cid))
                 continue
             if spec.side_effect.exceeds(grant.side_effect):
-                self._refuse(bot, spec.name, spec.side_effect, "exceeds_grant", str(cid))
+                if capability == spec.name:
+                    self._refuse(bot, spec.name, spec.side_effect, "exceeds_grant", str(cid))
+                continue
             if spec.side_effect.exceeds(max_side_effect):
-                self._refuse(bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid))
+                if capability == spec.name:
+                    self._refuse(bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid))
+                continue
             self._audit(
                 GrantAudit(
                     at=self._now(),
@@ -197,10 +227,15 @@ class ToolRegistry:
 
     def _wrap(self, t: Tool, bot: BotManifest) -> Tool:
         """Apply the Clock-routed timeout, correlation stamping and, for approval-gated
-        tools, the limits/approval check (I2). Retry and rate limiting are not applied yet."""
+        tools, the limits/approval check (I2). READ tools retry timeouts per their
+        RetryPolicy (5xx/429 apply at the transport client, which reads the same
+        policy); every call acquires the per-rate_limit_key limiter first."""
         spec = t.spec
         check_limits = self._check_limits
         clock = self._clock
+        rng = self._rng
+        limiter = self._limiter_for(spec.rate_limit_key)
+        policy = spec.retry
 
         class _Guarded:
             def __init__(self) -> None:
@@ -217,8 +252,21 @@ class ToolRegistry:
                             raise PermissionDenied(
                                 "RiskEngine.check refused", tool=spec.name, bot=bot.id
                             )
-                    # Not wired yet: spec.rate_limit_key and spec.retry (attempts must be 1).
                     async with clock.timeout(spec.timeout_s):
-                        return await t(payload)
+                        if policy.attempts <= 1:
+                            await limiter.acquire()
+                            return await t(payload)
+                        wait = _JitterWait(rng, base=policy.base_s, cap=policy.max_s)
+                        async for attempt in AsyncRetrying(
+                            sleep=clock.sleep,
+                            wait=wait,
+                            stop=stop_after_attempt(policy.attempts),
+                            retry=retry_if_exception(_retriable_tool_error),
+                            reraise=True,
+                        ):
+                            with attempt:
+                                await limiter.acquire()
+                                return await t(payload)
+                raise AssertionError("unreachable")
 
         return _Guarded()
