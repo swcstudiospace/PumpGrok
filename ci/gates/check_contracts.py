@@ -2,7 +2,7 @@
 """Gate G-4 — contract-first changes.
 
 A breaking change to a contract surface requires a version bump, a migration note, and an
-acknowledgement from every consumer listed in ownership.yaml.
+acknowledgement from every consumer listed in ownership.yaml except the proposing seat.
 
 Contracts are the only shared surface in a platform-decomposed system. A field rename that takes
 thirty seconds in the API repo breaks the iOS client silently, and the break is found weeks later
@@ -49,7 +49,7 @@ def _segments_match(pattern: str, path: str) -> bool:
     pat_parts = pattern.split("/")
     path_parts = path.split("/")
     return len(pat_parts) == len(path_parts) and all(
-        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts)
+        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts, strict=True)
     )
 
 
@@ -112,13 +112,142 @@ def changed_files(base: str) -> list[str]:
     except subprocess.CalledProcessError as exc:
         # A failed diff must not read as "no contract surfaces touched".
         sys.exit(f"check_contracts: git diff failed: {exc.stderr}")
-    return [l for l in out.stdout.splitlines() if l.strip()]
+    return [line for line in out.stdout.splitlines() if line.strip()]
 
 
 def touched_contracts(files: list[str], manifest: dict) -> list[str]:
     surfaces = contract_surfaces(manifest)
     return [f for f in files if any(_match(p, f) for p in surfaces)]
 
+
+def _surface_coverage_problems(
+    surfaces: list[str], touched: list[str] | None, change_path: Path | None
+) -> list[str]:
+    """The change document must actually describe THIS change.
+
+    Without this, a document left in contracts/changes/ after its own change merged will
+    validate a later, unrelated change: the caller selects a document by globbing the
+    directory, the gate reads it, and a breaking change with no acknowledgements passes on
+    the strength of a stale non-breaking record. The document's declared surfaces are the
+    only thing tying it to a diff, so they have to cover the diff.
+    """
+    if touched is None or not surfaces:
+        return []
+
+    # Compare the change document by resolved path, not by string: the gate may be run
+    # from a subdirectory, and a document that failed to match its own entry in the diff
+    # would be reported as an undeclared surface against itself.
+    def _is_change_doc(rel: str) -> bool:
+        if change_path is None:
+            return False
+        try:
+            return (REPO_ROOT / rel).resolve() == change_path.resolve()
+        except OSError:
+            return False
+
+    # contracts/changes/ is the protocol's own bookkeeping — change documents, the
+    # template, the archive — not a surface any consumer builds against. Requiring a
+    # document to declare those paths would mean every change that archives the previous
+    # document, which is the normal flow, has to list the archived file as a surface it
+    # changed. Noise, and it would push people toward a `contracts/**` wildcard that
+    # satisfies the check while describing nothing.
+    def _is_bookkeeping(rel: str) -> bool:
+        return rel == "contracts/changes" or rel.startswith("contracts/changes/")
+
+    undeclared = [
+        t
+        for t in touched
+        if not _is_change_doc(t)
+        and not _is_bookkeeping(t)
+        and not any(_surface_match(p, t) for p in surfaces)
+    ]
+    if not undeclared:
+        return []
+    return [
+        "change document does not cover every contract surface in this change.\n"
+        "      Declared: " + ", ".join(surfaces) + "\n"
+        "      Undeclared: " + ", ".join(undeclared) + "\n"
+        "      Either this is the wrong change document — a stale one selected from\n"
+        "      contracts/changes/ validates a change it never described — or the\n"
+        "      paths above belong in its 'surfaces:' list."
+    ]
+
+
+def _required_acknowledgers(doc: dict, manifest: dict, surfaces: list[str]) -> list[str]:
+    """Consumers that must ack: contract_consumers(surface) minus proposed_by (R56)."""
+    needed = list(doc.get("consumers_required") or [])
+    if not needed:
+        for surf in surfaces:
+            for consumer in required_consumers(surf, manifest):
+                if consumer not in needed:
+                    needed.append(consumer)
+    proposer = doc.get("proposed_by")
+    if isinstance(proposer, str) and proposer:
+        needed = [c for c in needed if c != proposer]
+    return needed
+
+
+def _visible_acks(doc: dict) -> dict:
+    """Acknowledgements the gate may see: a proposer ack is ignored, never rejected (R56)."""
+    acks = {a["bot"]: a for a in doc.get("acknowledgements", []) if isinstance(a, dict)}
+    proposer = doc.get("proposed_by")
+    if isinstance(proposer, str) and proposer:
+        acks = {bot: ack for bot, ack in acks.items() if bot != proposer}
+    return acks
+
+
+def _breaking_ack_problems(needed: list[str], acks: dict) -> list[str]:
+    """Every remaining required consumer must have a truthy ack (R56: presence, not authorship)."""
+    problems = []
+    for consumer in needed:
+        ack = acks.get(consumer)
+        if ack is None:
+            problems.append(
+                f"BREAKING change with no acknowledgement from '{consumer}'\n"
+                "      A breaking change needs every consumer except the proposer "
+                "to confirm it can implement it."
+            )
+        elif not ack.get("ack"):
+            note = ack.get("note", "no reason given")
+            problems.append(f"consumer '{consumer}' REJECTED the change: {note}")
+    return problems
+
+
+def _non_breaking_rejection_problems(acks: dict) -> list[str]:
+    """Non-breaking acks are informational, but a rejection still blocks."""
+    problems = []
+    for consumer, ack in acks.items():
+        if ack.get("ack") is False:
+            problems.append(
+                f"consumer '{consumer}' rejected this non-breaking change: "
+                f"{ack.get('note', 'no reason given')}"
+            )
+    return problems
+
+
+def _version_bump_problems(doc: dict) -> list[str]:
+    """A breaking change needs a major bump."""
+    version = str(doc["version"])
+    try:
+        major = int(version.split(".", maxsplit=1)[0])
+    except (ValueError, IndexError):
+        return [f"version '{version}' is not semver"]
+    problems = []
+    if major == 0:
+        problems.append(
+            f"BREAKING change at version '{version}' — a breaking change needs a major bump"
+        )
+    elif doc.get("previous_version"):
+        try:
+            prev_major = int(str(doc["previous_version"]).split(".")[0])
+            if major <= prev_major:
+                problems.append(
+                    "BREAKING change but major version did not increase "
+                    f"({doc['previous_version']} -> {version})"
+                )
+        except (ValueError, IndexError):
+            pass
+    return problems
 
 def check_change_doc(
     doc: dict, manifest: dict, touched: list[str] | None = None, change_path: Path | None = None
@@ -131,116 +260,28 @@ def check_change_doc(
     if problems:
         return problems
 
-    surface = doc["surface"]
-    breaking = doc["breaking"]
-    acks = {a["bot"]: a for a in doc.get("acknowledgements", []) if isinstance(a, dict)}
-
-    # The change document must actually describe THIS change.
-    #
-    # Without this, a document left in contracts/changes/ after its own change merged will
-    # validate a later, unrelated change: the caller selects a document by globbing the
-    # directory, the gate reads it, and a breaking change with no acknowledgements passes on
-    # the strength of a stale non-breaking record. The document's declared surfaces are the
-    # only thing tying it to a diff, so they have to cover the diff.
     surfaces = declared_surfaces(doc)
-    if touched is not None and surfaces:
-        # Compare the change document by resolved path, not by string: the gate may be run
-        # from a subdirectory, and a document that failed to match its own entry in the diff
-        # would be reported as an undeclared surface against itself.
-        def _is_change_doc(rel: str) -> bool:
-            if change_path is None:
-                return False
-            try:
-                return (REPO_ROOT / rel).resolve() == change_path.resolve()
-            except OSError:
-                return False
+    problems.extend(_surface_coverage_problems(surfaces, touched, change_path))
 
-        # contracts/changes/ is the protocol's own bookkeeping — change documents, the
-        # template, the archive — not a surface any consumer builds against. Requiring a
-        # document to declare those paths would mean every change that archives the previous
-        # document, which is the normal flow, has to list the archived file as a surface it
-        # changed. Noise, and it would push people toward a `contracts/**` wildcard that
-        # satisfies the check while describing nothing.
-        def _is_bookkeeping(rel: str) -> bool:
-            return rel == "contracts/changes" or rel.startswith("contracts/changes/")
-
-        undeclared = [
-            t
-            for t in touched
-            if not _is_change_doc(t)
-            and not _is_bookkeeping(t)
-            and not any(_surface_match(p, t) for p in surfaces)
-        ]
-        if undeclared:
-            problems.append(
-                "change document does not cover every contract surface in this change.\n"
-                "      Declared: " + ", ".join(surfaces) + "\n"
-                "      Undeclared: " + ", ".join(undeclared) + "\n"
-                "      Either this is the wrong change document — a stale one selected from\n"
-                "      contracts/changes/ validates a change it never described — or the\n"
-                "      paths above belong in its 'surfaces:' list."
-            )
-
-    needed = list(doc.get("consumers_required") or [])
-    if not needed:
-        for surf in surfaces:
-            for consumer in required_consumers(surf, manifest):
-                if consumer not in needed:
-                    needed.append(consumer)
+    needed = _required_acknowledgers(doc, manifest, surfaces)
     if not needed:
         problems.append(
-            f"no consumers resolved for surface '{surface}' — "
+            f"no consumers resolved for surface '{doc['surface']}' — "
             "either the surface is wrong or contract_consumers needs an entry"
         )
+    acks = _visible_acks(doc)
 
-    if breaking:
-        # Every consumer must positively acknowledge.
-        for consumer in needed:
-            ack = acks.get(consumer)
-            if ack is None:
-                problems.append(
-                    f"BREAKING change with no acknowledgement from '{consumer}'\n"
-                    f"      A breaking change needs every consumer to confirm it can implement it."
-                )
-            elif not ack.get("ack"):
-                note = ack.get("note", "no reason given")
-                problems.append(f"consumer '{consumer}' REJECTED the change: {note}")
+    if doc["breaking"]:
+        problems.extend(_breaking_ack_problems(needed, acks))
 
         if not doc.get("migration_note"):
             problems.append(
                 "BREAKING change with no 'migration_note' — "
                 "consumers need to know what to do, and why"
             )
-
-        version = str(doc["version"])
-        try:
-            major = int(version.split(".", maxsplit=1)[0])
-        except (ValueError, IndexError):
-            problems.append(f"version '{version}' is not semver")
-            major = None
-        if major == 0:
-            problems.append(
-                f"BREAKING change at version '{version}' — a breaking change needs a major bump"
-            )
-        elif doc.get("previous_version"):
-            try:
-                prev_major = int(str(doc["previous_version"]).split(".")[0])
-                if major <= prev_major:
-                    problems.append(
-                        f"BREAKING change but major version did not increase "
-                        f"({doc['previous_version']} -> {version})"
-                    )
-            except (ValueError, IndexError):
-                pass
-
+        problems.extend(_version_bump_problems(doc))
     else:
-        # Non-breaking: acknowledgements are informational, but a rejection still blocks.
-        for consumer, ack in acks.items():
-            if ack.get("ack") is False:
-                problems.append(
-                    f"consumer '{consumer}' rejected this non-breaking change: "
-                    f"{ack.get('note', 'no reason given')}"
-                )
+        problems.extend(_non_breaking_rejection_problems(acks))
 
     # The semantic-change trap: nothing detects a field whose meaning changed but whose
     # name and type did not. Require an explicit declaration either way.

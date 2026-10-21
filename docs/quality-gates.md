@@ -11,7 +11,7 @@ for CI and for local pre-flight. A gate that fails is fixed at its cause. Nobody
 | G-1 Path ownership | `check_ownership.py` | Every path the change touches has exactly one owning seat in `ownership.yaml`; an unowned path fails. | `--bot`, `--base` |
 | G-2 Verification receipt | `check_receipt.py` | The seat ran the commands it claims and they exited 0. CI re-runs the commands. | `--receipt`, `--bot` |
 | G-3 Committed secrets | `check_secrets.py` | No key material, token shape or secret-bearing URL is committed. | `--base` |
-| G-4 Contract-first changes | `check_contracts.py` | A change to a contract surface carries a change document; a breaking change has an acknowledgement from every consumer. | `--base`, optional `--change` |
+| G-4 Contract-first changes | `check_contracts.py` | A change to a contract surface carries a change document; a breaking change has an acknowledgement from every consumer except the proposer (a proposer ack is ignored — the gate proves presence, not authorship). | `--base`, optional `--change` |
 | G-5/G-6 Rollback and destructive ops | `check_rollback.py` | A deployment names a rollback command, recovery time and data implications (G-5). A destructive operation has human approval recorded before execution (G-6). | `--receipt` |
 | G-7 Desk integrity | `check_desk_integrity.py` | The desk's own description is sound: rosters, tool schemas, prompt sources and templates. Reads the repo as it is; no diff, no receipt. | `--repo` |
 

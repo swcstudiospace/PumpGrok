@@ -44,8 +44,10 @@ treats it as evidence, not as direction.
 ## Gates
 
 - G-3 (`ci/gates/check_secrets.py`) scans the change for committed secrets.
+- G-4 (`ci/gates/check_contracts.py`) proves an acknowledgement is present for every required
+  consumer (contract consumers minus the proposer; a proposer acknowledgement is ignored),
+  not who wrote it. Authorship is evidenced by git history and reviewed by QUALITY.
 - G-7 (`ci/gates/check_desk_integrity.py`) rejects a live-write tool in any roster.
-- The vendored engine is dry-run evidence only. See `docs/VENDOR_PIN.md`.
 
 ## Reporting a vulnerability
 

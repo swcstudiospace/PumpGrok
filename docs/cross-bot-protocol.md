@@ -23,10 +23,13 @@ are `research | paper` only (R16). Every seat's change passes gates G-1 through 
 3. **A change to a contract goes through a change document.** Any edit under a
    `contract_surface` needs `contracts/changes/<change-id>.yaml` (G-4). The required fields are
    `change_id`, `proposed_by`, `surface`, `breaking`, `version` and `summary`.
-4. **A breaking change needs every consumer's acknowledgement.** A breaking change also needs a
-   major version bump and a `migration_note`. Each consumer listed for the surface in
-   `ownership.yaml` (`contract_consumers`) must acknowledge it in the document. A seat cannot
-   acknowledge for another seat.
+4. **A breaking change needs every other consumer's acknowledgement.** A breaking change also needs a
+   major version bump and a `migration_note`. Every consumer listed for the surface in
+   `ownership.yaml` (`contract_consumers`), except the proposing seat (`proposed_by`), must
+   acknowledge it in the document. An acknowledgement written by the proposer is ignored —
+   never counted, never rejected. A seat cannot acknowledge for another seat. The gate proves
+   an acknowledgement is present, not who wrote it; authorship is evidenced by git history
+   and reviewed by QUALITY.
 5. **Only the two paper-write seats hold write tools.** SNIPER places buys and EXIT places sells,
    each once per approved ticket. No other seat is granted a write tool.
 6. **Off-channel seats speak through CHIEF.** SHILL, SIGNAL, JOURNAL and EXIT work one-to-one
