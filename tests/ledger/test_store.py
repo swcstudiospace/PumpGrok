@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -59,3 +60,14 @@ def test_duplicate_idempotency_key_refused(tmp_path) -> None:
     with pytest.raises(Exception):
         store.append(**_event(ts_utc="2026-01-01T00:00:02.000001Z"))
     assert store.count() == 1
+
+
+def test_snapshots_are_append_only(tmp_path) -> None:
+    store = LedgerStore(tmp_path / "ledger.sqlite")
+    store.write_snapshot(seq=1, ts_utc="2026-01-01T00:00:00.000001Z", state={"a": 1})
+    with pytest.raises(sqlite3.IntegrityError):
+        store.write_snapshot(seq=1, ts_utc="2026-01-01T00:00:00.000002Z", state={"a": 2})
+    with pytest.raises(sqlite3.IntegrityError):
+        store._db.execute("UPDATE snapshots SET state_json='{}' WHERE seq=1")
+    with pytest.raises(sqlite3.IntegrityError):
+        store._db.execute("DELETE FROM snapshots WHERE seq=1")

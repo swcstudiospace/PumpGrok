@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS snapshots (
   ts_utc      TEXT    NOT NULL,
   state_json  TEXT    NOT NULL
 );
+CREATE TRIGGER IF NOT EXISTS snapshots_append_only_u BEFORE UPDATE ON snapshots
+BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS snapshots_append_only_d BEFORE DELETE ON snapshots
+BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
@@ -221,9 +225,12 @@ class LedgerStore:
         return int(row[0])
 
     def write_snapshot(self, *, seq: int, ts_utc: str, state: Mapping[str, Any]) -> None:
-        """Fold state at seq into the snapshots table (append-only like events)."""
+        """Record state at seq. Append-only like events: a duplicate seq raises.
+
+        Snapshots are not hash-chained, so verify() does not cover them.
+        """
         self._db.execute(
-            "INSERT OR REPLACE INTO snapshots (seq, ts_utc, state_json) VALUES (?, ?, ?);",
+            "INSERT INTO snapshots (seq, ts_utc, state_json) VALUES (?, ?, ?);",
             (seq, ts_utc, canonical_json(dict(state))),
         )
 
