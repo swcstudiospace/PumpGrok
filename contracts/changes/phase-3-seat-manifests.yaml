@@ -1,0 +1,66 @@
+change_id: phase-3-seat-manifests
+proposed_by: bot-02-risk
+surface: contracts/tool-rosters/**
+surfaces:
+- contracts/events/**
+- contracts/README.md
+breaking: false
+version: "1.1.0"
+previous_version: "1.0.0"
+summary: >-
+  Additive seat-manifest blocks (B6 option a): each of the ten seat roster
+  files gains a manifest block that loads as BotManifest, and every roster
+  file (ten seats plus _core) bumps version 1.0.0 to 1.1.0. No tool name,
+  grant, or side_effect changes; R35 effective counts hold.
+reversibility: one-way
+files:
+- contracts/tool-rosters/bot-00-chief.yaml
+- contracts/tool-rosters/bot-01-scout.yaml
+- contracts/tool-rosters/bot-02-risk.yaml
+- contracts/tool-rosters/bot-03-whale.yaml
+- contracts/tool-rosters/bot-04-sniper.yaml
+- contracts/tool-rosters/bot-05-rug.yaml
+- contracts/tool-rosters/bot-06-exit.yaml
+- contracts/tool-rosters/bot-07-shill.yaml
+- contracts/tool-rosters/bot-08-signal.yaml
+- contracts/tool-rosters/bot-09-journal.yaml
+- contracts/tool-rosters/_core.yaml
+rationale: >-
+  B6 option (a), approved by the user (ask: roster, Approve the additive
+  version bump): the roster YAML could not load as BotManifest, so each seat
+  roster carries an additive manifest block with the same field list as
+  ROSTER section 5 (id, display, channel, purpose, inputs, outputs, skills,
+  risk_budget, forbidden, fail_safe, schedule, escalation, owned_paths,
+  receipts_dir, prompt_source, writes_to_exchange). allowed_tools is derived
+  by the loader from the roster tools list plus _core, so tool names stay in
+  exactly one place. The 1.0.0 to 1.1.0 bump marks the additive contract
+  change; G-4 acknowledgements from all ten seat consumers are PENDING (human
+  checkpoint recorded below). RISK and RUG stay at 15 effective tools each.
+  B3 reading: chief keeps portfolio.exposure, exec.positions and
+  portfolio.pnl as read tools; TOOL-009 "no exposure tools" means no
+  exposure-creating tools (exec.place, exec.cancel, market.*), which chief
+  does not hold. One-way roster contract change.
+b3_reading: >-
+  Chief retains portfolio.exposure, exec.positions and portfolio.pnl as READ
+  grants (desk-monitoring requires them; ROSTER section 6 matrix). TOOL-009
+  "chief has no exposure tools" is read as no exposure-creating tools:
+  chief resolves no exec.place, exec.cancel, or market.* tool.
+pending_acks:
+- bot-00-chief
+- bot-01-scout
+- bot-02-risk
+- bot-03-whale
+- bot-04-sniper
+- bot-05-rug
+- bot-06-exit
+- bot-07-shill
+- bot-08-signal
+- bot-09-journal
+acknowledgements: []
+ack_note: >-
+  G-4 acknowledgements from all ten seat consumers are PENDING; they cannot
+  be obtained in this run. This non-breaking change ships with zero acks
+  recorded; no consumer rejection is outstanding.
+approval: "user (ask: roster, Approve the additive version bump)"
+semantic_changes: []
+migration_note: ""
