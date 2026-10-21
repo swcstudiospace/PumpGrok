@@ -107,3 +107,6 @@ desk.doctor P 60 - desk d(tool,bot,sha(input))
 ## Deferred Ideas
 - Phase 4 (PaperAdapter, RiskEngine, ledger, breakers, live gate); Phase 5 (RISK-007, fault injection).
 </deferred>
+
+## Orchestrator resolutions (binding, from Phase 2 review)
+- R63 (seat guard on paper and state verbs): the --seat check that refuses sniper and exit (Phase 2, plan 02-04) is a policy filter on the caller-supplied value, not an authentication control. The control is the registry plus the approval record (invariants I1-I5 and ApprovalRecord). Phase 3 adds tests/safety/test_cron_seats_cannot_write.py proving that a cron-owner seat (sniper, exit per hermes forbidden_owners) cannot resolve any paper-write tool through the registry, and that a paper buy without a valid approval_id is rejected regardless of --seat.
