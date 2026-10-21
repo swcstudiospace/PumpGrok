@@ -8,33 +8,88 @@ limits checker that refuses every approval-gated call until RiskEngine lands
 registry. `build_operator_registry()` composes the full 37-tool Phase 3
 catalog over the same root for operator verbs (TOOL-011).
 """
+
 from __future__ import annotations
 
+import os
 import random
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.core.errors import NotYetImplemented
 from pumpgrok.core.ids import Clock
+from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
+from pumpgrok.replay.rng import make_rng
+from pumpgrok.tools.desk._memory import MemoryBank
+from pumpgrok.tools.desk.brief import build_brief_tool
+from pumpgrok.tools.desk.docs_search import build_docs_search_tool
+from pumpgrok.tools.desk.doctor import build_doctor_tool
+from pumpgrok.tools.desk.event_emit import build_event_emit_tool
+from pumpgrok.tools.desk.memory_recall import build_memory_recall_tool
+from pumpgrok.tools.desk.memory_retain import build_memory_retain_tool
+from pumpgrok.tools.desk.ownership_resolve import build_ownership_resolve_tool
+from pumpgrok.tools.desk.receipt_check import build_receipt_check_tool
+from pumpgrok.tools.exec.cancel import build_cancel_tool
+from pumpgrok.tools.exec.place import build_place_tool
+from pumpgrok.tools.exec.positions import build_positions_tool
+from pumpgrok.tools.exec.quote import build_quote_tool
+from pumpgrok.tools.exec.simulate import build_simulate_tool
+from pumpgrok.tools.journal.append import build_journal_append_tool
+from pumpgrok.tools.journal.render_report import build_render_report_tool
+from pumpgrok.tools.market.holders_snapshot import build_holders_snapshot_tool
+from pumpgrok.tools.market.liquidity import build_liquidity_tool
+from pumpgrok.tools.market.ohlcv import build_ohlcv_tool
+from pumpgrok.tools.market.price import build_price_tool
+from pumpgrok.tools.market.trades import build_trades_tool
+from pumpgrok.tools.notify.alert import build_alert_tool
+from pumpgrok.tools.notify.notifier import Notifier
+from pumpgrok.tools.onchain.authorities_tool import build_authorities_tool
+from pumpgrok.tools.onchain.deployer_history import build_deployer_history_tool
+from pumpgrok.tools.onchain.large_transfers import build_large_transfers_tool
+from pumpgrok.tools.onchain.lp_status import build_lp_status_tool
+from pumpgrok.tools.onchain.priority_fee_tool import build_priority_fee_tool
+from pumpgrok.tools.onchain.rpc import RpcClient
+from pumpgrok.tools.onchain.token_metadata import build_token_metadata_tool
+from pumpgrok.tools.onchain.top_holders import build_top_holders_tool
+from pumpgrok.tools.portfolio.exposure import build_exposure_tool
+from pumpgrok.tools.portfolio.ledger_read import build_ledger_read_tool
+from pumpgrok.tools.portfolio.ledger_write import build_ledger_write_tool
+from pumpgrok.tools.portfolio.pnl import build_pnl_tool
+from pumpgrok.tools.risk.check_limits import build_check_limits_tool
+from pumpgrok.tools.risk.drawdown import build_drawdown_tool
+from pumpgrok.tools.risk.halt_status import build_halt_status_tool
+from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
+from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
     from pumpgrok.config.settings import Settings
     from pumpgrok.core.bot import BotManifest
 
-    import httpx
 
-    from pumpgrok.tools.onchain.rpc import RpcClient
-
-
-__all__ = ["build_registry", "register_read_tools", "build_operator_registry"]
+__all__ = ["build_operator_registry", "build_registry", "register_read_tools"]
 
 
 async def _refuse_all(request: OrderRequest, bot_id: str) -> bool:
     """Fail-closed limits checker (skeleton): refuse until RiskEngine lands."""
     return False
+
+
+class _NeverSendNotifier(Notifier):
+    """Registration-only notifier: the Phase 3 CLI never calls notify.alert."""
+
+    async def send_telegram(self, chat_id: str, text: str) -> None:
+        raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
+
+    async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
+        raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
 
 
 def build_registry(
@@ -63,19 +118,6 @@ def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
     ``RpcClient`` with ordered failover and a header-only key (T-03-02-02).
     Returns the registry for chaining.
     """
-    from pumpgrok.tools.market.holders_snapshot import build_holders_snapshot_tool
-    from pumpgrok.tools.market.liquidity import build_liquidity_tool
-    from pumpgrok.tools.market.ohlcv import build_ohlcv_tool
-    from pumpgrok.tools.market.price import build_price_tool
-    from pumpgrok.tools.market.trades import build_trades_tool
-    from pumpgrok.tools.onchain.authorities_tool import build_authorities_tool
-    from pumpgrok.tools.onchain.deployer_history import build_deployer_history_tool
-    from pumpgrok.tools.onchain.large_transfers import build_large_transfers_tool
-    from pumpgrok.tools.onchain.lp_status import build_lp_status_tool
-    from pumpgrok.tools.onchain.priority_fee_tool import build_priority_fee_tool
-    from pumpgrok.tools.onchain.token_metadata import build_token_metadata_tool
-    from pumpgrok.tools.onchain.top_holders import build_top_holders_tool
-
     registry.register_all(
         [
             build_price_tool(rpc),
@@ -95,6 +137,62 @@ def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
     return registry
 
 
+def _register_trading(
+    reg: ToolRegistry, rpc: RpcClient, adapter: NotYetImplementedAdapter, budget: RiskBudget
+) -> None:
+    """Scoring, quote/simulate/place/cancel and position tools (refusing adapter)."""
+    reg.register(build_score_report_tool(rpc))
+    reg.register(build_quote_tool(adapter))
+    reg.register(build_simulate_tool())
+    reg.register(build_place_tool(adapter, lambda: budget))
+    reg.register(build_cancel_tool())
+    reg.register(build_positions_tool(adapter))
+
+
+def _register_ledger_and_risk(
+    reg: ToolRegistry, store: LedgerStore, clock: Clock, data_dir: Path, budget: RiskBudget
+) -> None:
+    """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
+    kill_switch_file = data_dir / "KILLSWITCH"
+    reg.register(build_ledger_read_tool(store))
+    reg.register(build_ledger_write_tool(store, clock))
+    reg.register(build_exposure_tool(store, clock))
+    reg.register(build_pnl_tool(store, clock))
+    reg.register(build_check_limits_tool(store, budget))
+    reg.register(build_drawdown_tool(store, budget))
+    reg.register(build_halt_status_tool(store, kill_switch_file, "paper"))
+    reg.register(build_kill_switch_tool(store, clock, kill_switch_file))
+    reg.register(build_journal_append_tool(store, clock, data_dir / "journal"))
+    reg.register(build_render_report_tool(store, clock, data_dir / "reports"))
+
+
+def _register_desk(
+    reg: ToolRegistry,
+    *,
+    store: LedgerStore,
+    bank: MemoryBank,
+    clock: Clock,
+    settings: Settings,
+    data_dir: Path,
+    repo_root: Path,
+) -> None:
+    """Alert, brief, docs, memory, ownership, receipt, event and doctor tools."""
+    reg.register(
+        build_alert_tool(
+            _NeverSendNotifier(allowlist=(), clock=clock, alert_file=data_dir / "alerts.jsonl"),
+            clock,
+        )
+    )
+    reg.register(build_brief_tool(store, bank, clock, None, "paper"))
+    reg.register(build_docs_search_tool(repo_root))
+    reg.register(build_memory_retain_tool(bank))
+    reg.register(build_memory_recall_tool(bank))
+    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
+    reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root))
+    reg.register(build_event_emit_tool(store, clock, data_dir / "journal", "bot-00-chief"))
+    reg.register(build_doctor_tool(settings, data_dir / "bindings", os.urandom(32)))
+
+
 def build_operator_registry(
     *,
     data_dir: Path,
@@ -110,54 +208,6 @@ def build_operator_registry(
     through ``registry.find`` and I1 holds on every verb. Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
     """
-    import os
-
-    import httpx
-
-    from pumpgrok.core.errors import NotYetImplemented
-    from pumpgrok.core.manifests import load_bot_manifests
-    from pumpgrok.core.risk_budget import RiskBudget
-    from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
-    from pumpgrok.ledger.store import LedgerStore
-    from pumpgrok.replay.rng import make_rng
-    from pumpgrok.tools.desk._memory import MemoryBank
-    from pumpgrok.tools.desk.brief import build_brief_tool
-    from pumpgrok.tools.desk.docs_search import build_docs_search_tool
-    from pumpgrok.tools.desk.doctor import build_doctor_tool
-    from pumpgrok.tools.desk.event_emit import build_event_emit_tool
-    from pumpgrok.tools.desk.memory_recall import build_memory_recall_tool
-    from pumpgrok.tools.desk.memory_retain import build_memory_retain_tool
-    from pumpgrok.tools.desk.ownership_resolve import build_ownership_resolve_tool
-    from pumpgrok.tools.desk.receipt_check import build_receipt_check_tool
-    from pumpgrok.tools.exec.cancel import build_cancel_tool
-    from pumpgrok.tools.exec.place import build_place_tool
-    from pumpgrok.tools.exec.positions import build_positions_tool
-    from pumpgrok.tools.exec.quote import build_quote_tool
-    from pumpgrok.tools.exec.simulate import build_simulate_tool
-    from pumpgrok.tools.journal.append import build_journal_append_tool
-    from pumpgrok.tools.journal.render_report import build_render_report_tool
-    from pumpgrok.tools.notify.alert import build_alert_tool
-    from pumpgrok.tools.notify.notifier import Notifier
-    from pumpgrok.tools.onchain.rpc import RpcClient
-    from pumpgrok.tools.portfolio.exposure import build_exposure_tool
-    from pumpgrok.tools.portfolio.ledger_read import build_ledger_read_tool
-    from pumpgrok.tools.portfolio.ledger_write import build_ledger_write_tool
-    from pumpgrok.tools.portfolio.pnl import build_pnl_tool
-    from pumpgrok.tools.risk.check_limits import build_check_limits_tool
-    from pumpgrok.tools.risk.drawdown import build_drawdown_tool
-    from pumpgrok.tools.risk.halt_status import build_halt_status_tool
-    from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
-    from pumpgrok.tools.safety.score_report import build_score_report_tool
-
-    class _NeverSendNotifier(Notifier):
-        """Registration-only notifier: the Phase 3 CLI never calls notify.alert."""
-
-        async def send_telegram(self, chat_id: str, text: str) -> None:
-            raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
-
-        async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
-            raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
-
     active_clock = clock if clock is not None else WallClock()
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -171,45 +221,16 @@ def build_operator_registry(
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
-    reg.register(build_score_report_tool(rpc))
-    reg.register(build_quote_tool(adapter))
-    reg.register(build_simulate_tool())
-    reg.register(build_place_tool(adapter, lambda: budget))
-    reg.register(build_cancel_tool())
-    reg.register(build_positions_tool(adapter))
-    reg.register(build_ledger_read_tool(store))
-    reg.register(build_ledger_write_tool(store, active_clock))
-    reg.register(build_exposure_tool(store, active_clock))
-    reg.register(build_pnl_tool(store, active_clock))
-    reg.register(build_check_limits_tool(store, budget))
-    reg.register(build_drawdown_tool(store, budget))
-    reg.register(build_halt_status_tool(store, data_dir / "KILLSWITCH", "paper"))
-    reg.register(build_kill_switch_tool(store, active_clock, data_dir / "KILLSWITCH"))
-    reg.register(build_journal_append_tool(store, active_clock, data_dir / "journal"))
-    reg.register(build_render_report_tool(store, active_clock, data_dir / "reports"))
-    reg.register(
-        build_alert_tool(
-            _NeverSendNotifier(
-                allowlist=(), clock=active_clock, alert_file=data_dir / "alerts.jsonl"
-            ),
-            active_clock,
-        )
-    )
-    reg.register(build_brief_tool(store, bank, active_clock, None, "paper"))
-    reg.register(build_docs_search_tool(repo_root))
-    reg.register(build_memory_retain_tool(bank))
-    reg.register(build_memory_recall_tool(bank))
-    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
-    reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root))
-    reg.register(
-        build_event_emit_tool(store, active_clock, data_dir / "journal", "bot-00-chief")
-    )
-    reg.register(
-        build_doctor_tool(
-            settings,
-            data_dir / "bindings",
-            os.urandom(32),
-        )
+    _register_trading(reg, rpc, adapter, budget)
+    _register_ledger_and_risk(reg, store, active_clock, data_dir, budget)
+    _register_desk(
+        reg,
+        store=store,
+        bank=bank,
+        clock=active_clock,
+        settings=settings,
+        data_dir=data_dir,
+        repo_root=repo_root,
     )
     manifests = load_bot_manifests(repo_root / "contracts" / "tool-rosters")
     return reg, manifests, client
