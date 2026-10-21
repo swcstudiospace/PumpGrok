@@ -22,6 +22,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Depends on**: Nothing (first phase)
 **Requirements**: FOUND-001, FOUND-002, FOUND-003, FOUND-004, FOUND-005, FOUND-006, FOUND-007, FOUND-008, FOUND-009, FOUND-010, FOUND-011, FOUND-012, FOUND-013, STRUCT-001, STRUCT-008, OBS-001, OBS-002, SEC-001, SEC-002
 **Success Criteria** (what must be TRUE):
+
   1. `uv sync --frozen && make lint typecheck test audit` exits 0 on a clean checkout (FOUND-001, FOUND-002)
   2. `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0, and `uv run python -c "import sqlite3; print(sqlite3.connect('var/replay/smoke/ledger.sqlite').execute(\"select count(*) from events where type='JournalNote' and source='replay'\").fetchone()[0])"` prints `1` (FOUND-013)
   3. `python3 ci/gates/check_ownership.py --validate-manifest`, `python3 ci/gates/check_desk_integrity.py --repo .`, `python3 ci/gates/check_secrets.py --base origin/main` and `python3 -m pytest ci/tests/ -q` each exit 0 (FOUND-006, FOUND-007, FOUND-008, SEC-001)
@@ -31,6 +32,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` completes one cycle under skip-only semantics (`docs/upgrade-plan-desk-v2.md` section 6.1) and the canonical gates pass.
 
 **Deliverables**:
+
 - [ ] `uv_build` src-layout package, Python 3.12 pin, committed `uv.lock` (FOUND-001)
 - [ ] Make targets, multi-stage non-root image, compose healthcheck (FOUND-002, FOUND-003)
 - [ ] pydantic-settings loader with R30 precedence, overlays and forbidden-key refusal (FOUND-004, STRUCT-008)
@@ -42,6 +44,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Redacted JSON logging, ULID correlation spans, env-only secrets, tracked-file cleanup (OBS-001, OBS-002, SEC-002, STRUCT-001)
 
 **Plans**: TBD
+
 - [x] 01-01-PLAN.md
 - [x] 01-02-PLAN.md
 - [x] 01-03-PLAN.md
@@ -58,6 +61,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Depends on**: Phase 1
 **Requirements**: STRUCT-002, STRUCT-003, STRUCT-005, STRUCT-007, SEC-003
 **Success Criteria** (what must be TRUE):
+
   1. `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` exits 0, reproducing the 6 root unittest cases that exercise these four ported tools (STRUCT-002)
   2. `cd vendor/grokbot-pumpfun && python3 -m pytest -q` exits 0, `uv run pytest -q tests/characterization/` exits 0, and `! grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` prints nothing (STRUCT-003)
   3. `test "$(grep -l '^bots:' skills/*/SKILL.md | wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md | wc -l)" -eq 23 && ! grep -rn -e lite-api -e '--max-micro' skills/` exits 0 (STRUCT-007)
@@ -67,6 +71,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` still completes one cycle and the canonical gates pass.
 
 **Deliverables**:
+
 - [ ] Read-only tools re-implemented over the single RPC client with failover (STRUCT-002)
 - [ ] Vendor monitor, analyzer, scoring, reputation, agents, tune, exits and watcher ported with translated strings and unchanged reason codes (STRUCT-003)
 - [ ] CLI verbs of DISCOVERY plus R12 and R40, `not-yet-implemented` for absent subsystems, cron prompts wrap `pumpgrok` only (STRUCT-005)
@@ -81,6 +86,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Depends on**: Phase 2
 **Requirements**: TOOL-001, TOOL-002, TOOL-003, TOOL-004, TOOL-005, TOOL-006, TOOL-007, TOOL-008, TOOL-009, TOOL-010, TOOL-011, SKILL-001, SKILL-002, SKILL-003, SKILL-004
 **Success Criteria** (what must be TRUE):
+
   1. `uv run pytest -q tests/test_skill_manifests.py tests/test_bot_manifests.py` exits 0 (SKILL-002, SKILL-003)
   2. `test "$(ls -d skills/*/ | wc -l)" -eq 35` and `grep -q 'bot-09-journal' skills/desk-post-trade-review/SKILL.md` both exit 0, and `! grep -rn "23 skills" plugin.json .claude-plugin .grok-plugin .cursor-plugin agents` prints nothing (SKILL-001, SKILL-004)
   3. `uv run pytest -q -k "least_privilege or gateway"` exits 0, and the desk gateway suite in `services/desk-gateway/` passes under `uv run pytest -q` (TOOL-009, TOOL-010)
@@ -90,6 +96,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` still completes one cycle and the canonical gates pass.
 
 **Deliverables**:
+
 - [ ] Market, onchain, safety, exec, portfolio, risk, journal, notify and desk core tools with typed models (TOOL-001..008)
 - [ ] Ten seat rosters and `_core.yaml` with the R35 sizes; least-privilege suite (TOOL-009)
 - [ ] Desk gateway serving `/mcp/<seat>` with per-seat token isolation (TOOL-010)
@@ -98,12 +105,21 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 
 **Plans**: TBD
 
+- [x] 03-01-PLAN.md
+- [x] 03-02-PLAN.md
+- [x] 03-03-PLAN.md
+- [x] 03-04-PLAN.md
+- [x] 03-05-PLAN.md
+- [ ] 03-06-PLAN.md
+- [ ] 03-07-PLAN.md
+
 ### Phase 4: Paper Trading and Autonomy
 
 **Goal**: The desk runs autonomously in paper mode on fixture data: curve-faithful fills, a risk engine with halts, breakers and kill switch, deterministic replay under virtual time, a supervised ten-seat loop with health and reports, live mode refused, and the vendor tree retired.
 **Depends on**: Phase 3
 **Requirements**: STRUCT-004, STRUCT-006, PAPER-001, PAPER-002, PAPER-003, PAPER-004, PAPER-005, PAPER-006, PAPER-007, RISK-001, RISK-002, RISK-003, RISK-004, RISK-005, RISK-006, AUTO-001, AUTO-002, AUTO-003, AUTO-004, AUTO-005, AUTO-006, SEC-004, GOLIVE-001, GOLIVE-002
 **Success Criteria** (what must be TRUE):
+
   1. `uv run pytest --collect-only -q tests/characterization` reports at least 164 tests collected, and `uv run pytest -q` exits 0 (STRUCT-004)
   2. `uv run pumpgrok verify --fixture smoke-10m` exits 0, showing two seeded runs over `tests/fixtures/replay/smoke-10m` produce identical `events.hash`, JSONL bytes and final state (PAPER-004)
   3. `PUMPGROK_KILLSWITCH=1 uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke-10m` exits 0 and `uv run python -c "import sqlite3; print(sqlite3.connect('var/replay/smoke-10m/ledger.sqlite').execute(\"select count(*) from events where type='OrderPlaced'\").fetchone()[0])"` prints `0` (RISK-004, RISK-003)
@@ -113,6 +129,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` completes one full ten-seat cycle with no network access and the canonical gates pass.
 
 **Deliverables**:
+
 - [ ] Vendor executor, risk, ops, state and log ported with adapted characterization tests; daily-loss auto-clear intentionally dropped (STRUCT-004)
 - [ ] `PaperAdapter` with curve-based fills, slippage, partial fills and dropped transactions (PAPER-001)
 - [ ] Hash-chained WAL ledger with snapshots, reducer, JSONL export and tamper detection (PAPER-002, PAPER-003)
@@ -132,6 +149,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Depends on**: Phase 4
 **Requirements**: RISK-007, AUTO-007, AUTO-008, OBS-003, OBS-004, OBS-005, SEC-005, GOLIVE-003
 **Success Criteria** (what must be TRUE):
+
   1. `uv run pytest -q tests/soak/test_soak_multiday_replay.py tests/degradation/` exits 0, covering the `soak-3d` memory bound, daily rollover and each degraded-mode fault row (AUTO-007, AUTO-008)
   2. `grep -rhoE "pumpgrok_(cycle_seconds|bot_crashes_total|orders_total|equity_sol|drawdown_pct|data_age_seconds|breaker_state|kill_switch|ledger_seq)" src/pumpgrok | sort -u | wc -l` prints `9`, and the metrics tests pass under `uv run pytest -q` (OBS-003)
   3. `for f in setup engine start_stop kill_switch breaker_reset outage rollback reading_reports go_live; do test -f docs/runbooks/$f.md || exit 1; done && ./scripts/check.sh` exits 0, `for p in 1 2 3 4 5; do grep -q "Phase $p" CHANGELOG.md || exit 1; done` exits 0, and `docker compose up -d --build pumpgrok && docker compose ps pumpgrok` reports the service `healthy` via the supervisor `/healthz` probe (OBS-004, OBS-005, FOUND-003)
@@ -141,6 +159,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` still completes one cycle and the canonical gates pass.
 
 **Deliverables**:
+
 - [ ] `soak-3d` multi-day replay and fault-injection suite under `tests/degradation/` (AUTO-007, AUTO-008)
 - [ ] Prometheus `/metrics` endpoint and span timings (OBS-003)
 - [ ] Nine runbooks, CHANGELOG entries for every phase, AGENTS index and milestone report (OBS-004, OBS-005)
@@ -159,6 +178,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
-| 3. Tools and Skills | 0/TBD | Not started | - |
+| 3. Tools and Skills | 5/7 | In Progress|  |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
 | 5. Hardening | 0/TBD | Not started | - |

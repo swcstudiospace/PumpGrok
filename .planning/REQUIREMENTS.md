@@ -45,7 +45,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [ ] **TOOL-007**: The desk core eight `desk.{brief,docs_search,memory_retain,memory_recall,ownership_resolve,receipt_check,event_emit,doctor}` (section 9) are resolvable by every seat, `desk.event_emit` `kind` follows R32 snake_case, and `desk.doctor check` is the same code path as `pumpgrok doctor`.
 - [ ] **TOOL-008**: Every registered tool has a pydantic v2 input and output model (`additionalProperties: false`), a `side_effect` in `{read, paper-write}`, `timeout_s`, a `RetryPolicy` and a `rate_limit_key`; money fields are integers in base units named `<x>_lamports: int` and `<x>_units: int` (token base units), prices and ratios are `Decimal` strings, no float money anywhere, and only the CLI boundary accepts `--size-sol` (R28); untrusted upstream payloads (pump.fun, PumpPortal, Jupiter, RPC, x.ai) are parsed with `extra="ignore"` models and a malformed payload yields a typed error (`DataStale`/`BLIND`), never an escaping exception.
 - [ ] **TOOL-009**: The least-privilege tests of `docs/design/interfaces.md` section 4 pass: no seat resolves a live-write tool, only sniper and exit resolve `exec.place`, exit cannot place a BUY, chief has no exposure tools, shill's only write is `journal.append`, every roster name exists in the registry, and `tools/social/` (bot-07-shill, R31) issues GET only.
-- [ ] **TOOL-010**: `services/desk-gateway/` serves `/mcp/<seat>` from the in-process registry so that `tools/list` equals `contracts/tool-rosters/<seat>.yaml` plus `_core.yaml`, transport names are the dotted ids with `.` replaced by `_` derived at exposure time and never stored (R19), and a token for seat A on `/mcp/<seat B>` is 403.
+- [x] **TOOL-010**: `services/desk-gateway/` serves `/mcp/<seat>` from the in-process registry so that `tools/list` equals `contracts/tool-rosters/<seat>.yaml` plus `_core.yaml`, transport names are the dotted ids with `.` replaced by `_` derived at exposure time and never stored (R19), and a token for seat A on `/mcp/<seat B>` is 403.
 - [ ] **TOOL-011**: Operator can run every verb of `docs/TOOL_CATALOG.md` section 12 plus the R12 and R40 additions; each verb is a thin wrapper over catalog tools and prints JSON by default; `pumpgrok paper buy | sell` requires `--ticket --mint --size-sol --slippage-bps --approval-id`.
 
 ### Skills (SKILL)
@@ -164,7 +164,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | TOOL-007 | Phase 3 Tools and Skills | Pending |
 | TOOL-008 | Phase 3 Tools and Skills | Pending |
 | TOOL-009 | Phase 3 Tools and Skills | Pending |
-| TOOL-010 | Phase 3 Tools and Skills | Pending |
+| TOOL-010 | Phase 3 Tools and Skills | Complete |
 | TOOL-011 | Phase 3 Tools and Skills | Pending |
 | SKILL-001 | Phase 3 Tools and Skills | Pending |
 | SKILL-002 | Phase 3 Tools and Skills | Pending |
@@ -207,6 +207,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | GOLIVE-003 | Phase 5 Hardening | Pending |
 
 **Coverage:**
+
 - v1 requirements: 71 total
 - Mapped to phases: 71
 - Unmapped: 0
