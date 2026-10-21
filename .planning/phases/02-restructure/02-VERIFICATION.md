@@ -1,6 +1,6 @@
 ---
 phase: 02-restructure
-verified: 2026-10-21T10:05:00Z
+verified: 2026-10-21T10:30:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -119,17 +119,33 @@ covered_files:
   - "tests/test_skip_cycle.py"
   - "tools/README.md"
   - "uv.lock"
-covered_digest: "v3:sha256:485aad5718189ae2acea39db99fc6bb803fffd77676d744646260a6b7a3f0c7d"
+
+covered_digest: "v3:sha256:0fd5dea32cf070a13f89b3d32dfbedbdb52a2482d983c545e75605ea10570476"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+  review_fixes_reverified:
+    - "CR-02 drop malformed socket payloads without tearing down the watcher (541f49c)"
+    - "WR-01 skip poisoned holder/trade rows instead of aborting analysis (d30490e)"
+    - "WR-02 log exception type instead of URL-carrying message (4b3f587)"
+    - "WR-03 persist grown peaks even when a later position sells (b810f39)"
+    - "WR-04 tune report uses operator-configured scoring weights (849389d)"
+    - "WR-05 round lamport conversion and cap paper size at equity (07d97dd)"
+    - "WR-06 ratchet trailing-stop peak in exit_signal entry point (6c5a78e)"
+    - "CR-03 quarantine corrupt reputation file (baa4a47)"
 ---
 
-# Phase 02: Restructure Verification Report
+# Phase 02: Restructure Verification Report (re-verification after code-review fixes)
 
 **Phase Goal:** The read-only tools and the vendor screening engine run from `src/pumpgrok` under characterization tests while the vendor tree stays alive as the oracle; skills, CLI verbs and the signing guard match the target layout.
-**Verified:** 2026-10-21T10:05:00Z
+**Verified:** 2026-10-21T10:30:00Z
 **Status:** passed
-**Re-verification:** No — initial verification (no prior 02-VERIFICATION.md exists).
+**Re-verification:** Yes — after code-review fixes CR-01, CR-02, WR-01..WR-06, CR-03 (commits 010b8d0..baa4a47) plus style commits and 68598b6 (review artifacts). Baseline 5/5, still 5/5. No regressions.
 
 ## Goal Achievement
 
@@ -138,101 +154,87 @@ overrides_applied: 0
 | #   | Truth   | Status     | Evidence       |
 | --- | ------- | ---------- | -------------- |
 | 1 | Ported read-only tools pass characterization tests reproducing the root unittest cases (STRUCT-002) | ✓ VERIFIED | SC1 exit 0, 13 passed (`.............`) |
-| 2 | Vendor oracle suite stays green, all 1:1 engine characterization tests pass, no untranslated Russian strings remain (STRUCT-003) | ✓ VERIFIED | SC2a exit 0 (279 vendor tests); SC2b exit 0 (151 characterization tests); SC2c negated-grep exit 0 (no output) |
+| 2 | Vendor oracle suite stays green, all 1:1 engine characterization tests pass, no untranslated Russian strings remain (STRUCT-003) | ✓ VERIFIED | SC2a exit 0 via /usr/bin/python3 (279 vendor tests); SC2b exit 0 (151 characterization tests); SC2c negated-grep exit 0 (no output) |
 | 3 | All 23 skills carry `bots`+`gates` frontmatter with L1/L2 bodies; no lite-api or --max-micro phrasing (STRUCT-007) | ✓ VERIFIED | SC3 compound exit 0; bots=23, gates=23; separate `lite-api` grep exit 1, `max-micro` grep exit 1 (clean) |
-| 4 | CLI exposes DISCOVERY+R12+R40 verbs and `paper buy` carries the five required flags (STRUCT-005) | ✓ VERIFIED | SC4a exit 0 (19 verbs incl. paper/live/replay/verify/state); SC4b exit 0, all five flags present |
-| 5 | AST guard fails on any signing symbol outside the live stub; live stub builds no transaction (SEC-003) | ✓ VERIFIED | SC5 exit 0, 14 passed; `live_adapter` place/cancel route through `_refuse` raising `LiveGateError` |
+| 4 | CLI exposes DISCOVERY+R12+R40 verbs and `paper buy` carries the five required flags (STRUCT-005) | ✓ VERIFIED | SC4a exit 0 (19 verbs); SC4b exit 0, all five flags present |
+| 5 | AST guard fails on any signing symbol outside the live stub; live stub builds no transaction (SEC-003) | ✓ VERIFIED | SC5 exit 0, 14 passed |
 
 **Score:** 5/5 truths verified (0 present-behavior-unverified).
 
-### Success Criteria (literal commands, repo root)
+### Success Criteria (literal commands, repo root unless noted)
 
 | SC | Command | Exit | Key output | Verdict |
 |----|---------|------|------------|---------|
-| SC1 | `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` (re-run without `-q`: same result) | 0 / 0 | `.............` — 13 passed | PASS |
-| SC2a | `cd vendor/grokbot-pumpfun && python3 -m pytest -q` | 0 | 4 dot-lines, 279 tests collected, all pass | PASS |
+| SC1 | `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` | 0 | `.............` — 13 passed | PASS |
+| SC2a | `cd vendor/grokbot-pumpfun && /usr/bin/python3 -m pytest -q` | 0 | 4 dot-lines, 279 tests, all pass | PASS |
 | SC2b | `uv run pytest -q tests/characterization/` | 0 | 151 passed (`72 + 72 + 7` dots) | PASS |
 | SC2c | `! grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` | 0 | no output (raw grep exit 1, negated to 0) | PASS |
 | SC3 | `test "$(grep -l '^bots:' skills/*/SKILL.md \| wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md \| wc -l)" -eq 23 && ! grep -rn -e lite-api -e '--max-micro' skills/` | 0 | bots=23, gates=23; compound exit 0 | PASS |
 | SC4a | `uv run pumpgrok --help` | 0 | 19 verbs incl. run/doctor/audit/verify/scout/risk/paper/live/replay | PASS |
 | SC4b | `uv run pumpgrok paper buy --help` | 0 | `--ticket --mint --size-sol --slippage-bps --approval-id` all listed (plus `--seat`) | PASS |
 | SC5 | `uv run pytest -q tests/safety/test_no_signing_outside_live_stub.py` | 0 | `..............` — 14 passed | PASS |
-| replay | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` | 0 | `engine decision=skip reason=data_unavailable`, `cycle_end` event, `ledger_seq: 1` | PASS (supporting) |
+| replay | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` | 0 | `engine decision=skip reason=data_unavailable`, `cycle_end`, `ledger_seq: 1` | PASS (supporting) |
 
-Runner notes (all recorded literally, none affect verdicts):
-- The harness display intermittently renders short `uv run pytest` outputs as "Pytest: No tests collected"; every such case was re-captured to a file (`> /tmp/*.log`) showing the real dot-lines above, and the no-`-q` re-runs behaved identically. No exit-5 collection artifact occurred.
-- The shell `grep` is `pi-uu-grep 0.2.0`, which misparses the combined `-e '--max-micro'` flag form (clap "unexpected argument" error, negated to 0 inside SC3). Substance was confirmed with two separate greps: `-e 'lite-api'` exit 1 and `-e 'max-micro'` exit 1 — both strings fully absent from `skills/`.
+No `-q` run collected zero tests this round, so no no-`-q` re-runs were needed. Runner notes (recorded literally, none affect verdicts):
+- The shell `grep` is `pi-uu-grep 0.2.0`, which misparses the combined `-e '--max-micro'` / `-o -e '--ticket'` flag forms (clap "unexpected argument" error, negated to 0 inside SC3). Substance was confirmed with separate greps: `-e 'lite-api'` exit 1 and `-e 'max-micro'` exit 1 — both strings fully absent from `skills/` — and each SC4b flag confirmed present via plain-substring grep.
 - `skills/README.md` is a file, so the `skills/*/SKILL.md` glob emits two harmless "Not a directory" warnings; counts are unaffected (23 skill dirs).
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `src/pumpgrok/tools/onchain/rpc.py` | single RPC client, httpx+tenacity, `sleep=clock.sleep`, ordered failover | ✓ VERIFIED | 4.9K; `sleep=self._clock.sleep` (line 124); tenacity `AsyncRetrying`; imported by authorities/holders/priority_fee |
-| `src/pumpgrok/tools/onchain/{authorities,holders,priority_fee}.py` | ported read-only tools over rpc.py | ✓ VERIFIED | all three `from pumpgrok.tools.onchain.rpc import RpcClient, RpcError`; characterization green |
-| `src/pumpgrok/tools/market/jupiter.py` | quote-only Jupiter v2 order path, never taker/execute | ✓ VERIFIED | `QUOTE_URL = .../swap/v2/order`; SecretStr key as `x-api-key`; priceImpact mapping; characterization green (by design separate from the Solana RPC client — plan 02-01) |
-| `src/pumpgrok/engine/{monitor,analyzer,scoring,reputation,agents/*,tune,exits,watcher,pipeline,models}.py` | ported vendor engine, reason codes unchanged | ✓ VERIFIED | all present (11.9K monitor … 5.4K watcher); 151 characterization tests green; vendor oracle 279 green |
-| `src/pumpgrok/cli.py` | DISCOVERY+R12+R40 verbs; absent subsystems → `not-yet-implemented` exit 5 | ✓ VERIFIED | 19 verbs; `{"ok": false, "status": "not-yet-implemented"}` contract at line 125; spot verbs (live confirm, replay trim/rebuild-ticks, state halt/autonomy, paper buy/sell, verify) all `--help` exit 0 |
-| `skills/*/SKILL.md` (23) | `bots`+`gates` frontmatter, L1/L2/Failure-modes/References | ✓ VERIFIED | 23/23 bots, 23/23 gates; 23/23 L1-Summary, 23/23 L2-Method; jupiter-routing is quote-only (`/swap/v2/order`, never `/execute`); browser-ops is detection/research-only |
-| `tests/safety/test_no_signing_outside_live_stub.py` | AST guard vs sign/send_transaction/Keypair | ✓ VERIFIED | 14 passed; `execution/live/live_adapter.py` place/cancel/simulate only `_refuse` → `LiveGateError` |
-| `hermes/cron/prompts/*.md` (6) | wrap `pumpgrok` subcommands only | ✓ VERIFIED | rewritten in plan 02-04 (chief-journal, chief-pickup, risk-audit, rug-watch, scout-discover, scout-pipeline) |
+| `src/pumpgrok/tools/onchain/rpc.py` | single RPC client, httpx+tenacity, `sleep=clock.sleep`, ordered failover | ✓ VERIFIED | imported by authorities/holders/priority_fee; WR-02 fix re-verified (exception type logged, no URL) |
+| `src/pumpgrok/tools/onchain/{authorities,holders,priority_fee}.py` | ported read-only tools over rpc.py | ✓ VERIFIED | WR-01 fix re-verified (poisoned rows skipped, analysis continues); characterization green |
+| `src/pumpgrok/tools/market/jupiter.py` | quote-only Jupiter v2 order path | ✓ VERIFIED | characterization green |
+| `src/pumpgrok/engine/*` (monitor/analyzer/scoring/reputation/agents/tune/exits/watcher/pipeline) | ported vendor engine, reason codes unchanged | ✓ VERIFIED | 151 characterization tests green; WR-03/WR-04/WR-06 fixes re-verified via suite; CR-02 (socket drops) and CR-03 (reputation quarantine) covered by green suite + full run |
+| `src/pumpgrok/cli.py` | DISCOVERY+R12+R40 verbs; absent → `not-yet-implemented` exit 5 | ✓ VERIFIED | 19 verbs; WR-05 lamport rounding/cap inside paper path; suite green |
+| `skills/*/SKILL.md` (23) | `bots`+`gates`, L1/L2 bodies; quote-only Jupiter; no lite-api/--max-micro | ✓ VERIFIED | 23/23 bots, 23/23 gates; forbidden strings absent |
+| `tests/safety/test_no_signing_outside_live_stub.py` | AST guard | ✓ VERIFIED | 14 passed |
+| `hermes/cron/prompts/*.md` (6) | wrap `pumpgrok` subcommands only | ✓ VERIFIED | unchanged since initial verification |
 
 ### Key Link Verification
 
 | From | To  | Via | Status | Details |
 | ---- | --- | --- | ------ | ------- |
-| `tools/onchain/{authorities,holders,priority_fee}.py` | `tools/onchain/rpc.py` | `from ...rpc import RpcClient, RpcError` | WIRED | grep confirms all three imports |
-| `tests/characterization/*` | ported tools/engine | `httpx.MockTransport` fixtures + `FixtureClock` | WIRED | 151 tests pass; retry test asserts injected-clock sleeps |
-| `cli.py paper buy/sell` | ticket/mint/size/slippage/approval flags | argparse `--ticket --mint --size-sol --slippage-bps --approval-id` | WIRED | SC4b output shows all five wired |
-| `execution/live/live_adapter.py` | `LiveGateError` | `_refuse` on every write path | WIRED | `quote/simulate/place/cancel` all refuse; guard test green |
-
-### Data-Flow Trace (Level 4)
-
-| Artifact | Data Variable | Source | Produces Real Data | Status |
-| -------- | ------------- | ------ | ------------------ | ------ |
-| `rpc.py` | JSON-RPC response | live `httpx` POST per endpoint with failover | ✓ FLOWING (mocked in tests, live at runtime) | ✓ FLOWING |
-| `jupiter.py` | route quote | live `GET api.jup.ag/swap/v2/order` | ✓ FLOWING (fixture-backed in tests) | ✓ FLOWING |
-| replay smoke | `ledger_seq` | `cycle_end` event after skip cycle | ✓ ledger_seq 1 observed | ✓ FLOWING |
+| onchain tools | `rpc.py` | `from ...rpc import RpcClient, RpcError` | WIRED | all three imports present |
+| characterization tests | ported code | MockTransport + FixtureClock | WIRED | 151 pass, incl. injected-clock retry assertions |
+| `cli.py paper buy/sell` | five flags | argparse | WIRED | SC4b shows all five |
+| `live_adapter.py` | `LiveGateError` | `_refuse` on every write path | WIRED | guard test green |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
 | full suite green | `uv run pytest -q` (once) | exit 0, 512 passed | ✓ PASS |
-| absent-subsystem contract | `uv run pumpgrok live confirm --help` etc. | exit 0 help; absent verbs return `not-yet-implemented` exit 5 per cli.py:125 | ✓ PASS |
 | paper replay still cycles | replay command above | exit 0, `engine decision=skip` | ✓ PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ---------- | ----------- | ------ | -------- |
-| STRUCT-002 | 02-01 | 4 tools ported over single RPC client; characterization reproduces root cases | SATISFIED | SC1 13/13; rpc.py tenacity+failover+injected clock |
-| STRUCT-003 | 02-02, 02-03 | vendor engine ported, strings translated, reason codes unchanged; oracle green | SATISFIED | SC2a 279 green; SC2b 151 green; SC2c clean |
-| STRUCT-005 | 02-04 | CLI verbs + not-yet-implemented + pumpgrok-only cron prompts | SATISFIED | SC4a/SC4b; cron prompts rewritten, refused PUMPGROK exports dropped |
-| STRUCT-007 | 02-05 | 23 skills bots/gates + L1/L2; quote-only Jupiter; no lite-api/--max-micro | SATISFIED | SC3; body spot-checks (jupiter-routing, browser-ops) |
-| SEC-003 | 02-05 | AST signing guard; live stub builds no transaction | SATISFIED | SC5 14/14; `_refuse` on all write paths |
-
-No orphaned IDs: all five Phase-2 REQUIREMENTS.md IDs are claimed by plan frontmatter and verified above.
+| STRUCT-002 | 02-01 | 4 tools ported over single RPC client | SATISFIED | SC1 13/13; WR-01/WR-02 fixes in green suite |
+| STRUCT-003 | 02-02, 02-03 | engine ported, oracle green, no Cyrillic | SATISFIED | SC2a/SC2b/SC2c; WR-03/WR-04/WR-06 + CR-02/CR-03 in green suite |
+| STRUCT-005 | 02-04 | CLI verbs + not-yet-implemented + pumpgrok-only cron | SATISFIED | SC4a/SC4b; WR-05 in green suite |
+| STRUCT-007 | 02-05 | 23 skills bots/gates + L1/L2; quote-only Jupiter | SATISFIED | SC3 |
+| SEC-003 | 02-05 | AST signing guard | SATISFIED | SC5 14/14 |
 
 ### Anti-Patterns Found
 
-| File | Line | Pattern | Severity | Impact |
-|------|---------|---------|----------|--------|
-| `src/pumpgrok/cli.py` (phase diff) | several | "not yet implemented" help strings | ℹ️ Info | required STRUCT-005 absent-subsystem contract (exit 5 JSON), not debt |
-| phase diff (`core/ratelimit.py` test double) | — | "Queue placeholder for an agent without limiters (tests, single call)" | ℹ️ Info | `_NullSlot` null-object test double, single-call scope; not a stub |
-| phase diff | — | `TBD/FIXME/XXX/TODO/HACK` (excluding the above) | — | clean — zero hits |
-| `src/pumpgrok/tools/onchain/rpc.py:97` | 97 | `return {}` | ℹ️ Info | `_headers()` keyless state returns no auth header by design (keyless logged, never the key); not a stub |
+| File | Pattern | Severity | Impact |
+|------|---------|----------|--------|
+| phase diff `src/ tests/ skills/` | `TBD/FIXME/XXX/TODO/HACK` (excl. required `not-yet-implemented` contract strings) | — | clean — zero hits |
+| `cli.py` help strings | "not yet implemented" | ℹ️ Info | required STRUCT-005 contract (exit 5 JSON), not debt |
 
-Full-suite regression: `uv run pytest -q` exit 0, 512 passed — no phase-1 behavior regressed.
+Full-suite regression: `uv run pytest -q` exit 0, 512 passed — review fixes introduced no regressions.
 
 ### Human Verification Required
 
-None. Every state-transition claim (retry-via-injected-clock, failover order, live refusal, replay skip cycle) is exercised by a passing named test or an observed command. No visual, real-time, or external-service behavior is in scope for Phase 2.
+None. Every state-transition claim (retry-via-injected-clock, failover order, poisoned-row skip, peak persistence, trailing-stop ratchet, live refusal, replay skip cycle) is exercised by a passing test or an observed command. No visual, real-time, or external-service behavior is in scope for Phase 2.
 
 ### Gaps Summary
 
-No gaps. All five roadmap success criteria hold with literal exit codes, all five requirement IDs are satisfied, and the supporting replay + full-suite runs are green. Ready to proceed to Phase 3.
+No gaps. All five roadmap success criteria hold with fresh literal exit codes after the code-review fixes, all five requirement IDs remain satisfied, and the supporting replay + full-suite runs are green. Ready to proceed to Phase 3.
 
 ---
-_Verified: 2026-10-21T10:05:00Z_
+_Verified: 2026-10-21T10:30:00Z_
 _Verifier: Claude (gsd-verifier)_
