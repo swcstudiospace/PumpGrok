@@ -9,6 +9,8 @@ no LIVE_WRITE spec at all.
 
 from __future__ import annotations
 
+import json
+import random
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -21,11 +23,13 @@ import yaml
 from pydantic import ValidationError
 
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
+from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.desk.event_emit import EventEmitIn
 from pumpgrok.tools.exec.place import PlaceIn, build_place_tool
 from pumpgrok.tools.journal.append import JournalAppendIn
@@ -242,3 +246,54 @@ def test_seats_write_only_journal_note_and_escalation() -> None:
         )
     with pytest.raises(ValidationError):
         EventEmitIn.model_validate({"kind": "order_placed", "payload": {}})
+
+
+async def test_journal_append_binds_calling_seat(tmp_path: Path) -> None:
+    reg, _, manifests = build_full_registry(tmp_path)
+    scout = manifests["bot-01-scout"]
+    factory = IdFactory(FixtureClock(start=1469918176.385), random.Random(41))
+    with bind_correlation(CorrelationId.new(factory)):
+        append = reg.find(
+            "journal.append", max_side_effect=SideEffect.PAPER_WRITE, bot=scout
+        )
+        out = await append(
+            JournalAppendIn(
+                kind="journal_note",
+                note_kind="lead",
+                ticket_id=TICKET,
+                body={"text": "scout saw a launch"},
+                bot="bot-01-scout",
+            )
+        )
+        assert out.seq == 1
+        with pytest.raises(PermissionDenied):
+            await append(
+                JournalAppendIn(
+                    kind="journal_note",
+                    note_kind="lead",
+                    ticket_id=TICKET,
+                    body={"text": "forged as chief"},
+                    bot="bot-00-chief",
+                )
+            )
+    files = list((tmp_path / "journal").glob("*.jsonl"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text(encoding="utf-8").splitlines()[-1])["payload"]
+    assert payload["seat"] == "bot-01-scout"
+
+
+async def test_event_emit_uses_calling_seat_not_chief(tmp_path: Path) -> None:
+    reg, _, manifests = build_full_registry(tmp_path)
+    scout = manifests["bot-01-scout"]
+    factory = IdFactory(FixtureClock(start=1469918176.385), random.Random(43))
+    with bind_correlation(CorrelationId.new(factory)):
+        emit = reg.find(
+            "desk.event_emit", max_side_effect=SideEffect.PAPER_WRITE, bot=scout
+        )
+        out = await emit(
+            EventEmitIn(kind="escalation", task_id="t-9", payload={"kind": "rug_alert"})
+        )
+    files = list((tmp_path / "journal").glob("*.jsonl"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text(encoding="utf-8").splitlines()[-1])["payload"]
+    assert payload["seat"] == "bot-01-scout"

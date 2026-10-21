@@ -21,7 +21,9 @@ __all__ = [
     "CorrelationId",
     "IdFactory",
     "ambient_correlation",
+    "bind_calling_seat",
     "bind_correlation",
+    "calling_seat",
     "current_correlation",
     "next_span",
 ]
@@ -134,3 +136,28 @@ class bind_correlation:
         if self._span_token is not None:
             _span_counter.reset(self._span_token)
         _correlation.reset(self._token)
+
+_calling_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "pumpgrok_calling_seat", default=None
+)
+
+
+def calling_seat() -> str | None:
+    """Return the seat bound by the registry wrapper, or None outside find dispatch."""
+    return _calling_seat.get()
+
+
+class bind_calling_seat:
+    """Bind the calling seat for one tool invocation (ledger seat attribution)."""
+
+    def __init__(self, seat: str) -> None:
+        self._seat = seat
+        self._token: contextvars.Token[str | None] | None = None
+
+    def __enter__(self) -> str:
+        self._token = _calling_seat.set(self._seat)
+        return self._seat
+
+    def __exit__(self, *exc: object) -> None:
+        assert self._token is not None
+        _calling_seat.reset(self._token)

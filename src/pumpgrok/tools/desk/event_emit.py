@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from pumpgrok.core.ids import Clock, ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation, calling_seat
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
@@ -102,26 +102,29 @@ def event_emit_key(bot: str, kind: str, task_id: str | None, payload: dict[str, 
 
 
 async def run_event_emit(
-    inp: EventEmitIn, store: LedgerStore, clock: Clock, journal_dir: Path, bot: str
+    inp: EventEmitIn, store: LedgerStore, clock: Clock, journal_dir: Path, bot: str = ""
 ) -> dict[str, Any]:
     """Scrub, cap, then append through the journal path with seat attribution."""
+    # The registry stamps the calling seat; the factory binding is only the
+    # fallback for direct invocation outside find dispatch.
+    seat = calling_seat() or bot
     scrubbed = scrub_payload(inp.payload)
     # Dedup rides on the journal key, whose body carries the seat: the same
     # triple (tool, bot, sha256(input)) that event_emit_key() pins for tests.
     if inp.kind == "journal_note":
         body = {
-            "seat": bot,
+            "seat": seat,
             "text": json.dumps(scrubbed, sort_keys=True)[:1000],
             "task_id": inp.task_id,
         }
     else:
-        body = {"seat": bot, **scrubbed}
+        body = {"seat": seat, **scrubbed}
     journal_in = JournalAppendIn(
         kind=inp.kind,
         note_kind=inp.note_kind,
         ticket_id=None,
         body=body,
-        bot=bot,
+        bot=seat,
         correlation_id=inp.correlation_id,
     )
     out = await run_journal_append(journal_in, store, clock, journal_dir)
@@ -134,8 +137,14 @@ async def run_event_emit(
     ).model_dump()
 
 
-def build_event_emit_tool(store: LedgerStore, clock: Clock, journal_dir: Path, bot: str) -> Tool:
-    """Bind ``desk.event_emit`` to one store, clock, directory and seat."""
+def build_event_emit_tool(
+    store: LedgerStore, clock: Clock, journal_dir: Path, bot: str = ""
+) -> Tool:
+    """Bind ``desk.event_emit`` to one store, clock and directory.
+
+    ``bot`` is the fallback seat for direct invocation; registry dispatch
+    always stamps the calling seat instead.
+    """
 
     @tool(EVENT_EMIT_SPEC)
     async def _event_emit(payload: EventEmitIn) -> dict[str, Any]:

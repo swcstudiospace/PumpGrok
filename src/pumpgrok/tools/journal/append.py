@@ -20,7 +20,8 @@ from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 
-from pumpgrok.core.ids import Clock, ambient_correlation
+from pumpgrok.core.errors import PermissionDenied
+from pumpgrok.core.ids import Clock, ambient_correlation, calling_seat
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.events import NoteKind
@@ -93,16 +94,16 @@ def journal_append_key(kind: str, ticket_id: str | None, body: dict[str, Any]) -
     return digest[:32]
 
 
-def _payload_of(inp: JournalAppendIn) -> tuple[str, dict[str, Any]]:
+def _payload_of(inp: JournalAppendIn, seat: str) -> tuple[str, dict[str, Any]]:
     if inp.kind == "journal_note":
         return "JournalNote", {
             "source": "paper",
-            "seat": inp.bot,
+            "seat": seat,
             "note_kind": inp.note_kind,
             "text": str(inp.body.get("text", "")),
             "refs": list(inp.body.get("refs", [])),
         }
-    return "Escalation", {"source": "paper", "seat": inp.bot, **inp.body}
+    return "Escalation", {"source": "paper", "seat": seat, **inp.body}
 
 
 def _export_line(journal_dir: Path, now: datetime, line: str) -> Path:
@@ -120,9 +121,17 @@ async def run_journal_append(
     """Append the event (idempotent) and export the JSONL line."""
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
+    bound = calling_seat()
+    if bound is not None and inp.bot != bound:
+        raise PermissionDenied(
+            f"journal.append seat mismatch: calling seat is {bound}",
+            tool="journal.append",
+            bot=bound,
+        )
+    seat = bound if bound is not None else inp.bot
     now = datetime.fromtimestamp(clock.now(), UTC)
     key = journal_append_key(inp.kind, inp.ticket_id, inp.body)
-    event_type, payload = _payload_of(inp)
+    event_type, payload = _payload_of(inp, seat)
     try:
         row = store.append(
             ts_utc=now.isoformat(),

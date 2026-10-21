@@ -126,7 +126,7 @@ def build_full_registry(
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml"))
     reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, WallClock()))
-    reg.register(build_event_emit_tool(store, clock, tmp_path / "journal", "bot-00-chief"))
+    reg.register(build_event_emit_tool(store, clock, tmp_path / "journal"))
     reg.register(build_doctor_tool(Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key"))
 
     manifests = load_bot_manifests(ROSTERS_DIR)

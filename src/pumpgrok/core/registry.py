@@ -26,6 +26,7 @@ from pumpgrok.core.bot import BotManifest
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
 from pumpgrok.core.ids import (
     Clock,
+    bind_calling_seat,
     bind_correlation,
     current_correlation,
     next_span,
@@ -245,7 +246,7 @@ class ToolRegistry:
 
             async def __call__(self, payload: ToolInput, /) -> ToolOutput:
                 cid = next_span(current_correlation())
-                with bind_correlation(cid):
+                with bind_correlation(cid), bind_calling_seat(bot.id):
                     if spec.requires_approval:
                         req = OrderRequest.model_validate(
                             payload.model_dump() | {"correlation_id": str(cid)}

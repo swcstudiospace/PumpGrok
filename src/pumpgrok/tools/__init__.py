@@ -189,7 +189,7 @@ def _register_desk(
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, clock))
-    reg.register(build_event_emit_tool(store, clock, data_dir / "journal", "bot-00-chief"))
+    reg.register(build_event_emit_tool(store, clock, data_dir / "journal"))
     reg.register(build_doctor_tool(settings, data_dir / "bindings", os.urandom(32)))
 
 
