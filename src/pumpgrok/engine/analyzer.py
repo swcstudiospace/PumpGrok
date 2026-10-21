@@ -24,7 +24,10 @@ import asyncio
 import itertools
 import logging
 import statistics
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 import httpx
 
@@ -109,11 +112,23 @@ class Analyzer:
             self._get(f"/coins/{mint}/holders", limit=HOLDER_LIMIT),
             self._get(f"/trades/all/{mint}", limit=TRADE_LIMIT),
         )
-        return (
-            info or {},
-            [parse_holder(h) for h in (holders_raw or []) if isinstance(h, dict)],
-            [parse_trade(t) for t in (trades_raw or []) if isinstance(t, dict)],
-        )
+        if not isinstance(info, dict):
+            info = {}
+        holders = [
+            parsed
+            for h in (holders_raw or [])
+            if isinstance(h, dict)
+            for parsed in [_safe_parse(parse_holder, h)]
+            if parsed is not None
+        ]
+        trades = [
+            parsed
+            for t in (trades_raw or [])
+            if isinstance(t, dict)
+            for parsed in [_safe_parse(parse_trade, t)]
+            if parsed is not None
+        ]
+        return (info, holders, trades)
 
     async def analyze(self, token: Token) -> TokenMetrics:
         """Full pass: hit the network, then compute metrics."""
@@ -133,6 +148,14 @@ class Analyzer:
 # --------------------------------------------------------------------------
 # Provider response parsing
 # --------------------------------------------------------------------------
+
+
+def _safe_parse(parse: Callable[[dict[str, Any]], _T], raw: dict[str, Any]) -> _T | None:
+    """One poisoned row degrades to a skip, never to a lost analysis."""
+    try:
+        return parse(raw)
+    except (ValueError, TypeError):
+        return None
 
 
 def parse_holder(raw: dict[str, Any]) -> Holder:
@@ -178,9 +201,15 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
     token.website = token.website or info.get("website")
     token.creator = token.creator or info.get("creator")
     if info.get("market_cap") is not None:
-        token.market_cap_sol = float(info["market_cap"])
+        try:
+            token.market_cap_sol = float(info["market_cap"])
+        except (ValueError, TypeError):
+            pass
     if info.get("virtual_sol_reserves") is not None:
-        token.sol_in_curve = float(info["virtual_sol_reserves"]) / 1e9
+        try:
+            token.sol_in_curve = float(info["virtual_sol_reserves"]) / 1e9
+        except (ValueError, TypeError):
+            pass
     return token
 
 
