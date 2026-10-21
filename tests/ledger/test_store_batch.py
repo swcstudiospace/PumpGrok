@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import sys
@@ -12,9 +13,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from pumpgrok.ledger.desk_bus import mirror_halt, mirror_halt_cleared, mirror_killswitch
+from pumpgrok.ledger.export import export_ledger
 from pumpgrok.ledger.reconcile import CONSISTENT, INCONSISTENT, reconcile
 from pumpgrok.ledger.reducer import dump_state, initial_state, load_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
+from pumpgrok.ledger.tickets import TICKET_RE, allocate_ticket
 from pumpgrok.ledger.views import cash_lamports, equity_lamports, unrealized_pnl_lamports
 from pumpgrok.ledger.views import positions as open_positions
 
@@ -313,3 +317,158 @@ def test_restart_replays_snapshot_plus_tail(tmp_path) -> None:
     assert result["snapshot_seq"] == 2
     assert result["tail_events"] == 1
     assert result["head_seq"] == 3
+
+
+def _fill_row(**overrides):
+    base = {
+        "ts_utc": "2026-01-01T00:00:02.000001Z",
+        "source": "paper",
+        "correlation_id": "01J0000000000000000000001",
+        "idempotency_key": "fill-key-0001",
+        "type": "FillRecorded",
+        "payload": {
+            "source": "paper",
+            "order_id": "01J0000000000000000000002",
+            "decision_id": "01J0000000000000000000003",
+            "side": "buy",
+            "mint": MINT,
+            "filled_lamports": 200_000_000,
+            "filled_units": 3579186000000,
+            "filled_fraction": "1",
+            "price_avg": "5.532e-5",
+            "venue_fee_lamports": 2000000,
+            "network_cost_lamports": 9000,
+            "cash_delta_lamports": -200009000,
+            "latency_s": "1.4",
+            "venue_tx_ref": "dry_run:01J0000000000000000000004",
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def _closed_row(**overrides):
+    base = {
+        "ts_utc": "2026-01-01T00:00:03.000001Z",
+        "source": "paper",
+        "correlation_id": "01J0000000000000000000001",
+        "idempotency_key": "closed-key-0001",
+        "type": "PositionClosed",
+        "payload": {
+            "source": "paper",
+            "mint": MINT,
+            "price_exit": "6.2e-5",
+            "proceeds_lamports": 225000000,
+            "realized_pnl_lamports": 25000000,
+            "reason": "take_profit",
+            "pnl_pct": "12.5",
+            "hold_seconds": 300,
+            "venue_tx_ref": "dry_run:01J0000000000000000000005",
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def _rejected_row(**overrides):
+    base = {
+        "ts_utc": "2026-01-01T00:00:04.000001Z",
+        "source": "paper",
+        "correlation_id": "01J0000000000000000000001",
+        "idempotency_key": "rejected-key-0001",
+        "type": "OrderRejected",
+        "payload": {
+            "source": "paper",
+            "order_id": "01J0000000000000000000006",
+            "decision_id": "01J0000000000000000000007",
+            "reason": "slippage_exceeded",
+            "detail": "confirm 3512285 < threshold 3560247",
+            "stage": "CONFIRMING",
+            "fees_lamports": 9000,
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_export_resumes_without_duplicate_rows(tmp_path) -> None:
+    store = LedgerStore(tmp_path / "ledger.sqlite")
+    store.set_meta("source", "paper")
+    store.set_meta("initial_equity_lamports", str(INITIAL_EQUITY))
+    store.append_batch([_approval(), _order(), _fill_row(), _closed_row(), _rejected_row()])
+    journal_dir = tmp_path / "journal"
+    trades_path = journal_dir / "trades.jsonl"
+    first = export_ledger(store, journal_dir=journal_dir, trades_path=trades_path)
+    assert first == {"journal_lines": 5, "trade_lines": 3, "export_seq": 5}
+    day_lines = (journal_dir / "2026-01-01.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(day_lines) == 5
+    assert json.loads(day_lines[0])["seq"] == 1
+    trades = [json.loads(line) for line in trades_path.read_text(encoding="utf-8").splitlines()]
+    assert [record["type"] for record in trades] == ["buy", "close", "skip"]
+    assert trades[0]["tx_hash"] == "dry_run"
+    assert trades[0]["size_sol"] == round(200_000_000 / 1_000_000_000, 6)
+    assert trades[2]["reason"] == "slippage_exceeded"
+    before = hashlib.sha256(trades_path.read_bytes()).hexdigest()
+    second = export_ledger(store, journal_dir=journal_dir, trades_path=trades_path)
+    assert second == {"journal_lines": 0, "trade_lines": 0, "export_seq": 5}
+    assert hashlib.sha256(trades_path.read_bytes()).hexdigest() == before
+    assert (journal_dir / "2026-01-01.jsonl").read_text(encoding="utf-8").splitlines() == day_lines
+
+
+def test_desk_mirrors_swap_atomically(tmp_path) -> None:
+    desk = tmp_path / "desk"
+    desk.mkdir()
+    (desk / "desk.md").write_text("# Desk\n\nHalt: false\n", encoding="utf-8")
+    first = mirror_halt(desk, reason="daily_loss", ts_utc="2026-01-01T00:00:00Z")
+    body = first.read_text(encoding="utf-8")
+    assert "Halt: true" in body
+    assert "FLOOR HALTED - daily_loss @ 2026-01-01T00:00:00Z" in body
+    assert "# Desk" in body
+    mirror_halt(desk, reason="drawdown", ts_utc="2026-01-01T01:00:00Z")
+    body = first.read_text(encoding="utf-8")
+    assert body.count("Halt: true") == 1
+    assert "FLOOR HALTED - drawdown @ 2026-01-01T01:00:00Z" in body
+    mirror_halt_cleared(
+        desk, reason="daily_loss", cleared_by="human:chief", ts_utc="2026-01-01T02:00:00Z"
+    )
+    body = first.read_text(encoding="utf-8")
+    assert "Halt: false" in body
+    mirror_killswitch(desk, source="file", reason="manual", ts_utc="2026-01-01T03:00:00Z")
+    body = first.read_text(encoding="utf-8")
+    assert "FLOOR HALTED - KILL SWITCH (file): manual @ 2026-01-01T03:00:00Z" in body
+
+
+def test_tickets_allocate_per_day_sequences(tmp_path) -> None:
+    store = LedgerStore(tmp_path / "ledger.sqlite")
+    first = allocate_ticket(
+        store,
+        ts_utc="2026-01-01T00:00:00.000001Z",
+        source="paper",
+        correlation_id="01J0000000000000000000001",
+        seat="chief",
+        title="scout candidate review",
+    )
+    second = allocate_ticket(
+        store,
+        ts_utc="2026-01-01T00:01:00.000001Z",
+        source="paper",
+        correlation_id="01J0000000000000000000002",
+        seat="chief",
+        title="second review",
+    )
+    third = allocate_ticket(
+        store,
+        ts_utc="2026-01-02T00:00:00.000001Z",
+        source="paper",
+        correlation_id="01J0000000000000000000003",
+        seat="chief",
+        title="next day review",
+    )
+    assert first == "SOL-20260101-001"
+    assert second == "SOL-20260101-002"
+    assert third == "SOL-20260102-001"
+    assert TICKET_RE.match(first) is not None
+    assert store.verify() is True
+    rows = store.read(since_seq=1, limit=None)
+    assert [row["payload"]["note_kind"] for row in rows] == ["ticket"] * 3
+    assert [row["payload"]["refs"][0] for row in rows] == [first, second, third]
