@@ -1,0 +1,47 @@
+[project]
+name = "desk-gateway"
+version = "0.1.0"
+description = "Desk gateway: thin stdlib-HTTP projection over the pumpgrok registry (TOOL-010)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+    "pumpgrok",
+    "pydantic>=2.14.1,<3",
+    "pyyaml>=6.0.3,<7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1,<10",
+    "pytest-asyncio>=1.4.0,<2",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.4,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "desk_gateway"
+module-root = "src"
+
+[tool.uv.sources]
+pumpgrok = { path = "../..", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "C4", "SIM", "RUF", "S", "T20", "PL"]
+ignore = [
+    "S101",
+]
+[tool.ruff.lint.isort]
+known-first-party = ["desk_gateway", "pumpgrok"]

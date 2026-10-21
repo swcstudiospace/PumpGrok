@@ -11,7 +11,7 @@ import yaml
 
 from pumpgrok.contracts.projection import effective_roster, transport_name
 
-from .conftest import rpc_call
+from conftest import rpc_call
 
 
 def _roster_doc(contracts_dir, seat_id):  # type: ignore[no-untyped-def]
