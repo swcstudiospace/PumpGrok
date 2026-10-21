@@ -5,8 +5,8 @@ consumes :func:`event_json_schemas`. Money is integer base units (R28):
 ``<x>_lamports`` for SOL, ``<x>_units`` for token base units; prices and
 fractions are :class:`~decimal.Decimal` parsed from strings with a ``price_``
 (or ``*_fraction``/``*_pct``) name and never copied from vendor float prices
-(R28). Every model is strict and ``extra=forbid`` (T-01-43): float money or a
-float price raises instead of coercing.
+(R28). Every model forbids extras (T-01-43) and every value field is strict:
+float money or a float price raises instead of coercing.
 
 Seat chatter is a :class:`JournalNote` payload; RUG alerts are
 :class:`Escalation` payloads with ``kind="rug_alert"``.
@@ -24,17 +24,29 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 EventSource = Literal["paper", "replay", "manual"]
 
 
-class _StrictForbid(BaseModel):
-    """Strict, closed models: no coercion, no unknown fields."""
+def _reject_float(value: Any) -> Any:
+    """Refuse float leaves before Decimal parsing (R28: money is int, ratios are Decimal)."""
+    if isinstance(value, float):
+        raise ValueError("float leaves are forbidden (money is int, ratios are Decimal)")
+    return value
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+
+MoneyInt = Annotated[int, Field(strict=True)]
+StrictBool = Annotated[bool, Field(strict=True)]
+PriceDecimal = Annotated[Decimal, BeforeValidator(_reject_float)]
+
+
+class _ClosedModel(BaseModel):
+    """Closed models: unknown fields rejected (T-01-43)."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class EventType(StrEnum):
@@ -74,7 +86,7 @@ class NoteKind(StrEnum):
     note = "note"
 
 
-class OrderPlaced(_StrictForbid):
+class OrderPlaced(_ClosedModel):
     """Buy/sell intent accepted for placement (PaperAdapter.place)."""
 
     source: EventSource
@@ -83,15 +95,15 @@ class OrderPlaced(_StrictForbid):
     ticket_id: str
     side: str = Field(description="buy | sell")
     mint: str
-    slippage_bps: int
-    size_lamports: int | None = None
-    token_units: int | None = None
+    slippage_bps: MoneyInt
+    size_lamports: MoneyInt | None = None
+    token_units: MoneyInt | None = None
     quote_json: str = ""
     approval_json: str = ""
     risk_json: str = ""
 
 
-class OrderRejected(_StrictForbid):
+class OrderRejected(_ClosedModel):
     """Buy/sell intent refused (adapter, RiskEngine, or LiveGate)."""
 
     source: EventSource
@@ -100,10 +112,10 @@ class OrderRejected(_StrictForbid):
     reason: str = Field(description="R34 ids + section 2.8 reasons")
     detail: str
     stage: str = Field(description="ACCEPTED | CONFIRMING")
-    fees_lamports: int = 0
+    fees_lamports: MoneyInt = 0
 
 
-class FillRecorded(_StrictForbid):
+class FillRecorded(_ClosedModel):
     """Execution fill; partials carry filled_fraction < 1 (no OrderPartial)."""
 
     source: EventSource
@@ -111,72 +123,72 @@ class FillRecorded(_StrictForbid):
     decision_id: str
     side: str = Field(description="buy | sell")
     mint: str
-    filled_lamports: int
-    filled_units: int
-    filled_fraction: Decimal
-    price_avg: Decimal = Field(description="Decimal string, lamports per token base unit")
-    venue_fee_lamports: int = 0
-    network_cost_lamports: int = 0
-    cash_delta_lamports: int = 0
-    latency_s: Decimal = Decimal("0")
+    filled_lamports: MoneyInt
+    filled_units: MoneyInt
+    filled_fraction: PriceDecimal
+    price_avg: PriceDecimal = Field(description="Decimal string, lamports per token base unit")
+    venue_fee_lamports: MoneyInt = 0
+    network_cost_lamports: MoneyInt = 0
+    cash_delta_lamports: MoneyInt = 0
+    latency_s: PriceDecimal = Decimal("0")
     venue_tx_ref: str = ""
 
 
-class PositionOpened(_StrictForbid):
+class PositionOpened(_ClosedModel):
     """First buy fill opened a position."""
 
     source: EventSource
     mint: str
-    price_entry: Decimal = Field(description="Decimal string, lamports per token base unit")
-    token_units: int
-    cost_basis_lamports: int
+    price_entry: PriceDecimal = Field(description="Decimal string, lamports per token base unit")
+    token_units: MoneyInt
+    cost_basis_lamports: MoneyInt
     opened_ts_utc: str
     symbol: str = ""
     creator: str = ""
     ticket_id: str = ""
-    score: Decimal = Decimal("0")
+    score: PriceDecimal = Decimal("0")
 
 
-class PositionClosed(_StrictForbid):
+class PositionClosed(_ClosedModel):
     """Sell fill zeroed the position (or a force-close did)."""
 
     source: EventSource
     mint: str
-    price_exit: Decimal = Field(description="Decimal string, lamports per token base unit")
-    proceeds_lamports: int
-    realized_pnl_lamports: int
+    price_exit: PriceDecimal = Field(description="Decimal string, lamports per token base unit")
+    proceeds_lamports: MoneyInt
+    realized_pnl_lamports: MoneyInt
     reason: str = Field(
         description="stop_loss | take_profit | trailing_stop | max_hold | rug_alert"
         " | kill_flatten | blind_flatten | graduated | manual"
     )
-    pnl_pct: Decimal = Decimal("0")
-    hold_seconds: int = 0
+    pnl_pct: PriceDecimal = Decimal("0")
+    hold_seconds: MoneyInt = 0
     venue_tx_ref: str = ""
 
 
-class MarkToMarket(_StrictForbid):
+class MarkToMarket(_ClosedModel):
     """Periodic mark snapshot (journal seat / RiskEngine)."""
 
     source: EventSource
     ts_source: str
-    cash_lamports: int
-    equity_lamports: int
-    unrealized_lamports: int
+    cash_lamports: MoneyInt
+    equity_lamports: MoneyInt
+    unrealized_lamports: MoneyInt
     prices_json: str = ""
 
 
-class HaltSet(_StrictForbid):
+class HaltSet(_ClosedModel):
     """Trading halted (RiskEngine only, R24)."""
 
     source: EventSource
     reason: str = Field(description="daily_loss | drawdown | ledger_inconsistent | manual")
     detail: str
-    equity_lamports: int
-    day_start_equity_lamports: int
+    equity_lamports: MoneyInt
+    day_start_equity_lamports: MoneyInt
     set_by: str = "risk_engine"
 
 
-class HaltCleared(_StrictForbid):
+class HaltCleared(_ClosedModel):
     """Halt cleared by a human via CLI."""
 
     source: EventSource
@@ -186,17 +198,17 @@ class HaltCleared(_StrictForbid):
     note: str = ""
 
 
-class KillSwitchSet(_StrictForbid):
+class KillSwitchSet(_ClosedModel):
     """Kill switch engaged (RiskEngine / risk.kill_switch)."""
 
     source: EventSource
     origin: str = Field(description="spec `source`: env | file | alert_command | tool")
     reason: str
-    flatten_requested: bool = False
+    flatten_requested: StrictBool = False
     set_by: str = ""
 
 
-class KillSwitchCleared(_StrictForbid):
+class KillSwitchCleared(_ClosedModel):
     """Kill switch cleared by a human via CLI."""
 
     source: EventSource
@@ -205,36 +217,36 @@ class KillSwitchCleared(_StrictForbid):
     sources_now_clear: list[str] = []
 
 
-class BreakerTripped(_StrictForbid):
+class BreakerTripped(_ClosedModel):
     """Risk breaker tripped."""
 
     source: EventSource
     breaker: str = Field(description="data_stale | loss_velocity | exec_errors")
     metric: str
     threshold: str
-    cooldown_s: int
+    cooldown_s: MoneyInt
 
 
-class BreakerReset(_StrictForbid):
+class BreakerReset(_ClosedModel):
     """Risk breaker reset after cooldown/probe."""
 
     source: EventSource
     breaker: str
-    after_s: int
-    probe_ok: bool = False
+    after_s: MoneyInt
+    probe_ok: StrictBool = False
 
 
-class DailyRollover(_StrictForbid):
+class DailyRollover(_ClosedModel):
     """UTC day boundary totals (RiskEngine)."""
 
     source: EventSource
     day_utc: str
-    day_start_equity_lamports: int
+    day_start_equity_lamports: MoneyInt
     prior_day_json: str = ""
     open_positions: list[str] = []
 
 
-class ConfigChanged(_StrictForbid):
+class ConfigChanged(_ClosedModel):
     """Effective config diff applied at startup or via `state autonomy`."""
 
     source: EventSource
@@ -244,7 +256,7 @@ class ConfigChanged(_StrictForbid):
     new_hash: str = ""
 
 
-class LiveWriteAttempted(_StrictForbid):
+class LiveWriteAttempted(_ClosedModel):
     """A live-write path was reached and refused (LiveAdapter / registry)."""
 
     source: EventSource
@@ -255,7 +267,7 @@ class LiveWriteAttempted(_StrictForbid):
     stack_hash: str = ""
 
 
-class Escalation(_StrictForbid):
+class Escalation(_ClosedModel):
     """Supervisor/RiskEngine/seat escalation; RUG alerts use kind=rug_alert."""
 
     source: EventSource
@@ -267,7 +279,7 @@ class Escalation(_StrictForbid):
     detail: str
 
 
-class JournalNote(_StrictForbid):
+class JournalNote(_ClosedModel):
     """Seat journal entry; the skip cycle uses seat=desk, note_kind=note."""
 
     source: EventSource
@@ -277,7 +289,7 @@ class JournalNote(_StrictForbid):
     refs: list[str] = []
 
 
-class ApprovalRecorded(_StrictForbid):
+class ApprovalRecorded(_ClosedModel):
     """Human approval captured (interfaces.md 2.9); consumption is a second row."""
 
     source: EventSource
@@ -287,14 +299,14 @@ class ApprovalRecorded(_StrictForbid):
     at: str
     ticket_id: str = ""
     mint: str = ""
-    size_lamports: int = 0
-    max_slippage_bps: int = 0
+    size_lamports: MoneyInt = 0
+    max_slippage_bps: MoneyInt = 0
     exit_rule_id: str = ""
     raw_message: str = ""
-    consumed: bool = False
+    consumed: StrictBool = False
 
 
-EVENT_MODELS: dict[EventType, type[_StrictForbid]] = {
+EVENT_MODELS: dict[EventType, type[_ClosedModel]] = {
     EventType.OrderPlaced: OrderPlaced,
     EventType.OrderRejected: OrderRejected,
     EventType.FillRecorded: FillRecorded,
