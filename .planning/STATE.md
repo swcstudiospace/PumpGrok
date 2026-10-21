@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 
 ## Current Position
 
-Phase: 3 (tools-and-skills) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-21 — Phase 2 complete, transitioned to Phase 03
+Phase: 3 (tools-and-skills) — EXECUTING (wave 1)
+Plan: 03-01 complete (registry contract + money typing)
+Status: 03-01 committed; 03-02+ pending orchestrator dispatch
+Last activity: 2026-10-21 — Phase 3 plan 03-01 executed (5 commits, plan pytest exit 0)
 
 Progress: [████░░░░░░] 40%
 
