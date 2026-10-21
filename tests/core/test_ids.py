@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pumpgrok.core.atomic_write import atomic_write_json
-from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation, next_span
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -116,3 +116,15 @@ def test_uuid_is_banned_from_src_pumpgrok() -> None:
                 if isinstance(node.value, ast.Name) and node.value.id == "uuid":
                     offenders.append(f"{path}:{node.lineno}: uuid.{node.attr}")
     assert offenders == [], f"uuid usage banned by R29: {offenders}"
+
+
+def test_span_numbering_restarts_per_root_and_stays_unique_within_one() -> None:
+    root_a = CorrelationId("01ARYZ6S41TSV4RRFF7Q3V9J6A")
+    root_b = CorrelationId("01ARYZ6S41TSV4RRFF7Q3V9J6B")
+    with bind_correlation(root_a):
+        first = next_span(root_a)
+        assert first == f"{root_a}.1"
+        with bind_correlation(first):
+            assert next_span(first) == f"{root_a}.2"
+    with bind_correlation(root_b):
+        assert next_span(root_b) == f"{root_b}.1"

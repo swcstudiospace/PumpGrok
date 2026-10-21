@@ -109,16 +109,26 @@ def next_span(cid: CorrelationId) -> CorrelationId:
 
 
 class bind_correlation:
-    """Bind an id for the dynamic extent of a bot cycle or tool call."""
+    """Bind an id for the dynamic extent of a bot cycle or tool call.
+
+    Binding a new root restarts that root's span numbering at 1. Binding a child of the
+    ambient root keeps the count, so sibling spans under one root stay unique.
+    """
 
     def __init__(self, cid: CorrelationId) -> None:
         self._cid = cid
         self._token: contextvars.Token[CorrelationId | None] | None = None
+        self._span_token: contextvars.Token[int] | None = None
 
     def __enter__(self) -> CorrelationId:
+        outer = _correlation.get()
         self._token = _correlation.set(self._cid)
+        if outer is None or outer.root != self._cid.root:
+            self._span_token = _span_counter.set(0)
         return self._cid
 
     def __exit__(self, *exc: object) -> None:
         assert self._token is not None
+        if self._span_token is not None:
+            _span_counter.reset(self._span_token)
         _correlation.reset(self._token)
