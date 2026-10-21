@@ -283,6 +283,14 @@ class RiskEngine:
         """Attach (or detach) the book; a rebuilt book takes effect at once."""
         self._reputation = book
 
+    def set_observe_only(self, seats: frozenset[str]) -> None:
+        """Mirror the supervisor latch set (paper-engine.md 6.4, plan 04-08).
+
+        Latched seats refuse paper writes at ``seat_may_trade``; a latched
+        risk seat refuses buys desk-wide while exits continue.
+        """
+        self._observe_only = frozenset(seats)
+
     def _now_ts(self) -> str:
         return format_ts_utc(self._clock.now())
 

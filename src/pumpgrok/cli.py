@@ -69,6 +69,7 @@ from pumpgrok.replay.runner import run_replay
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
+from pumpgrok.supervisor.scheduler import run_once_replay
 from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
@@ -531,7 +532,8 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
-    result = run_replay(source, settings.filter, seed=settings.replay.seed)
+
+    result = run_once_replay(source, settings.filter, seed=settings.replay.seed)
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     return EXIT_OK
 

@@ -223,6 +223,7 @@ def test_doctor_reports_absent_subsystems_as_warnings(
     assert "ok    ledger" in out
     assert "ok    tools (pumpgrok.tools)" in out
     assert "ok    engine (pumpgrok.engine)" in out
-    for absent in ("gateway", "supervisor", "reports"):
+    assert "ok    supervisor (pumpgrok.supervisor)" in out
+    for absent in ("gateway", "reports"):
         assert f"warn  {absent} (pumpgrok.{absent}): not-yet-implemented" in out
     assert not (tmp_path / "var").exists()
