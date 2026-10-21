@@ -17,6 +17,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 ## Phase Details
 
 ### Phase 1: Foundation
+
 **Goal**: A clean checkout installs from the lockfile, passes the canonical gates, loads layered settings, and runs one skip-only replay cycle that writes a hash-chained ledger with no network access.
 **Depends on**: Nothing (first phase)
 **Requirements**: FOUND-001, FOUND-002, FOUND-003, FOUND-004, FOUND-005, FOUND-006, FOUND-007, FOUND-008, FOUND-009, FOUND-010, FOUND-011, FOUND-012, FOUND-013, STRUCT-001, STRUCT-008, OBS-001, OBS-002, SEC-001, SEC-002
@@ -41,8 +42,18 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Redacted JSON logging, ULID correlation spans, env-only secrets, tracked-file cleanup (OBS-001, OBS-002, SEC-002, STRUCT-001)
 
 **Plans**: TBD
+- [ ] 01-01-PLAN.md
+- [x] 01-02-PLAN.md
+- [x] 01-03-PLAN.md
+- [ ] 01-04-PLAN.md
+- [ ] 01-05-PLAN.md
+- [ ] 01-06-PLAN.md
+- [ ] 01-07-PLAN.md
+- [ ] 01-08-PLAN.md
+- [ ] 01-09-PLAN.md
 
 ### Phase 2: Restructure
+
 **Goal**: The read-only tools and the vendor screening engine run from `src/pumpgrok` under characterization tests while the vendor tree stays alive as the oracle; skills, CLI verbs and the signing guard match the target layout.
 **Depends on**: Phase 1
 **Requirements**: STRUCT-002, STRUCT-003, STRUCT-005, STRUCT-007, SEC-003
@@ -65,6 +76,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Plans**: TBD
 
 ### Phase 3: Tools and Skills
+
 **Goal**: Every desk tool is a typed, registered dotted tool that seats reach only through least-privilege rosters, exposed through the desk gateway, and the full 35-skill set validates against its manifests.
 **Depends on**: Phase 2
 **Requirements**: TOOL-001, TOOL-002, TOOL-003, TOOL-004, TOOL-005, TOOL-006, TOOL-007, TOOL-008, TOOL-009, TOOL-010, TOOL-011, SKILL-001, SKILL-002, SKILL-003, SKILL-004
@@ -87,6 +99,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Plans**: TBD
 
 ### Phase 4: Paper Trading and Autonomy
+
 **Goal**: The desk runs autonomously in paper mode on fixture data: curve-faithful fills, a risk engine with halts, breakers and kill switch, deterministic replay under virtual time, a supervised ten-seat loop with health and reports, live mode refused, and the vendor tree retired.
 **Depends on**: Phase 3
 **Requirements**: STRUCT-004, STRUCT-006, PAPER-001, PAPER-002, PAPER-003, PAPER-004, PAPER-005, PAPER-006, PAPER-007, RISK-001, RISK-002, RISK-003, RISK-004, RISK-005, RISK-006, AUTO-001, AUTO-002, AUTO-003, AUTO-004, AUTO-005, AUTO-006, SEC-004, GOLIVE-001, GOLIVE-002
@@ -114,6 +127,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 **Plans**: TBD
 
 ### Phase 5: Hardening
+
 **Goal**: The desk survives multi-day replay, injected faults and restarts; exposes metrics and health; ships runbooks and proven go-live gates with live disabled; and carries security and changelog evidence.
 **Depends on**: Phase 4
 **Requirements**: RISK-007, AUTO-007, AUTO-008, OBS-003, OBS-004, OBS-005, SEC-005, GOLIVE-003
@@ -143,7 +157,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 2/9 | In Progress | - |
 | 2. Restructure | 0/TBD | Not started | - |
 | 3. Tools and Skills | 0/TBD | Not started | - |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
