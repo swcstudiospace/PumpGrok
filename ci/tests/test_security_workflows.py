@@ -31,7 +31,7 @@ WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
 BYPASS_SNIPPETS = ["|| true", "|| exit 0", "2>/dev/null", "--exit-zero", "--dry-run"]
 
 TRADING_GITLEAKS_RULES = [
-    "solana-base58-secret-key",
+    "solana-base58-key",
     "solana-json-keypair",
     "helius-rpc-key",
     "quicknode-endpoint-token",

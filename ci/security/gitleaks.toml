@@ -11,7 +11,7 @@
 useDefault = true
 
 [[rules]]
-id = "solana-base58-secret-key"
+id = "solana-base58-key"
 description = "Solana 64-byte secret key, base58"
 regex = '''\b[1-9A-HJ-NP-Za-km-z]{86,88}\b'''
 tags = ["key", "solana"]
