@@ -435,21 +435,7 @@ def _add_tail(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
     replay_cmd.add_parser("trim", help="trim a replay dataset")
     replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
-    tools_p = verbs.add_parser(
-        "tools",
-        parents=[mode_option],
-        help=argparse.SUPPRESS,
-        description=(
-            "Hidden developer verb (B8): print one catalog tool JSON schema. "
-            "Not listed in top-level help."
-        ),
-    )
-    tools_p.add_argument(
-        "id",
-        nargs="?",
-        default=None,
-        help="dotted tool id, e.g. exec.quote; with --help prints its JSON schema",
-    )
+
 
 def build_parser() -> argparse.ArgumentParser:
     mode_option = _Parser(add_help=False)
@@ -696,10 +682,30 @@ def _tools_schema(tool_id: str) -> int:
     return asyncio.run(_schema())
 
 
-def _tools_cmd(args: argparse.Namespace) -> int:
-    if args.id is None:
+_TOOLS_HELP = (
+    "usage: pumpgrok tools <id> [--help]",
+    "",
+    "Hidden developer verb (B8): print one catalog tool JSON schema.",
+    "Not listed in top-level help. The schema is mode-independent.",
+    "",
+    "examples:",
+    "  pumpgrok tools exec.quote --help",
+)
+
+
+def _tools_entry(rest: list[str]) -> int:
+    """Route the hidden `tools` verb without argparse (B8: absent from top help)."""
+    if not rest:
         raise UsageError("tools requires a tool id (try `pumpgrok tools exec.quote --help`)")
-    return _tools_schema(args.id)
+    if rest == ["--help"] or rest == ["-h"]:
+        _say(sys.stdout, *_TOOLS_HELP)
+        return EXIT_OK
+    tool_id = rest[0]
+    if tool_id.startswith("-"):
+        raise UsageError(f"unexpected arguments for `tools`: {' '.join(rest)}")
+    if rest[1:] not in ([], ["--help"], ["-h"]):
+        raise UsageError(f"unexpected arguments for `tools {tool_id}`: {' '.join(rest[1:])}")
+    return _tools_schema(tool_id)
 
 
 _SCOUT_FLOW = ("market.trades", "market.liquidity", "onchain.authorities", "journal.append")
@@ -724,13 +730,8 @@ _RUG_WATCH = (
 
 def _dispatch(argv: Sequence[str]) -> int:
     refuse_cli_secrets(argv)
-    if (
-        len(argv) == 3
-        and argv[0] == "tools"
-        and not argv[1].startswith("-")
-        and argv[2] in ("--help", "-h")
-    ):
-        return _tools_schema(argv[1])
+    if argv and argv[0] == "tools":
+        return _tools_entry(list(argv[1:]))
     args = build_parser().parse_args(list(argv))
     settings = load_settings(**_settings_kwargs(args.mode))
     setup_logging(mode=settings.effective_mode, profile=current_profile())
@@ -745,8 +746,6 @@ def _dispatch(argv: Sequence[str]) -> int:
         return _state(args, settings)
     if args.verb == "killswitch":
         return _killswitch(args, settings)
-    if args.verb == "tools":
-        return _tools_cmd(args)
     if args.verb == "scout":
         return _find_only(f"scout {args.cmd}", "scout", settings, _SCOUT_FLOW)
     if args.verb == "risk":
