@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-authority_check.py – Check mint authority, freeze authority, and basic Token-2022 flags.
+authority_check.py - Check mint authority, freeze authority, and basic Token-2022 flags.
 
 Usage:
   python tools/authority_check.py --mint <mint_address> [--rpc <rpc_url>]
@@ -11,7 +11,7 @@ Outputs clean JSON. Never signs or sends.
 import argparse
 import json
 import sys
-from typing import Any, Dict
+from typing import Any
 
 try:
     import requests
@@ -22,7 +22,7 @@ except ImportError:
 DEFAULT_RPC = "https://api.mainnet-beta.solana.com"
 
 
-def rpc_call(rpc_url: str, method: str, params: list) -> Dict[str, Any]:
+def rpc_call(rpc_url: str, method: str, params: list) -> dict[str, Any]:
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -37,7 +37,7 @@ def rpc_call(rpc_url: str, method: str, params: list) -> Dict[str, Any]:
     return data.get("result")
 
 
-def check_mint(mint: str, rpc_url: str) -> Dict[str, Any]:
+def check_mint(mint: str, rpc_url: str) -> dict[str, Any]:
     try:
         result = rpc_call(rpc_url, "getAccountInfo", [
             mint,

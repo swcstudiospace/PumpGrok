@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-holder_check.py – Basic top-holder / concentration snapshot for PumpGrok.
+holder_check.py - Basic top-holder / concentration snapshot for PumpGrok.
 
 Usage:
   python tools/holder_check.py --mint <mint> [--rpc <url>] [--limit 20]
@@ -12,12 +12,16 @@ Never signs or sends. For richer smart-money labelling prefer gmgn / paid APIs l
 import argparse
 import json
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 try:
     import requests
 except ImportError:
-    print(json.dumps({"ok": False, "error": "requests library required. Run: pip install requests"}))
+    print(
+        json.dumps(
+            {"ok": False, "error": "requests library required. Run: pip install requests"}
+        )
+    )
     sys.exit(1)
 
 DEFAULT_RPC = "https://api.mainnet-beta.solana.com"
@@ -38,14 +42,14 @@ def rpc_call(rpc_url: str, method: str, params: list) -> Any:
     return data.get("result")
 
 
-def holder_snapshot(mint: str, rpc_url: str, limit: int = 20) -> Dict[str, Any]:
+def holder_snapshot(mint: str, rpc_url: str, limit: int = 20) -> dict[str, Any]:
     try:
         result = rpc_call(rpc_url, "getTokenLargestAccounts", [mint])
         value = result.get("value") if isinstance(result, dict) else result
         if not value:
             return {"ok": False, "error": "No largest accounts returned", "mint": mint}
 
-        holders: List[Dict[str, Any]] = []
+        holders: list[dict[str, Any]] = []
         total_ui = 0.0
         for item in value[:limit]:
             ui = float(item.get("uiAmount") or 0)
@@ -71,7 +75,11 @@ def holder_snapshot(mint: str, rpc_url: str, limit: int = 20) -> Dict[str, Any]:
             "top10Pct": round(top10 * 100, 2),
             "holders": holders,
             "rpc": rpc_url,
-            "note": "Percentages are of the sampled largest accounts only. LP and locked tokens are not auto-excluded. Cross-check with Solscan / gmgn for production decisions.",
+            "note": (
+                "Percentages are of the sampled largest accounts only. "
+                "LP and locked tokens are not auto-excluded. "
+                "Cross-check with Solscan / gmgn for production decisions."
+            ),
         }
     except Exception as e:
         return {"ok": False, "error": str(e), "mint": mint}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pipeline_evidence.py – Read vendored grokbot-pumpfun JSONL as desk evidence.
+pipeline_evidence.py - Read vendored grokbot-pumpfun JSONL as desk evidence.
 
 Usage:
   python tools/pipeline_evidence.py
@@ -16,7 +16,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 
 DEFAULT_LOG = "vendor/grokbot-pumpfun/logs/trades.jsonl"
@@ -65,7 +65,7 @@ def fmt_pct(share: Any) -> str:
     return f"{float(share) * 100:.1f}%"
 
 
-def as_dict(value: Any) -> Optional[Dict[str, Any]]:
+def as_dict(value: Any) -> Optional[dict[str, Any]]:
     return value if isinstance(value, dict) else None
 
 
@@ -75,7 +75,7 @@ def display_or_dash(value: Any) -> str:
     return str(value)
 
 
-def analyzer_line(metrics: Optional[Dict[str, Any]]) -> str:
+def analyzer_line(metrics: Optional[dict[str, Any]]) -> str:
     if metrics is None:
         return "unavailable"
     risk = metrics.get("risk_score")
@@ -85,7 +85,7 @@ def analyzer_line(metrics: Optional[Dict[str, Any]]) -> str:
     return f"{risk_part}, creator holding {creator}, top-5 {top5}"
 
 
-def audit_line(audit: Optional[Dict[str, Any]]) -> str:
+def audit_line(audit: Optional[dict[str, Any]]) -> str:
     if audit is None:
         return "unavailable"
     coordinated = audit.get("coordinated_buying")
@@ -100,7 +100,7 @@ def audit_line(audit: Optional[Dict[str, Any]]) -> str:
     )
 
 
-def narrative_line(narrative: Optional[Dict[str, Any]]) -> str:
+def narrative_line(narrative: Optional[dict[str, Any]]) -> str:
     if narrative is None:
         return "unavailable"
     trend = narrative.get("trend_fit")
@@ -115,7 +115,7 @@ def narrative_line(narrative: Optional[Dict[str, Any]]) -> str:
     )
 
 
-def checker_approve(checker: Optional[Dict[str, Any]]) -> str:
+def checker_approve(checker: Optional[dict[str, Any]]) -> str:
     if checker is None:
         return "unavailable"
     approve = checker.get("approve")
@@ -124,7 +124,7 @@ def checker_approve(checker: Optional[Dict[str, Any]]) -> str:
     return "unavailable"
 
 
-def total_score(scores: Optional[Dict[str, Any]]) -> str:
+def total_score(scores: Optional[dict[str, Any]]) -> str:
     if scores is None:
         return "unavailable"
     total = scores.get("total")
@@ -133,7 +133,7 @@ def total_score(scores: Optional[Dict[str, Any]]) -> str:
     return "unavailable"
 
 
-def desk_action(record: Dict[str, Any]) -> str:
+def desk_action(record: dict[str, Any]) -> str:
     rtype = record.get("type")
     if rtype == "buy":
         return "hand off as LEAD to RISK"
@@ -152,7 +152,7 @@ def desk_action(record: Dict[str, Any]) -> str:
     return "context-only"
 
 
-def evidence_block(record: Dict[str, Any]) -> str:
+def evidence_block(record: dict[str, Any]) -> str:
     mint = display_or_dash(record.get("mint"))
     symbol = display_or_dash(record.get("symbol"))
     ts = record.get("ts")
@@ -180,8 +180,8 @@ def evidence_block(record: Dict[str, Any]) -> str:
     )
 
 
-def load_records(path: Path) -> Tuple[List[Dict[str, Any]], int]:
-    records: List[Dict[str, Any]] = []
+def load_records(path: Path) -> tuple[list[dict[str, Any]], int]:
+    records: list[dict[str, Any]] = []
     skipped = 0
     with path.open(encoding="utf-8") as fh:
         for line in fh:
@@ -201,7 +201,7 @@ def load_records(path: Path) -> Tuple[List[Dict[str, Any]], int]:
 
 
 def matches(
-    record: Dict[str, Any],
+    record: dict[str, Any],
     mint: Optional[str],
     rtype: Optional[str],
     candidates: bool,

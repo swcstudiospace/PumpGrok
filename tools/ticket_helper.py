@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ticket_helper.py – Generate next PumpGrok ticket ID and optional proposal skeleton.
+ticket_helper.py - Generate next PumpGrok ticket ID and optional proposal skeleton.
 
 Usage:
   python tools/ticket_helper.py next
@@ -22,7 +22,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 
 TICKET_RE = re.compile(r"SOL-\d{8}-\d{3}")
@@ -62,7 +62,7 @@ def today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d")
 
 
-def list_existing_ids() -> List[str]:
+def list_existing_ids() -> list[str]:
     desk = desk_root()
     found = set()
     for child in SCAN_CHILDREN:
@@ -157,7 +157,9 @@ def main():
     create_p.add_argument("--mint", required=True, help="Token mint address")
     create_p.add_argument("--ticket", default=None, help="Reuse an existing LEAD-ID")
     create_p.add_argument("--size", default=None, help="Intended size (e.g. 25 USDC or 0.1 SOL)")
-    create_p.add_argument("--slippage", type=int, default=100, help="Max slippage in bps (default 100)")
+    create_p.add_argument(
+        "--slippage", type=int, default=100, help="Max slippage in bps (default 100)"
+    )
     create_p.add_argument("--status", default="PENDING_RISK", help="Proposal status field")
 
     sub.add_parser("list", help="List existing ticket IDs across the desk")
@@ -180,7 +182,12 @@ def main():
             sys.exit(1)
     elif args.command == "list":
         ids = list_existing_ids()
-        print(json.dumps({"ok": True, "tickets": ids, "count": len(ids), "desk": str(desk_root())}, indent=2))
+        print(
+            json.dumps(
+                {"ok": True, "tickets": ids, "count": len(ids), "desk": str(desk_root())},
+                indent=2,
+            )
+        )
     else:
         print(json.dumps({"ok": False, "error": "unknown command"}))
         sys.exit(1)

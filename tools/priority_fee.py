@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-priority_fee.py – Estimate Solana prioritization fees for PumpGrok.
+priority_fee.py - Estimate Solana prioritization fees for PumpGrok.
 
 Usage:
   python tools/priority_fee.py [--rpc <rpc_url>] [--percentile 50] [--multiplier 1.2]
@@ -13,7 +13,7 @@ import argparse
 import json
 import statistics
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 try:
     import requests
@@ -39,14 +39,18 @@ def rpc_call(rpc_url: str, method: str, params: list) -> Any:
     return data.get("result")
 
 
-def estimate_priority_fee(rpc_url: str, percentile: int = 50, multiplier: float = 1.2) -> Dict[str, Any]:
+def estimate_priority_fee(
+    rpc_url: str, percentile: int = 50, multiplier: float = 1.2
+) -> dict[str, Any]:
     try:
         # getRecentPrioritizationFees returns a list of {slot, prioritizationFee}
         result = rpc_call(rpc_url, "getRecentPrioritizationFees", [[]])
         if not result:
             return {"ok": False, "error": "Empty prioritization fee response"}
 
-        fees: List[int] = [item.get("prioritizationFee", 0) for item in result if isinstance(item, dict)]
+        fees: list[int] = [
+            item.get("prioritizationFee", 0) for item in result if isinstance(item, dict)
+        ]
         fees = [f for f in fees if f is not None and f >= 0]
 
         if not fees:
@@ -78,7 +82,10 @@ def estimate_priority_fee(rpc_url: str, percentile: int = 50, multiplier: float 
             "recommended_micro_lamports": recommended,
             "recommended_lamports_per_cu": recommended,  # alias
             "rpc": rpc_url,
-            "note": "Value is micro-lamports per compute unit. Use with ComputeBudgetProgram.set_compute_unit_price.",
+            "note": (
+                "Value is micro-lamports per compute unit. "
+                "Use with ComputeBudgetProgram.set_compute_unit_price."
+            ),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -87,8 +94,18 @@ def estimate_priority_fee(rpc_url: str, percentile: int = 50, multiplier: float 
 def main():
     parser = argparse.ArgumentParser(description="Priority fee estimator for PumpGrok")
     parser.add_argument("--rpc", default=DEFAULT_RPC, help="Solana RPC URL")
-    parser.add_argument("--percentile", type=int, default=50, help="Percentile to target (default 50 = median)")
-    parser.add_argument("--multiplier", type=float, default=1.2, help="Safety multiplier on the chosen percentile (default 1.2)")
+    parser.add_argument(
+        "--percentile",
+        type=int,
+        default=50,
+        help="Percentile to target (default 50 = median)",
+    )
+    parser.add_argument(
+        "--multiplier",
+        type=float,
+        default=1.2,
+        help="Safety multiplier on the chosen percentile (default 1.2)",
+    )
     args = parser.parse_args()
 
     result = estimate_priority_fee(args.rpc, args.percentile, args.multiplier)

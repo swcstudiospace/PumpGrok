@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_state.py – File-bus status for the PumpGrok cron state machine.
+desk_state.py - File-bus status for the PumpGrok cron state machine.
 
 No network. No signing. JSON on stdout.
 Resolves the desk from PUMPGROK_DESK, then /workspace/trading-desk, then ./trading-desk.
@@ -15,7 +15,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 
 DESK_CHILDREN = (
@@ -64,7 +64,7 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def parse_desk_md(text: str) -> Dict[str, object]:
+def parse_desk_md(text: str) -> dict[str, object]:
     engagement = "research"
     halt = False
     m = ENGAGEMENT_RE.search(text)
@@ -83,14 +83,14 @@ def ticket_id_from_name(path: Path) -> Optional[str]:
     return m.group(0) if m else None
 
 
-def list_ticket_files(folder: Path) -> List[Path]:
+def list_ticket_files(folder: Path) -> list[Path]:
     if not folder.exists():
         return []
     files = [p for p in folder.iterdir() if p.is_file() and TICKET_RE.search(p.stem)]
     return sorted(files)
 
 
-def all_ticket_ids(desk: Path) -> List[str]:
+def all_ticket_ids(desk: Path) -> list[str]:
     found = set()
     for child in DESK_CHILDREN:
         folder = desk / child
@@ -114,7 +114,7 @@ def next_ticket_id(desk: Path) -> str:
     return f"{prefix}{seq:03d}"
 
 
-def pending_leads(desk: Path) -> List[Dict[str, str]]:
+def pending_leads(desk: Path) -> list[dict[str, str]]:
     leads = list_ticket_files(desk / "leads")
     briefs = {ticket_id_from_name(p) for p in list_ticket_files(desk / "briefs")}
     out = []
@@ -135,7 +135,7 @@ def proposal_status(path: Path) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
-def pending_tickets(desk: Path) -> List[Dict[str, str]]:
+def pending_tickets(desk: Path) -> list[dict[str, str]]:
     out = []
     for brief in list_ticket_files(desk / "briefs"):
         tid = ticket_id_from_name(brief)
@@ -154,7 +154,7 @@ def pending_tickets(desk: Path) -> List[Dict[str, str]]:
     return out
 
 
-def open_positions(desk: Path) -> List[Dict[str, str]]:
+def open_positions(desk: Path) -> list[dict[str, str]]:
     folder = desk / "positions"
     if not folder.exists():
         return []
@@ -192,7 +192,7 @@ def ensure_desk(desk: Path) -> None:
         )
 
 
-def write_halt(desk: Path, reason: str) -> Dict[str, object]:
+def write_halt(desk: Path, reason: str) -> dict[str, object]:
     ensure_desk(desk)
     path = desk / "desk.md"
     body = read_text(path)
@@ -201,7 +201,7 @@ def write_halt(desk: Path, reason: str) -> Dict[str, object]:
     else:
         body = HALT_RE.sub("Halt: true", body, count=1)
     stamp = utc_now()
-    body += f"\nFLOOR HALTED – {reason} @ {stamp}\n"
+    body += f"\nFLOOR HALTED - {reason} @ {stamp}\n"
     path.write_text(body, encoding="utf-8")
     journal = desk / "journal" / f"{stamp[:10]}.md"
     journal.parent.mkdir(parents=True, exist_ok=True)
@@ -210,7 +210,7 @@ def write_halt(desk: Path, reason: str) -> Dict[str, object]:
     return {"ok": True, "halt": True, "reason": reason, "path": str(path)}
 
 
-def status_payload(desk: Path) -> Dict[str, object]:
+def status_payload(desk: Path) -> dict[str, object]:
     ensure_desk(desk)
     parsed = parse_desk_md(read_text(desk / "desk.md"))
     return {

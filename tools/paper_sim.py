@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-paper_sim.py – Simple paper-trading fill logger for PumpGrok.
+paper_sim.py - Simple paper-trading fill logger for PumpGrok.
 
 Usage (buy):
   python tools/paper_sim.py --action buy --ticket SOL-20260827-001 \
@@ -15,14 +15,13 @@ Appends a structured paper fill to the journal. Never touches real capital.
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
-def append_paper_fill(desk: Path, record: Dict[str, Any]) -> str:
+def append_paper_fill(desk: Path, record: dict[str, Any]) -> str:
     journal_dir = desk / "journal"
     journal_dir.mkdir(parents=True, exist_ok=True)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
