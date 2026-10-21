@@ -289,6 +289,7 @@ class TestG2Receipts:
         problems = receipt_gate.check(_receipt(loop_acks=[ack]), "bot-04-sniper")
         assert any("is a seat, not a human" in p for p in problems)
 
+
 # A git diff that cannot be computed must fail the gate, never print PASS on an unscanned tree.
 _UNRESOLVABLE_BASE = "refs/heads/no-such-base-ref-wr01"
 
@@ -383,9 +384,7 @@ class TestG3Secrets:
         ("**/*.yaml", "contracts/changes/a.yaml", True),
     ],
 )
-def test_contract_single_star_does_not_cross_a_directory(
-    contracts_gate, pattern, path, expected
-):
+def test_contract_single_star_does_not_cross_a_directory(contracts_gate, pattern, path, expected):
     assert contracts_gate._match(pattern, path) is expected
 
 
