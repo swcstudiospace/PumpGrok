@@ -168,6 +168,19 @@ class OpsSettings(BaseModel):
     reputation_path: str = "var/reputation.json"
 
 
+class NotifySettings(BaseModel):
+    """Human alert destinations (TOOL-006, R39).
+
+    ``allowlist`` holds Telegram chat ids and webhook URLs; empty means
+    stdout and file only. The Telegram token travels via env
+    ``PUMPGROK_TELEGRAM_TOKEN`` only, never TOML and never this model.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    allowlist: list[str] = Field(default_factory=list)
+
+
 Mode = Literal["paper", "live"]
 
 OVERLAY_PROFILES: tuple[str, str, str] = ("dev", "paper", "live")
@@ -262,6 +275,7 @@ class Settings(BaseSettings):
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     exits: ExitsSettings = Field(default_factory=ExitsSettings)
     ops: OpsSettings = Field(default_factory=OpsSettings)
+    notify: NotifySettings = Field(default_factory=NotifySettings)
 
     @property
     def effective_mode(self) -> Mode:

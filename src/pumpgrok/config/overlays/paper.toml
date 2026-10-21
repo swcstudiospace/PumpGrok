@@ -82,3 +82,7 @@ stop_loss_poll_seconds = 15.0
 
 [ops]
 reputation_path = "var/reputation.json"
+
+[notify]
+# Telegram chat ids and webhook URLs. Empty means stdout and file only (R39).
+allowlist = []
