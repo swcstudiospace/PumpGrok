@@ -1,59 +1,61 @@
 ---
 phase: 01-foundation
 fix_scope: critical_warning
-findings_in_scope: 10
-fixed: 10
+findings_in_scope: 8
+fixed: 7
+partial: 1
 skipped: 0
 failed: 0
 iteration: 2
-status: all_fixed
+status: partial
 ---
 
 # Phase 1: Code Review Fix Report
 
-**Source review:** 01-REVIEW.md (iteration 1, reviewed 2026-10-21T03:11:18Z)
-**Fix scope:** critical_warning (1 Critical, 9 Warning). Info findings were not in scope.
+**Source review:** 01-REVIEW.md (committed f471efb, depth standard, 1 Critical, 7 Warning, 8 Info)
+**Fix scope:** critical_warning (CR-01, WR-01 to WR-07). Info findings (IN-01 to IN-08) were not in scope and were not touched.
 **Applied by:** inline fixer. No sub-agent could be spawned, so each fix was applied in the orchestrator context, one atomic commit per finding.
-**Verification:** diff inspection and a parse check of every changed module. The test suite was not run, per the run contract. The orchestrator should run it.
+**Verification:** targeted pytest on the modules changed (`ci/tests/test_gates.py`, `tests/safety/test_static_guards.py`, `tests/test_logging.py`, `tests/replay/`). The canonical gate runner was not run, per the run contract. The `scripts/check.sh` emoji change was exercised with a scratch harness, not with the full script.
 
 ## Per-finding outcome
 
 | Finding | Severity | Outcome | Commit | Files |
 |---------|----------|---------|--------|-------|
-| CR-01 | Critical | fixed | 3b4e1ea | `.env.example`, `tests/config/test_settings.py` |
-| WR-01 | Warning | fixed | 8101b38 | `src/pumpgrok/core/risk_budget.py` (new), `src/pumpgrok/core/bot.py`, `src/pumpgrok/config/settings.py`, `src/pumpgrok/core/__init__.py`, `tests/core/test_models.py` |
-| WR-02 | Warning | fixed | 6d054e0 | `src/pumpgrok/config/settings.py`, `tests/config/test_secret_refusal.py` |
-| WR-03 | Warning | fixed | 57994bf | `src/pumpgrok/core/atomic_write.py`, `tests/core/test_ids.py` |
-| WR-04 | Warning | fixed | e55ec46 | `src/pumpgrok/ledger/store.py`, `tests/ledger/test_store.py` |
-| WR-05 | Warning | fixed | 5c0afd0 | `src/pumpgrok/ledger/store.py`, `tests/ledger/test_store.py` |
-| WR-06 | Warning | fixed | 0b51828 | `src/pumpgrok/core/tool.py`, `src/pumpgrok/core/registry.py`, `tests/core/test_registry.py` |
-| WR-07 | Warning | fixed | 3e90d15 | `src/pumpgrok/core/ids.py`, `tests/core/test_ids.py` |
-| WR-08 | Warning | fixed | 3df5aae | `src/pumpgrok/core/approvals.py`, `tests/core/test_models.py` |
-| WR-09 | Warning | fixed | a7a76eb | `src/pumpgrok/config/settings.py`, `tests/config/test_settings.py` |
+| CR-01 | Critical | partial: G-1 half fixed; G-4 half not fixed (decision needed, see below) | 104e708 | `ci/gates/check_ownership.py`, `ci/tests/test_gates.py` |
+| WR-01 | Warning | fixed | adea028 | `ci/gates/check_secrets.py`, `ci/gates/check_contracts.py`, `ci/tests/test_gates.py` |
+| WR-02 | Warning | fixed | 5136509 | `ci/gates/check_ownership.py`, `ci/gates/check_contracts.py`, `ci/tests/test_gates.py` |
+| WR-03 | Warning | fixed | f51db58 | `ci/gates/check_rollback.py`, `ci/tests/test_gates.py` |
+| WR-04 | Warning | fixed | 6ff569a | `tests/safety/test_static_guards.py` |
+| WR-05 | Warning | fixed | c12770d | `src/pumpgrok/logging/json.py`, `tests/test_logging.py` |
+| WR-06 | Warning | fixed | 6fca20c | `src/pumpgrok/replay/fixtures.py`, `tests/replay/test_fixtures.py` |
+| WR-07 | Warning | fixed | af36e17 | `scripts/check.sh` |
 
-Skipped: none. Failed: none.
+Skipped: none. Failed: none. Partial: CR-01 (see below).
 
-## Decisions taken where the review offered options or the suggested snippet needed adjustment
+## CR-01: what was fixed and what was not
 
-- **WR-01:** The shared class is the bot definition, which is the superset (it has `paper_equity_sol` and the INV-C-06 validator). `paper_equity_sol` is therefore now an accepted `[risk]` overlay and `PUMPGROK_RISK__PAPER_EQUITY_SOL` key.
-- **WR-05:** Implemented the review snippet. The stored payload is the validated model dump, so defaults are materialised. `JournalNote` requires `source` in its payload, so the test fixture was corrected.
-- **WR-06:** Took the review's second option. The registry does not apply retry, rate limiting or alerts, so `ToolSpec` refuses `retry.attempts > 1` and the docstrings no longer claim them. Nothing implemented retry or alerts.
-- **WR-07:** The review snippet resets the span counter on every bind. That would restart nested child spans at `.1` under the same root and collide with siblings. The counter now resets only when the bound root changes.
-- **WR-08:** `token_units` is required for `human_sell` and `exit_rule` (all sell kinds bind quantity). `matches()` requires the kind-to-side mapping to match the order side.
-- **WR-09:** The refusal lives in `load_settings()` after construction, because `collect_startup_problems` receives no kwargs. Tests that asserted live loads now assert the refusal. Precedence is checked on `Settings` directly.
+**Fixed (commit 104e708):** `check_ownership.main` classified contract surfaces before checking ownership, so a non-owner editing a shared contract got a G-1 NOTE and passed. Ownership is now checked first. `contracts/tool-rosters/bot-03-whale.yaml` edited from `bot-04-sniper` now fails with FOREIGN (owned by bot-02-risk). A regression test covers it.
 
-## Open follow-up (not a finding)
+**Not fixed: the G-4 half.** The review asks that `check_contracts` require `proposed_by == --bot` and reject any acknowledgement whose `bot` equals `proposed_by`. Neither is derivable from `docs/cross-bot-protocol.md`, and both conflict with it. Decisions needed:
 
-- `ApprovalRecorded` in `ledger/events.py` has no `token_units` field. Approvals persisted to the ledger therefore cannot carry the sell quantity that WR-08 now binds in memory. No production code constructs `ApprovalRecord` yet, so nothing is affected today, but the ledger model should gain the field before a human-approval path is wired.
+1. **Self-acknowledgement.** `ownership.yaml` lists `bot-02-risk` as a required consumer of `contracts/events/**` and `contracts/tool-rosters/**`, and RISK is also the owner. Rejecting an ack where `bot == proposed_by` makes every breaking change proposed by RISK on those surfaces impossible to pass. Either the proposer is exempt from its own acknowledgement, or it must acknowledge itself. The protocol does not say which.
+2. **Proposer binding.** Protocol step 2 says "the integrating seat opens the contract change", and G-1 lets only the owner commit under `contracts/**`. An integrating seat that is not the owner therefore cannot make the commit, so `proposed_by == --bot` would reject a protocol-conforming routed change. Either `proposed_by` may name a seat other than the committing seat, or routed changes must be proposed by the owner.
+3. **Residual limit (state in the gate docs, not fixable in code).** A consumer's acknowledgement is written by whoever commits the document. The gate cannot prove an ack came from the named seat. Only the owner's branch can carry a contract change after fix 104e708, so the exposure is the owner writing acks for other seats, which matches the protocol's "a seat writing its own acknowledgement ... for another seat" anti-pattern.
 
 ## Iterations (--auto)
 
-- Iteration 1: fix pass (all 10 in-scope findings, commits above).
-- Iteration 2: inline re-review (`01-REVIEW.md` overwritten; iteration-1 copy kept as `01-REVIEW.iter2.md`). Result: Critical 0, Warning 0, Info 14 open. The Info items are out of the fix scope.
-- The loop stopped after iteration 2. No in-scope findings remain, so another fix pass would have nothing to apply. The workflow's `clean` convergence test is not met only because Info items remain.
+- **Iteration 1 (fix pass):** the eight in-scope findings above, one commit each. CR-01 is partial, WR-01 to WR-07 are fixed.
+- **Iteration 2 (re-review, inline):** the changed modules were re-read in full and the cumulative diff f471efb..HEAD was reviewed. No new Critical or Warning finding was found. `check_ownership --validate-manifest` self-test passes through `ci/tests/test_gates.py`, so every tracked path still has exactly one owner. Remaining in-scope item: CR-01 G-4 half, blocked on the decisions above.
+- **Stop:** the loop stopped after iteration 2, before the cap of 3. The only open in-scope item has no derivable fix, so a further fixer pass would have nothing to apply. This is a decision block, not a cap.
+- **REVIEW.md:** not rewritten. The iteration-2 result is recorded here; 01-REVIEW.md still holds the original review, and this report is the record of what changed since.
+
+## Warnings that were reviewed and still apply (not in this fix run)
+
+- `check_contracts._surface_match` (declared-surface matching) still uses `fnmatch` across `/`. It is the same class of defect as WR-02, but it was not in the cited finding and is not changed here. Its effect is lenient, so it can over-cover declared surfaces.
+- `check_ownership._match` and `check_contracts._match` still ignore the literal prefix before `**/` (for example `a/**/b` matches `b` anywhere). This predates WR-02 and is unchanged.
 
 ## Files changed by the fix commits
 
-`.env.example`, `src/pumpgrok/config/settings.py`, `src/pumpgrok/core/__init__.py`, `src/pumpgrok/core/approvals.py`, `src/pumpgrok/core/atomic_write.py`, `src/pumpgrok/core/bot.py`, `src/pumpgrok/core/ids.py`, `src/pumpgrok/core/registry.py`, `src/pumpgrok/core/risk_budget.py` (new), `src/pumpgrok/core/tool.py`, `src/pumpgrok/ledger/store.py`, `tests/config/test_secret_refusal.py`, `tests/config/test_settings.py`, `tests/core/test_ids.py`, `tests/core/test_models.py`, `tests/core/test_registry.py`, `tests/ledger/test_store.py`.
+`ci/gates/check_ownership.py`, `ci/gates/check_contracts.py`, `ci/gates/check_secrets.py`, `ci/gates/check_rollback.py`, `ci/tests/test_gates.py`, `tests/safety/test_static_guards.py`, `src/pumpgrok/logging/json.py`, `tests/test_logging.py`, `src/pumpgrok/replay/fixtures.py`, `tests/replay/test_fixtures.py`, `scripts/check.sh`.
 
-Not committed by the fixer: `01-REVIEW.md` (iteration 2 re-review result), `01-REVIEW.iter2.md` (iteration-1 backup), `01-REVIEW-FIX.md`. The orchestrator commits the docs artifacts.
+Not committed by this run: `01-REVIEW.iter2.md` and `.planning/state.json` (untracked, pre-existing, left as found).
