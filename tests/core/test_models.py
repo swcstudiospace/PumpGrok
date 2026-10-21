@@ -149,7 +149,9 @@ def test_approval_matches_only_its_side_quantity_and_unconsumed() -> None:
     )
     assert sell.matches(OrderRequest(**_order_fields()))
     assert not sell.matches(OrderRequest(**_order_fields(token_units=600_000)))
-    buy_request = OrderRequest(**_order_fields(side="buy", size_lamports=1_000_000, token_units=None))
+    buy_request = OrderRequest(
+        **_order_fields(side="buy", size_lamports=1_000_000, token_units=None)
+    )
     assert not sell.matches(buy_request)
     consumed = sell.model_copy(update={"consumed": True})
     assert not consumed.matches(OrderRequest(**_order_fields()))
