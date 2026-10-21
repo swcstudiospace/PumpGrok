@@ -204,13 +204,16 @@ def build_operator_registry(
     repo_root: Path,
     settings: Settings,
     clock: Clock | None = None,
+    ledger_path: Path | None = None,
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
     Same wiring as the desk gateway and the least-privilege harness: every
     catalog tool registers through its production factory with the refusing
     execution adapter (Phase 3 backends land in Phase 4), so the CLI resolves
-    through ``registry.find`` and I1 holds on every verb. Returns the registry,
+    through ``registry.find`` and I1 holds on every verb. ``ledger_path``
+    overrides the store location: the CLI passes the canonical paper ledger.
+    Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
     """
     active_clock = clock if clock is not None else WallClock()
@@ -220,7 +223,7 @@ def build_operator_registry(
     reg, _audits = build_registry(clock=active_clock, rng=make_rng())
     client = httpx.AsyncClient()
     rpc = RpcClient(list(settings.rpc.endpoints), client, active_clock, make_rng())
-    store = LedgerStore(data_dir / "ledger.sqlite")
+    store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
     adapter = NotYetImplementedAdapter()
     budget = RiskBudget()
     bank = MemoryBank(data_dir / "memory.jsonl")

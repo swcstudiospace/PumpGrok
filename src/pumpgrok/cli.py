@@ -70,6 +70,11 @@ EXIT_NOT_IMPLEMENTED = 5
 
 DATASET_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
+# Canonical paper ledger (paper-engine.md 3.1): every wired verb opens
+# var/ledger.sqlite for paper state. var/desk/ledger.sqlite is retired;
+# fixture replays write var/replay/<dataset>/ledger.sqlite (R21).
+PAPER_LEDGER_PATH = Path("var") / "ledger.sqlite"
+
 FORBIDDEN_OWNERS = frozenset({"sniper", "exit"})
 TICKET_RE = re.compile(r"^SOL-\d{8}-\d{3}$")
 APPROVAL_RE = re.compile(r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
@@ -220,6 +225,7 @@ async def _with_tools(
         data_dir=Path("var") / "desk",
         repo_root=_repo_root(),
         settings=settings,
+        ledger_path=PAPER_LEDGER_PATH,
     )
     try:
         try:
@@ -594,6 +600,7 @@ def _tools_schema(tool_id: str) -> int:
             data_dir=Path("var") / "desk",
             repo_root=_repo_root(),
             settings=settings,
+            ledger_path=PAPER_LEDGER_PATH,
         )
         try:
             try:

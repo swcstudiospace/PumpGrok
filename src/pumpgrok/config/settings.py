@@ -341,10 +341,17 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
 
 
 # PUMPGROK_* names read outside the Settings model: PUMPGROK_LOG_JSON by the
-# logging setup (honoured only under the dev profile) and PUMPGROK_LIVE_ENABLE
-# by the live gate (precondition 2; env-only, never a TOML key).
+# logging setup (honoured only under the dev profile), PUMPGROK_LIVE_ENABLE
+# by the live gate (precondition 2; env-only, never a TOML key), and
+# PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22).
 NON_SETTING_ENV_NAMES = frozenset(
-    {"PUMPGROK_PROFILE", "PUMPGROK_CONFIG", "PUMPGROK_LOG_JSON", "PUMPGROK_LIVE_ENABLE"}
+    {
+        "PUMPGROK_PROFILE",
+        "PUMPGROK_CONFIG",
+        "PUMPGROK_LOG_JSON",
+        "PUMPGROK_LIVE_ENABLE",
+        "PUMPGROK_KILLSWITCH",
+    }
 )
 
 
