@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Buy/sell intent accepted for placement (PaperAdapter.place).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "ticket_id": {
+      "title": "Ticket Id",
+      "type": "string"
+    },
+    "side": {
+      "description": "buy | sell",
+      "title": "Side",
+      "type": "string"
+    },
+    "mint": {
+      "title": "Mint",
+      "type": "string"
+    },
+    "slippage_bps": {
+      "title": "Slippage Bps",
+      "type": "integer"
+    },
+    "size_lamports": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Size Lamports"
+    },
+    "token_units": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Token Units"
+    },
+    "quote_json": {
+      "default": "",
+      "title": "Quote Json",
+      "type": "string"
+    },
+    "approval_json": {
+      "default": "",
+      "title": "Approval Json",
+      "type": "string"
+    },
+    "risk_json": {
+      "default": "",
+      "title": "Risk Json",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "order_id",
+    "decision_id",
+    "ticket_id",
+    "side",
+    "mint",
+    "slippage_bps"
+  ],
+  "title": "OrderPlaced",
+  "type": "object"
+}

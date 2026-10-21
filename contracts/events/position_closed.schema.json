@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Sell fill zeroed the position (or a force-close did).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "mint": {
+      "title": "Mint",
+      "type": "string"
+    },
+    "price_exit": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Decimal string, lamports per token base unit",
+      "title": "Price Exit"
+    },
+    "proceeds_lamports": {
+      "title": "Proceeds Lamports",
+      "type": "integer"
+    },
+    "realized_pnl_lamports": {
+      "title": "Realized Pnl Lamports",
+      "type": "integer"
+    },
+    "reason": {
+      "description": "stop_loss | take_profit | trailing_stop | max_hold | rug_alert | kill_flatten | blind_flatten | graduated | manual",
+      "title": "Reason",
+      "type": "string"
+    },
+    "pnl_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "title": "Pnl Pct"
+    },
+    "hold_seconds": {
+      "default": 0,
+      "title": "Hold Seconds",
+      "type": "integer"
+    },
+    "venue_tx_ref": {
+      "default": "",
+      "title": "Venue Tx Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "mint",
+    "price_exit",
+    "proceeds_lamports",
+    "realized_pnl_lamports",
+    "reason"
+  ],
+  "title": "PositionClosed",
+  "type": "object"
+}

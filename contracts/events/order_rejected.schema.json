@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Buy/sell intent refused (adapter, RiskEngine, or LiveGate).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "reason": {
+      "description": "R34 ids + section 2.8 reasons",
+      "title": "Reason",
+      "type": "string"
+    },
+    "detail": {
+      "title": "Detail",
+      "type": "string"
+    },
+    "stage": {
+      "description": "ACCEPTED | CONFIRMING",
+      "title": "Stage",
+      "type": "string"
+    },
+    "fees_lamports": {
+      "default": 0,
+      "title": "Fees Lamports",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "source",
+    "order_id",
+    "decision_id",
+    "reason",
+    "detail",
+    "stage"
+  ],
+  "title": "OrderRejected",
+  "type": "object"
+}

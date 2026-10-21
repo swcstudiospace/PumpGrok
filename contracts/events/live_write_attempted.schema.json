@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A live-write path was reached and refused (LiveAdapter / registry).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "adapter": {
+      "title": "Adapter",
+      "type": "string"
+    },
+    "method": {
+      "title": "Method",
+      "type": "string"
+    },
+    "caller_seat": {
+      "title": "Caller Seat",
+      "type": "string"
+    },
+    "gate_result_json": {
+      "default": "",
+      "title": "Gate Result Json",
+      "type": "string"
+    },
+    "stack_hash": {
+      "default": "",
+      "title": "Stack Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "adapter",
+    "method",
+    "caller_seat"
+  ],
+  "title": "LiveWriteAttempted",
+  "type": "object"
+}

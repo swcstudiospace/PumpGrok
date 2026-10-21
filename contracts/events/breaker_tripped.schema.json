@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Risk breaker tripped.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "breaker": {
+      "description": "data_stale | loss_velocity | exec_errors",
+      "title": "Breaker",
+      "type": "string"
+    },
+    "metric": {
+      "title": "Metric",
+      "type": "string"
+    },
+    "threshold": {
+      "title": "Threshold",
+      "type": "string"
+    },
+    "cooldown_s": {
+      "title": "Cooldown S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "source",
+    "breaker",
+    "metric",
+    "threshold",
+    "cooldown_s"
+  ],
+  "title": "BreakerTripped",
+  "type": "object"
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "First buy fill opened a position.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "mint": {
+      "title": "Mint",
+      "type": "string"
+    },
+    "price_entry": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Decimal string, lamports per token base unit",
+      "title": "Price Entry"
+    },
+    "token_units": {
+      "title": "Token Units",
+      "type": "integer"
+    },
+    "cost_basis_lamports": {
+      "title": "Cost Basis Lamports",
+      "type": "integer"
+    },
+    "opened_ts_utc": {
+      "title": "Opened Ts Utc",
+      "type": "string"
+    },
+    "symbol": {
+      "default": "",
+      "title": "Symbol",
+      "type": "string"
+    },
+    "creator": {
+      "default": "",
+      "title": "Creator",
+      "type": "string"
+    },
+    "ticket_id": {
+      "default": "",
+      "title": "Ticket Id",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "title": "Score"
+    }
+  },
+  "required": [
+    "source",
+    "mint",
+    "price_entry",
+    "token_units",
+    "cost_basis_lamports",
+    "opened_ts_utc"
+  ],
+  "title": "PositionOpened",
+  "type": "object"
+}

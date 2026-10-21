@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Execution fill; partials carry filled_fraction < 1 (no OrderPartial).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "order_id": {
+      "title": "Order Id",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "side": {
+      "description": "buy | sell",
+      "title": "Side",
+      "type": "string"
+    },
+    "mint": {
+      "title": "Mint",
+      "type": "string"
+    },
+    "filled_lamports": {
+      "title": "Filled Lamports",
+      "type": "integer"
+    },
+    "filled_units": {
+      "title": "Filled Units",
+      "type": "integer"
+    },
+    "filled_fraction": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Filled Fraction"
+    },
+    "price_avg": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Decimal string, lamports per token base unit",
+      "title": "Price Avg"
+    },
+    "venue_fee_lamports": {
+      "default": 0,
+      "title": "Venue Fee Lamports",
+      "type": "integer"
+    },
+    "network_cost_lamports": {
+      "default": 0,
+      "title": "Network Cost Lamports",
+      "type": "integer"
+    },
+    "cash_delta_lamports": {
+      "default": 0,
+      "title": "Cash Delta Lamports",
+      "type": "integer"
+    },
+    "latency_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "title": "Latency S"
+    },
+    "venue_tx_ref": {
+      "default": "",
+      "title": "Venue Tx Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "order_id",
+    "decision_id",
+    "side",
+    "mint",
+    "filled_lamports",
+    "filled_units",
+    "filled_fraction",
+    "price_avg"
+  ],
+  "title": "FillRecorded",
+  "type": "object"
+}

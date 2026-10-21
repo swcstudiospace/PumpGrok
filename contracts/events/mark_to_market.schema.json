@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Periodic mark snapshot (journal seat / RiskEngine).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "ts_source": {
+      "title": "Ts Source",
+      "type": "string"
+    },
+    "cash_lamports": {
+      "title": "Cash Lamports",
+      "type": "integer"
+    },
+    "equity_lamports": {
+      "title": "Equity Lamports",
+      "type": "integer"
+    },
+    "unrealized_lamports": {
+      "title": "Unrealized Lamports",
+      "type": "integer"
+    },
+    "prices_json": {
+      "default": "",
+      "title": "Prices Json",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "ts_source",
+    "cash_lamports",
+    "equity_lamports",
+    "unrealized_lamports"
+  ],
+  "title": "MarkToMarket",
+  "type": "object"
+}

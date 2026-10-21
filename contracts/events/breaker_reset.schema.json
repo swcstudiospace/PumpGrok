@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Risk breaker reset after cooldown/probe.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "breaker": {
+      "title": "Breaker",
+      "type": "string"
+    },
+    "after_s": {
+      "title": "After S",
+      "type": "integer"
+    },
+    "probe_ok": {
+      "default": false,
+      "title": "Probe Ok",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "source",
+    "breaker",
+    "after_s"
+  ],
+  "title": "BreakerReset",
+  "type": "object"
+}

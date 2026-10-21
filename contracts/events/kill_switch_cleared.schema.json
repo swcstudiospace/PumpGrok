@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Kill switch cleared by a human via CLI.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "cleared_by": {
+      "description": "\"human:<name>\"",
+      "title": "Cleared By",
+      "type": "string"
+    },
+    "approval_id": {
+      "default": "",
+      "title": "Approval Id",
+      "type": "string"
+    },
+    "sources_now_clear": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Sources Now Clear",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "cleared_by"
+  ],
+  "title": "KillSwitchCleared",
+  "type": "object"
+}

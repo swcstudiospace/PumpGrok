@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "NoteKind": {
+      "description": "JournalNote kinds per paper-engine.md 3.3 (no halt; locked Q4).",
+      "enum": [
+        "lead",
+        "whale",
+        "social",
+        "signal",
+        "verdict",
+        "safety_report",
+        "review",
+        "ticket",
+        "note"
+      ],
+      "title": "NoteKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Seat journal entry; the skip cycle uses seat=desk, note_kind=note.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "seat": {
+      "default": "desk",
+      "title": "Seat",
+      "type": "string"
+    },
+    "note_kind": {
+      "$ref": "#/$defs/NoteKind",
+      "default": "note"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "refs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Refs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "text"
+  ],
+  "title": "JournalNote",
+  "type": "object"
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "UTC day boundary totals (RiskEngine).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "day_utc": {
+      "title": "Day Utc",
+      "type": "string"
+    },
+    "day_start_equity_lamports": {
+      "title": "Day Start Equity Lamports",
+      "type": "integer"
+    },
+    "prior_day_json": {
+      "default": "",
+      "title": "Prior Day Json",
+      "type": "string"
+    },
+    "open_positions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Open Positions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "day_utc",
+    "day_start_equity_lamports"
+  ],
+  "title": "DailyRollover",
+  "type": "object"
+}

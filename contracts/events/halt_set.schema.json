@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Trading halted (RiskEngine only, R24).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "reason": {
+      "description": "daily_loss | drawdown | ledger_inconsistent | manual",
+      "title": "Reason",
+      "type": "string"
+    },
+    "detail": {
+      "title": "Detail",
+      "type": "string"
+    },
+    "equity_lamports": {
+      "title": "Equity Lamports",
+      "type": "integer"
+    },
+    "day_start_equity_lamports": {
+      "title": "Day Start Equity Lamports",
+      "type": "integer"
+    },
+    "set_by": {
+      "default": "risk_engine",
+      "title": "Set By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "reason",
+    "detail",
+    "equity_lamports",
+    "day_start_equity_lamports"
+  ],
+  "title": "HaltSet",
+  "type": "object"
+}

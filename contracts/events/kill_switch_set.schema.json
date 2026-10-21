@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Kill switch engaged (RiskEngine / risk.kill_switch).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "origin": {
+      "description": "spec `source`: env | file | alert_command | tool",
+      "title": "Origin",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "flatten_requested": {
+      "default": false,
+      "title": "Flatten Requested",
+      "type": "boolean"
+    },
+    "set_by": {
+      "default": "",
+      "title": "Set By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "origin",
+    "reason"
+  ],
+  "title": "KillSwitchSet",
+  "type": "object"
+}

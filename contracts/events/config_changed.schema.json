@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Effective config diff applied at startup or via `state autonomy`.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "by": {
+      "title": "By",
+      "type": "string"
+    },
+    "keys_changed": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Keys Changed",
+      "type": "array"
+    },
+    "old_hash": {
+      "default": "",
+      "title": "Old Hash",
+      "type": "string"
+    },
+    "new_hash": {
+      "default": "",
+      "title": "New Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "by"
+  ],
+  "title": "ConfigChanged",
+  "type": "object"
+}

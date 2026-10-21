@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Halt cleared by a human via CLI.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "cleared_by": {
+      "description": "\"human:<name>\" required",
+      "title": "Cleared By",
+      "type": "string"
+    },
+    "approval_id": {
+      "default": "",
+      "title": "Approval Id",
+      "type": "string"
+    },
+    "note": {
+      "default": "",
+      "title": "Note",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "reason",
+    "cleared_by"
+  ],
+  "title": "HaltCleared",
+  "type": "object"
+}

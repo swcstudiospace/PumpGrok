@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Human approval captured (interfaces.md 2.9); consumption is a second row.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "approved_by": {
+      "title": "Approved By",
+      "type": "string"
+    },
+    "at": {
+      "title": "At",
+      "type": "string"
+    },
+    "ticket_id": {
+      "default": "",
+      "title": "Ticket Id",
+      "type": "string"
+    },
+    "mint": {
+      "default": "",
+      "title": "Mint",
+      "type": "string"
+    },
+    "size_lamports": {
+      "default": 0,
+      "title": "Size Lamports",
+      "type": "integer"
+    },
+    "max_slippage_bps": {
+      "default": 0,
+      "title": "Max Slippage Bps",
+      "type": "integer"
+    },
+    "exit_rule_id": {
+      "default": "",
+      "title": "Exit Rule Id",
+      "type": "string"
+    },
+    "raw_message": {
+      "default": "",
+      "title": "Raw Message",
+      "type": "string"
+    },
+    "consumed": {
+      "default": false,
+      "title": "Consumed",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "source",
+    "id",
+    "kind",
+    "approved_by",
+    "at"
+  ],
+  "title": "ApprovalRecorded",
+  "type": "object"
+}
