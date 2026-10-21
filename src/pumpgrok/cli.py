@@ -48,18 +48,17 @@ from pumpgrok.config.settings import (
 )
 from pumpgrok.contracts.projection import short_to_seat
 from pumpgrok.core.errors import PumpgrokError
-from pumpgrok.core.idempotency import derive_idempotency_key
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
-from pumpgrok.engine.pipeline import decide_replay, format_decision
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
-from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore, recreate_ledger_db
-from pumpgrok.logging.json import bind_seat, setup_logging
-from pumpgrok.replay.clock import FixtureClock, WallClock
-from pumpgrok.replay.fixtures import CorruptFixture, event_epoch, load_dataset
+from pumpgrok.ledger.store import LedgerInconsistent
+from pumpgrok.logging.json import setup_logging
+from pumpgrok.replay.clock import WallClock
+from pumpgrok.replay.fixtures import CorruptFixture
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.replay.runner import run_replay
 from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
@@ -69,8 +68,6 @@ EXIT_LIVE = 3
 EXIT_FIXTURE = 4
 EXIT_NOT_IMPLEMENTED = 5
 
-LEDGER_ROOT = Path("var") / "replay"
-CYCLE_SEAT = "desk"
 DATASET_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
 FORBIDDEN_OWNERS = frozenset({"sniper", "exit"})
@@ -501,62 +498,8 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
-    dataset = load_dataset(source)  # verifies every listed digest before any ledger file exists
-
-    start = event_epoch(dataset.events[0]) if dataset.events else 0.0
-    clock = FixtureClock(start=start)
-    ids = IdFactory(clock, make_rng(settings.replay.seed))
-    cycle = CorrelationId.new(ids)
-    ledger_path = recreate_ledger_db(LEDGER_ROOT / dataset_name / "ledger.sqlite")
-
-    with bind_correlation(cycle), bind_seat(CYCLE_SEAT):
-        for event in dataset.events:
-            clock.advance_to(event_epoch(event))
-        # Pure engine stage only: fixture ticks become evidence-less
-        # candidates, so the fail-closed filter decides. No monitor stream,
-        # no analyzer fetch, no model lookup of any kind.
-        decision = decide_replay(dataset.events, settings.filter, clock.now())
-        _say(sys.stdout, format_decision(decision))
-        store = LedgerStore(ledger_path)
-        try:
-            row = store.append(
-                ts_utc=clock.utc_iso(),
-                source="replay",
-                correlation_id=str(cycle),
-                idempotency_key=derive_idempotency_key(
-                    "skip_cycle",
-                    CYCLE_SEAT,
-                    {"dataset": dataset_name, "events": len(dataset.events)},
-                    scope=str(cycle),
-                ),
-                type="JournalNote",
-                payload={
-                    "source": "replay",
-                    "seat": CYCLE_SEAT,
-                    "note_kind": "verdict",
-                    "text": (
-                        f"replay engine cycle: {format_decision(decision)}; "
-                        "model resolution skipped (replay); "
-                        f"read {len(dataset.events)} fixture events from {dataset_name}; "
-                        "metadata and age gates satisfied by construction, "
-                        "buyer evidence absent by construction"
-                    ),
-                    "refs": [],
-                },
-            )
-            store.verify()
-        finally:
-            store.close()
-        log.info(
-            "replay engine cycle complete",
-            extra={
-                "event": "cycle_end",
-                "events_read": len(dataset.events),
-                "engine_decision": decision.decision,
-                "engine_reason": decision.reason,
-                "ledger_seq": row["seq"],
-            },
-        )
+    result = run_replay(source, settings.filter, seed=settings.replay.seed)
+    _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     return EXIT_OK
 
 

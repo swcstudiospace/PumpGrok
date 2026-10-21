@@ -1,7 +1,11 @@
 """Deterministic replay primitives: clock, seeded RNG, manifest-gated fixtures.
 
 `clock` is imported first: `pumpgrok.core.ids` re-exports `Clock` from it, and
-`fixtures` depends on `pumpgrok.core.errors`.
+`fixtures` depends on `pumpgrok.core.errors`. The composition layers
+(`sources`, `runner`) stay out of this package init on purpose: the runner
+folds engine decisions and settings, which would cycle back through
+`pumpgrok.core` while it is still initializing. Import them from their
+modules: `pumpgrok.replay.runner`, `pumpgrok.replay.sources`.
 """
 
 from pumpgrok.replay.clock import (
