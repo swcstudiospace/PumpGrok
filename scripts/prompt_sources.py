@@ -107,22 +107,30 @@ def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
     return sections
 
 
-def load_seat(path: Path) -> SeatSource:
-    root = ET.parse(path).getroot()  # noqa: S314 - repo-owned prompt source, see load_core
-    if root.tag != "seat-prompt":
-        raise PromptError(f"{path.name}: root must be <seat-prompt>")
+def _seat_id(root: ET.Element, path: Path) -> str:
     seat = _attr(root, "id", path)
     if not SEAT_RE.match(seat):
         raise PromptError(f"{path.name}: id {seat!r} does not match {SEAT_RE.pattern}")
     if path.stem != seat:
         raise PromptError(f"{path.name}: id {seat!r} must equal the file name")
+    return seat
+
+
+def _writes_to_exchange(root: ET.Element, path: Path) -> bool:
     writes = _attr(root, "writes_to_exchange", path)
     if writes not in ("true", "false"):
         raise PromptError(f"{path.name}: writes_to_exchange must be 'true' or 'false'")
+    return writes == "true"
+
+
+def _channel(root: ET.Element, path: Path) -> str:
     channel = _attr(root, "seat", path)
     if channel not in CHANNELS:
         raise PromptError(f"{path.name}: seat {channel!r} must be one of {CHANNELS}")
+    return channel
 
+
+def _skills(root: ET.Element, path: Path) -> tuple[str, ...]:
     skills: list[str] = []
     for el in root.findall("skills/skill"):
         if not el.text:
@@ -135,7 +143,10 @@ def load_seat(path: Path) -> SeatSource:
         skills.append(el.text.strip())
     if not skills:
         raise PromptError(f"{path.name}: <skills> lists no skill")
+    return tuple(skills)
 
+
+def _tools_contract(root: ET.Element, seat: str, path: Path) -> str:
     tools_el = root.find("tools")
     if tools_el is None:
         raise PromptError(f"{path.name}: missing <tools contract=.../>")
@@ -147,7 +158,10 @@ def load_seat(path: Path) -> SeatSource:
         raise PromptError(f"{path.name}: <tools> contract {contract!r} must be {expected!r}")
     if not (REPO_ROOT / contract).exists():
         raise PromptError(f"{path.name}: <tools> contract {contract} not found")
+    return contract
 
+
+def _body_parts(root: ET.Element, path: Path) -> tuple[tuple[str, str], ...]:
     parts: list[tuple[str, str]] = []
     body = root.find("body")
     if body is None:
@@ -161,7 +175,19 @@ def load_seat(path: Path) -> SeatSource:
             raise PromptError(f"{path.name}: unknown element <{el.tag}> in <body>")
     if not parts:
         raise PromptError(f"{path.name}: <body> is empty")
+    return tuple(parts)
 
+
+def load_seat(path: Path) -> SeatSource:
+    root = ET.parse(path).getroot()  # noqa: S314 - repo-owned prompt source, see load_core
+    if root.tag != "seat-prompt":
+        raise PromptError(f"{path.name}: root must be <seat-prompt>")
+    seat = _seat_id(root, path)
+    writes = _writes_to_exchange(root, path)
+    channel = _channel(root, path)
+    skills = _skills(root, path)
+    tools_contract = _tools_contract(root, seat, path)
+    parts = _body_parts(root, path)
     return SeatSource(
         path=path,
         seat=seat,
@@ -169,10 +195,10 @@ def load_seat(path: Path) -> SeatSource:
         title=_attr(root, "title", path),
         description=_attr(root, "description", path),
         channel=channel,
-        writes_to_exchange=writes == "true",
-        skills=tuple(skills),
-        tools_contract=contract,
-        parts=tuple(parts),
+        writes_to_exchange=writes,
+        skills=skills,
+        tools_contract=tools_contract,
+        parts=parts,
     )
 
 
