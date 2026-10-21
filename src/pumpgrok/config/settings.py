@@ -49,6 +49,7 @@ class DataSettings(BaseModel):
     rest_url: str = "https://frontend-api.pump.fun"
     ws_url: str = "wss://pumpportal.fun/api/data"
     ws_max_queue: int = Field(default=16, ge=1)
+    request_timeout: float = 10.0
 
 
 class RpcSettings(BaseModel):
