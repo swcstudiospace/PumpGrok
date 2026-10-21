@@ -9,15 +9,17 @@ name and the status code are ever logged.
 
 from __future__ import annotations
 
+import json
 import threading
 from typing import Any
 
 import httpx
 import pytest
 
-from desk_gateway.server import build_gateway_registry, create_server
+from desk_gateway.server import close_server, create_server
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from conftest import _refusing_transport, rpc_call
+from pumpgrok.replay.clock import WallClock
 
 
 def _serve_without(short_missing: str, tmp_path: Any) -> Any:
@@ -26,20 +28,15 @@ def _serve_without(short_missing: str, tmp_path: Any) -> Any:
     shorts = sorted(short_to_seat(contracts_dir).keys())
     tokens = {short: f"fake_token_{short}" for short in shorts if short != short_missing}
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(_refusing_transport))
-    registry, manifests = build_gateway_registry(
-        data_dir=tmp_path / "data",
-        repo_root=tmp_path,
-        clock=WallClock(),
-        http_client=http_client,
-    )
     server = create_server(
         host="127.0.0.1",
         port=0,
         contracts_dir=contracts_dir,
         tokens=tokens,
-        registry=registry,
-        manifests=manifests,
+        data_dir=tmp_path / "data",
+        repo_root=tmp_path,
         clock=WallClock(),
+        http_client=http_client,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -51,8 +48,7 @@ def _serve_without(short_missing: str, tmp_path: Any) -> Any:
 def unconfigured_gateway(tmp_path: Any) -> Any:
     server, base_url, tokens = _serve_without("journal", tmp_path)
     yield base_url, tokens
-    server.shutdown()
-    server.server_close()
+    close_server(server)
 
 
 def test_missing_token_is_401(gateway):  # type: ignore[no-untyped-def]
@@ -88,7 +84,8 @@ def test_unconfigured_seat_is_503_without_detail(unconfigured_gateway):  # type:
     status, body = rpc_call(base_url, "journal", "tools/list", tokens["scout"])
     assert status == 503, body
     assert body["error"]["code"] == "seat_unconfigured"
-    assert "token" not in (body["error"].get("message") or "").lower()
+    dumped = json.dumps(body)
+    assert not any(value in dumped for value in tokens.values())
 
 
 def test_get_is_405(gateway):  # type: ignore[no-untyped-def]

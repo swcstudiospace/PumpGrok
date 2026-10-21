@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 import pytest
 
-from desk_gateway.server import build_gateway_registry, create_server
+from desk_gateway.server import close_server, create_server
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.replay.clock import WallClock
 
@@ -53,6 +53,7 @@ def rpc_call(
     )
     try:
         with urllib.request.urlopen(request) as response:
+            status = response.status
             raw = response.read().decode()
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode()
@@ -61,9 +62,9 @@ def rpc_call(
         except json.JSONDecodeError:
             return exc.code, {"raw": raw}
     try:
-        return 200, json.loads(raw or "null")
+        return status, json.loads(raw or "null")
     except json.JSONDecodeError:
-        return 200, {"raw": raw}
+        return status, {"raw": raw}
 
 
 @pytest.fixture(scope="module")
@@ -74,26 +75,22 @@ def gateway(tmp_path_factory: pytest.TempPathFactory) -> Any:
     tokens = {short: f"fake_token_{short}" for short in shorts}
     data_dir = tmp_path_factory.mktemp("gateway-data")
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(_refusing_transport))
-    registry, manifests = build_gateway_registry(
-        data_dir=data_dir,
-        repo_root=Path(__file__).resolve().parents[3],
-        clock=WallClock(),
-        http_client=http_client,
-    )
     server = create_server(
         host="127.0.0.1",
         port=0,
         contracts_dir=contracts_dir,
         tokens=tokens,
-        registry=registry,
-        manifests=manifests,
+        data_dir=data_dir,
+        repo_root=Path(__file__).resolve().parents[3],
         clock=WallClock(),
+        http_client=http_client,
     )
+    registry = server.gateway_state["registry"]  # type: ignore[attr-defined]
+    manifests = server.gateway_state["manifests"]  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         host, port = server.server_address
         yield f"http://{host}:{port}", tokens, contracts_dir, registry, manifests
     finally:
-        server.shutdown()
-        server.server_close()
+        close_server(server)

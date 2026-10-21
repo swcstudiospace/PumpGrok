@@ -8,29 +8,44 @@ backends answer ``not_yet_implemented`` where they are unbuilt).
 Transport: ``ThreadingHTTPServer`` plus ``asyncio.run`` per request, with
 ``WallClock``. Only ``POST /mcp/<short>`` serves JSON-RPC; every other
 verb answers 405 and every unknown seat answers 404.
+
+Auth (T-03-05-01/02): per-seat bearer tokens from ``DESK_GATEWAY_TOKEN_*``
+only, compared with ``hmac.compare_digest`` in a loop over every seat.
+No match is 401, a match for another seat is 403, and a path seat with
+no configured token fails closed with 503 and no token detail. Only the
+seat short name and the status code are ever logged.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import json
 import logging
 import os
 import random
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
     exposure_entries,
     short_to_seat,
+    transport_map,
+    transport_name,
 )
 from pumpgrok.core.bot import BotManifest
-from pumpgrok.core.errors import NotYetImplemented
-from pumpgrok.core.registry import GrantAudit, ToolRegistry
+from pumpgrok.core.errors import NotYetImplemented, PumpgrokError
+from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.registry import ToolRegistry
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, WallClock
@@ -63,7 +78,6 @@ from pumpgrok.tools.risk.drawdown import build_drawdown_tool
 from pumpgrok.tools.risk.halt_status import build_halt_status_tool
 from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
 from pumpgrok.tools.safety.score_report import build_score_report_tool
-from pumpgrok.core.risk_budget import RiskBudget
 
 log = logging.getLogger("desk_gateway")
 
@@ -174,8 +188,26 @@ def _short_from_path(path: str) -> str | None:
     return short
 
 
+def _presented_token(headers: Any) -> str | None:
+    value = headers.get("Authorization")
+    if not isinstance(value, str):
+        return None
+    scheme, sep, token = value.partition(" ")
+    if not sep or scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+def _error_result(code: str, message: str) -> dict[str, Any]:
+    return {
+        "content": [{"type": "text", "text": message}],
+        "isError": True,
+        "code": code,
+    }
+
+
 class _Handler(BaseHTTPRequestHandler):
-    """JSON-RPC over POST only; auth and tools/call land in plan task 2."""
+    """JSON-RPC over POST with per-seat compare_digest auth."""
 
     def log_message(self, _format: str, *_args: Any) -> None:
         return
@@ -187,6 +219,11 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_empty(self, status: int) -> None:
+        self.send_response(status)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _method_not_allowed(self) -> None:
         self._send_json(
@@ -200,6 +237,48 @@ class _Handler(BaseHTTPRequestHandler):
     do_HEAD = _method_not_allowed
     do_OPTIONS = _method_not_allowed
 
+    def _authenticate(self, short: str, tokens: dict[str, str]) -> int | None:
+        """Return an HTTP error status, or None when the request may proceed.
+
+        The presented bearer token is compared against every configured
+        seat with ``hmac.compare_digest`` so the matched seat does not leak
+        through timing; the path seat must equal the matched seat.
+        """
+        if short not in tokens:
+            return 503
+        presented = _presented_token(self.headers)
+        matched: str | None = None
+        for seat_short, expected in tokens.items():
+            if presented is not None and hmac.compare_digest(presented, expected):
+                matched = seat_short
+        if matched is None:
+            return 401
+        if matched != short:
+            return 403
+        return None
+
+    def _auth_error_body(self, status: int) -> dict[str, Any]:
+        if status == 401:
+            return {
+                "error": {
+                    "code": "unauthorized",
+                    "message": "missing or unknown bearer token",
+                }
+            }
+        if status == 403:
+            return {
+                "error": {
+                    "code": "forbidden",
+                    "message": "token belongs to another seat",
+                }
+            }
+        return {
+            "error": {
+                "code": "seat_unconfigured",
+                "message": "seat has no token configured",
+            }
+        }
+
     def do_POST(self) -> None:
         state = self.server.gateway_state  # type: ignore[attr-defined]
         short = _short_from_path(self.path)
@@ -211,8 +290,14 @@ class _Handler(BaseHTTPRequestHandler):
             log.info("seat=%s status=%s", short, 404)
             return
         length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length > 0 else b""
+        denied = self._authenticate(short, state["tokens"])
+        if denied is not None:
+            self._send_json(denied, self._auth_error_body(denied))
+            log.info("seat=%s status=%s", short, denied)
+            return
         try:
-            envelope = json.loads(self.rfile.read(length).decode() or "null")
+            envelope = json.loads(raw.decode() or "null")
         except (json.JSONDecodeError, UnicodeDecodeError):
             self._send_json(
                 400,
@@ -241,10 +326,34 @@ class _Handler(BaseHTTPRequestHandler):
             return
         request_id = envelope.get("id")
         method = envelope["method"]
+        if method == "notifications/initialized":
+            self._send_empty(202)
+            log.info("seat=%s status=%s", short, 202)
+            return
+        if method == "initialize":
+            self._send_json(
+                200,
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "desk-gateway", "version": "0.1.0"},
+                    },
+                },
+            )
+            log.info("seat=%s status=%s", short, 200)
+            return
         if method == "tools/list":
             result: dict[str, Any] = {
                 "tools": exposure_entries(seat_id, state["contracts_dir"])
             }
+            self._send_json(200, {"jsonrpc": "2.0", "id": request_id, "result": result})
+            log.info("seat=%s status=%s", short, 200)
+            return
+        if method == "tools/call":
+            result = self._tools_call(state, seat_id, envelope.get("params"))
             self._send_json(200, {"jsonrpc": "2.0", "id": request_id, "result": result})
             log.info("seat=%s status=%s", short, 200)
             return
@@ -258,6 +367,117 @@ class _Handler(BaseHTTPRequestHandler):
         )
         log.info("seat=%s status=%s", short, 200)
 
+    def _tools_call(
+        self, state: dict[str, Any], seat_id: str, params: Any
+    ) -> dict[str, Any]:
+        """Map the transport name back through the roster dict and dispatch.
+
+        The seat roster decides first; a name another seat exposes still
+        resolves so ``registry.find`` refuses it with ``permission_denied``
+        under this seat's manifest instead of a vaguer unknown-tool error.
+        """
+        if not isinstance(params, dict) or not isinstance(params.get("name"), str):
+            return _error_result("invalid_arguments", "tools/call needs a name")
+        arguments = params.get("arguments", {})
+        if not isinstance(arguments, dict):
+            return _error_result("invalid_arguments", "tools/call arguments must pair")
+        dotted = transport_map(seat_id, state["contracts_dir"]).get(params["name"])
+        if dotted is None:
+            dotted = state["global_map"].get(params["name"])
+        if dotted is None:
+            return _error_result("unknown_tool", f"unknown tool: {params['name']}")
+        registry: ToolRegistry = state["registry"]
+        manifests: dict[str, BotManifest] = state["manifests"]
+        clock: Clock = state["clock"]
+        factory = IdFactory(clock, random.Random())
+        cid = CorrelationId.new(factory)
+
+        async def _dispatch() -> tuple[Any | None, dict[str, Any] | None]:
+            with bind_correlation(cid):
+                try:
+                    tool_obj = registry.find(
+                        dotted,
+                        max_side_effect=SideEffect.PAPER_WRITE,
+                        bot=manifests[seat_id],
+                    )
+                except PumpgrokError as exc:
+                    return None, _error_result(exc.code, exc.message)
+                try:
+                    payload = tool_obj.spec.input_model(**arguments)
+                except ValidationError as exc:
+                    return None, _error_result(
+                        "invalid_arguments",
+                        f"invalid arguments for {dotted}: {exc.errors()[0]['msg']}",
+                    )
+                try:
+                    return await tool_obj(payload), None
+                except PumpgrokError as exc:
+                    return None, _error_result(exc.code, exc.message)
+
+        future = asyncio.run_coroutine_threadsafe(_dispatch(), state["owner_loop"])
+        try:
+            output, error = future.result(timeout=_CALL_TIMEOUT_S)
+        except Exception:
+            # Envelope must never leak internals; the traceback stays server-side.
+            log.exception("tools/call failed")
+            return _error_result("internal_error", "internal error")
+        if error is not None:
+            return error
+        assert output is not None
+        dumped = output.model_dump(mode="json")
+        return {
+            "content": [{"type": "text", "text": json.dumps(dumped)}],
+            "isError": False,
+        }
+
+
+_CALL_TIMEOUT_S = 120.0
+
+
+def _start_owner_loop(
+    *,
+    data_dir: Path,
+    repo_root: Path,
+    clock: Clock,
+    http_client: httpx.AsyncClient | None,
+) -> tuple[Any, dict[str, Any]]:
+    """Run the tool loop in its own thread and build the registry inside it.
+
+    ``LedgerStore`` holds a sqlite connection bound to its creating thread,
+    so the registry must be both built and used in one owner thread while
+    ``ThreadingHTTPServer`` serves requests from worker threads.
+    """
+    loop = asyncio.new_event_loop()
+    ready = threading.Event()
+    cell: dict[str, Any] = {}
+
+    def _serve_tools() -> None:
+        asyncio.set_event_loop(loop)
+        try:
+            cell["registry"], cell["manifests"] = build_gateway_registry(
+                data_dir=data_dir,
+                repo_root=repo_root,
+                clock=clock,
+                http_client=http_client,
+            )
+            names = cell["registry"].names()
+            cell["global_map"] = {transport_name(name): name for name in names}
+        except Exception as exc:  # fail fast: never leave ready unset
+            cell["error"] = exc
+        finally:
+            ready.set()
+        if "error" not in cell:
+            loop.run_forever()
+
+    thread = threading.Thread(target=_serve_tools, name="desk-gateway-tools")
+    thread.daemon = True
+    thread.start()
+    if not ready.wait(timeout=120):
+        raise RuntimeError("gateway tool loop did not start")
+    if "error" in cell:
+        raise cell["error"]
+    return loop, cell
+
 
 def create_server(
     *,
@@ -265,19 +485,38 @@ def create_server(
     port: int,
     contracts_dir: Path,
     tokens: dict[str, str],
-    registry: ToolRegistry,
-    manifests: dict[str, BotManifest],
-    clock: Clock,
+    data_dir: Path,
+    repo_root: Path,
+    clock: Clock | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> ThreadingHTTPServer:
-    """Bind a threaded JSON-RPC server over the given registry and manifests."""
+    """Bind a threaded JSON-RPC server over an owner-thread registry."""
+    active_clock = clock if clock is not None else WallClock()
+    owner_loop, cell = _start_owner_loop(
+        data_dir=data_dir,
+        repo_root=repo_root,
+        clock=active_clock,
+        http_client=http_client,
+    )
     server = ThreadingHTTPServer((host, port), _Handler)
     server.gateway_state = {  # type: ignore[attr-defined]
         "contracts_dir": Path(contracts_dir),
         "tokens": dict(tokens),
-        "registry": registry,
-        "manifests": manifests,
-        "clock": clock,
+        "registry": cell["registry"],
+        "manifests": cell["manifests"],
+        "global_map": cell["global_map"],
+        "owner_loop": owner_loop,
+        "clock": active_clock,
         "shorts": short_to_seat(contracts_dir),
     }
     server.daemon_threads = True
     return server
+
+
+def close_server(server: ThreadingHTTPServer) -> None:
+    """Stop HTTP serving and the owner tool loop."""
+    loop = server.gateway_state.get("owner_loop")  # type: ignore[attr-defined]
+    server.shutdown()
+    server.server_close()
+    if loop is not None:
+        loop.call_soon_threadsafe(loop.stop)
