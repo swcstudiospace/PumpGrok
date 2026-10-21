@@ -56,6 +56,7 @@ def test_simulate_spec_and_no_ledger_write(tmp_path: Path) -> None:
     assert SIMULATE_SPEC.timeout_s == 10.0
     assert SIMULATE_SPEC.retry.attempts == 1
     assert SIMULATE_SPEC.rate_limit_key == "solana_rpc"
+    assert SIMULATE_SPEC.requires_approval is False
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     assert store.count() == 0
     store.close()
@@ -63,7 +64,8 @@ def test_simulate_spec_and_no_ledger_write(tmp_path: Path) -> None:
 
 async def test_simulate_writes_zero_ledger_events(tmp_path: Path) -> None:
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
-    tool = build_simulate_tool()
+    clock = FixtureClock(start=1469918176.385)
+    tool = build_simulate_tool(NotYetImplementedAdapter(), clock)
     with pytest.raises(NotYetImplemented) as excinfo:
         await tool(SimulateIn(ticket_id=TICKET, mint=MINT, side="buy", size_lamports=100_000_000))
     assert excinfo.value.code == "not_yet_implemented"
@@ -76,19 +78,23 @@ def test_cancel_spec_and_key() -> None:
     assert CANCEL_SPEC.timeout_s == 10.0
     assert CANCEL_SPEC.retry.attempts == 1
     assert CANCEL_SPEC.rate_limit_key == "exec"
-    assert CANCEL_SPEC.requires_approval is True
+    assert CANCEL_SPEC.requires_approval is False
     assert CANCEL_SPEC.idempotent is True
 
 
-async def test_cancel_requires_approval_and_derives_key() -> None:
-    tool = build_cancel_tool()
+async def test_cancel_requires_approval_and_derives_key(tmp_path: Path) -> None:
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    clock = FixtureClock(start=1469918176.385)
+    tool = build_cancel_tool(NotYetImplementedAdapter(), store, clock)
     with pytest.raises(ValidationError):
         CancelIn.model_validate({"order_id": ORDER, "ticket_id": TICKET})
-    with pytest.raises(NotYetImplemented) as excinfo:
-        await tool(CancelIn(order_id=ORDER, ticket_id=TICKET, approval_id=APPROVAL))
-    assert excinfo.value.code == "not_yet_implemented"
-    assert exec_cancel_key(ORDER) == exec_cancel_key(ORDER)
+    out = await tool(CancelIn(order_id=ORDER, ticket_id=TICKET, approval_id=APPROVAL))
+    assert out.cancelled is False
+    assert out.status_after == "not_found"
+    assert out.idempotency_key == exec_cancel_key(ORDER)
     assert len(exec_cancel_key(ORDER)) == 32
+    assert store.count() == 0
+    store.close()
 
 
 def test_positions_spec() -> None:

@@ -153,7 +153,14 @@ class ExecutionAdapter(Protocol):
         self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
     ) -> Quote: ...
 
-    async def simulate(self, request: OrderRequest) -> SimulationResult: ...
+    async def simulate(
+        self,
+        *,
+        mint: str,
+        side: Side,
+        size_lamports: int | None,
+        token_units: int | None,
+    ) -> SimulationResult: ...
 
     async def place(self, request: OrderRequest) -> Fill: ...
 
@@ -162,3 +169,7 @@ class ExecutionAdapter(Protocol):
     # True only while the order is ACCEPTED; False once the latency sleep has completed.
 
     async def positions(self, mint: str | None = None) -> Sequence[Position]: ...
+
+    def cash_lamports(self) -> int: ...
+
+    def equity_lamports(self) -> int: ...

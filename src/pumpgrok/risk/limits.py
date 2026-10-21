@@ -28,3 +28,4 @@ class EngineLimits(BaseModel):
     daily_loss_basis: Literal["total", "realized"] = "total"
     blind_max_s: float = Field(default=300.0, ge=0)
     mtm_interval_s: float = Field(default=60.0, gt=0)
+    confirm_timeout_s: float = Field(default=30.0, gt=0)

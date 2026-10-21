@@ -393,6 +393,7 @@ class RiskEngine:
             kind="autonomous_paper",
             ticket_id=order.ticket_id,
             mint=order.mint,
+            size_lamports=order.size_lamports if order.token_units is None else None,
             token_units=order.token_units,
             max_slippage_bps=order.max_slippage_bps,
             approved_by="risk_engine",

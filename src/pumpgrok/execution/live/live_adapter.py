@@ -17,6 +17,7 @@ from pumpgrok.core.adapter import (
     OrderRequest,
     Position,
     Quote,
+    Side,
     SimulationResult,
 )
 from pumpgrok.core.errors import LiveGateError
@@ -79,7 +80,14 @@ class LiveAdapterStub:
     ) -> Quote:
         self._refuse("quote")
 
-    async def simulate(self, request: OrderRequest) -> SimulationResult:
+    async def simulate(
+        self,
+        *,
+        mint: str,
+        side: Side,
+        size_lamports: int | None,
+        token_units: int | None,
+    ) -> SimulationResult:
         self._refuse("simulate")
 
     async def place(self, request: OrderRequest) -> Fill:
@@ -90,3 +98,9 @@ class LiveAdapterStub:
 
     async def positions(self, mint: str | None = None) -> Sequence[Position]:
         self._refuse("positions")
+
+    def cash_lamports(self) -> int:
+        self._refuse("cash")
+
+    def equity_lamports(self) -> int:
+        self._refuse("equity")

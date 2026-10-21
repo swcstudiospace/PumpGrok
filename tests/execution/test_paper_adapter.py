@@ -310,7 +310,12 @@ async def test_sell_mirrors_buy_through_sell_out(tmp_path: Path) -> None:
 
 async def test_simulate_previews_full_without_writes(tmp_path: Path) -> None:
     adapter, _clock, request = _harness(tmp_path, [_snap(S0, T0)])
-    sim = await adapter.simulate(request)
+    sim = await adapter.simulate(
+        mint=request.mint,
+        side=request.side,
+        size_lamports=request.size_lamports,
+        token_units=request.token_units,
+    )
     assert sim.would_fill is True
     assert sim.fill_kind == "full"
     assert adapter._store.read(limit=None) == []

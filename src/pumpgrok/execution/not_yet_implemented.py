@@ -18,6 +18,7 @@ from pumpgrok.core.adapter import (
     OrderRequest,
     Position,
     Quote,
+    Side,
     SimulationResult,
 )
 from pumpgrok.core.errors import NotYetImplemented
@@ -44,11 +45,18 @@ class NotYetImplementedAdapter(ExecutionAdapter):
             tool="exec.quote",
         )
 
-    async def simulate(self, request: OrderRequest) -> SimulationResult:
+    async def simulate(
+        self,
+        *,
+        mint: str,
+        side: Side,
+        size_lamports: int | None,
+        token_units: int | None,
+    ) -> SimulationResult:
         raise NotYetImplemented(
             "exec.simulate needs the Phase 4 PaperAdapter",
             tool="exec.simulate",
-            ticket_id=request.ticket_id,
+            ticket_id=mint,
         )
 
     async def place(self, request: OrderRequest) -> Fill:
@@ -67,6 +75,18 @@ class NotYetImplementedAdapter(ExecutionAdapter):
         )
 
     async def positions(self, mint: str | None = None) -> Sequence[Position]:
+        raise NotYetImplemented(
+            "exec.positions needs the Phase 4 ledger snapshot reader",
+            tool="exec.positions",
+        )
+
+    def cash_lamports(self) -> int:
+        raise NotYetImplemented(
+            "exec.positions needs the Phase 4 ledger snapshot reader",
+            tool="exec.positions",
+        )
+
+    def equity_lamports(self) -> int:
         raise NotYetImplemented(
             "exec.positions needs the Phase 4 ledger snapshot reader",
             tool="exec.positions",

@@ -139,17 +139,19 @@ def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
 
 def _register_trading(
     reg: ToolRegistry,
+    *,
     rpc: RpcClient,
     adapter: NotYetImplementedAdapter,
     budget: RiskBudget,
+    store: LedgerStore,
     clock: Clock,
 ) -> None:
     """Scoring, quote/simulate/place/cancel and position tools (refusing adapter)."""
     reg.register(build_score_report_tool(rpc))
     reg.register(build_quote_tool(adapter, clock))
-    reg.register(build_simulate_tool())
+    reg.register(build_simulate_tool(adapter, clock))
     reg.register(build_place_tool(adapter, lambda: budget, clock))
-    reg.register(build_cancel_tool())
+    reg.register(build_cancel_tool(adapter, store, clock))
     reg.register(build_positions_tool(adapter, clock))
 
 
@@ -229,7 +231,7 @@ def build_operator_registry(
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
-    _register_trading(reg, rpc, adapter, budget, active_clock)
+    _register_trading(reg, rpc=rpc, adapter=adapter, budget=budget, store=store, clock=active_clock)
     _register_ledger_and_risk(reg, store, active_clock, data_dir, budget)
     _register_desk(
         reg,

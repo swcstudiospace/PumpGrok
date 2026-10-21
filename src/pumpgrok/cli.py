@@ -53,12 +53,14 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
-from pumpgrok.ledger.store import LedgerInconsistent
+from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.logging.json import setup_logging
-from pumpgrok.replay.clock import WallClock
+from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import CorruptFixture
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import run_replay
+from pumpgrok.risk.killswitch import SEAT_RE
 from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
@@ -162,6 +164,17 @@ def _refuse_forbidden_seat(seat: str, verb: str) -> int | None:
         _say(sys.stderr, f"refused: seat {seat!r} is a forbidden owner for `{verb}`")
         return EXIT_CONFIG
     return None
+
+
+def _human_by(value: str | None, verb: str) -> str:
+    """Validate human attribution (R22): ``human:<name>``, never a seat id."""
+    if (
+        value is None
+        or not value.startswith("human:")
+        or SEAT_RE.match(value.removeprefix("human:"))
+    ):
+        raise UsageError(f"bad --by {value!r} for `{verb}`: want human:<name>")
+    return value
 
 
 _EXIT_BY_CODE = {
@@ -412,6 +425,7 @@ def _add_state(verbs: _VerbsAction, mode_option: _Parser) -> None:
     state_autonomy.add_argument(
         "policy", choices=("manual-ticket", "autonomous-paper"), help="autonomy policy"
     )
+    state_autonomy.add_argument("--by", required=True, help="human setting the policy")
     _add_seat(state_autonomy)
 
 
@@ -541,6 +555,31 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
     return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 
 
+def _set_autonomy(policy: str, by: str) -> int:
+    """Append the ``ConfigChanged`` + ``JournalNote`` pair for a level change."""
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        previous = read_autonomy(store)
+        ts_utc = format_ts_utc(WallClock().now())
+        store.append_batch(
+            autonomy_rows(
+                policy,
+                by,
+                previous=previous,
+                ts_utc=ts_utc,
+                source="paper",
+                correlation_id="desk",
+            )
+        )
+    finally:
+        store.close()
+    _say(
+        sys.stdout,
+        json.dumps({"ok": True, "autonomy": policy, "previous": previous, "by": by}),
+    )
+    return EXIT_OK
+
+
 def _state(args: argparse.Namespace, settings: Settings) -> int:
     verb = f"state {args.cmd}"
     refused = _refuse_forbidden_seat(args.seat, verb)
@@ -550,8 +589,13 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
         # Human-only (R22): the ledger HaltCleared + ApprovalRecord land in Phase 4.
         return _not_implemented("state halt --clear", {"by": args.by, "reason": args.reason})
     if args.cmd == "autonomy":
-        # Human-only (R17, R40): the ledger ConfigChanged lands in Phase 4.
-        return _not_implemented("state autonomy", {"policy": args.policy})
+        # Human-only (R17, R40): ConfigChanged plus a journal note, one batch.
+        by = _human_by(args.by, verb)
+
+        async def _autonomy_use(_tools: list[Tool]) -> int:
+            return _set_autonomy(args.policy, by)
+
+        return _run_wired(verb, args.seat, settings, ("portfolio.ledger_read",), _autonomy_use)
     return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _call_use(verb, 0, {}))
 
 

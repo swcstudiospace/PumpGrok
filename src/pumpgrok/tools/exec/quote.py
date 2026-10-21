@@ -62,7 +62,7 @@ QUOTE_SPEC = ToolSpec(
     timeout_s=12.0,
     retry=J4,
     rate_limit_key="jupiter",
-    backend="pumpgrok.execution.not_yet_implemented.NotYetImplementedAdapter.quote",
+    backend="pumpgrok.execution.paper_adapter.PaperAdapter.quote",
 )
 
 

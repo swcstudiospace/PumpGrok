@@ -1,8 +1,7 @@
 """exec.positions: open paper positions with mark-to-market (TOOL-004).
 
-Read-only view over the ExecutionAdapter. In Phase 3 the adapter raises
-``not_yet_implemented``; the ledger-snapshot reader and curve marks land
-with the Phase 4 PaperAdapter.
+Read-only view over the ExecutionAdapter: positions from the adapter plus
+ledger-fold equity and cash. Never appends.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ class PositionsIn(ToolInput):
 
 
 class PositionsOut(ToolOutput):
-    """Open positions; unreachable in Phase 3 (kept for the Phase 4 backend)."""
+    """Open positions with ledger-fold equity and cash."""
 
     positions: list[dict[str, str | int | bool]] = Field(default_factory=list)
     equity_lamports: int = Field(default=0, ge=0)
@@ -44,22 +43,22 @@ class PositionsOut(ToolOutput):
 POSITIONS_SPEC = ToolSpec(
     name="exec.positions",
     description=(
-        "Open paper positions with mark-to-market from the latest curve price. "
-        "Phase 3 delegates and surfaces not_yet_implemented."
+        "Open paper positions with mark-to-market from the latest curve price, "
+        "plus ledger-fold equity and cash."
     ),
     input_model=PositionsIn,
     output_model=PositionsOut,
     side_effect=SideEffect.READ,
     timeout_s=10.0,
     rate_limit_key="ledger",
-    backend="pumpgrok.execution.not_yet_implemented.NotYetImplementedAdapter.positions",
+    backend="pumpgrok.execution.paper_adapter.PaperAdapter.positions",
 )
 
 
 async def run_positions(
     inp: PositionsIn, adapter: ExecutionAdapter, clock: Clock
 ) -> dict[str, Any]:
-    """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
+    """Open positions plus ledger-fold equity and cash (all integer lamports)."""
     positions = await adapter.positions(inp.mint)
     ambient = ambient_correlation()
     rows = [
@@ -74,6 +73,8 @@ async def run_positions(
     return PositionsOut.model_validate(
         {
             "positions": rows,
+            "equity_lamports": adapter.equity_lamports(),
+            "cash_lamports": adapter.cash_lamports(),
             "meta": meta_now(
                 "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
             ),

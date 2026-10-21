@@ -147,6 +147,45 @@ class PaperAdapter(ExecutionAdapter):
     def _slippage_bps(self, request: OrderRequest) -> int:
         return min(int(request.max_slippage_bps), int(self._limits.max_slippage_bps))
 
+    @staticmethod
+    def _sell_units(request: OrderRequest, curve: CurveSnapshot) -> int:
+        """Token units for a sell: carried units, else SOL notional at the curve.
+        Size-based sells (the CLI sell path, ``human_sell`` approvals) carry
+        ``size_lamports`` without ``token_units``; units derive here at the
+        decision curve as ``size * T // S`` (floored, never negative).
+        """
+        return PaperAdapter._sell_preview_units(request.size_lamports, request.token_units, curve)
+
+    @staticmethod
+    def _sell_preview_units(
+        size_lamports: int | None, token_units: int | None, curve: CurveSnapshot
+    ) -> int:
+        """Unit derivation shared by ``_sell_units`` and the fill preview."""
+        if token_units is not None:
+            return int(token_units)
+        size = int(size_lamports or 0)
+        if size <= 0 or curve.s_lamports <= 0:
+            return 0
+        return size * curve.t_units // curve.s_lamports
+
+    def _open_units(self, mint: str) -> int:
+        """Open token units for ``mint`` from the ledger fold; zero when flat."""
+        pos = self._fold_state().positions.get(mint)
+        if pos is None:
+            return 0
+        return int(pos.token_units)
+
+    def cash_lamports(self) -> int:
+        """Spendable paper cash from the ledger fold (exec.positions)."""
+        return int(self._fold_state().cash_lamports)
+
+    def equity_lamports(self) -> int:
+        """Cash plus open-position marks from the ledger fold (exec.positions)."""
+        state = self._fold_state()
+        return int(state.cash_lamports) + sum(
+            int(pos.last_mtm_lamports) for pos in state.positions.values() if pos.token_units > 0
+        )
+
     # -- ExecutionAdapter: quote / simulate --------------------------------
 
     async def quote(
@@ -170,9 +209,16 @@ class PaperAdapter(ExecutionAdapter):
             expires_at=datetime.fromtimestamp(self._clock.now() + 60.0, UTC),
         )
 
-    async def simulate(self, request: OrderRequest) -> SimulationResult:
+    async def simulate(
+        self,
+        *,
+        mint: str,
+        side: Side,
+        size_lamports: int | None,
+        token_units: int | None,
+    ) -> SimulationResult:
         """Pure-math preview: no risk check, no latency, no ledger writes."""
-        curve = await self._read_curve(request.mint)
+        curve = await self._read_curve(mint)
         if curve is None:
             return SimulationResult(
                 would_fill=False,
@@ -186,8 +232,8 @@ class PaperAdapter(ExecutionAdapter):
                 rejection_reason="no_reserves",
                 latency_ms_estimate=1200,
             )
-        if request.side is Side.BUY:
-            size = int(request.size_lamports or 0)
+        if side is Side.BUY:
+            size = int(size_lamports or 0)
             if curve.s_lamports < self._floor(size):
                 return self._sim_reject("below_liquidity_floor", curve.s_lamports, size)
             filled = min(size, self._fill_cap(curve.s_lamports))
@@ -204,7 +250,9 @@ class PaperAdapter(ExecutionAdapter):
                 rejection_reason=None,
                 latency_ms_estimate=1200,
             )
-        units = int(request.token_units or 0)
+        units = self._sell_preview_units(size_lamports, token_units, curve)
+        if units <= 0:
+            return self._sim_reject("below_liquidity_floor", curve.t_units, units)
         if curve.t_units < self._floor(units):
             return self._sim_reject("below_liquidity_floor", curve.t_units, units)
         filled_units = min(units, self._fill_cap(curve.t_units))
@@ -345,11 +393,35 @@ class PaperAdapter(ExecutionAdapter):
 
         Returns the CONFIRMING reserves with the virtual latency. Any refusal
         discards the in-flight order and raises ``OrderRejectedError``; the
-        caller compares the confirm-out against the decision threshold.
+        caller compares the confirm-out against the decision threshold. When
+        the latency sleep outlasts ``confirm_timeout_s`` the outcome is
+        UNKNOWN: the placed row stays without an outcome, an
+        ``OrderRejected`` row with reason ``confirmation_timeout`` is stored
+        for repeat reconstruction, and ``OrderUnknownError`` is raised. The
+        timed-out attempt is never retried (single-send rule).
         """
         self._inflight.add(order_id)
         latency_s, dropped = draw_latency(self._rng, p_drop=self._p_drop)
-        await self._clock.sleep(latency_s)
+        try:
+            async with self._clock.timeout(self._limits.confirm_timeout_s):
+                await self._clock.sleep(latency_s)
+        except TimeoutError:
+            self._inflight.discard(order_id)
+            await self._reject(
+                request,
+                request.decision_id,
+                "confirmation_timeout",
+                f"confirm wait {latency_s:.3f}s exceeded {self._limits.confirm_timeout_s:.3f}s",
+                stage="CONFIRMING",
+                order_id=order_id,
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+            raise OrderUnknownError(
+                "confirmation_timeout",
+                f"order_id={order_id} outcome UNKNOWN; never retried",
+                stage="CONFIRMING",
+            ) from None
         if order_id in self._cancelled:
             self._inflight.discard(order_id)
             self._cancelled.discard(order_id)
@@ -588,6 +660,54 @@ class PaperAdapter(ExecutionAdapter):
             ledger_seq=int(stored[0]["seq"]),
         )
 
+    async def _sell_targets(
+        self,
+        request: OrderRequest,
+        curve0: CurveSnapshot,
+        *,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> tuple[int, int]:
+        """Validated ``(units, filled_units)`` for a sell at the decision curve.
+
+        Refuses with ``no_position`` when flat and caps the fill at the open
+        position; the requested units stay uncapped so an over-size exit
+        reports ``partial`` instead of a quiet ``filled``.
+        """
+        units = self._sell_units(request, curve0)
+        open_units = self._open_units(request.mint)
+        if open_units <= 0:
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "no_position",
+                f"mint={request.mint} sells need an open position",
+                stage="ACCEPTED",
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+        if units <= 0:
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "below_liquidity_floor",
+                f"T0={curve0.t_units} derived_units=0",
+                stage="ACCEPTED",
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+        if curve0.t_units < self._floor(units):
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "below_liquidity_floor",
+                f"T0={curve0.t_units} floor={self._floor(units)}",
+                stage="ACCEPTED",
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+        return units, min(units, self._fill_cap(curve0.t_units), open_units)
+
     async def _place_sell(
         self,
         request: OrderRequest,
@@ -599,18 +719,9 @@ class PaperAdapter(ExecutionAdapter):
         exit_reason: str | None,
         creator: str | None,
     ) -> Fill:
-        units = int(request.token_units or 0)
-        if curve0.t_units < self._floor(units):
-            raise await self._reject(
-                request,
-                request.decision_id,
-                "below_liquidity_floor",
-                f"T0={curve0.t_units} floor={self._floor(units)}",
-                stage="ACCEPTED",
-                source=ledger_source,
-                correlation_id=correlation_id,
-            )
-        filled_units = min(units, self._fill_cap(curve0.t_units))
+        units, filled_units = await self._sell_targets(
+            request, curve0, ledger_source=ledger_source, correlation_id=correlation_id
+        )
         fraction = Decimal(filled_units) / Decimal(units)
         slippage_bps = self._slippage_bps(request)
         gross0 = sell_out(curve0.s_lamports, curve0.t_units, filled_units)
@@ -1003,7 +1114,8 @@ class PaperAdapter(ExecutionAdapter):
                     opened_at=opened_at,
                     price_mark=None,
                     last_mtm_lamports=view.last_mtm_lamports,
-                    unrealised_pnl_lamports=view.unrealised_pnl_lamports,
+                    unrealised_pnl_lamports=int(view.last_mtm_lamports)
+                    - int(view.cost_basis_lamports),
                     unrealised_pnl_pct=None,
                     mtm_source="live",
                     mtm_frozen=view.mtm_frozen,
