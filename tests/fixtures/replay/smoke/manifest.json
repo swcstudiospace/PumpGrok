@@ -1,0 +1,14 @@
+{
+  "dataset": "smoke",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-01T00:00:03.000Z",
+  "seed_hint": 20260101,
+  "sources": {
+    "rest": "hand-authored",
+    "pumpportal": "hand-authored"
+  },
+  "sha256": {
+    "events.jsonl": "9ee37f754c065cc60790ccd0c287fd748fdf69f38b45e885938b3e70f7e212d7"
+  },
+  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two mints, four ticks, strictly ordered ts_utc."
+}

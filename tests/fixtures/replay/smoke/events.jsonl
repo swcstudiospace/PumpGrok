@@ -1,0 +1,4 @@
+{"ts_utc":"2026-01-01T00:00:00.000Z","kind":"tick","mint":"SmokeMintAAAA1111111111111111111111111111111","S":42100000000,"T":764608076000000,"complete":false,"source":"rest"}
+{"ts_utc":"2026-01-01T00:00:01.250Z","kind":"tick","mint":"SmokeMintAAAA1111111111111111111111111111111","S":42350000000,"T":764610000000000,"complete":false,"source":"pumpportal"}
+{"ts_utc":"2026-01-01T00:00:02.500Z","kind":"tick","mint":"SmokeMintBBBB2222222222222222222222222222222","S":9800000000,"T":120000000000000,"complete":true,"source":"pumpportal"}
+{"ts_utc":"2026-01-01T00:00:03.000Z","kind":"tick","mint":"SmokeMintBBBB2222222222222222222222222222222","S":9900000000,"T":121500000000000,"complete":false,"source":"rest"}

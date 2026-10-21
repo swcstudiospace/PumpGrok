@@ -4,33 +4,18 @@ The only ULID source in the package. Time comes from the injected Clock, the 80
 random bits from the single seeded `random.Random`, so a replay reproduces every
 correlation_id byte-for-byte. The `uuid` module is banned in src/pumpgrok.
 
-`Clock` lives here until `replay/clock.py` (plan 01-05) exists; that module will
-become the definition site and this one will re-export it.
+`Clock` is defined in replay/clock.py (paper-engine.md 4.2) and re-exported here.
 """
 
 from __future__ import annotations
 
 import contextvars
 import random
-from typing import Any, Protocol
 
 from pumpgrok.core.errors import PumpgrokError
+from pumpgrok.replay.clock import Clock
 
 ULID_RE = r"^[0-9A-HJKMNP-TV-Z]{26}$"  # Crockford base32, 48-bit ms time + 80-bit rng
-
-
-class Clock(Protocol):
-    """The only time source. Every id, audit row, timeout and retry wait reads it."""
-
-    def now(self) -> float: ...  # epoch seconds (UTC)
-
-    def monotonic(self) -> float: ...
-
-    def utc_iso(self) -> str: ...
-
-    async def sleep(self, seconds: float) -> None: ...
-
-    def timeout(self, seconds: float) -> Any: ...  # async context manager; virtual in replay
 
 
 class IdFactory:
