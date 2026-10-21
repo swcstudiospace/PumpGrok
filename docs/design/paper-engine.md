@@ -310,7 +310,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 -- keys: schema_version ("1"), ledger_id (ULID), initial_equity_lamports, created_ts_utc, source, autonomy_level, export_seq
 ```
 
-Hash chain rule (R28): `hash = sha256(canonical_json({"prev_hash", "seq", "ts_utc", "source", "correlation_id", "type", "payload_json"}))` with the values of the row, computed inside the same `BEGIN IMMEDIATE` transaction as the insert (R26). Verification walks `events` in `seq` order and recomputes; any mismatch makes the ledger `INCONSISTENT` (section 3.5). Because `ts_utc` comes from the injected `Clock` and every id from `core/ids.py`, replay runs produce byte-identical chains (section 4.5).
+Hash chain rule (R28): `hash = sha256(canonical_json({"prev_hash", "seq", "ts_utc", "source", "correlation_id", "idempotency_key", "type", "payload_json"}))` with the values of the row, computed inside the same `BEGIN IMMEDIATE` transaction as the insert (R26). `idempotency_key` is part of the hash input because the column is NOT NULL UNIQUE and must be covered by the chain (locked Q3). Verification walks `events` in `seq` order and recomputes; any mismatch makes the ledger `INCONSISTENT` (section 3.5). Because `ts_utc` comes from the injected `Clock` and every id from `core/ids.py`, replay runs produce byte-identical chains (section 4.5).
 
 Snapshot cadence: every `ledger.snapshot_every_events` (500, REVIEW) events or `ledger.snapshot_every_s` (300 s, REVIEW), whichever first; plus on `DailyRollover`, on graceful shutdown, and on `HaltSet`. Old snapshots are kept (they are small; the table is append-only like `events`).
 
