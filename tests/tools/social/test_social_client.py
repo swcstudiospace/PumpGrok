@@ -106,7 +106,9 @@ async def test_venue_errors_become_typed() -> None:
 def test_client_module_uses_get_only() -> None:
     import ast
 
-    path = Path(__file__).resolve().parents[3] / "src" / "pumpgrok" / "tools" / "social" / "client.py"
+    path = (
+        Path(__file__).resolve().parents[3] / "src" / "pumpgrok" / "tools" / "social" / "client.py"
+    )
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr in ("post", "put", "patch", "delete"):

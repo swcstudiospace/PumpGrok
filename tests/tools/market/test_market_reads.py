@@ -58,12 +58,16 @@ def _curve_b64() -> str:
     return base64.b64encode(raw).decode("ascii")
 
 
-def _tx(keys: list[str], pre_sol: list[int], post_sol: list[int], pre_tok: list[tuple[int, str]], post_tok: list[tuple[int, str]], ts: int) -> dict:
+def _tx(
+    keys: list[str],
+    pre_sol: list[int],
+    post_sol: list[int],
+    pre_tok: list[tuple[int, str]],
+    post_tok: list[tuple[int, str]],
+    ts: int,
+) -> dict:
     def _bal(side: list[tuple[int, str]]) -> list[dict]:
-        return [
-            {"accountIndex": i, "mint": MINT, "uiTokenAmount": {"amount": a}}
-            for i, a in side
-        ]
+        return [{"accountIndex": i, "mint": MINT, "uiTokenAmount": {"amount": a}} for i, a in side]
 
     return {
         "blockTime": ts,
@@ -137,8 +141,13 @@ def _registry():
 
 
 def _bot() -> BotManifest:
-    names = ["market.price", "market.ohlcv", "market.liquidity", "market.trades",
-             "market.holders_snapshot"]
+    names = [
+        "market.price",
+        "market.ohlcv",
+        "market.liquidity",
+        "market.trades",
+        "market.holders_snapshot",
+    ]
     return BotManifest(
         id="bot-01-scout",
         display="scout",
@@ -250,8 +259,12 @@ async def test_market_upstream_failure_is_typed() -> None:
 
     transport = httpx.MockTransport(handler)  # type: ignore[arg-type]
     client = httpx.AsyncClient(transport=transport)
-    rpc = RpcClient(["https://a.invalid", "https://b.invalid"], client, FixtureClock(start=START),
-                    rng=random.Random(5))
+    rpc = RpcClient(
+        ["https://a.invalid", "https://b.invalid"],
+        client,
+        FixtureClock(start=START),
+        rng=random.Random(5),
+    )
     reg, _ = build_registry(clock=FixtureClock(start=START), rng=random.Random(11))
     register_read_tools(reg, rpc)
     factory = IdFactory(FixtureClock(start=START), random.Random(12))

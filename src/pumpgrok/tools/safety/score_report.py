@@ -241,7 +241,9 @@ async def run_score_report(
     if "deployer_history" in runnable:
         if dep_unresolved:
             rows.append(
-                _blind("deployer_history", Decimal("0.10"), "creator not supplied; window unscanned")
+                _blind(
+                    "deployer_history", Decimal("0.10"), "creator not supplied; window unscanned"
+                )
             )
         else:
             rows.append(
@@ -280,9 +282,7 @@ async def run_score_report(
                 )
             )
             evidence.append(
-                Evidence(
-                    check=check_id, source="unwired", slot=None, fetched_at=utcnow()
-                )
+                Evidence(check=check_id, source="unwired", slot=None, fetched_at=utcnow())
             )
 
     score = Decimal(100)

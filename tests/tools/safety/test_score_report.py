@@ -113,7 +113,9 @@ def _handler(*, freeze_live: bool, supply: str, holders_ok: bool):
 def _run_with(handler, payload: ScoreReportIn):
     transport = httpx.MockTransport(handler)  # type: ignore[arg-type]
     client = httpx.AsyncClient(transport=transport)
-    rpc = RpcClient(["https://rpc.invalid"], client, FixtureClock(start=START), rng=random.Random(9))
+    rpc = RpcClient(
+        ["https://rpc.invalid"], client, FixtureClock(start=START), rng=random.Random(9)
+    )
     reg, _ = build_registry(clock=FixtureClock(start=START), rng=random.Random(11))
     reg.register(build_score_report_tool(rpc))
     bot = BotManifest(
@@ -149,7 +151,9 @@ def _clear_in() -> ScoreReportIn:
 
 
 async def test_clear_report_on_clean_data() -> None:
-    reg, bot = _run_with(_handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in()
+    )
     out = await _call(reg, bot, _clear_in())
     assert out.score == 100
     assert out.verdict_recommendation == "CLEAR"
@@ -162,7 +166,9 @@ async def test_clear_report_on_clean_data() -> None:
 
 
 async def test_conditional_on_concentration_and_freeze() -> None:
-    reg, bot = _run_with(_handler(freeze_live=True, supply="200000000", holders_ok=True), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=True, supply="200000000", holders_ok=True), _clear_in()
+    )
     out = await _call(reg, bot, _clear_in())
     assert out.score == 50
     assert out.verdict_recommendation == "CONDITIONAL"
@@ -173,14 +179,18 @@ async def test_conditional_on_concentration_and_freeze() -> None:
 
 
 async def test_kill_on_top5_hard_veto() -> None:
-    reg, bot = _run_with(_handler(freeze_live=False, supply="100000000", holders_ok=True), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="100000000", holders_ok=True), _clear_in()
+    )
     out = await _call(reg, bot, _clear_in())
     assert out.hard_veto is True
     assert out.verdict_recommendation == "KILL"
 
 
 async def test_blind_never_raises_and_forces_kill() -> None:
-    reg, bot = _run_with(_handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in()
+    )
     out = await _call(reg, bot, _clear_in())
     statuses = {c.id: c.status for c in out.checks}
     assert statuses["top10_concentration"] == "blind"
@@ -189,7 +199,9 @@ async def test_blind_never_raises_and_forces_kill() -> None:
 
 
 async def test_unknown_check_and_threshold_ids_are_refused() -> None:
-    reg, bot = _run_with(_handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in()
+    )
     with pytest.raises(DataStale):
         await _call(reg, bot, ScoreReportIn(mint=MINT, curve_account=CURVE, checks=["nope"]))
     with pytest.raises(DataStale):
@@ -199,21 +211,32 @@ async def test_unknown_check_and_threshold_ids_are_refused() -> None:
 
 
 async def test_threshold_override_moves_verdict() -> None:
-    reg, bot = _run_with(_handler(freeze_live=True, supply="1000000000000", holders_ok=True), _clear_in())
+    reg, bot = _run_with(
+        _handler(freeze_live=True, supply="1000000000000", holders_ok=True), _clear_in()
+    )
     base = await _call(reg, bot, _clear_in())
     assert base.score == 75
     assert base.verdict_recommendation == "CLEAR"
     over = await _call(
-        reg, bot, ScoreReportIn(mint=MINT, curve_account=CURVE, creator=CREATOR,
-                               thresholds={"kill_below_score": 95.0})
+        reg,
+        bot,
+        ScoreReportIn(
+            mint=MINT, curve_account=CURVE, creator=CREATOR, thresholds={"kill_below_score": 95.0}
+        ),
     )
     assert over.score == base.score
     assert over.verdict_recommendation == "KILL"
 
 
 async def test_checks_subset_limits_runnable() -> None:
-    reg, bot = _run_with(_handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in())
-    out = await _call(reg, bot, ScoreReportIn(mint=MINT, curve_account=CURVE, creator=CREATOR, checks=["mint_authority"]))
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="1000000000000", holders_ok=True), _clear_in()
+    )
+    out = await _call(
+        reg,
+        bot,
+        ScoreReportIn(mint=MINT, curve_account=CURVE, creator=CREATOR, checks=["mint_authority"]),
+    )
     assert [c.id for c in out.checks] == ["mint_authority"]
 
 

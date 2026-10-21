@@ -97,7 +97,11 @@ def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> T
     meta = tx.get("meta")
     if not isinstance(meta, dict) or meta.get("err") is not None:
         return None
-    message = tx.get("transaction", {}).get("message", {}) if isinstance(tx.get("transaction"), dict) else {}
+    message = (
+        tx.get("transaction", {}).get("message", {})
+        if isinstance(tx.get("transaction"), dict)
+        else {}
+    )
     keys = _pubkeys(message)
     if not keys:
         return None
@@ -144,7 +148,9 @@ async def fetch_trades(
 ) -> list[Trade]:
     """Fetch and classify up to ``limit`` movements for ``mint`` (RPC only)."""
     try:
-        sigs = await rpc.call("getSignaturesForAddress", [mint, {"limit": min(limit, _TX_LIMIT_PER_MINT)}])
+        sigs = await rpc.call(
+            "getSignaturesForAddress", [mint, {"limit": min(limit, _TX_LIMIT_PER_MINT)}]
+        )
     except RpcError as exc:
         raise DataStale(f"market.trades signatures failed mint={mint}") from exc
     if not isinstance(sigs, list):
@@ -160,7 +166,10 @@ async def fetch_trades(
         try:
             tx = await rpc.call(
                 "getTransaction",
-                [entry["signature"], {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                [
+                    entry["signature"],
+                    {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
+                ],
             )
         except RpcError:
             continue

@@ -50,10 +50,18 @@ FREEZE = "F" * 44
 SUPPLY = 100_000_000
 
 ALL_NAMES = [
-    "market.price", "market.ohlcv", "market.liquidity", "market.trades",
-    "market.holders_snapshot", "onchain.token_metadata", "onchain.authorities",
-    "onchain.lp_status", "onchain.top_holders", "onchain.deployer_history",
-    "onchain.large_transfers", "onchain.priority_fee",
+    "market.price",
+    "market.ohlcv",
+    "market.liquidity",
+    "market.trades",
+    "market.holders_snapshot",
+    "onchain.token_metadata",
+    "onchain.authorities",
+    "onchain.lp_status",
+    "onchain.top_holders",
+    "onchain.deployer_history",
+    "onchain.large_transfers",
+    "onchain.priority_fee",
 ]
 
 

@@ -6,6 +6,7 @@ window: ``tokens_seen`` is a signature count, not an adjudicated token
 count, and ``rugs``/``worst_pnl_pct`` stay unwired until the reputation
 book lands (Phase 4+).
 """
+
 from datetime import UTC, datetime
 
 from pydantic import Field

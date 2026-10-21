@@ -9,6 +9,7 @@ the layout is pending. Shared by ``market.price`` and ``onchain.lp_status``.
 RPC only: this module performs no HTTP reads outside the injected RPC
 client and references no quote endpoint (R44, R46, R47).
 """
+
 from __future__ import annotations
 
 import base64
@@ -54,9 +55,7 @@ def decode_curve_account(data: bytes) -> CurveState:
     completion flag outside ``{0, 1}``); callers map it to ``DataStale``.
     """
     if len(data) != CURVE_ACCOUNT_SIZE:
-        raise CurveDecodeError(
-            f"curve account size {len(data)} != ASSUMED {CURVE_ACCOUNT_SIZE}"
-        )
+        raise CurveDecodeError(f"curve account size {len(data)} != ASSUMED {CURVE_ACCOUNT_SIZE}")
     try:
         (_, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(data)
     except struct.error as exc:

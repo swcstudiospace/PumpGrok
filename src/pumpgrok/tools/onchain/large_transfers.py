@@ -120,7 +120,9 @@ def parse_transfer_tx(
                 amount = int(entry.get("uiTokenAmount", {}).get("amount", "0"))
             except (KeyError, ValueError, TypeError, AttributeError):
                 continue
-            deltas[index] = deltas.get(index, 0) + (amount if side == "postTokenBalances" else -amount)
+            deltas[index] = deltas.get(index, 0) + (
+                amount if side == "postTokenBalances" else -amount
+            )
     if not deltas:
         return None
     decrease_idx = min(deltas, key=lambda i: deltas[i])
@@ -188,11 +190,16 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict:
             try:
                 tx = await rpc.call(
                     "getTransaction",
-                    [entry["signature"], {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                    [
+                        entry["signature"],
+                        {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
+                    ],
                 )
             except RpcError:
                 continue
-            transfer = parse_transfer_tx(inp.mint, entry["signature"], wallet, supply, inp.min_share, tx)
+            transfer = parse_transfer_tx(
+                inp.mint, entry["signature"], wallet, supply, inp.min_share, tx
+            )
             if transfer is not None:
                 found.append(transfer)
     found.sort(key=lambda t: t.ts)
