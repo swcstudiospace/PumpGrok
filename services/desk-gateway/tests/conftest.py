@@ -93,7 +93,7 @@ def gateway(tmp_path_factory: pytest.TempPathFactory) -> Any:
     thread.start()
     try:
         host, port = server.server_address
-        yield f"http://{host}:{port}", tokens, contracts_dir
+        yield f"http://{host}:{port}", tokens, contracts_dir, registry, manifests
     finally:
         server.shutdown()
         server.server_close()

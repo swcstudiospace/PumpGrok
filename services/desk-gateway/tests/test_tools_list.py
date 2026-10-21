@@ -21,7 +21,7 @@ def _roster_doc(contracts_dir, seat_id):  # type: ignore[no-untyped-def]
 
 
 def test_chief_tools_list_equals_roster_plus_core(gateway):  # type: ignore[no-untyped-def]
-    base_url, tokens, contracts_dir = gateway
+    base_url, tokens, contracts_dir, _registry, _manifests = gateway
     status, body = rpc_call(base_url, "chief", "tools/list", tokens["chief"])
     assert status == 200, body
     served = {entry["name"]: entry for entry in body["result"]["tools"]}
@@ -32,7 +32,7 @@ def test_chief_tools_list_equals_roster_plus_core(gateway):  # type: ignore[no-u
 
 
 def test_chief_entry_schema_verbatim(gateway):  # type: ignore[no-untyped-def]
-    base_url, tokens, contracts_dir = gateway
+    base_url, tokens, contracts_dir, _registry, _manifests = gateway
     status, body = rpc_call(base_url, "chief", "tools/list", tokens["chief"])
     assert status == 200, body
     served = {entry["name"]: entry for entry in body["result"]["tools"]}
