@@ -9,18 +9,30 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
 
-TOKEN_ENV_PREFIX = "DESK_GATEWAY_TOKEN_"
+SEAT_CREDENTIAL_ENV_PREFIX = "DESK_GATEWAY_TOKEN_"
+
+
+@dataclass(frozen=True)
+class GatewayConfig:
+    """Everything one gateway process binds with; ``tokens`` is never repr'd."""
+
+    host: str
+    port: int
+    contracts_dir: Path
+    data_dir: Path
+    repo_root: Path
+    tokens: Mapping[str, str] = field(repr=False)
 
 
 def token_env_name(short: str) -> str:
     """Environment variable holding the bearer token for one seat short."""
-    return f"{TOKEN_ENV_PREFIX}{short.upper()}"
+    return f"{SEAT_CREDENTIAL_ENV_PREFIX}{short.upper()}"
 
 
-def load_tokens(
-    shorts: list[str], env: Mapping[str, str] | None = None
-) -> dict[str, str]:
+def load_tokens(shorts: list[str], env: Mapping[str, str] | None = None) -> dict[str, str]:
     """Read configured per-seat tokens; unconfigured seats are absent (503)."""
     source = env if env is not None else os.environ
     tokens: dict[str, str] = {}

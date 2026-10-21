@@ -19,6 +19,8 @@ from pumpgrok.contracts.projection import (
 
 SERVER_PATH = Path(__file__).resolve().parents[1] / "src" / "desk_gateway" / "server.py"
 
+EXPECTED_TOOL_COUNT = 37
+
 
 def test_transport_names_use_underscore_form() -> None:
     assert transport_name("onchain.token_metadata") == "onchain_token_metadata"
@@ -42,7 +44,7 @@ def test_transport_mapping_injective_registry_wide(gateway):  # type: ignore[no-
     _base, _tokens, _contracts, registry, _manifests = gateway
     transports = [transport_name(name) for name in registry.names()]
     assert len(set(transports)) == len(transports), "transport collision over registry"
-    assert len(registry.names()) == 37
+    assert len(registry.names()) == EXPECTED_TOOL_COUNT
 
 
 def test_server_never_reverse_replaces_underscores() -> None:

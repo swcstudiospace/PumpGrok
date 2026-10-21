@@ -23,7 +23,7 @@ import hmac
 import json
 import logging
 import os
-import random
+import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,6 +32,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from desk_gateway.config import GatewayConfig
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
@@ -43,6 +44,7 @@ from pumpgrok.contracts.projection import (
 from pumpgrok.core.bot import BotManifest
 from pumpgrok.core.errors import NotYetImplemented, PumpgrokError
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
@@ -89,14 +91,10 @@ class _ClosedNotifier(Notifier):
     """Refusing alert sink: the gateway owns no delivery path (fail-closed)."""
 
     async def send_telegram(self, chat_id: str, text: str) -> None:
-        raise NotYetImplemented(
-            "notify.send needs Phase 4 sinks", tool="notify.alert"
-        )
+        raise NotYetImplemented("notify.send needs Phase 4 sinks", tool="notify.alert")
 
     async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
-        raise NotYetImplemented(
-            "notify.send needs Phase 4 sinks", tool="notify.alert"
-        )
+        raise NotYetImplemented("notify.send needs Phase 4 sinks", tool="notify.alert")
 
 
 def rpc_endpoints() -> list[str]:
@@ -120,14 +118,13 @@ def build_gateway_registry(
     same roster grants over HTTP as in-process. Returns the registry plus
     the ten seat manifests for ``find``.
     """
-    from pumpgrok.core.manifests import load_bot_manifests
 
     active_clock = clock if clock is not None else WallClock()
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    reg, _audits = build_registry(clock=active_clock, rng=random.Random())
+    reg, _audits = build_registry(clock=active_clock, rng=secrets.SystemRandom())
     client = http_client if http_client is not None else httpx.AsyncClient()
-    rpc = RpcClient(rpc_endpoints(), client, active_clock, random.Random())
+    rpc = RpcClient(rpc_endpoints(), client, active_clock, secrets.SystemRandom())
     store = LedgerStore(data_dir / "ledger.sqlite")
     adapter = NotYetImplementedAdapter()
     budget = RiskBudget()
@@ -152,9 +149,7 @@ def build_gateway_registry(
     reg.register(build_render_report_tool(store, active_clock, data_dir / "reports"))
     reg.register(
         build_alert_tool(
-            _ClosedNotifier(
-                allowlist=(), clock=active_clock, alert_file=data_dir / "alerts.jsonl"
-            ),
+            _ClosedNotifier(allowlist=(), clock=active_clock, alert_file=data_dir / "alerts.jsonl"),
             active_clock,
         )
     )
@@ -164,9 +159,7 @@ def build_gateway_registry(
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root))
-    reg.register(
-        build_event_emit_tool(store, active_clock, data_dir / "journal", "bot-00-chief")
-    )
+    reg.register(build_event_emit_tool(store, active_clock, data_dir / "journal", "bot-00-chief"))
     reg.register(
         build_doctor_tool(
             Settings(mode="paper"),
@@ -206,6 +199,10 @@ def _error_result(code: str, message: str) -> dict[str, Any]:
     }
 
 
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
+
+
 class _Handler(BaseHTTPRequestHandler):
     """JSON-RPC over POST with per-seat compare_digest auth."""
 
@@ -226,9 +223,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _method_not_allowed(self) -> None:
-        self._send_json(
-            405, {"error": {"code": "method_not_allowed", "message": "use POST"}}
-        )
+        self._send_json(405, {"error": {"code": "method_not_allowed", "message": "use POST"}})
 
     do_GET = _method_not_allowed
     do_PUT = _method_not_allowed
@@ -252,20 +247,20 @@ class _Handler(BaseHTTPRequestHandler):
             if presented is not None and hmac.compare_digest(presented, expected):
                 matched = seat_short
         if matched is None:
-            return 401
+            return HTTP_UNAUTHORIZED
         if matched != short:
-            return 403
+            return HTTP_FORBIDDEN
         return None
 
     def _auth_error_body(self, status: int) -> dict[str, Any]:
-        if status == 401:
+        if status == HTTP_UNAUTHORIZED:
             return {
                 "error": {
                     "code": "unauthorized",
                     "message": "missing or unknown bearer token",
                 }
             }
-        if status == 403:
+        if status == HTTP_FORBIDDEN:
             return {
                 "error": {
                     "code": "forbidden",
@@ -284,9 +279,7 @@ class _Handler(BaseHTTPRequestHandler):
         short = _short_from_path(self.path)
         seat_id = state["shorts"].get(short) if short else None
         if seat_id is None:
-            self._send_json(
-                404, {"error": {"code": "unknown_seat", "message": "unknown seat"}}
-            )
+            self._send_json(404, {"error": {"code": "unknown_seat", "message": "unknown seat"}})
             log.info("seat=%s status=%s", short, 404)
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -296,6 +289,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(denied, self._auth_error_body(denied))
             log.info("seat=%s status=%s", short, denied)
             return
+        self._handle_rpc(state, short, seat_id, raw)
+
+    def _handle_rpc(
+        self, state: dict[str, Any], short: str | None, seat_id: str, raw: bytes
+    ) -> None:
+        """Parse one JSON-RPC envelope and answer the supported methods."""
         try:
             envelope = json.loads(raw.decode() or "null")
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -346,9 +345,7 @@ class _Handler(BaseHTTPRequestHandler):
             log.info("seat=%s status=%s", short, 200)
             return
         if method == "tools/list":
-            result: dict[str, Any] = {
-                "tools": exposure_entries(seat_id, state["contracts_dir"])
-            }
+            result: dict[str, Any] = {"tools": exposure_entries(seat_id, state["contracts_dir"])}
             self._send_json(200, {"jsonrpc": "2.0", "id": request_id, "result": result})
             log.info("seat=%s status=%s", short, 200)
             return
@@ -367,9 +364,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         log.info("seat=%s status=%s", short, 200)
 
-    def _tools_call(
-        self, state: dict[str, Any], seat_id: str, params: Any
-    ) -> dict[str, Any]:
+    def _tools_call(self, state: dict[str, Any], seat_id: str, params: Any) -> dict[str, Any]:
         """Map the transport name back through the roster dict and dispatch.
 
         The seat roster decides first; a name another seat exposes still
@@ -389,7 +384,7 @@ class _Handler(BaseHTTPRequestHandler):
         registry: ToolRegistry = state["registry"]
         manifests: dict[str, BotManifest] = state["manifests"]
         clock: Clock = state["clock"]
-        factory = IdFactory(clock, random.Random())
+        factory = IdFactory(clock, secrets.SystemRandom())
         cid = CorrelationId.new(factory)
 
         async def _dispatch() -> tuple[Any | None, dict[str, Any] | None]:
@@ -480,34 +475,29 @@ def _start_owner_loop(
 
 
 def create_server(
+    config: GatewayConfig,
     *,
-    host: str,
-    port: int,
-    contracts_dir: Path,
-    tokens: dict[str, str],
-    data_dir: Path,
-    repo_root: Path,
     clock: Clock | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> ThreadingHTTPServer:
     """Bind a threaded JSON-RPC server over an owner-thread registry."""
     active_clock = clock if clock is not None else WallClock()
     owner_loop, cell = _start_owner_loop(
-        data_dir=data_dir,
-        repo_root=repo_root,
+        data_dir=config.data_dir,
+        repo_root=config.repo_root,
         clock=active_clock,
         http_client=http_client,
     )
-    server = ThreadingHTTPServer((host, port), _Handler)
+    server = ThreadingHTTPServer((config.host, config.port), _Handler)
     server.gateway_state = {  # type: ignore[attr-defined]
-        "contracts_dir": Path(contracts_dir),
-        "tokens": dict(tokens),
+        "contracts_dir": Path(config.contracts_dir),
+        "tokens": dict(config.tokens),
         "registry": cell["registry"],
         "manifests": cell["manifests"],
         "global_map": cell["global_map"],
         "owner_loop": owner_loop,
         "clock": active_clock,
-        "shorts": short_to_seat(contracts_dir),
+        "shorts": short_to_seat(config.contracts_dir),
     }
     server.daemon_threads = True
     return server

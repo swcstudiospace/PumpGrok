@@ -15,10 +15,20 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import (
+    HTTP_FORBIDDEN,
+    HTTP_METHOD_NOT_ALLOWED,
+    HTTP_OK,
+    HTTP_SEAT_UNCONFIGURED,
+    HTTP_UNAUTHORIZED,
+    _refusing_transport,
+    rpc_call,
+    rpc_call_as,
+)
 
+from desk_gateway.config import GatewayConfig
 from desk_gateway.server import close_server, create_server
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
-from conftest import _refusing_transport, rpc_call
 from pumpgrok.replay.clock import WallClock
 
 
@@ -28,16 +38,15 @@ def _serve_without(short_missing: str, tmp_path: Any) -> Any:
     shorts = sorted(short_to_seat(contracts_dir).keys())
     tokens = {short: f"fake_token_{short}" for short in shorts if short != short_missing}
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(_refusing_transport))
-    server = create_server(
+    config = GatewayConfig(
         host="127.0.0.1",
         port=0,
         contracts_dir=contracts_dir,
-        tokens=tokens,
         data_dir=tmp_path / "data",
         repo_root=tmp_path,
-        clock=WallClock(),
-        http_client=http_client,
+        tokens=tokens,
     )
+    server = create_server(config, clock=WallClock(), http_client=http_client)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
@@ -54,35 +63,35 @@ def unconfigured_gateway(tmp_path: Any) -> Any:
 def test_missing_token_is_401(gateway):  # type: ignore[no-untyped-def]
     base_url, _tokens, _contracts, _reg, _manifests = gateway
     status, body = rpc_call(base_url, "chief", "tools/list", None)
-    assert status == 401, body
+    assert status == HTTP_UNAUTHORIZED, body
     assert body["error"]["code"] == "unauthorized"
 
 
 def test_wrong_token_is_401(gateway):  # type: ignore[no-untyped-def]
     base_url, _tokens, _contracts, _reg, _manifests = gateway
     status, body = rpc_call(base_url, "chief", "tools/list", "fake_token_nope")
-    assert status == 401, body
+    assert status == HTTP_UNAUTHORIZED, body
     assert body["error"]["code"] == "unauthorized"
 
 
 def test_cross_seat_token_is_403(gateway):  # type: ignore[no-untyped-def]
     base_url, tokens, _contracts, _reg, _manifests = gateway
     status, body = rpc_call(base_url, "chief", "tools/list", tokens["scout"])
-    assert status == 403, body
+    assert status == HTTP_FORBIDDEN, body
     assert body["error"]["code"] == "forbidden"
 
 
 def test_own_seat_token_proceeds(gateway):  # type: ignore[no-untyped-def]
     base_url, tokens, _contracts, _reg, _manifests = gateway
     status, body = rpc_call(base_url, "scout", "tools/list", tokens["scout"])
-    assert status == 200, body
+    assert status == HTTP_OK, body
     assert body["result"]["tools"]
 
 
 def test_unconfigured_seat_is_503_without_detail(unconfigured_gateway):  # type: ignore[no-untyped-def]
     base_url, tokens = unconfigured_gateway
     status, body = rpc_call(base_url, "journal", "tools/list", tokens["scout"])
-    assert status == 503, body
+    assert status == HTTP_SEAT_UNCONFIGURED, body
     assert body["error"]["code"] == "seat_unconfigured"
     dumped = json.dumps(body)
     assert not any(value in dumped for value in tokens.values())
@@ -90,7 +99,5 @@ def test_unconfigured_seat_is_503_without_detail(unconfigured_gateway):  # type:
 
 def test_get_is_405(gateway):  # type: ignore[no-untyped-def]
     base_url, tokens, _contracts, _reg, _manifests = gateway
-    status, body = rpc_call(
-        base_url, "chief", "tools/list", tokens["chief"], http_method="GET"
-    )
-    assert status == 405, body
+    status, body = rpc_call_as(base_url, "chief", "GET", tokens["chief"])
+    assert status == HTTP_METHOD_NOT_ALLOWED, body
