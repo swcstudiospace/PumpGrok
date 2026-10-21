@@ -15,6 +15,7 @@ import contextlib
 import hashlib
 import json
 import sqlite3
+import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -75,6 +76,35 @@ def recreate_ledger_db(path: str | Path) -> Path:
     return target
 
 
+def _validated_payload(type: str, payload: Mapping[str, Any]) -> str:
+    """Validate ``payload`` against its R32 model; return canonical JSON."""
+    # Raises ValueError for a type outside the R32 vocabulary or a bad payload.
+    model = EVENT_MODELS[EventType(type)]
+    return canonical_json(model.model_validate(dict(payload)).model_dump(mode="json"))
+
+
+def _check_envelope(entry: Mapping[str, Any]) -> tuple[str, str, str, str, str, Mapping[str, Any]]:
+    """Extract and check the append envelope; returns typed fields."""
+    ts_utc = entry.get("ts_utc")
+    source = entry.get("source")
+    correlation_id = entry.get("correlation_id")
+    idempotency_key = entry.get("idempotency_key")
+    type = entry.get("type")
+    payload = entry.get("payload")
+    if source not in SOURCES:
+        raise ValueError(f"source must be one of {sorted(SOURCES)}, got {source!r}")
+    if not ts_utc or not correlation_id or not idempotency_key or not type:
+        raise ValueError("ts_utc, correlation_id, idempotency_key and type are required")
+    if not isinstance(payload, Mapping):
+        raise ValueError("payload must be a mapping")
+    assert isinstance(ts_utc, str)
+    assert isinstance(source, str)
+    assert isinstance(correlation_id, str)
+    assert isinstance(idempotency_key, str)
+    assert isinstance(type, str)
+    return ts_utc, source, correlation_id, idempotency_key, type, payload
+
+
 def _row_hash(
     *,
     prev_hash: str,
@@ -103,7 +133,6 @@ def _row_hash(
 
 class LedgerStore:
     """Append-only hash-chained event ledger over sqlite3 stdlib."""
-
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,6 +141,13 @@ class LedgerStore:
         self._db.execute("PRAGMA synchronous = FULL;")
         self._db.execute("PRAGMA busy_timeout = 5000;")
         self._db.executescript(_SCHEMA)
+        self._write_lock = threading.Lock()
+        self._inconsistent = False
+
+    def _require_consistent(self) -> None:
+        """Refuse writes once this handle has observed an INCONSISTENT chain."""
+        if self._inconsistent:
+            raise LedgerInconsistent("ledger is INCONSISTENT: appends refused")
 
     def append(
         self,
@@ -124,52 +160,58 @@ class LedgerStore:
         payload: Mapping[str, Any],
     ) -> dict[str, Any]:
         """Append one event; returns the stored row. Raises on duplicates."""
-        if source not in SOURCES:
-            raise ValueError(f"source must be one of {sorted(SOURCES)}, got {source!r}")
-        if not correlation_id or not idempotency_key or not type or not ts_utc:
-            raise ValueError("ts_utc, correlation_id, idempotency_key and type are required")
-        # Raises ValueError for a type outside the R32 vocabulary or a payload that fails its model.
-        model = EVENT_MODELS[EventType(type)]
-        payload_json = canonical_json(model.model_validate(dict(payload)).model_dump(mode="json"))
-        db = self._db
-        db.execute("BEGIN IMMEDIATE;")
-        try:
-            head = db.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;").fetchone()
-            if head is None:
-                seq, prev_hash = 1, GENESIS_PREV_HASH
-            else:
-                seq, prev_hash = head[0] + 1, head[1]
-            hash_ = _row_hash(
-                prev_hash=prev_hash,
-                seq=seq,
-                ts_utc=ts_utc,
-                source=source,
-                correlation_id=correlation_id,
-                idempotency_key=idempotency_key,
-                type=type,
-                payload_json=payload_json,
-            )
-            db.execute(
-                "INSERT INTO events (seq, ts_utc, source, correlation_id,"
-                " idempotency_key, type, payload_json, prev_hash, hash)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                (
-                    seq,
-                    ts_utc,
-                    source,
-                    correlation_id,
-                    idempotency_key,
-                    type,
-                    payload_json,
-                    prev_hash,
-                    hash_,
-                ),
-            )
-            db.execute("COMMIT;")
-        except Exception:
-            with contextlib.suppress(sqlite3.Error):
-                db.execute("ROLLBACK;")
-            raise
+        self._require_consistent()
+        with self._write_lock:
+            db = self._db
+            db.execute("BEGIN IMMEDIATE;")
+            try:
+                _check_envelope(
+                    {
+                        "ts_utc": ts_utc,
+                        "source": source,
+                        "correlation_id": correlation_id,
+                        "idempotency_key": idempotency_key,
+                        "type": type,
+                        "payload": payload,
+                    }
+                )
+                payload_json = _validated_payload(type, payload)
+                head = db.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;").fetchone()
+                if head is None:
+                    seq, prev_hash = 1, GENESIS_PREV_HASH
+                else:
+                    seq, prev_hash = head[0] + 1, head[1]
+                hash_ = _row_hash(
+                    prev_hash=prev_hash,
+                    seq=seq,
+                    ts_utc=ts_utc,
+                    source=source,
+                    correlation_id=correlation_id,
+                    idempotency_key=idempotency_key,
+                    type=type,
+                    payload_json=payload_json,
+                )
+                db.execute(
+                    "INSERT INTO events (seq, ts_utc, source, correlation_id,"
+                    " idempotency_key, type, payload_json, prev_hash, hash)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                    (
+                        seq,
+                        ts_utc,
+                        source,
+                        correlation_id,
+                        idempotency_key,
+                        type,
+                        payload_json,
+                        prev_hash,
+                        hash_,
+                    ),
+                )
+                db.execute("COMMIT;")
+            except Exception:
+                with contextlib.suppress(sqlite3.Error):
+                    db.execute("ROLLBACK;")
+                raise
         return {
             "seq": seq,
             "ts_utc": ts_utc,
@@ -181,6 +223,78 @@ class LedgerStore:
             "prev_hash": prev_hash,
             "hash": hash_,
         }
+
+    def append_batch(self, rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """Append many events atomically; the single transaction primitive.
+
+        One write lock covers the repeat-check plus every row, with per-row
+        hash chaining exactly as :meth:`append` does. Any error rolls back
+        the whole batch, so no partial rows survive; a duplicate
+        ``idempotency_key`` therefore refuses the entire batch.
+        """
+        pending = list(rows)
+        if not pending:
+            return []
+        self._require_consistent()
+        with self._write_lock:
+            db = self._db
+            db.execute("BEGIN IMMEDIATE;")
+            try:
+                head = db.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;").fetchone()
+                if head is None:
+                    seq, prev_hash = 1, GENESIS_PREV_HASH
+                else:
+                    seq, prev_hash = head[0] + 1, head[1]
+                stored: list[dict[str, Any]] = []
+                for entry in pending:
+                    ts_utc, source, correlation_id, idempotency_key, type, payload = _check_envelope(entry)
+                    payload_json = _validated_payload(type, payload)
+                    hash_ = _row_hash(
+                        prev_hash=prev_hash,
+                        seq=seq,
+                        ts_utc=ts_utc,
+                        source=source,
+                        correlation_id=correlation_id,
+                        idempotency_key=idempotency_key,
+                        type=type,
+                        payload_json=payload_json,
+                    )
+                    db.execute(
+                        "INSERT INTO events (seq, ts_utc, source, correlation_id,"
+                        " idempotency_key, type, payload_json, prev_hash, hash)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                        (
+                            seq,
+                            ts_utc,
+                            source,
+                            correlation_id,
+                            idempotency_key,
+                            type,
+                            payload_json,
+                            prev_hash,
+                            hash_,
+                        ),
+                    )
+                    stored.append(
+                        {
+                            "seq": seq,
+                            "ts_utc": ts_utc,
+                            "source": source,
+                            "correlation_id": correlation_id,
+                            "idempotency_key": idempotency_key,
+                            "type": type,
+                            "payload_json": payload_json,
+                            "prev_hash": prev_hash,
+                            "hash": hash_,
+                        }
+                    )
+                    seq, prev_hash = seq + 1, hash_
+                db.execute("COMMIT;")
+            except Exception:
+                with contextlib.suppress(sqlite3.Error):
+                    db.execute("ROLLBACK;")
+                raise
+            return stored
 
     def verify(self) -> bool:
         """Recompute every row hash in seq order; raise LedgerInconsistent on mismatch."""
@@ -201,6 +315,7 @@ class LedgerStore:
             hash_,
         ) in rows:
             if prev_hash != expected_prev:
+                self._inconsistent = True
                 raise LedgerInconsistent(
                     f"seq {seq}: prev_hash does not chain",
                     seq=seq,
@@ -216,8 +331,10 @@ class LedgerStore:
                 payload_json=payload_json,
             )
             if recomputed != hash_:
+                self._inconsistent = True
                 raise LedgerInconsistent(f"seq {seq}: hash mismatch", seq=seq)
             expected_prev = hash_
+        self._inconsistent = False
         return True
 
     def count(self) -> int:
