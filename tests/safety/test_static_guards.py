@@ -28,9 +28,18 @@ _CLOCK_PRIMITIVES = frozenset(
         "time.time",
         "time.monotonic",
         "datetime.now",
+        "datetime.utcnow",
+        "datetime.today",
+        "date.today",
     }
 )
-_AMBIENT_RANDOM = frozenset({"random.random", "random.SystemRandom"})
+
+
+def _is_ambient_random(resolved: str) -> bool:
+    """Every attribute of the random module except the seeded Random class (paper-engine 4.2)."""
+    return resolved.startswith("random.") and resolved != "random.Random"
+
+
 _BANNED_MODULES = frozenset({"uuid", "secrets"})
 
 
@@ -88,8 +97,8 @@ def _scan_file(path: Path, rel: str) -> list[str]:
             flag(line, f"use of {head} is banned")
         elif (head == "time" or tail in _CLOCK_PRIMITIVES) and not clock_ok:
             flag(line, f"{tail} used outside replay/clock.py")
-        elif tail in _AMBIENT_RANDOM:
-            flag(line, f"ambient randomness {tail} is banned")
+        elif _is_ambient_random(resolved):
+            flag(line, f"ambient randomness {resolved} is banned")
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -101,7 +110,7 @@ def _scan_file(path: Path, rel: str) -> list[str]:
                 qualified = f"{node.module}.{alias.name}"
                 if qualified in _CLOCK_PRIMITIVES and not clock_ok:
                     flag(node.lineno, f"{qualified} imported outside replay/clock.py")
-                if qualified in _AMBIENT_RANDOM:
+                if _is_ambient_random(qualified):
                     flag(node.lineno, f"ambient randomness {qualified} is banned")
         elif isinstance(node, (ast.Attribute, ast.Name)):
             resolved = _resolve(node, aliases)
@@ -151,6 +160,17 @@ PROBES: list[tuple[str, str, bool]] = [
     ("core/probe.py", "import uuid\n\nIDENT = uuid.uuid4()\n", True),
     ("core/probe.py", "import secrets\n\nTOKEN = secrets.token_hex(8)\n", True),
     ("core/probe.py", "import random\n\nX = random.random()\n", True),
+    ("core/probe.py", "import random\n\nX = random.randint(1, 6)\n", True),
+    ("core/probe.py", "import random\n\nX = random.choice([1, 2])\n", True),
+    ("core/probe.py", "from random import randint\n\nX = randint(1, 6)\n", True),
+    ("core/probe.py", "from datetime import datetime\n\nNOW = datetime.utcnow()\n", True),
+    ("core/probe.py", "from datetime import datetime\n\nNOW = datetime.today()\n", True),
+    ("core/probe.py", "from datetime import date\n\nTODAY = date.today()\n", True),
+    (
+        "core/probe.py",
+        "from random import Random\n\ndef f(r: Random) -> int:\n    return r.getrandbits(8)\n",
+        False,
+    ),
     ("core/probe.py", "import random\n\nRNG = random.Random()\n", True),
     ("core/probe.py", "import random\n\nRNG = random.Random(7)\n", True),
     (
