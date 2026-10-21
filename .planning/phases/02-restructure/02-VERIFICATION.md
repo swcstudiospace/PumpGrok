@@ -120,7 +120,7 @@ covered_files:
   - "tools/README.md"
   - "uv.lock"
 
-covered_digest: "v3:sha256:0fd5dea32cf070a13f89b3d32dfbedbdb52a2482d983c545e75605ea10570476"
+covered_digest: "v3:sha256:5a6760180a79a4c523e0fa8221381767d55002590a64d9acb4a0d211f34f40b3"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -153,11 +153,11 @@ re_verification:
 
 | #   | Truth   | Status     | Evidence       |
 | --- | ------- | ---------- | -------------- |
-| 1 | Ported read-only tools pass characterization tests reproducing the root unittest cases (STRUCT-002) | ✓ VERIFIED | SC1 exit 0, 13 passed (`.............`) |
-| 2 | Vendor oracle suite stays green, all 1:1 engine characterization tests pass, no untranslated Russian strings remain (STRUCT-003) | ✓ VERIFIED | SC2a exit 0 via /usr/bin/python3 (279 vendor tests); SC2b exit 0 (151 characterization tests); SC2c negated-grep exit 0 (no output) |
-| 3 | All 23 skills carry `bots`+`gates` frontmatter with L1/L2 bodies; no lite-api or --max-micro phrasing (STRUCT-007) | ✓ VERIFIED | SC3 compound exit 0; bots=23, gates=23; separate `lite-api` grep exit 1, `max-micro` grep exit 1 (clean) |
-| 4 | CLI exposes DISCOVERY+R12+R40 verbs and `paper buy` carries the five required flags (STRUCT-005) | ✓ VERIFIED | SC4a exit 0 (19 verbs); SC4b exit 0, all five flags present |
-| 5 | AST guard fails on any signing symbol outside the live stub; live stub builds no transaction (SEC-003) | ✓ VERIFIED | SC5 exit 0, 14 passed |
+| 1 | Ported read-only tools pass characterization tests reproducing the root unittest cases (STRUCT-002) | VERIFIED | SC1 exit 0, 13 passed (`.............`) |
+| 2 | Vendor oracle suite stays green, all 1:1 engine characterization tests pass, no untranslated Russian strings remain (STRUCT-003) | VERIFIED | SC2a exit 0 via /usr/bin/python3 (279 vendor tests); SC2b exit 0 (151 characterization tests); SC2c negated-grep exit 0 (no output) |
+| 3 | All 23 skills carry `bots`+`gates` frontmatter with L1/L2 bodies; no lite-api or --max-micro phrasing (STRUCT-007) | VERIFIED | SC3 compound exit 0; bots=23, gates=23; separate `lite-api` grep exit 1, `max-micro` grep exit 1 (clean) |
+| 4 | CLI exposes DISCOVERY+R12+R40 verbs and `paper buy` carries the five required flags (STRUCT-005) | VERIFIED | SC4a exit 0 (19 verbs); SC4b exit 0, all five flags present |
+| 5 | AST guard fails on any signing symbol outside the live stub; live stub builds no transaction (SEC-003) | VERIFIED | SC5 exit 0, 14 passed |
 
 **Score:** 5/5 truths verified (0 present-behavior-unverified).
 
@@ -183,14 +183,14 @@ No `-q` run collected zero tests this round, so no no-`-q` re-runs were needed. 
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `src/pumpgrok/tools/onchain/rpc.py` | single RPC client, httpx+tenacity, `sleep=clock.sleep`, ordered failover | ✓ VERIFIED | imported by authorities/holders/priority_fee; WR-02 fix re-verified (exception type logged, no URL) |
-| `src/pumpgrok/tools/onchain/{authorities,holders,priority_fee}.py` | ported read-only tools over rpc.py | ✓ VERIFIED | WR-01 fix re-verified (poisoned rows skipped, analysis continues); characterization green |
-| `src/pumpgrok/tools/market/jupiter.py` | quote-only Jupiter v2 order path | ✓ VERIFIED | characterization green |
-| `src/pumpgrok/engine/*` (monitor/analyzer/scoring/reputation/agents/tune/exits/watcher/pipeline) | ported vendor engine, reason codes unchanged | ✓ VERIFIED | 151 characterization tests green; WR-03/WR-04/WR-06 fixes re-verified via suite; CR-02 (socket drops) and CR-03 (reputation quarantine) covered by green suite + full run |
-| `src/pumpgrok/cli.py` | DISCOVERY+R12+R40 verbs; absent → `not-yet-implemented` exit 5 | ✓ VERIFIED | 19 verbs; WR-05 lamport rounding/cap inside paper path; suite green |
-| `skills/*/SKILL.md` (23) | `bots`+`gates`, L1/L2 bodies; quote-only Jupiter; no lite-api/--max-micro | ✓ VERIFIED | 23/23 bots, 23/23 gates; forbidden strings absent |
-| `tests/safety/test_no_signing_outside_live_stub.py` | AST guard | ✓ VERIFIED | 14 passed |
-| `hermes/cron/prompts/*.md` (6) | wrap `pumpgrok` subcommands only | ✓ VERIFIED | unchanged since initial verification |
+| `src/pumpgrok/tools/onchain/rpc.py` | single RPC client, httpx+tenacity, `sleep=clock.sleep`, ordered failover | VERIFIED | imported by authorities/holders/priority_fee; WR-02 fix re-verified (exception type logged, no URL) |
+| `src/pumpgrok/tools/onchain/{authorities,holders,priority_fee}.py` | ported read-only tools over rpc.py | VERIFIED | WR-01 fix re-verified (poisoned rows skipped, analysis continues); characterization green |
+| `src/pumpgrok/tools/market/jupiter.py` | quote-only Jupiter v2 order path | VERIFIED | characterization green |
+| `src/pumpgrok/engine/*` (monitor/analyzer/scoring/reputation/agents/tune/exits/watcher/pipeline) | ported vendor engine, reason codes unchanged | VERIFIED | 151 characterization tests green; WR-03/WR-04/WR-06 fixes re-verified via suite; CR-02 (socket drops) and CR-03 (reputation quarantine) covered by green suite + full run |
+| `src/pumpgrok/cli.py` | DISCOVERY+R12+R40 verbs; absent → `not-yet-implemented` exit 5 | VERIFIED | 19 verbs; WR-05 lamport rounding/cap inside paper path; suite green |
+| `skills/*/SKILL.md` (23) | `bots`+`gates`, L1/L2 bodies; quote-only Jupiter; no lite-api/--max-micro | VERIFIED | 23/23 bots, 23/23 gates; forbidden strings absent |
+| `tests/safety/test_no_signing_outside_live_stub.py` | AST guard | VERIFIED | 14 passed |
+| `hermes/cron/prompts/*.md` (6) | wrap `pumpgrok` subcommands only | VERIFIED | unchanged since initial verification |
 
 ### Key Link Verification
 
@@ -205,8 +205,8 @@ No `-q` run collected zero tests this round, so no no-`-q` re-runs were needed. 
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| full suite green | `uv run pytest -q` (once) | exit 0, 512 passed | ✓ PASS |
-| paper replay still cycles | replay command above | exit 0, `engine decision=skip` | ✓ PASS |
+| full suite green | `uv run pytest -q` (once) | exit 0, 512 passed | PASS |
+| paper replay still cycles | replay command above | exit 0, `engine decision=skip` | PASS |
 
 ### Requirements Coverage
 
@@ -223,7 +223,7 @@ No `-q` run collected zero tests this round, so no no-`-q` re-runs were needed. 
 | File | Pattern | Severity | Impact |
 |------|---------|----------|--------|
 | phase diff `src/ tests/ skills/` | `TBD/FIXME/XXX/TODO/HACK` (excl. required `not-yet-implemented` contract strings) | — | clean — zero hits |
-| `cli.py` help strings | "not yet implemented" | ℹ️ Info | required STRUCT-005 contract (exit 5 JSON), not debt |
+| `cli.py` help strings | "not yet implemented" | Info | required STRUCT-005 contract (exit 5 JSON), not debt |
 
 Full-suite regression: `uv run pytest -q` exit 0, 512 passed — review fixes introduced no regressions.
 
