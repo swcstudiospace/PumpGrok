@@ -28,6 +28,7 @@ from tenacity import (
 )
 
 from pumpgrok.replay.clock import Clock
+from pumpgrok.replay.rng import make_rng
 
 
 class RpcError(RuntimeError):
@@ -80,7 +81,7 @@ class RpcClient:
         self._endpoints = list(endpoints)
         self._client = client
         self._clock = clock
-        self._rng = rng if rng is not None else random.Random(0)
+        self._rng = rng if rng is not None else make_rng()
         self._api_key = api_key if api_key is not None else SecretStr("")
         self._timeout_seconds = timeout_seconds
         self._max_attempts = max(1, max_attempts_per_endpoint)
@@ -135,6 +136,4 @@ class RpcClient:
                 continue
             except (httpx.HTTPError, RetryError):
                 continue
-        raise RpcError(
-            f"rpc failed method={method} endpoints={len(self._endpoints)}"
-        ) from None
+        raise RpcError(f"rpc failed method={method} endpoints={len(self._endpoints)}") from None

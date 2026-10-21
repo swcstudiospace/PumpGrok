@@ -1,0 +1,21 @@
+{
+  "source": "hand-authored",
+  "note": "Jupiter Swap V2 order quote (quote-only, no taker); served by httpx.MockTransport, no network. priceImpact is percentage points (v2), not the v1 decimal ratio.",
+  "http": {
+    "inputMint": "So11111111111111111111111111111111111111112",
+    "outputMint": "MintMintMintMintMintMintMintMintMintMintMint",
+    "inAmount": "1000000000",
+    "outAmount": "500000000",
+    "otherAmountThreshold": "495000000",
+    "slippageBps": 100,
+    "priceImpact": "0.5",
+    "router": "mock-router",
+    "priceImpactPct": "0.005",
+    "swapUsdValue": "100.0",
+    "requestId": "hand-authored-request",
+    "routePlan": [
+      { "swapInfo": { "label": "mock-amm", "inputMint": "A", "outputMint": "B" }, "percent": 100 }
+    ],
+    "taker": null
+  }
+}

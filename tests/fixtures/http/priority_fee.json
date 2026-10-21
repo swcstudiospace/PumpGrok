@@ -1,0 +1,15 @@
+{
+  "source": "hand-authored",
+  "note": "getRecentPrioritizationFees response; served by httpx.MockTransport, no network",
+  "http": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": [
+      { "slot": 314159260, "prioritizationFee": 0 },
+      { "slot": 314159261, "prioritizationFee": 1000 },
+      { "slot": 314159262, "prioritizationFee": 2000 },
+      { "slot": 314159263, "prioritizationFee": 3000 },
+      { "slot": 314159264, "prioritizationFee": 4000 }
+    ]
+  }
+}

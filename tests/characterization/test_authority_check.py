@@ -37,8 +37,12 @@ def _body(name: str) -> dict:
 
 def _client(handler: httpx.MockTransport | None, **kwargs) -> tuple[RpcClient, FixtureClock]:
     clock = FixtureClock()
-    transport = handler if handler is not None else httpx.MockTransport(
-        lambda request: httpx.Response(200, json=_body("authority_ok.json"))
+    transport = (
+        handler
+        if handler is not None
+        else httpx.MockTransport(
+            lambda request: httpx.Response(200, json=_body("authority_ok.json"))
+        )
     )
     http = httpx.AsyncClient(transport=transport)
     rpc = RpcClient(
@@ -128,6 +132,7 @@ async def test_retry_uses_injected_clock_and_seeded_wait() -> None:
     expected = random.Random(7)
     ceiling = 0.1
     assert clock.sleeps == [ceiling + expected.uniform(0, ceiling)]
+
 
 @pytest.mark.characterization
 async def test_failover_tries_endpoints_in_order() -> None:

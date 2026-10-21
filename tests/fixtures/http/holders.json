@@ -1,0 +1,18 @@
+{
+  "source": "hand-authored",
+  "note": "getTokenLargestAccounts response; served by httpx.MockTransport, no network",
+  "http": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "context": { "slot": 314159267 },
+      "value": [
+        { "address": "Holder1111111111111111111111111111111111111", "amount": "600000000000", "decimals": 9, "uiAmount": 600.0, "uiAmountString": "600" },
+        { "address": "Holder2222222222222222222222222222222222222", "amount": "200000000000", "decimals": 9, "uiAmount": 200.0, "uiAmountString": "200" },
+        { "address": "Holder3333333333333333333333333333333333333", "amount": "100000000000", "decimals": 9, "uiAmount": 100.0, "uiAmountString": "100" },
+        { "address": "Holder4444444444444444444444444444444444444", "amount": "60000000000", "decimals": 9, "uiAmount": 60.0, "uiAmountString": "60" },
+        { "address": "Holder5555555555555555555555555555555555555", "amount": "40000000000", "decimals": 9, "uiAmount": 40.0, "uiAmountString": "40" }
+      ]
+    }
+  }
+}

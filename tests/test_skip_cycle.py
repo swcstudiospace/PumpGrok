@@ -153,6 +153,7 @@ def test_doctor_reports_absent_subsystems_as_warnings(
     assert main(["doctor"]) == 0
     out = capsys.readouterr().out
     assert "ok    ledger" in out
-    for absent in ("engine", "tools", "gateway", "supervisor", "reports"):
+    assert "ok    tools (pumpgrok.tools)" in out
+    for absent in ("engine", "gateway", "supervisor", "reports"):
         assert f"warn  {absent} (pumpgrok.{absent}): not-yet-implemented" in out
     assert not (tmp_path / "var").exists()
