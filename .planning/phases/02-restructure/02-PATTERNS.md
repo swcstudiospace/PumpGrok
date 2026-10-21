@@ -75,7 +75,13 @@ result = rpc_call(rpc_url, "getAccountInfo", [mint, {"encoding": "jsonParsed"}])
 if result is None or result.get("value") is None:
     return {"ok": False, "error": "Mint account not found or not a token mint"}
 ...
-return {"ok": True, "mint": mint, "mintAuthority": ..., "hasMintAuthority": mint_authority is not None, "rpc": rpc_url}
+return {
+    "ok": True,
+    "mint": mint,
+    "mintAuthority": ...,
+    "hasMintAuthority": mint_authority is not None,
+    "rpc": rpc_url,
+}
 ```
 Changes:
 - `"rpc": rpc_url` (`:72`) leaks the endpoint into output. Keep only keyless endpoints (research Pitfall 4/5), and redact at the RPC boundary.
@@ -118,8 +124,8 @@ def passes_filter(token: Token, cfg: FilterConfig) -> tuple[bool, str]:
         return False, "curve_too_full"
     if token.age_seconds < cfg.min_age_seconds:
         return False, "too_young"
-    if token.unique_buyers < cfg.min_unique_buyers:      # :109
-        return False, "few_buyers"                        # :110
+    if token.unique_buyers < cfg.min_unique_buyers:  # :109
+        return False, "few_buyers"  # :110
     return True, "ok"
 ```
 Port rules:
@@ -141,11 +147,15 @@ except TimeoutError:
 **Analog for row 20 analyzer: `vendor/grokbot-pumpfun/src/analyzer.py:38-80`.** Keep the injection shape:
 ```python
 class Analyzer:
-    def __init__(self, config: Config, client: httpx.AsyncClient | None = None) -> None:   # :41
+    def __init__(self, config: Config, client: httpx.AsyncClient | None = None) -> None:  # :41
         self._client = client
         self._owns_client = client is None
+
+
 ...
-async def _get(self, path: str, **params: Any) -> Any:                                     # :72
+
+
+async def _get(self, path: str, **params: Any) -> Any:  # :72
     try:
         resp = await self.client.get(path, params=params)
         resp.raise_for_status()
@@ -214,22 +224,25 @@ Port rules:
 
 **Analog for row 33 `config/settings.py`: Phase 1 `Settings` (`settings.py:112-127`) plus the vendor secret model (`vendor/.../models.py:271-287`).**
 ```python
-class ReplaySettings(BaseModel):                       # settings.py:98
+class ReplaySettings(BaseModel):  # settings.py:98
     model_config = ConfigDict(frozen=True, extra="forbid")
     seed: int = 20260101
 
-class Settings(BaseSettings):                          # :112
-    model_config = SettingsConfigDict(env_prefix="PUMPGROK_", env_nested_delimiter="__", extra="forbid")
-    risk: RiskBudget = Field(default_factory=RiskBudget)   # :125
+
+class Settings(BaseSettings):  # :112
+    model_config = SettingsConfigDict(
+        env_prefix="PUMPGROK_", env_nested_delimiter="__", extra="forbid"
+    )
+    risk: RiskBudget = Field(default_factory=RiskBudget)  # :125
     replay: ReplaySettings = Field(default_factory=ReplaySettings)
 ```
 Vendor secret pattern:
 ```python
-class GrokConfig(SecretModel):                         # models.py:277
-    api_key: SecretStr = SecretStr("")                 # :278
-    base_url: str = "https://api.x.ai/v1/chat/completions"   # :279
-    fast_model: str = "grok-4-fast"                    # :280
-    checker_model: str = "grok-4"                      # :281
+class GrokConfig(SecretModel):  # models.py:277
+    api_key: SecretStr = SecretStr("")  # :278
+    base_url: str = "https://api.x.ai/v1/chat/completions"  # :279
+    fast_model: str = "grok-4-fast"  # :280
+    checker_model: str = "grok-4"  # :281
 ```
 Port rules:
 - Add sections `data` (`ws_url`, `ws_max_queue=16`), `rpc` (`endpoints[]`), `grok` (`base_url=https://api.x.ai/v1`, `strong_model=grok-4.3`, `strong_effort=low`, `fast_model=grok-4.20-0309-non-reasoning`, `api_key: SecretStr`), `jupiter` (`quote_url`), `filter`, `scoring`, `exits`, `ops` (`reputation_path`). Do not extend `risk` (Pitfall 15).
@@ -249,11 +262,14 @@ def build_parser() -> argparse.ArgumentParser:                                  
     verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
 ```
 ```python
-def _run(args, settings) -> int:                                                  # :93
+def _run(args, settings) -> int:  # :93
     ...
     if not (args.once and args.replay):
-        _say(sys.stderr, "not implemented: this release runs only `run --mode paper --once --replay <dir>`")
-        return EXIT_NOT_IMPLEMENTED                                               # :105
+        _say(
+            sys.stderr,
+            "not implemented: this release runs only `run --mode paper --once --replay <dir>`",
+        )
+        return EXIT_NOT_IMPLEMENTED  # :105
 ```
 Port rules:
 - Add the DISCOVERY verbs as subparsers. Absent verbs print one JSON object on stdout (`{"ok": false, "status": "not-yet-implemented", "verb": ...}`) and exit 5. Today `_run` writes text to stderr only (`:102-105`). Research Open Q1 and CONTEXT Discretion say exit 2; `cli.py:5-6` reserves 2 for ledger. Use 5 (Pitfall 17).
@@ -263,7 +279,7 @@ Port rules:
 
 **Analog for JournalNote (engine decision row): `ledger/events.py:282-289` and `NoteKind` at `:75-86`.**
 ```python
-class JournalNote(_ClosedModel):          # :282, extra="forbid"
+class JournalNote(_ClosedModel):  # :282, extra="forbid"
     source: EventSource
     seat: str = "desk"
     note_kind: NoteKind = NoteKind.note
@@ -280,12 +296,13 @@ class SkillManifest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{1,60}$")
     description: str = Field(min_length=1, max_length=1024)
-    bots: list[str] = Field(min_length=1)          # :39
+    bots: list[str] = Field(min_length=1)  # :39
     gates: list[str] = Field(default_factory=list)
 ```
 ```python
 # scripts/check.sh: name must equal directory; description <= 1024; body <= 350 lines
-if name != os.path.basename(d): err(...)
+if name != os.path.basename(d):
+    err(...)
 ```
 Current state: 23 `skills/*/SKILL.md`, zero with `^bots:` or `^gates:` (verified). Frontmatter today has only `name` and `description`.
 
@@ -342,8 +359,10 @@ Keep the root oracle files untouched (R53). Their assertions (`lite-api`, `ticke
 def client(handler) -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url="http://test", transport=httpx.MockTransport(handler))
 
+
 async def test_fetch_hits_three_endpoints(config):
     seen: list[str] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request.url.path)
         ...

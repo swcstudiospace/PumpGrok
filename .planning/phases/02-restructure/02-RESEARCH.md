@@ -248,7 +248,9 @@ Every ported class takes its dependencies in `__init__`, the way `analyzer.py:41
 ```python
 # Illustrative shape; not final code. Names follow Phase 1 modules.
 class RpcClient:
-    def __init__(self, endpoints: Sequence[str], client: httpx.AsyncClient, clock: Clock) -> None: ...
+    def __init__(
+        self, endpoints: Sequence[str], client: httpx.AsyncClient, clock: Clock
+    ) -> None: ...
 ```
 
 ### Pattern 2: Replacing `asyncio.wait_for` and `asyncio.sleep`
@@ -481,8 +483,8 @@ from tenacity import AsyncRetrying, stop_after_attempt, retry_if_exception_type
 async for attempt in AsyncRetrying(
     stop=stop_after_attempt(3),
     retry=retry_if_exception_type((httpx.TimeoutException, RpcRetryable)),
-    wait=seeded_jitter_wait(rng),          # custom callable; avoids global random
-    sleep=clock.sleep,                     # R27
+    wait=seeded_jitter_wait(rng),  # custom callable; avoids global random
+    sleep=clock.sleep,  # R27
     reraise=True,
 ):
     with attempt:
@@ -492,7 +494,9 @@ async for attempt in AsyncRetrying(
 ### Explicit `now` in exit rules
 ```python
 # Source: risk.py:238-280 rewritten; rule order preserved (risk.py:255,258,264,272)
-def exit_signal(position: Position, price: float, cfg: ExitConfig, now: float) -> ExitSignal | None: ...
+def exit_signal(
+    position: Position, price: float, cfg: ExitConfig, now: float
+) -> ExitSignal | None: ...
 ```
 
 ### Settings-declared secret
