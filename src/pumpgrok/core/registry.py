@@ -13,9 +13,8 @@ Invariants (I1-I5):
      by library code only.
 """
 
-from __future__ import annotations
-
 import logging
+import random
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import UTC, datetime
 
@@ -30,10 +29,12 @@ from pumpgrok.core.ids import (
     current_correlation,
     next_span,
 )
+from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput
+from pumpgrok.replay.rng import make_rng
 
-log = logging.getLogger("pumpgrok.core")
+_DEFAULT_PER_MINUTE = 60.0  # skeleton budget until config tools.* lands (Phase 3)
 
 
 class GrantAudit(BaseModel):
@@ -63,11 +64,22 @@ class ToolRegistry:
         clock: Clock,
         audit_sink: Callable[[GrantAudit], None],
         limits_checker: Callable[[OrderRequest, str], Awaitable[bool]],
+        rng: random.Random | None = None,
     ) -> None:
         self._clock = clock
         self._tools: dict[str, Tool] = {}
         self._audit = audit_sink
         self._check_limits = limits_checker  # RiskEngine.check bound by cli.py
+        self._rng = rng if rng is not None else make_rng()
+        self._limiters: dict[str, RateLimiter] = {}
+
+    def _limiter_for(self, key: str) -> RateLimiter:
+        """One limiter per rate_limit_key; created lazily so keys stay in code."""
+        limiter = self._limiters.get(key)
+        if limiter is None:
+            limiter = RateLimiter(_DEFAULT_PER_MINUTE, None, self._clock)
+            self._limiters[key] = limiter
+        return limiter
 
     # -- registration -------------------------------------------------------
 
