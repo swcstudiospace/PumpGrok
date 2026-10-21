@@ -83,12 +83,10 @@ class ConfigError(RuntimeError):
 
 
 def mask(secret: str) -> str:
-    """How a secret may appear in logs: recognisable, not usable."""
+    """How a secret may appear in logs: its length, never any of its characters."""
     if not secret:
         return "<empty>"
-    if len(secret) <= 8:
-        return "***"
-    return f"{secret[:4]}...{secret[-4:]} ({len(secret)} chars)"
+    return f"*** ({len(secret)} chars)"
 
 
 class ExecutionSettings(BaseModel):

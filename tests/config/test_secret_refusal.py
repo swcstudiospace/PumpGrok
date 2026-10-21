@@ -46,7 +46,8 @@ def test_no_jito_or_wallet_material_in_model(clean_env: None) -> None:
 
 def test_mask_never_returns_full_secret() -> None:
     assert mask("") == "<empty>"
-    assert mask("short") == "***"
+    assert mask("short") == "*** (5 chars)"
+    assert mask("123456789") == "*** (9 chars)"
     assert mask("0123456789abcdef") != "0123456789abcdef"
 
 
