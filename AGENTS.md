@@ -1,3 +1,75 @@
+# PumpGrok desk: instructions for coding agents
+
+PumpGrok is a ten-seat, paper-first Solana trading desk (`src/pumpgrok/`), packaged in the
+programming-desk shape: path ownership, verification receipts, gates G-1..G-7, contracts and prompt
+assembly. Engagement levels are `research | paper` only (R16). No code path can move real funds.
+
+## Where the rules live
+
+The linked file is the rule. Do not treat a summary as a substitute.
+
+| Topic | File |
+|---|---|
+| Gates G-1..G-7, how to run them | [docs/quality-gates.md](docs/quality-gates.md) |
+| Ten seats, levels, flow of a trade | [docs/desk-operating-model.md](docs/desk-operating-model.md) |
+| Features that cross seats | [docs/cross-bot-protocol.md](docs/cross-bot-protocol.md) |
+| Key custody, secrets, container posture | [SECURITY.md](SECURITY.md) |
+| Security constitution (verbatim in every seat file) | [rules/pumpgrok-team.mdc](rules/pumpgrok-team.mdc) |
+| Path to owner | [ownership.yaml](ownership.yaml) |
+| Vendored engine pin and desk overrides | [docs/VENDOR_PIN.md](docs/VENDOR_PIN.md) |
+| Event and tool contracts | [contracts/README.md](contracts/README.md) |
+| Release history | [CHANGELOG.md](CHANGELOG.md) |
+
+## The ten seats
+
+| Seat id | Channel | Writes exchange |
+|---|---|---|
+| bot-00-chief | Trading Floor | no |
+| bot-01-scout | Trading Floor | no |
+| bot-02-risk | Trading Floor | no |
+| bot-03-whale | Trading Floor | no |
+| bot-04-sniper | Trading Floor | paper-write |
+| bot-05-rug | Trading Floor | no |
+| bot-06-exit | DM / off-channel | paper-write |
+| bot-07-shill | DM / off-channel | no |
+| bot-08-signal | DM / off-channel | no |
+| bot-09-journal | DM / off-channel | no |
+
+## Before the first edit
+
+Every path resolves to exactly one seat in [ownership.yaml](ownership.yaml). The last matching
+pattern wins, and an unowned path fails G-1. Resolve the paths you will edit before changing them.
+Cross-seat work follows [docs/cross-bot-protocol.md](docs/cross-bot-protocol.md).
+
+Work on a `bot-0N-<seat>/<unit>` branch. The gates workflow derives the acting seat from that
+prefix. Open a draft pull request. Do not merge, force-push or delete branches without approval.
+
+## Receipts
+
+No completion claim without a receipt under `.receipts/<seat>/<task-id>.json`. Record the commands
+you ran and their exit codes, and list what you did not verify. A seat never approves its own
+work. Receipts are gitignored; track one with `git add -f`.
+
+## Secrets
+
+Do not print, commit or echo keys, tokens, seed phrases, or `.env` contents. Reference environment
+variables by name only. G-3 is `python3 ci/gates/check_secrets.py`.
+
+## Run the checks
+
+```bash
+uv sync --frozen --group dev
+make lint typecheck test audit   # canonical suite (CI runs the same)
+./scripts/check.sh               # instruction-file lint, no network
+docker compose run --rm pumpgrok # one skip-only replay cycle, exits 0
+```
+
+Use `uv run` for Python commands. The replay is the only executable path in Phase 1.
+
+---
+
+Generated and maintained sections follow. The GSD marker blocks below are kept verbatim.
+
 <!-- GSD:project-start source:PROJECT.md -->
 
 ## Project
