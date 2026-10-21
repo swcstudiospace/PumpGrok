@@ -27,7 +27,6 @@ import os
 import re
 import tomllib
 from collections.abc import Iterator, Mapping, Sequence
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -38,6 +37,8 @@ from pydantic_settings import (
     SettingsConfigDict,
     TomlConfigSettingsSource,
 )
+
+from pumpgrok.core.risk_budget import RiskBudget
 
 Mode = Literal["paper", "live"]
 
@@ -88,22 +89,6 @@ def mask(secret: str) -> str:
     if len(secret) <= 8:
         return "***"
     return f"{secret[:4]}...{secret[-4:]} ({len(secret)} chars)"
-
-
-class RiskBudget(BaseModel):
-    """Risk limits. Money elsewhere is int; ratios here are Decimal (R28)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    max_trade_fraction: Decimal = Field(default=Decimal("0.02"), ge=0, le=1)
-    max_token_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)
-    # INV-C-06: the daily loss halt can never exceed 0.05.
-    daily_loss_halt_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=Decimal("0.05"))
-    drawdown_halt_fraction: Decimal = Field(default=Decimal("0.15"), ge=0, le=1)
-    max_open_positions: int = Field(default=3, ge=0)
-    max_trades_per_day: int = Field(default=20, ge=0)
-    liquidity_floor_multiple: int = Field(default=10, ge=1)
-    partial_fill_fraction: Decimal = Field(default=Decimal("0.02"), gt=0, le=1)
 
 
 class ExecutionSettings(BaseModel):

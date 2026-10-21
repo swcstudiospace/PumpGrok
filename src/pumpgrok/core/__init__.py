@@ -15,7 +15,7 @@ from pumpgrok.core.adapter import (
 )
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.atomic_write import atomic_write_json
-from pumpgrok.core.bot import Bot, BotManifest, RiskBudget, Schedule, ToolGrant
+from pumpgrok.core.bot import Bot, BotManifest, Schedule, ToolGrant
 from pumpgrok.core.correlation import child_span, is_child_span, root_of
 from pumpgrok.core.datasource import DataSource, Freshness, Health, HealthStatus
 from pumpgrok.core.errors import (
@@ -39,6 +39,7 @@ from pumpgrok.core.ids import (
     next_span,
 )
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import MAX_GRANTABLE_SIDE_EFFECT, SideEffect
 from pumpgrok.core.skill import Skill, SkillManifest, SkillPermissions
 from pumpgrok.core.tool import (

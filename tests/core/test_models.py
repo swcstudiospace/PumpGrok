@@ -12,8 +12,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pumpgrok.core.approvals import ApprovalRecord
-from pumpgrok.core.bot import BotManifest, RiskBudget, ToolGrant
+from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.idempotency import canonical_json, derive_idempotency_key
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 
 NINE_KEYS = {
