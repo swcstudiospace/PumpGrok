@@ -53,9 +53,7 @@ def test_candidate_hits_the_evidence_gate() -> None:
 def test_decide_token_reports_skip_with_reason() -> None:
     token = tick_to_candidate(_smoke_events()[1], now=1_767_225_603.0)
     decision = decide_token(token, _filter(), 1_767_225_603.0)
-    assert decision == EngineDecision(
-        decision="skip", reason=DATA_UNAVAILABLE, mint=token.mint
-    )
+    assert decision == EngineDecision(decision="skip", reason=DATA_UNAVAILABLE, mint=token.mint)
 
 
 def test_decide_replay_over_smoke_is_one_skip() -> None:

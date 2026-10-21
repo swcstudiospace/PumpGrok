@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-smoke-001",
+  "object": "chat.completion",
+  "created": 1767225600,
+  "model": "grok-4.20-0309-non-reasoning",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"trend_fit\": 0.8, \"virality\": 0.7, \"community_signals\": 0.6, \"launch_timing\": 0.5, \"reasoning\": \"smoke record: names rhyme, links present, first on the topic\"}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 120,
+    "completion_tokens": 40,
+    "total_tokens": 160
+  }
+}
