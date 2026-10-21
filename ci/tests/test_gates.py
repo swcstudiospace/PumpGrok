@@ -527,6 +527,19 @@ class TestG5G6RollbackAndDestructive:
         hits = rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DESTRUCTIVE_PATTERNS)
         assert hits and hits[0][2] == category
 
+    @pytest.mark.parametrize(
+        "cmd",
+        ["rm -rf var/replay", "rm -fr var/replay", "rm -f -r var/replay", "rm --recursive var/x"],
+    )
+    def test_recursive_rm_in_every_flag_form_is_destructive(self, rollback_gate, cmd):
+        hits = rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DESTRUCTIVE_PATTERNS)
+        assert hits and hits[0][2] == "fs"
+
+    @pytest.mark.parametrize("cmd", ["rm notes.txt", "rm -f notes.txt", "rm foo-rel.txt"])
+    def test_non_recursive_rm_is_not_recursive_destructive(self, rollback_gate, cmd):
+        hits = rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DESTRUCTIVE_PATTERNS)
+        assert not [h for h in hits if h[2] == "fs"]
+
     def test_halt_without_clear_is_not_destructive(self, rollback_gate):
         hits = rollback_gate.find_matches(
             [{"cmd": "uv run pumpgrok state halt --reason drawdown"}],

@@ -31,7 +31,7 @@ DESTRUCTIVE_PATTERNS: list[tuple[str, str, str]] = [
     (r"\bgit\s+push\b.*(?:--force|-f)\b", "git", "force push"),
     (r"\bgit\s+reset\s+--hard\b", "git", "discards work irrecoverably"),
     (r"\bgit\s+filter-(?:branch|repo)\b", "git", "rewrites history"),
-    (r"\brm\s+-rf?\b", "fs", "recursive delete"),
+    (r"\brm\s+(?:[^\n;&|]*\s)?(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b", "fs", "recursive delete"),
     (r"\bdocker\s+system\s+prune\b", "fs", "removes shared caches and volumes"),
     (r"\bdocker\s+volume\s+rm\b", "fs", "removes a volume"),
     (r"\bmkfs\b", "fs", "formats a filesystem"),
