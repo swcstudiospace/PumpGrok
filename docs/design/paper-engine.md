@@ -93,7 +93,9 @@ Both adapters consume prices through one interface (all integers; `Decimal` only
 class PriceSource(Protocol):
     async def curve(self, mint: str) -> CurveState | None: ...
     # CurveState(mint, s_lamports: int, t_units: int, complete: bool, source_ts: float, source: str)
-    async def spot(self, mint: str) -> Decimal | None: ...   # lamports per token base unit; None if unknown
+    async def spot(
+        self, mint: str
+    ) -> Decimal | None: ...  # lamports per token base unit; None if unknown
 ```
 
 Live-paper mode binds `PriceSource` to the pump.fun REST client (`/coins/{mint}` fields `virtual_sol_reserves`, `virtual_token_reserves`, executor.py:85-90) with the PumpPortal trade stream as a faster update path (`vSolInBondingCurve`, monitor.py:155-157). Replay mode binds it to the fixture feed (section 4). PaperAdapter does not know which.
@@ -450,11 +452,13 @@ src/pumpgrok/replay/
 
 ```python
 class Clock(Protocol):
-    def now(self) -> float: ...             # epoch seconds (UTC)
+    def now(self) -> float: ...  # epoch seconds (UTC)
     def monotonic(self) -> float: ...
-    def utc_iso(self) -> str: ...           # ts_utc for ledger events
+    def utc_iso(self) -> str: ...  # ts_utc for ledger events
     async def sleep(self, seconds: float) -> None: ...
-    def timeout(self, seconds: float) -> AbstractAsyncContextManager[None]: ...   # replaces asyncio.timeout
+    def timeout(
+        self, seconds: float
+    ) -> AbstractAsyncContextManager[None]: ...  # replaces asyncio.timeout
 ```
 
 `WallClock` delegates to `time.time`, `time.monotonic`, `asyncio.sleep`, `asyncio.timeout`. `FixtureClock` holds a virtual time that only advances when (a) the runner delivers the next fixture event, or (b) a task calls `sleep(s)` or a `timeout(s)` deadline is the earliest pending wake; sleeping tasks and deadlines are queued in one heap and woken in `(wake_time, enqueue_seq)` order so scheduling is deterministic regardless of asyncio's internal ordering and of host CPU speed. All sleeps, timeouts and retry waits go through the Clock: `clock.sleep`, `clock.timeout`, and every tenacity retrier is built with `sleep=clock.sleep` (R27). Direct `asyncio.timeout`, `asyncio.wait_for`, `asyncio.sleep`, `time.time`, `time.monotonic` and `datetime.now` are forbidden outside `replay/clock.py` by the static test `tests/safety/test_virtual_time_only.py`. The vendor already injects `clock` into `RiskManager` (`risk.py:45`), `RateLimiter` (`ops.py:93-98`), `CircuitBreaker` (`ops.py:139-143`), `CallBudget` (`ops.py:191-196`), `Metrics` (`ops.py:44`); the port keeps that style and extends it to every module that reads time.
@@ -811,8 +815,13 @@ When the effective mode is `paper` the gate is not evaluated; `LiveAdapter` cons
 
 ```python
 class LiveAdapter(LiveAdapterStub):
-    async def place(self, order):  await self._audit(order, "place"); raise LiveGateError("live place disabled", unmet=list(self._gate.check()))
-    async def cancel(self, order_id, ticket_id, decision_id):  await self._audit(None, "cancel"); raise LiveGateError("live cancel disabled", unmet=list(self._gate.check()))
+    async def place(self, order):
+        await self._audit(order, "place")
+        raise LiveGateError("live place disabled", unmet=list(self._gate.check()))
+
+    async def cancel(self, order_id, ticket_id, decision_id):
+        await self._audit(None, "cancel")
+        raise LiveGateError("live cancel disabled", unmet=list(self._gate.check()))
 ```
 
 `_audit` appends `LiveWriteAttempted(adapter="live", method, caller_seat, gate_result)` before raising, so an attempt is recorded even though nothing happened. Under D3 no seat can resolve a live-write tool from the registry in the first place, so reaching `LiveAdapter.place` already means a registry bug; the ledger event plus a critical Notifier alert makes that visible. There is no code path in `LiveAdapter` that builds, signs or sends a transaction (D4); the six-step vendor TODO (executor.py:151-162) is not carried over. No live auto-exit exists: an EXIT sell in live mode hits the same `LiveGateError` (R17).

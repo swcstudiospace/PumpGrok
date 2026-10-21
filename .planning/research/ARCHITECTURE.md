@@ -137,21 +137,40 @@ con = sqlite3.connect(path, timeout=cfg.busy_timeout_s, autocommit=True, uri=Tru
 con.execute("PRAGMA journal_mode=WAL")
 con.execute("PRAGMA synchronous=FULL")
 
+
 def append(self, event: Event) -> int:
-    con.execute("BEGIN IMMEDIATE")              # write lock first, then read the head
+    con.execute("BEGIN IMMEDIATE")  # write lock first, then read the head
     try:
         row = con.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1").fetchone()
         seq, prev = (row[0] + 1, row[1]) if row else (1, "0" * 64)
-        body = {"prev_hash": prev, "seq": seq, "ts_utc": event.ts_utc, "source": event.source,
-                "correlation_id": event.correlation_id, "type": event.type,
-                "payload_json": canonical_json(event.payload)}
+        body = {
+            "prev_hash": prev,
+            "seq": seq,
+            "ts_utc": event.ts_utc,
+            "source": event.source,
+            "correlation_id": event.correlation_id,
+            "type": event.type,
+            "payload_json": canonical_json(event.payload),
+        }
         h = hashlib.sha256(canonical_json(body).encode()).hexdigest()
-        con.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?)",
-                    (seq, event.ts_utc, event.source, event.correlation_id,
-                     event.idempotency_key, event.type, body["payload_json"], prev, h))
+        con.execute(
+            "INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                seq,
+                event.ts_utc,
+                event.source,
+                event.correlation_id,
+                event.idempotency_key,
+                event.type,
+                body["payload_json"],
+                prev,
+                h,
+            ),
+        )
         con.execute("COMMIT")
     except BaseException:
-        con.execute("ROLLBACK"); raise
+        con.execute("ROLLBACK")
+        raise
     return seq
 ```
 
@@ -172,14 +191,22 @@ def append(self, event: Event) -> int:
 **Example:**
 ```python
 # first-party jittered wait, seeded; passes mypy --strict
-def full_jitter(rng: random.Random, base_s: float, max_s: float) -> Callable[[RetryCallState], float]:
+def full_jitter(
+    rng: random.Random, base_s: float, max_s: float
+) -> Callable[[RetryCallState], float]:
     def wait(state: RetryCallState) -> float:
         high = min(max_s, base_s * (2 ** (state.attempt_number - 1)))
         return rng.uniform(0.0, high)
+
     return wait
 
-retrier = AsyncRetrying(sleep=clock.sleep, wait=full_jitter(rng, 0.5, 5.0),
-                        stop=stop_after_attempt(policy.attempts), reraise=True)
+
+retrier = AsyncRetrying(
+    sleep=clock.sleep,
+    wait=full_jitter(rng, 0.5, 5.0),
+    stop=stop_after_attempt(policy.attempts),
+    reraise=True,
+)
 ```
 
 ### Pattern 3: Risk engine as library code inside the execution adapter (check at NEW, re-check at CONFIRMING, in-flight barrier)

@@ -20,10 +20,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-
 
 TICKET_RE = re.compile(r"SOL-\d{8}-\d{3}")
 SCAN_CHILDREN = (
@@ -59,7 +57,7 @@ def ensure_dir() -> Path:
 
 
 def today_str() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d")
+    return datetime.now(UTC).strftime("%Y%m%d")
 
 
 def list_existing_ids() -> list[str]:
@@ -89,9 +87,9 @@ def next_ticket_id() -> str:
 
 def create_proposal(
     mint: str,
-    size: Optional[str] = None,
+    size: str | None = None,
     slippage_bps: int = 100,
-    ticket: Optional[str] = None,
+    ticket: str | None = None,
     status: str = "PENDING_RISK",
 ) -> dict:
     folder = ensure_dir()
@@ -117,7 +115,7 @@ def create_proposal(
 - **Size:** {size or "TBD"}
 - **Max Slippage (bps):** {slippage_bps}
 - **Status:** {status}
-- **Created:** {datetime.now(timezone.utc).isoformat()}
+- **Created:** {datetime.now(UTC).isoformat()}
 
 ## RISK
 (to be filled by RISK Bot)

@@ -658,9 +658,7 @@ def _evidence_shape_problems(
     # evidence that pattern most often: a missing-target error, a command
     # that only checks existence and never looks at content either way, and
     # a quiet-grep compound with no independent proof its target existed.
-    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(
-        _strip_quoted(cmd_text)
-    ):
+    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(_strip_quoted(cmd_text)):
         return [
             f"claim[{i}] {text!r} sets expects_failure and asserts "
             f"exhaustiveness, but command[{idx}]'s evidence reads as the "
@@ -779,10 +777,7 @@ def _condition_problems(i: int, ack: dict) -> list[str]:
     """The condition must name a known degraded-mode cause."""
     cond = ack.get("condition")
     if cond and (not isinstance(cond, str) or cond not in LOOP_ACK_CONDITIONS):
-        return [
-            f"loop_acks[{i}] condition {cond!r} is not one of "
-            f"{sorted(LOOP_ACK_CONDITIONS)}"
-        ]
+        return [f"loop_acks[{i}] condition {cond!r} is not one of {sorted(LOOP_ACK_CONDITIONS)}"]
     return []
 
 

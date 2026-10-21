@@ -179,7 +179,7 @@ except subprocess.CalledProcessError as exc:
 **Fix:** Match any short-flag cluster containing `r` or the long form:
 
 ```python
-(r"\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*\b|--recursive\b)", "fs", "recursive delete"),
+((r"\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*\b|--recursive\b)", "fs", "recursive delete"),)
 ```
 
 Add cases for `rm -fr`, `rm -f -r` and `rm --recursive`.

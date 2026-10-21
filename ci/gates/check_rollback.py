@@ -147,8 +147,7 @@ def trade_approval_problems(destructive: list, approvals: list) -> list[str]:
     """A trade op needs an approval naming the human-accepted max notional."""
     trade_hits = [hit for hit in destructive if hit[2] == "trade"]
     if trade_hits and not any(
-        isinstance(a, dict)
-        and TRADE_BLAST_RADIUS_RE.match(str(a.get("blast_radius") or ""))
+        isinstance(a, dict) and TRADE_BLAST_RADIUS_RE.match(str(a.get("blast_radius") or ""))
         for a in approvals
     ):
         return [

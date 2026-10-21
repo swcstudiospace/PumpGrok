@@ -16,7 +16,7 @@ Appends a structured paper fill to the journal. Never touches real capital.
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ from typing import Any
 def append_paper_fill(desk: Path, record: dict[str, Any]) -> str:
     journal_dir = desk / "journal"
     journal_dir.mkdir(parents=True, exist_ok=True)
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     path = journal_dir / f"paper-{day}.md"
 
     line = (
@@ -66,7 +66,7 @@ def main():
         "slippageBps": args.slippage_bps,
         "reason": args.reason,
         "note": args.note,
-        "utc": datetime.now(timezone.utc).isoformat(),
+        "utc": datetime.now(UTC).isoformat(),
     }
 
     try:

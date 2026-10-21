@@ -41,10 +41,7 @@ def rpc_call(rpc_url: str, method: str, params: list) -> dict[str, Any]:
 
 def check_mint(mint: str, rpc_url: str) -> dict[str, Any]:
     try:
-        result = rpc_call(rpc_url, "getAccountInfo", [
-            mint,
-            {"encoding": "jsonParsed"}
-        ])
+        result = rpc_call(rpc_url, "getAccountInfo", [mint, {"encoding": "jsonParsed"}])
 
         if result is None or result.get("value") is None:
             return {"ok": False, "error": "Mint account not found or not a token mint"}

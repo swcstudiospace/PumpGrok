@@ -208,7 +208,7 @@ Behaviour the library does NOT provide (verified), so the loader must add it:
 ```python
 # Source: verified /tmp/probe/test_probe.py - sqlite3 stdlib, WAL, trigger refusal
 conn = sqlite3.connect(path, isolation_level=None)  # explicit transactions
-conn.execute("PRAGMA journal_mode=WAL")            # returned 'wal'
+conn.execute("PRAGMA journal_mode=WAL")  # returned 'wal'
 conn.execute("BEGIN IMMEDIATE")
 # read head (seq, hash) -> compute prev_hash, hash -> INSERT
 conn.execute("COMMIT")
@@ -345,8 +345,17 @@ An unannotated `settings_customise_sources` fails `--strict` (verified). Annotat
 ### Forbidden-name and unknown-key refusal (skeleton; implement in config/settings.py)
 ```python
 # Source: derived from verified behaviour (Pitfalls 1-3); names from hermes/profiles.yaml:18-23 and CONTEXT
-FORBIDDEN_SUBSTRINGS = ("PRIVATE_KEY", "SECRET_KEY", "SEED", "MNEMONIC", "PHANTOM", "WALLET_SECRET", "KEYPAIR")
+FORBIDDEN_SUBSTRINGS = (
+    "PRIVATE_KEY",
+    "SECRET_KEY",
+    "SEED",
+    "MNEMONIC",
+    "PHANTOM",
+    "WALLET_SECRET",
+    "KEYPAIR",
+)
 EXEMPT_ENV = frozenset({"PUMPGROK_REPLAY__SEED"})
+
 
 def refuse_forbidden_env(environ: Mapping[str, str]) -> list[str]:
     bad = []
@@ -366,17 +375,39 @@ def append(self, event: EventRecord) -> int:
     with self._conn_lock:
         self._conn.execute("BEGIN IMMEDIATE")
         try:
-            prev = self._conn.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1").fetchone()
+            prev = self._conn.execute(
+                "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1"
+            ).fetchone()
             seq = (prev[0] + 1) if prev else 1
             prev_hash = prev[1] if prev else "0" * 64
-            body = canonical_json({"prev_hash": prev_hash, "seq": seq, "ts_utc": event.ts_utc,
-                                   "source": event.source, "correlation_id": event.correlation_id,
-                                   "type": event.type, "payload_json": event.payload_json,
-                                   # recommended addition, Open Question Q3:
-                                   "idempotency_key": event.idempotency_key})
+            body = canonical_json(
+                {
+                    "prev_hash": prev_hash,
+                    "seq": seq,
+                    "ts_utc": event.ts_utc,
+                    "source": event.source,
+                    "correlation_id": event.correlation_id,
+                    "type": event.type,
+                    "payload_json": event.payload_json,
+                    # recommended addition, Open Question Q3:
+                    "idempotency_key": event.idempotency_key,
+                }
+            )
             h = hashlib.sha256(body.encode()).hexdigest()
-            self._conn.execute("INSERT INTO events (seq, ts_utc, source, correlation_id, idempotency_key, type, payload_json, prev_hash, hash) VALUES (?,?,?,?,?,?,?,?,?)",
-                               (seq, event.ts_utc, event.source, event.correlation_id, event.idempotency_key, event.type, event.payload_json, prev_hash, h))
+            self._conn.execute(
+                "INSERT INTO events (seq, ts_utc, source, correlation_id, idempotency_key, type, payload_json, prev_hash, hash) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    seq,
+                    event.ts_utc,
+                    event.source,
+                    event.correlation_id,
+                    event.idempotency_key,
+                    event.type,
+                    event.payload_json,
+                    prev_hash,
+                    h,
+                ),
+            )
             self._conn.execute("COMMIT")
             return seq
         except Exception:

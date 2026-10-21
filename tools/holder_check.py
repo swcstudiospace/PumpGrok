@@ -18,9 +18,7 @@ try:
     import requests
 except ImportError:
     sys.stdout.write(
-        json.dumps(
-            {"ok": False, "error": "requests library required. Run: pip install requests"}
-        )
+        json.dumps({"ok": False, "error": "requests library required. Run: pip install requests"})
         + "\n"
     )
     sys.exit(1)
@@ -55,11 +53,13 @@ def holder_snapshot(mint: str, rpc_url: str, limit: int = 20) -> dict[str, Any]:
         for item in value[:limit]:
             ui = float(item.get("uiAmount") or 0)
             total_ui += ui
-            holders.append({
-                "address": item.get("address"),
-                "uiAmount": ui,
-                "decimals": item.get("decimals"),
-            })
+            holders.append(
+                {
+                    "address": item.get("address"),
+                    "uiAmount": ui,
+                    "decimals": item.get("decimals"),
+                }
+            )
 
         # Simple concentration metrics (note: does not exclude LP automatically)
         top1 = holders[0]["uiAmount"] / total_ui if holders and total_ui else 0

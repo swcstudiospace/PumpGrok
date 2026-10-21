@@ -249,6 +249,7 @@ def _version_bump_problems(doc: dict) -> list[str]:
             pass
     return problems
 
+
 def check_change_doc(
     doc: dict, manifest: dict, touched: list[str] | None = None, change_path: Path | None = None
 ) -> list[str]:

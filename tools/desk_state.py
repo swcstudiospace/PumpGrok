@@ -13,10 +13,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-
 
 DESK_CHILDREN = (
     "proposals",
@@ -37,7 +35,7 @@ HALT_RE = re.compile(r"(?im)^\s*[-*]?\s*\**Halt:\**\s*(true|false|yes|no|1|0)")
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def repo_root() -> Path:
@@ -78,7 +76,7 @@ def parse_desk_md(text: str) -> dict[str, object]:
     return {"engagement": engagement, "halt": halt}
 
 
-def ticket_id_from_name(path: Path) -> Optional[str]:
+def ticket_id_from_name(path: Path) -> str | None:
     m = TICKET_RE.search(path.stem)
     return m.group(0) if m else None
 
@@ -105,7 +103,7 @@ def all_ticket_ids(desk: Path) -> list[str]:
 
 
 def next_ticket_id(desk: Path) -> str:
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     prefix = f"SOL-{today}-"
     seq = 1
     for tid in all_ticket_ids(desk):
@@ -125,12 +123,12 @@ def pending_leads(desk: Path) -> list[dict[str, str]]:
     return out
 
 
-def brief_verdict(path: Path) -> Optional[str]:
+def brief_verdict(path: Path) -> str | None:
     m = VERDICT_RE.search(read_text(path))
     return m.group(1).upper() if m else None
 
 
-def proposal_status(path: Path) -> Optional[str]:
+def proposal_status(path: Path) -> str | None:
     m = STATUS_RE.search(read_text(path))
     return m.group(1).upper() if m else None
 
@@ -261,9 +259,7 @@ def main() -> int:
     if args.command == "next-id":
         ensure_desk(desk)
         sys.stdout.write(
-            json.dumps(
-                {"ok": True, "ticket": next_ticket_id(desk), "desk": str(desk)}, indent=2
-            )
+            json.dumps({"ok": True, "ticket": next_ticket_id(desk), "desk": str(desk)}, indent=2)
             + "\n"
         )
         return 0

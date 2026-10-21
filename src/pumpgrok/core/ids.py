@@ -13,7 +13,18 @@ import contextvars
 import random
 
 from pumpgrok.core.errors import PumpgrokError
-from pumpgrok.replay.clock import Clock as Clock
+from pumpgrok.replay.clock import Clock
+
+__all__ = [
+    "ULID_RE",
+    "Clock",
+    "CorrelationId",
+    "IdFactory",
+    "ambient_correlation",
+    "bind_correlation",
+    "current_correlation",
+    "next_span",
+]
 
 ULID_RE = r"^[0-9A-HJKMNP-TV-Z]{26}$"  # Crockford base32, 48-bit ms time + 80-bit rng
 

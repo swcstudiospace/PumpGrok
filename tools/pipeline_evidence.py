@@ -14,10 +14,9 @@ or reads secrets. tx_hash dry_run is not a fill.
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
-
+from typing import Any
 
 DEFAULT_LOG = "vendor/grokbot-pumpfun/logs/trades.jsonl"
 SOURCES = "vendor/grokbot-pumpfun logs/trades.jsonl"
@@ -52,9 +51,7 @@ def utc_iso(ts: Any) -> str:
     if not is_number(ts):
         return "unavailable"
     try:
-        return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        return datetime.fromtimestamp(float(ts), tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     except (OverflowError, OSError, ValueError):
         return "unavailable"
 
@@ -65,7 +62,7 @@ def fmt_pct(share: Any) -> str:
     return f"{float(share) * 100:.1f}%"
 
 
-def as_dict(value: Any) -> Optional[dict[str, Any]]:
+def as_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
@@ -75,7 +72,7 @@ def display_or_dash(value: Any) -> str:
     return str(value)
 
 
-def analyzer_line(metrics: Optional[dict[str, Any]]) -> str:
+def analyzer_line(metrics: dict[str, Any] | None) -> str:
     if metrics is None:
         return "unavailable"
     risk = metrics.get("risk_score")
@@ -85,7 +82,7 @@ def analyzer_line(metrics: Optional[dict[str, Any]]) -> str:
     return f"{risk_part}, creator holding {creator}, top-5 {top5}"
 
 
-def audit_line(audit: Optional[dict[str, Any]]) -> str:
+def audit_line(audit: dict[str, Any] | None) -> str:
     if audit is None:
         return "unavailable"
     coordinated = audit.get("coordinated_buying")
@@ -100,7 +97,7 @@ def audit_line(audit: Optional[dict[str, Any]]) -> str:
     )
 
 
-def narrative_line(narrative: Optional[dict[str, Any]]) -> str:
+def narrative_line(narrative: dict[str, Any] | None) -> str:
     if narrative is None:
         return "unavailable"
     trend = narrative.get("trend_fit")
@@ -115,7 +112,7 @@ def narrative_line(narrative: Optional[dict[str, Any]]) -> str:
     )
 
 
-def checker_approve(checker: Optional[dict[str, Any]]) -> str:
+def checker_approve(checker: dict[str, Any] | None) -> str:
     if checker is None:
         return "unavailable"
     approve = checker.get("approve")
@@ -124,7 +121,7 @@ def checker_approve(checker: Optional[dict[str, Any]]) -> str:
     return "unavailable"
 
 
-def total_score(scores: Optional[dict[str, Any]]) -> str:
+def total_score(scores: dict[str, Any] | None) -> str:
     if scores is None:
         return "unavailable"
     total = scores.get("total")
@@ -202,18 +199,15 @@ def load_records(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 def matches(
     record: dict[str, Any],
-    mint: Optional[str],
-    rtype: Optional[str],
+    mint: str | None,
+    rtype: str | None,
     candidates: bool,
 ) -> bool:
     if mint is not None and record.get("mint") != mint:
         return False
     if rtype is not None and record.get("type") != rtype:
         return False
-    return not (
-        candidates
-        and (record.get("type") != "buy" or record.get("tx_hash") != "dry_run")
-    )
+    return not (candidates and (record.get("type") != "buy" or record.get("tx_hash") != "dry_run"))
 
 
 def fail(error: str) -> int:
@@ -224,8 +218,7 @@ def fail(error: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE. "
-            "Never signs or sends."
+            "Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE. Never signs or sends."
         )
     )
     parser.add_argument(
@@ -271,11 +264,7 @@ def main() -> int:
     except OSError as exc:
         return fail(str(exc))
 
-    filtered = [
-        rec
-        for rec in records
-        if matches(rec, args.mint, args.type, args.candidates)
-    ]
+    filtered = [rec for rec in records if matches(rec, args.mint, args.type, args.candidates)]
     limit = max(0, args.limit)
     selected = filtered[-limit:] if limit else []
 

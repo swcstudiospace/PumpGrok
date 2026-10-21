@@ -245,6 +245,7 @@ class bind_correlation:
         assert self._token is not None
         _correlation.reset(self._token)
 
+
 # ---------------------------------------------------------------------------
 # 2.4 Idempotency keys
 # ---------------------------------------------------------------------------
@@ -446,7 +447,9 @@ class DataSource(Protocol):
     name: str  # 'pumpfun_rest' | 'pumpportal_ws' | 'jupiter_lite' | 'solana_rpc' | 'xai_grok'
     rate_limit_key: str
 
-    async def fetch(self, request: Mapping[str, Any], *, max_age_s: float) -> tuple[Any, Freshness]: ...
+    async def fetch(
+        self, request: Mapping[str, Any], *, max_age_s: float
+    ) -> tuple[Any, Freshness]: ...
 
     def freshness(self, key: str) -> Freshness | None: ...
 
@@ -595,13 +598,16 @@ class ExecutionAdapter(Protocol):
     mode: ClassVar[ExecutionMode]
     venue: ClassVar[str]  # 'paper' | 'disabled'
 
-    async def quote(self, input_mint: str, output_mint: str, amount: int, slippage_bps: int) -> Quote: ...
+    async def quote(
+        self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
+    ) -> Quote: ...
 
     async def simulate(self, request: OrderRequest) -> SimulationResult: ...
 
     async def place(self, request: OrderRequest) -> Fill: ...
 
     async def cancel(self, order_id: str, ticket_id: str, decision_id: str) -> bool: ...
+
     # True only while the order is ACCEPTED; appends OrderRejected(reason=cancelled, stage=ACCEPTED).
     # False (and no event) once the latency sleep has completed.
 
@@ -624,9 +630,13 @@ class LiveAdapterStub:
         unmet = gate.check()
         if unmet:
             raise LiveGateError("live adapter construction refused", unmet=list(unmet))
-        raise LiveGateError("live adapters are not implemented in this release", unmet=["adapter_registered"])
+        raise LiveGateError(
+            "live adapters are not implemented in this release", unmet=["adapter_registered"]
+        )
 
-    async def quote(self, input_mint: str, output_mint: str, amount: int, slippage_bps: int) -> Quote:
+    async def quote(
+        self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
+    ) -> Quote:
         raise LiveGateError("live quote disabled")
 
     async def simulate(self, request: OrderRequest) -> SimulationResult:
@@ -717,7 +727,9 @@ class Skill(Protocol):
 
     manifest: ClassVar[SkillManifest]
 
-    async def run(self, registry: ToolRegistry, bot: BotManifest, context: Mapping[str, Any]) -> Mapping[str, Any]: ...
+    async def run(
+        self, registry: ToolRegistry, bot: BotManifest, context: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -818,7 +830,9 @@ class BotManifest(BaseModel):
             if g.name == "risk.kill_switch" and self.id != "bot-02-risk":
                 raise ValueError(f"{self.id} may not hold risk.kill_switch")
             if g.name == "notify.alert" and self.id in ("bot-02-risk", "bot-05-rug"):
-                raise ValueError(f"{self.id} escalates via desk.event_emit kind=escalation; the supervisor relays to notify.alert (R35)")
+                raise ValueError(
+                    f"{self.id} escalates via desk.event_emit kind=escalation; the supervisor relays to notify.alert (R35)"
+                )
             if g.name == "portfolio.ledger_write":
                 raise ValueError("portfolio.ledger_write is adapter-only, never a seat grant")
         return self
@@ -828,7 +842,9 @@ class BotManifest(BaseModel):
 class Bot(Protocol):
     manifest: ClassVar[BotManifest]
 
-    async def cycle(self, registry: ToolRegistry, trigger: Mapping[str, Any]) -> Mapping[str, Any]: ...
+    async def cycle(
+        self, registry: ToolRegistry, trigger: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
 
     async def heartbeat(self) -> Health: ...
 
@@ -865,11 +881,15 @@ class ApprovalRecord(BaseModel):
     mint: str | None = None
     size_lamports: int | None = Field(default=None, gt=0)
     max_slippage_bps: int | None = None
-    exit_rule_id: str | None = None  # exit_rule kind: which rule of engine/exits.py is pre-approved for this ticket
+    exit_rule_id: str | None = (
+        None  # exit_rule kind: which rule of engine/exits.py is pre-approved for this ticket
+    )
     approved_by: str  # 'human:<name>' for human kinds; 'risk_engine' for autonomous_paper
     raw_message: str
     at: datetime  # Clock time (R27)
-    consumed: bool = False  # single-send: one approval, one order; reduced from ApprovalRecorded rows
+    consumed: bool = (
+        False  # single-send: one approval, one order; reduced from ApprovalRecorded rows
+    )
 
     HUMAN_KINDS: ClassVar[frozenset[str]] = frozenset(
         {"human_buy", "human_sell", "exit_rule", "killswitch_clear", "halt_clear", "live_gate"}
@@ -881,7 +901,10 @@ class ApprovalRecord(BaseModel):
             if not self.approved_by.startswith("human:"):
                 raise ValueError("human approval must be signed by a human, not a seat")
             if self.kind in ("human_buy", "human_sell") and (
-                self.ticket_id is None or self.mint is None or self.size_lamports is None or self.max_slippage_bps is None
+                self.ticket_id is None
+                or self.mint is None
+                or self.size_lamports is None
+                or self.max_slippage_bps is None
             ):
                 raise ValueError("human trade approval must carry ticket, mint, size, slippage")
             if self.kind == "exit_rule" and (self.ticket_id is None or self.exit_rule_id is None):
@@ -994,13 +1017,17 @@ class ToolRegistry:
         effect does not exceed `max_side_effect`; an exact name must match exactly.
         """
         cid = current_correlation()
-        candidates = [t for n, t in self._tools.items() if n == capability or n.startswith(capability + ".")]
+        candidates = [
+            t for n, t in self._tools.items() if n == capability or n.startswith(capability + ".")
+        ]
         if not candidates:
             self._refuse(bot, capability, max_side_effect, "unknown_tool", cid)
         for t in sorted(candidates, key=lambda t: t.spec.name):
             spec = t.spec
             if spec.side_effect is SideEffect.LIVE_WRITE:
-                self._refuse(bot, spec.name, spec.side_effect, "live_write_never_resolvable", cid, live=True)
+                self._refuse(
+                    bot, spec.name, spec.side_effect, "live_write_never_resolvable", cid, live=True
+                )
             grant = bot.grant_for(spec.name)
             if grant is None:
                 if capability == spec.name:
@@ -1010,16 +1037,52 @@ class ToolRegistry:
                 self._refuse(bot, spec.name, spec.side_effect, "exceeds_grant", cid)
             if spec.side_effect.exceeds(max_side_effect):
                 self._refuse(bot, spec.name, spec.side_effect, "exceeds_requested_max", cid)
-            self._audit(GrantAudit(at=self._now(), bot=bot.id, tool=spec.name, requested_side_effect=spec.side_effect, allowed=True, reason="ok", correlation_id=cid))
+            self._audit(
+                GrantAudit(
+                    at=self._now(),
+                    bot=bot.id,
+                    tool=spec.name,
+                    requested_side_effect=spec.side_effect,
+                    allowed=True,
+                    reason="ok",
+                    correlation_id=cid,
+                )
+            )
             return self._wrap(t, bot)
         self._refuse(bot, capability, max_side_effect, "no_granted_tool_in_namespace", cid)
         raise AssertionError("unreachable")
 
-    def _refuse(self, bot: BotManifest, tool_name: str, se: SideEffect, reason: str, cid: str, *, live: bool = False) -> None:
-        self._audit(GrantAudit(at=self._now(), bot=bot.id, tool=tool_name, requested_side_effect=se, allowed=False, reason=reason, correlation_id=cid))
+    def _refuse(
+        self,
+        bot: BotManifest,
+        tool_name: str,
+        se: SideEffect,
+        reason: str,
+        cid: str,
+        *,
+        live: bool = False,
+    ) -> None:
+        self._audit(
+            GrantAudit(
+                at=self._now(),
+                bot=bot.id,
+                tool=tool_name,
+                requested_side_effect=se,
+                allowed=False,
+                reason=reason,
+                correlation_id=cid,
+            )
+        )
         if live:
-            raise LiveGateError(f"{bot.id} attempted live-write tool {tool_name}", tool=tool_name, bot=bot.id)
-        raise PermissionDenied(f"{bot.id} may not resolve {tool_name}: {reason}", tool=tool_name, bot=bot.id, reason=reason)
+            raise LiveGateError(
+                f"{bot.id} attempted live-write tool {tool_name}", tool=tool_name, bot=bot.id
+            )
+        raise PermissionDenied(
+            f"{bot.id} may not resolve {tool_name}: {reason}",
+            tool=tool_name,
+            bot=bot.id,
+            reason=reason,
+        )
 
     def _wrap(self, t: Tool, bot: BotManifest) -> Tool:
         """Apply Clock-routed timeout and retry, rate limit, correlation stamping and, for
@@ -1037,9 +1100,13 @@ class ToolRegistry:
                 cid = next_span(current_correlation())
                 with bind_correlation(cid):
                     if spec.requires_approval:
-                        req = OrderRequest.model_validate(payload.model_dump() | {"correlation_id": str(cid)})
+                        req = OrderRequest.model_validate(
+                            payload.model_dump() | {"correlation_id": str(cid)}
+                        )
                         if not await check_limits(req, bot.id):
-                            raise PermissionDenied("RiskEngine.check refused", tool=spec.name, bot=bot.id)
+                            raise PermissionDenied(
+                                "RiskEngine.check refused", tool=spec.name, bot=bot.id
+                            )
                     # rate limit applied here by the implementation; retries use
                     # tenacity(sleep=clock.sleep, ...) per spec.retry (R27)
                     async with clock.timeout(spec.timeout_s):

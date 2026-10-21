@@ -468,11 +468,7 @@ class TestG4Contracts:
         self, contracts_gate, manifest
     ):
         # R56: the required set is consumers minus proposed_by (bot-04-sniper here).
-        acks = [
-            {"bot": bot, "ack": True}
-            for bot in manifest["bots"]
-            if bot != "bot-04-sniper"
-        ]
+        acks = [{"bot": bot, "ack": True} for bot in manifest["bots"] if bot != "bot-04-sniper"]
         doc = _change_doc(
             manifest,
             breaking=True,
@@ -483,9 +479,7 @@ class TestG4Contracts:
         )
         assert contracts_gate.check_change_doc(doc, manifest) == []
 
-    def test_proposer_rejection_is_ignored_on_a_breaking_change(
-        self, contracts_gate, manifest
-    ):
+    def test_proposer_rejection_is_ignored_on_a_breaking_change(self, contracts_gate, manifest):
         acks = [
             {"bot": bot, "ack": bot != "bot-04-sniper", "note": "changed my mind"}
             for bot in manifest["bots"]
@@ -500,9 +494,7 @@ class TestG4Contracts:
         )
         assert contracts_gate.check_change_doc(doc, manifest) == []
 
-    def test_proposer_rejection_is_ignored_on_a_non_breaking_change(
-        self, contracts_gate, manifest
-    ):
+    def test_proposer_rejection_is_ignored_on_a_non_breaking_change(self, contracts_gate, manifest):
         acks = [
             {"bot": bot, "ack": bot != "bot-04-sniper", "note": "changed my mind"}
             for bot in manifest["bots"]
@@ -510,9 +502,7 @@ class TestG4Contracts:
         doc = _change_doc(manifest, acknowledgements=acks)
         assert contracts_gate.check_change_doc(doc, manifest) == []
 
-    def test_non_proposer_rejection_fails_a_breaking_change(
-        self, contracts_gate, manifest
-    ):
+    def test_non_proposer_rejection_fails_a_breaking_change(self, contracts_gate, manifest):
         acks = [
             {"bot": bot, "ack": bot != "bot-09-journal", "note": "breaks my reader"}
             for bot in manifest["bots"]
@@ -526,13 +516,9 @@ class TestG4Contracts:
             acknowledgements=acks,
         )
         problems = contracts_gate.check_change_doc(doc, manifest)
-        assert any(
-            "bot-09-journal" in p and "REJECTED" in p for p in problems
-        )
+        assert any("bot-09-journal" in p and "REJECTED" in p for p in problems)
 
-    def test_non_proposer_rejection_fails_a_non_breaking_change(
-        self, contracts_gate, manifest
-    ):
+    def test_non_proposer_rejection_fails_a_non_breaking_change(self, contracts_gate, manifest):
         acks = [
             {"bot": bot, "ack": bot != "bot-09-journal", "note": "needs discussion"}
             for bot in manifest["bots"]
@@ -540,10 +526,8 @@ class TestG4Contracts:
         doc = _change_doc(manifest, acknowledgements=acks)
         problems = contracts_gate.check_change_doc(doc, manifest)
         assert any(
-            "bot-09-journal" in p and "rejected this non-breaking change" in p
-            for p in problems
+            "bot-09-journal" in p and "rejected this non-breaking change" in p for p in problems
         )
-
 
 
 # ---------------------------------------------------------------------------

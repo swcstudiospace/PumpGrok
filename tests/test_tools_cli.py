@@ -15,7 +15,6 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 
@@ -190,9 +189,7 @@ class HermesScriptsExecutable(unittest.TestCase):
 
 class TicketHelperDocs(unittest.TestCase):
     def test_lifecycle_skill_uses_real_subcommands(self):
-        text = (ROOT / "skills" / "desk-trade-lifecycle" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
+        text = (ROOT / "skills" / "desk-trade-lifecycle" / "SKILL.md").read_text(encoding="utf-8")
         self.assertNotIn("ticket_helper.py --write", text)
         self.assertIn("ticket_helper.py next", text)
         self.assertIn("ticket_helper.py create", text)

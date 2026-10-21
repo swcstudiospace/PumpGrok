@@ -423,17 +423,14 @@ Command: `rg -n -i "private_key|secret_key|seed|mnemonic|keypair|sign\(|send_tra
 ```python
 class LiveExecutor(BaseExecutor):
     ...
+
     async def buy(self, token: Token, size_sol: float) -> ExecutionResult:
         # TODO(live): ... 1. Load Keypair from config.solana.wallet_private_key (solders.keypair).
         # ... 5. if jito.enabled add tip and send bundle; else send_transaction via RPC.
-        raise NotImplementedError(
-            "LiveExecutor.buy ... before enabling mode: live"
-        )
+        raise NotImplementedError("LiveExecutor.buy ... before enabling mode: live")
 
     async def sell(self, position: Position) -> ExecutionResult:
-        raise NotImplementedError(
-            "LiveExecutor.sell ... before enabling mode: live"
-        )
+        raise NotImplementedError("LiveExecutor.sell ... before enabling mode: live")
 ```
 
 (`:161-164` and `:169-172`; Russian message text elided.) It is selected only by

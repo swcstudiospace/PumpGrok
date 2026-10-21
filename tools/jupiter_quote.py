@@ -18,9 +18,7 @@ try:
     import requests
 except ImportError:
     sys.stdout.write(
-        json.dumps(
-            {"ok": False, "error": "requests library required. Run: pip install requests"}
-        )
+        json.dumps({"ok": False, "error": "requests library required. Run: pip install requests"})
         + "\n"
     )
     sys.exit(1)

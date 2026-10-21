@@ -183,9 +183,7 @@ def classify_files(
     return unowned, foreign, contracts
 
 
-def report_ownership_failure(
-    bot: str, unowned: list[str], foreign: list[tuple[str, str]]
-) -> int:
+def report_ownership_failure(bot: str, unowned: list[str], foreign: list[tuple[str, str]]) -> int:
     """Print the G-1 failure detail. Always returns 1."""
     print(f"G-1 FAIL — {bot}", file=sys.stderr)
     for path in unowned:

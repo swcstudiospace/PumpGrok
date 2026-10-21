@@ -98,6 +98,7 @@
 class ConfigError(RuntimeError):
     """Config is not fit to start. The list of problems is the argument."""
 
+
 def mask(secret: str) -> str:
     """How a secret may appear in logs: enough to recognise, not enough to use."""
 ```
@@ -117,7 +118,7 @@ def settings_customise_sources(
 ) -> tuple[PydanticBaseSettingsSource, ...]:
     files = [overlay_path(profile)]
     if config_file := os.environ.get("PUMPGROK_CONFIG"):
-        files.append(Path(config_file))          # later file wins
+        files.append(Path(config_file))  # later file wins
     return (init_settings, env_settings, TomlConfigSettingsSource(settings_cls, toml_file=files))
 ```
 
@@ -149,7 +150,9 @@ class RiskBudget(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     max_trade_fraction: Decimal = Field(default=Decimal("0.02"), ge=0, le=1)
     max_token_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)
-    daily_loss_halt_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)  # validator: <= 0.05
+    daily_loss_halt_fraction: Decimal = Field(
+        default=Decimal("0.05"), ge=0, le=1
+    )  # validator: <= 0.05
     drawdown_halt_fraction: Decimal = Field(default=Decimal("0.15"), ge=0, le=1)
     max_open_positions: int = Field(default=3, ge=0)
     max_trades_per_day: int = Field(default=20, ge=0)
@@ -171,7 +174,7 @@ behind, `clear`).
 Append pattern (RESEARCH Pattern 2, verified):
 
 ```python
-conn = sqlite3.connect(path, isolation_level=None)   # explicit transactions
+conn = sqlite3.connect(path, isolation_level=None)  # explicit transactions
 conn.execute("PRAGMA journal_mode=WAL")
 conn.execute("BEGIN IMMEDIATE")
 # read head (seq, hash); prev_hash = 64 zeros for seq 1; hash = sha256(canonical_json({...}))
@@ -201,7 +204,7 @@ module docstring.
 
 ```python
 class IdFactory:
-    def __init__(self, clock: Clock, rng: random.Random) -> None:   # type rng tightly, not Any
+    def __init__(self, clock: Clock, rng: random.Random) -> None:  # type rng tightly, not Any
         self._clock = clock
         self._rng = rng
 
