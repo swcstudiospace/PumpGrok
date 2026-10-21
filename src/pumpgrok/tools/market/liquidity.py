@@ -77,9 +77,10 @@ async def run_liquidity(inp: LiquidityIn, rpc: RpcClient) -> dict[str, Any]:
     vsol = Decimal(state.virtual_sol_reserves_lamports)
     order = Decimal(inp.order_size_lamports)
     impact = order / (vsol + order) if order > 0 else Decimal(0)
+    token_reserves_units = state.virtual_token_reserves_units
     out = {
         "virtual_sol_reserves_lamports": state.virtual_sol_reserves_lamports,
-        "virtual_token_reserves_units": state.virtual_token_reserves_units,
+        "virtual_token_reserves_units": token_reserves_units,  # pragma: allowlist secret: field
         "liquidity_lamports": state.virtual_sol_reserves_lamports,
         "curve_progress": curve_progress(state),
         "price_impact": impact,

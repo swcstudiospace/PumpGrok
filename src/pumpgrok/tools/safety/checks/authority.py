@@ -30,7 +30,7 @@ def check_mint_authority(auth: dict[str, Any]) -> CheckResult:
 
 def check_freeze_authority(auth: dict[str, Any]) -> CheckResult:
     """Pass when the freeze authority is revoked; fail while one is live."""
-    live = bool(auth.get("has_freeze_authority"))
+    live = bool(auth.get("has_freeze_authority"))  # pragma: allowlist secret: RPC field name
     return CheckResult(
         id="freeze_authority",
         status="fail" if live else "pass",

@@ -13,7 +13,7 @@ import httpx
 
 __all__ = ["TELEGRAM_ENV_VAR", "TelegramSender", "read_telegram_token"]
 
-TELEGRAM_ENV_VAR = "PUMPGROK_TELEGRAM_TOKEN"
+TELEGRAM_ENV_VAR = "PUMPGROK_TELEGRAM_TOKEN"  # pragma: allowlist secret: env var name
 
 
 def read_telegram_token() -> str:
