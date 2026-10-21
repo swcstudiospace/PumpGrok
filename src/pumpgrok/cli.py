@@ -4,13 +4,15 @@ Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and
 print text (exemptions: the replay checkpoint prints the engine-decision line and the
 doctor report is human-readable). Every other section-12 verb is a thin JSON wrapper
 over catalog tools through `build_operator_registry` + `registry.find` (TOOL-011, I1):
-`paper buy|sell` (fail closed on unknown `--approval-id`, exit 1, R63), `state`,
-`killswitch`, `scout`, `risk`, `chief`, `rug`, `journal`, `ticket`, `report`,
-`audit`, `verify`. Absent backends print the JSON error envelope and exit 5 (B5
-partial until Phase 4); human-only verbs (`killswitch clear`, `state halt --clear`,
-`state autonomy`, `live confirm`) record their intent shape and exit 5 (R22); replay
-maintenance verbs exit 5. `paper` and `state` require `--seat` and refuse
-`sniper`/`exit`. Hidden `tools <id> --help` prints the tool JSON schema (B8).
+`paper buy|sell` (simulate then place against the paper engine; fail closed on
+unknown `--approval-id`, exit 1, R63), `state` (status, halt, halt --clear,
+autonomy, resume), `killswitch` (set, flatten, status, clear), `ticket`
+(next, create, list), `verify`, plus the find-only orchestration verbs
+(`scout`, `risk`, `chief`, `rug`, `journal`, `report`, `audit`) and the
+human-only `live confirm`, which print the JSON envelope and exit 5 (B5
+partial until Phase 4). Replay maintenance verbs exit 5. `paper` and `state`
+halt/autonomy require `--seat` and refuse `sniper`/`exit`. Hidden
+`tools <id> --help` prints the tool JSON schema (B8).
 Exit codes: 0 ok; 1 config or usage; 2 ledger inconsistent; 3 live refused; 4 corrupt
 fixture; 5 not implemented. argparse's own exit 2 is overridden so that 2 means only a
 ledger inconsistency. Stdout carries JSON (or the doctor report and the engine decision);
@@ -33,6 +35,7 @@ import os
 import re
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn, TextIO
@@ -47,20 +50,25 @@ from pumpgrok.config.settings import (
     refuse_cli_secrets,
 )
 from pumpgrok.contracts.projection import short_to_seat
+from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import DataStale, PumpgrokError, ReplayMissingRecord
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
+from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.logging.json import setup_logging
 from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import CorruptFixture
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import run_replay
-from pumpgrok.risk.killswitch import SEAT_RE
+from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
@@ -406,7 +414,9 @@ def _add_journal_ticket(verbs: _VerbsAction, mode_option: _Parser) -> None:
     ticket_cmd.add_parser("next", help="allocate the next ticket id")
     ticket_create = ticket_cmd.add_parser("create", help="draft a ticket")
     ticket_create.add_argument("--mint", default=None, help="mint address")
-    ticket_create.add_argument("--ticket", default=None, help="ticket id SOL-YYYYMMDD-NNN")
+    ticket_create.add_argument(
+        "--ticket", default=None, type=_ticket, help="ticket id SOL-YYYYMMDD-NNN"
+    )
     ticket_create.add_argument("--status", default=None, help="initial ticket status")
     ticket_cmd.add_parser("list", help="list tickets")
 
@@ -427,6 +437,9 @@ def _add_state(verbs: _VerbsAction, mode_option: _Parser) -> None:
     )
     state_autonomy.add_argument("--by", required=True, help="human setting the policy")
     _add_seat(state_autonomy)
+    state_resume = state_cmd.add_parser("resume", help="resume a seat from observe-only")
+    state_resume.add_argument("--seat", required=True, help="seat to resume")
+    state_resume.add_argument("--by", required=True, help="human resuming the seat")
 
 
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
@@ -446,9 +459,9 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch_cmd.add_parser("status", help="report killswitch state")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")
-    paper_buy = paper_cmd.add_parser("buy", help="paper buy (not yet implemented)")
+    paper_buy = paper_cmd.add_parser("buy", help="paper buy against the paper engine")
     _add_paper_trade_flags(paper_buy)
-    paper_sell = paper_cmd.add_parser("sell", help="paper sell (not yet implemented)")
+    paper_sell = paper_cmd.add_parser("sell", help="paper sell against the paper engine")
     _add_paper_trade_flags(paper_sell)
     live = verbs.add_parser("live", parents=[mode_option], help="live verbs")
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
@@ -523,22 +536,24 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _paper(args: argparse.Namespace, settings: Settings) -> int:
-    verb = f"paper {args.cmd}"
-    refused = _refuse_forbidden_seat(args.seat, verb)
-    if refused is not None:
-        return refused
-    lamports = size_sol_to_lamports(args.size_sol)
-    if lamports > settings.risk.paper_equity_lamports:
-        _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
-        return EXIT_CONFIG
+_APPROVAL_REASONS = frozenset({"approval_missing", "approval_mismatch", "approval_unknown"})
 
-    async def use(_tools: list[Tool]) -> int:
-        # R63: no paper trade without a valid approval. Phase 3 has no
-        # approval-issue/consume path (RiskEngine check plus the PaperAdapter
-        # place transaction land in Phase 4), so every presented approval_id
-        # is unknown: fail closed with exit 1 and write nothing. A fresh
-        # decision_id is minted per invocation here in Phase 4 (R23).
+
+def _mint_approval_id() -> str:
+    """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29)."""
+    return f"apr-{IdFactory(WallClock(), make_rng()).ulid()}"
+
+
+def _paper_outcome(verb: str, body: dict[str, Any]) -> int:
+    """Map a place result to the CLI contract: fills exit 0, refusals exit 1."""
+    status = body.get("status")
+    if status in ("filled", "partial"):
+        _say(sys.stdout, json.dumps(body))
+        return EXIT_OK
+    reason = str(body.get("reason") or "order_rejected")
+    if reason in _APPROVAL_REASONS:
+        # R63: no paper trade without a valid approval; fail closed
+        # with the established CLI envelope and write nothing.
         _say(
             sys.stdout,
             json.dumps(
@@ -551,6 +566,87 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
         )
         _say(sys.stderr, f"refused: no valid approval_id for `{verb}` (R63)")
         return EXIT_CONFIG
+    if status == "unknown":
+        return _tool_error(verb, "order_unknown", reason)
+    return _tool_error(verb, "order_rejected", reason)
+
+
+async def _paper_trade(
+    verb: str,
+    tools: list[Tool],
+    *,
+    ticket: str,
+    mint: str,
+    side: str,
+    lamports: int,
+    slippage_bps: int,
+    approval_id: str,
+    seed: int,
+) -> int:
+    """Simulate then place one paper order; a fresh decision_id per call (R23)."""
+    simulate_tool, place_tool = tools
+    sim_fields: dict[str, Any] = {
+        "ticket_id": ticket,
+        "mint": mint,
+        "side": side,
+        "size_lamports": lamports,
+        "slippage_bps": slippage_bps,
+    }
+    try:
+        sim_in = simulate_tool.spec.input_model(**sim_fields)
+    except ValidationError as exc:
+        msg = f"bad simulate input: {exc.errors()[0]['msg']}"
+        return _tool_error(verb, "invalid_arguments", msg)
+    try:
+        _sim_out = await simulate_tool(sim_in)
+    except PumpgrokError as exc:
+        return _tool_error(verb, exc.code, exc.message)
+    # Place is idempotent on (ticket, side, decision), so a retry never
+    # double-fills.
+    decision_id = IdFactory(WallClock(), make_rng(seed)).ulid()
+    place_fields: dict[str, Any] = {
+        "ticket_id": ticket,
+        "mint": mint,
+        "side": side,
+        "decision_id": decision_id,
+        "size_lamports": lamports,
+        "max_slippage_bps": slippage_bps,
+        "approval_id": approval_id,
+    }
+    try:
+        place_in = place_tool.spec.input_model(**place_fields)
+    except ValidationError as exc:
+        msg = f"bad place input: {exc.errors()[0]['msg']}"
+        return _tool_error(verb, "invalid_arguments", msg)
+    try:
+        out = await place_tool(place_in)
+    except PumpgrokError as exc:
+        return _tool_error(verb, exc.code, exc.message)
+    return _paper_outcome(verb, out.model_dump(mode="json"))
+
+
+def _paper(args: argparse.Namespace, settings: Settings) -> int:
+    verb = f"paper {args.cmd}"
+    refused = _refuse_forbidden_seat(args.seat, verb)
+    if refused is not None:
+        return refused
+    lamports = size_sol_to_lamports(args.size_sol)
+    if lamports > settings.risk.paper_equity_lamports:
+        _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
+        return EXIT_CONFIG
+
+    async def use(tools: list[Tool]) -> int:
+        return await _paper_trade(
+            verb,
+            tools,
+            ticket=args.ticket,
+            mint=args.mint,
+            side=args.cmd,
+            lamports=lamports,
+            slippage_bps=args.slippage_bps,
+            approval_id=args.approval_id,
+            seed=settings.replay.seed,
+        )
 
     return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 
@@ -580,14 +676,81 @@ def _set_autonomy(policy: str, by: str) -> int:
     return EXIT_OK
 
 
+def _halt_clear(by: str, reason: str) -> int:
+    """Append ``HaltCleared`` plus the consumed ``halt_clear`` approval (R5)."""
+    verb = "state halt --clear"
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        clock = WallClock()
+        engine = RiskEngine(
+            store=store,
+            budget=RiskBudget(),
+            ids=IdFactory(clock, make_rng()),
+            clock=clock,
+            limits=EngineLimits(),
+        )
+        approval = ApprovalRecord(
+            id=_mint_approval_id(),
+            kind="halt_clear",
+            approved_by=by,
+            raw_message=reason,
+            at=datetime.fromtimestamp(clock.now(), UTC),
+        )
+        try:
+            engine.request_halt_clear(approval, reason, source="paper", correlation_id="desk")
+        except ValueError as exc:
+            return _tool_error(verb, "halt_clear_refused", str(exc))
+    finally:
+        store.close()
+    _say(sys.stdout, json.dumps({"ok": True, "halt": "cleared", "by": by, "reason": reason}))
+    return EXIT_OK
+
+
+def _resume(target: str, by: str) -> int:
+    """Record a seat resume from observe-only (paper-engine.md 6.4, R22)."""
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        ts_utc = format_ts_utc(WallClock().now())
+        store.append(
+            ts_utc=ts_utc,
+            source="paper",
+            correlation_id="desk",
+            idempotency_key=f"resume|{target}|{ts_utc}",
+            type="JournalNote",
+            payload={
+                "source": "paper",
+                "seat": target,
+                "note_kind": "note",
+                "text": f"resume {target} by {by}",
+                "refs": [],
+            },
+        )
+    finally:
+        store.close()
+    _say(sys.stdout, json.dumps({"ok": True, "seat": target, "by": by}))
+    return EXIT_OK
+
+
 def _state(args: argparse.Namespace, settings: Settings) -> int:
     verb = f"state {args.cmd}"
+    if args.cmd == "resume":
+        # Human-only (R22): the supervisor folds the note in 04-08. The
+        # target seat resolves through the roster; sniper/exit targets are
+        # allowed here because resuming them is the point.
+        by = _human_by(args.by, verb)
+        try:
+            target = _seat_manifest_id(args.seat)
+        except UsageError as exc:
+            _say(sys.stderr, f"usage error: {exc}")
+            return EXIT_CONFIG
+        return _resume(target, by)
     refused = _refuse_forbidden_seat(args.seat, verb)
     if refused is not None:
         return refused
     if args.cmd == "halt" and args.clear:
-        # Human-only (R22): the ledger HaltCleared + ApprovalRecord land in Phase 4.
-        return _not_implemented("state halt --clear", {"by": args.by, "reason": args.reason})
+        # Human-only (R22): the ledger HaltCleared + ApprovalRecord.
+        by = _human_by(args.by, verb)
+        return _halt_clear(by, args.reason or "")
     if args.cmd == "autonomy":
         # Human-only (R17, R40): ConfigChanged plus a journal note, one batch.
         by = _human_by(args.by, verb)
@@ -595,16 +758,47 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
         async def _autonomy_use(_tools: list[Tool]) -> int:
             return _set_autonomy(args.policy, by)
 
-        return _run_wired(verb, args.seat, settings, ("portfolio.ledger_read",), _autonomy_use)
+        return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _autonomy_use)
     return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _call_use(verb, 0, {}))
+
+
+def _killswitch_clear(by: str, reason: str) -> int:
+    """Append ``KillSwitchCleared`` plus the ``killswitch_clear`` approval."""
+    verb = "killswitch clear"
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        clock = WallClock()
+        switch = KillSwitch(
+            clock,
+            store=store,
+            killswitch_path=Path("var") / "desk" / "KILLSWITCH",
+        )
+        approval = ApprovalRecord(
+            id=_mint_approval_id(),
+            kind="killswitch_clear",
+            approved_by=by,
+            raw_message=reason,
+            at=datetime.fromtimestamp(clock.now(), UTC),
+        )
+        try:
+            switch.request_clear(
+                approval, reason, ts_utc=format_ts_utc(clock.now()), source="paper"
+            )
+        except (ClearRefused, ValueError) as exc:
+            return _tool_error(verb, "killswitch_clear_refused", str(exc))
+    finally:
+        store.close()
+    _say(sys.stdout, json.dumps({"ok": True, "killswitch": "cleared", "by": by, "reason": reason}))
+    return EXIT_OK
 
 
 def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
     verb = f"killswitch {args.cmd}"
     if args.cmd == "clear":
-        # Human-only (R22): the ledger KillSwitchCleared + ApprovalRecord
-        # kind killswitch_clear land in Phase 4. No tool, no seat.
-        return _not_implemented(verb, {"by": args.by, "reason": args.reason})
+        # Human-only (R22): the ledger KillSwitchCleared + ApprovalRecord.
+        # No seat: the human identity in --by is the authorization.
+        by = _human_by(args.by, verb)
+        return _killswitch_clear(by, args.reason)
     if args.cmd == "set":
         return _run_wired(
             verb,
@@ -622,6 +816,77 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
             _call_use(verb, 0, {"action": "flatten_request", "reason": args.reason}),
         )
     return _run_wired(verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {}))
+
+
+def _ticket_verb(args: argparse.Namespace, settings: Settings) -> int:
+    """Allocate and list paper tickets over the canonical ledger (R29, R33)."""
+    del settings
+    verb = f"ticket {args.cmd}"
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        ts_utc = format_ts_utc(WallClock().now())
+        if args.cmd == "next":
+            ticket_id = allocate_ticket(
+                store,
+                ts_utc=ts_utc,
+                source="paper",
+                correlation_id="desk",
+                seat="desk",
+                title="lead",
+            )
+            _say(sys.stdout, json.dumps({"ok": True, "ticket_id": ticket_id}))
+            return EXIT_OK
+        if args.cmd == "create":
+            if args.ticket is not None:
+                ticket_id = args.ticket
+                taken = {
+                    str(note.get("payload", {}).get("refs", [None])[0])
+                    for note in store.read(types=["JournalNote"], limit=None)
+                    if isinstance(note.get("payload"), dict)
+                    and note["payload"].get("note_kind") == "ticket"
+                }
+                if ticket_id in taken:
+                    return _tool_error(verb, "ticket_taken", f"ticket already exists: {ticket_id}")
+                title = " ".join(part for part in (args.mint, args.status) if part) or "lead"
+                store.append(
+                    ts_utc=ts_utc,
+                    source="paper",
+                    correlation_id="desk",
+                    idempotency_key=f"ticket:{ticket_id}",
+                    type="JournalNote",
+                    payload={
+                        "source": "paper",
+                        "seat": "desk",
+                        "note_kind": "ticket",
+                        "text": f"{ticket_id} {title}",
+                        "refs": [ticket_id],
+                    },
+                )
+            else:
+                title = " ".join(part for part in (args.mint, args.status) if part) or "lead"
+                ticket_id = allocate_ticket(
+                    store,
+                    ts_utc=ts_utc,
+                    source="paper",
+                    correlation_id="desk",
+                    seat="desk",
+                    title=title,
+                )
+            _say(sys.stdout, json.dumps({"ok": True, "ticket_id": ticket_id}))
+            return EXIT_OK
+        if args.cmd == "list":
+            tickets = [
+                str(note["payload"]["refs"][0])
+                for note in store.read(types=["JournalNote"], limit=None)
+                if isinstance(note.get("payload"), dict)
+                and note["payload"].get("note_kind") == "ticket"
+                and note["payload"].get("refs")
+            ]
+            _say(sys.stdout, json.dumps({"ok": True, "tickets": tickets}))
+            return EXIT_OK
+    finally:
+        store.close()
+    return _not_implemented(verb)
 
 
 def _find_only(verb: str, seat: str, settings: Settings, capabilities: Sequence[str]) -> int:
@@ -776,7 +1041,6 @@ _FIND_ONLY_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
     "chief": ("chief", _CHIEF_PICKUP),
     "rug": ("rug", _RUG_WATCH),
     "journal": ("journal", ("journal.render_report",)),
-    "ticket": ("journal", ("journal.append", "portfolio.ledger_read")),
     "report": ("journal", ("journal.render_report",)),
     "audit": ("desk", ("desk.doctor",)),
 }
@@ -787,6 +1051,7 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "paper": _paper,
     "state": _state,
     "killswitch": _killswitch,
+    "ticket": _ticket_verb,
     "live": _live_verb,
     "replay": _replay_verb,
     "verify": _verify_verb,

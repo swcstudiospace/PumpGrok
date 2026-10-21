@@ -15,13 +15,21 @@ import tempfile
 import unittest
 from collections.abc import Iterator
 from contextlib import redirect_stderr, redirect_stdout, suppress
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
+import pumpgrok.cli as cli_mod
 from pumpgrok.cli import main
+from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
+from pumpgrok.core.ids import IdFactory
+from pumpgrok.execution.paper_adapter import CurveSnapshot
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.tickets import allocate_ticket
+from pumpgrok.replay.clock import WallClock, format_ts_utc
+from pumpgrok.replay.rng import make_rng
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
@@ -313,6 +321,114 @@ class TestPaperRegistryPath:
             assert rows == []
 
 
+class _ScriptedCurves:
+    """Pop one scripted snapshot per read; hold the last."""
+
+    def __init__(self, reads: list[CurveSnapshot]) -> None:
+        self._reads = list(reads)
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        if len(self._reads) > 1:
+            return self._reads.pop(0)
+        return self._reads[0]
+
+
+class TestPaperFillPath:
+    """Task 3: sniper buy/sell with a valid approval fill (exit 0, was 1)."""
+
+    def _fill_flags(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, side: str, size_sol: str
+    ) -> list[str]:
+        mint = _TRADE_MINT
+        snap = CurveSnapshot(mint=mint, s_lamports=42_000_000_000, t_units=766_428_571_428_571)
+        curves = _ScriptedCurves([snap, snap, snap, snap, snap])
+        real_registry = cli_mod.build_operator_registry
+
+        def _with_curves(**kwargs: object) -> object:
+            params = dict(kwargs)
+            params.setdefault("price_source", curves)
+            params.setdefault("p_drop", 0.0)
+            return real_registry(**params)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(cli_mod, "build_operator_registry", _with_curves)
+        seat = "bot-04-sniper" if side == "buy" else "bot-06-exit"
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            clock = WallClock()
+            ts_utc = format_ts_utc(clock.now())
+            ticket_id = allocate_ticket(
+                store,
+                ts_utc=ts_utc,
+                source="paper",
+                correlation_id="t",
+                seat=seat,
+                title="lead",
+            )
+            approval_id = f"apr-{IdFactory(clock, make_rng()).ulid()}"
+            record = parse_human_phrase(
+                f"approve {ticket_id} {mint} {size_sol} 100",
+                kind="human_buy" if side == "buy" else "human_sell",  # type: ignore[arg-type]
+                by="human:alice",
+                approval_id=approval_id,
+                at=datetime.fromtimestamp(clock.now(), UTC),
+            )
+            record_human_approval(store, record, ts_utc=ts_utc, source="paper", correlation_id="t")
+        finally:
+            store.close()
+        return [
+            "paper",
+            side,
+            "--ticket",
+            ticket_id,
+            "--mint",
+            mint,
+            "--size-sol",
+            size_sol,
+            "--slippage-bps",
+            "100",
+            "--approval-id",
+            approval_id,
+            "--seat",
+            seat,
+        ]
+
+    def test_sniper_buy_then_sell_fill_exit_0(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        buy = self._fill_flags(tmp_path, monkeypatch, side="buy", size_sol="0.2")
+        assert main(buy) == 0
+        assert json.loads(capsys.readouterr().out)["status"] == "filled"
+        mark_store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            now = format_ts_utc(WallClock().now())
+            mark_store.append(
+                ts_utc=now,
+                source="paper",
+                correlation_id="t",
+                idempotency_key=f"mtm|{_TRADE_MINT}|{now}",
+                type="MarkToMarket",
+                payload={
+                    "source": "paper",
+                    "ts_source": now,
+                    "cash_lamports": 9_800_000_000,
+                    "equity_lamports": 10_000_000_000,
+                    "unrealized_lamports": 0,
+                    "prices_json": json.dumps(
+                        {_TRADE_MINT: {"mtm_lamports": 200_000_000, "spot": "0"}}
+                    ),
+                },
+            )
+        finally:
+            mark_store.close()
+        sell = self._fill_flags(tmp_path, monkeypatch, side="sell", size_sol="0.1")
+        assert main(sell) == 0
+        assert json.loads(capsys.readouterr().out)["status"] == "filled"
+
+
 class TestOperatorVerbs:
     """Task 2: killswitch/state verbs plus hidden tools help (TOOL-011, B5, B8, R22)."""
 
@@ -359,7 +475,37 @@ class TestOperatorVerbs:
         payload = json.loads(out)
         assert payload["flatten_requested"] is True
 
-    def test_killswitch_clear_records_intent_exit_5(
+    def test_killswitch_clear_appends_cleared_and_approval(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["killswitch", "clear", "--by", "human:op", "--reason", "03-07 red"],
+        )
+        assert code == 0
+        payload = json.loads(out)
+        assert payload == {
+            "ok": True,
+            "killswitch": "cleared",
+            "by": "human:op",
+            "reason": "03-07 red",
+        }
+        assert (tmp_path / "var" / "ledger.sqlite").is_file()
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            events = store.read(limit=10000)
+            kinds = [event["type"] for event in events]
+            cleared = [event for event in events if event["type"] == "KillSwitchCleared"]
+        finally:
+            store.close()
+        assert "KillSwitchCleared" in kinds
+        assert cleared[0]["payload"]["cleared_by"] == "human:op"
+        recorded = [event for event in events if event["type"] == "ApprovalRecorded"]
+        assert {event["payload"]["kind"] for event in recorded} == {"killswitch_clear"}
+        assert all(event["payload"]["consumed"] is True for event in recorded)
+
+    def test_killswitch_clear_rejects_nonhuman_by(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         code, out, _ = self._run(
@@ -367,11 +513,8 @@ class TestOperatorVerbs:
             monkeypatch,
             ["killswitch", "clear", "--by", "op", "--reason", "03-07 red"],
         )
-        assert code == 5
-        payload = json.loads(out)
-        assert payload["status"] == "not-yet-implemented"
-        assert payload["verb"] == "killswitch clear"
-        assert payload["intent"] == {"by": "op", "reason": "03-07 red"}
+        assert code == 1
+        assert out == ""
         assert not (tmp_path / "var" / "ledger.sqlite").is_file()
 
     def test_killswitch_status_prints_json(
@@ -388,31 +531,128 @@ class TestOperatorVerbs:
         assert code == 0
         assert "halted" in json.loads(out)
 
-    def test_state_halt_clear_records_intent_exit_5(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        code, out, _ = self._run(
-            tmp_path,
-            monkeypatch,
-            ["state", "halt", "--clear", "--by", "op", "--reason", "r", "--seat", "desk"],
-        )
-        assert code == 5
-        payload = json.loads(out)
-        assert payload["verb"] == "state halt --clear"
-        assert payload["intent"] == {"by": "op", "reason": "r"}
+    def _latch_halt(self, tmp_path: Path) -> None:
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            store.append(
+                ts_utc=format_ts_utc(WallClock().now()),
+                source="paper",
+                correlation_id="test",
+                idempotency_key="halt-test-1",
+                type="HaltSet",
+                payload={
+                    "source": "paper",
+                    "reason": "manual",
+                    "detail": "test",
+                    "equity_lamports": 10,
+                    "day_start_equity_lamports": 10,
+                    "set_by": "risk_engine",
+                },
+            )
+        finally:
+            store.close()
 
-    def test_state_autonomy_records_intent_exit_5(
+    def test_state_halt_clear_refused_without_halt(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         code, out, _ = self._run(
             tmp_path,
             monkeypatch,
-            ["state", "autonomy", "manual-ticket", "--seat", "desk"],
+            ["state", "halt", "--clear", "--by", "human:op", "--reason", "r", "--seat", "desk"],
         )
-        assert code == 5
+        assert code == 1
+        assert json.loads(out)["code"] == "halt_clear_refused"
+
+    def test_state_halt_clear_appends_cleared_and_approval(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._latch_halt(tmp_path)
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["state", "halt", "--clear", "--by", "human:op", "--reason", "r", "--seat", "desk"],
+        )
+        assert code == 0
+        assert json.loads(out) == {"ok": True, "halt": "cleared", "by": "human:op", "reason": "r"}
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            events = store.read(limit=10000)
+        finally:
+            store.close()
+        kinds = [event["type"] for event in events]
+        assert "HaltCleared" in kinds
+        recorded = [event for event in events if event["type"] == "ApprovalRecorded"]
+        assert {event["payload"]["kind"] for event in recorded} == {"halt_clear"}
+
+    def test_state_autonomy_appends_config_and_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["state", "autonomy", "manual-ticket", "--by", "human:op", "--seat", "desk"],
+        )
+        assert code == 0
         payload = json.loads(out)
-        assert payload["verb"] == "state autonomy"
-        assert payload["intent"] == {"policy": "manual-ticket"}
+        assert payload == {
+            "ok": True,
+            "autonomy": "manual-ticket",
+            "previous": "manual-ticket",
+            "by": "human:op",
+        }
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            kinds = [event["type"] for event in store.read(limit=10000)]
+        finally:
+            store.close()
+        assert "ConfigChanged" in kinds
+
+    def test_state_resume_records_resume_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path, monkeypatch, ["state", "resume", "--seat", "sniper", "--by", "human:op"]
+        )
+        assert code == 0
+        assert json.loads(out) == {"ok": True, "seat": "bot-04-sniper", "by": "human:op"}
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+        try:
+            notes = [
+                event
+                for event in store.read(limit=10000)
+                if event["type"] == "JournalNote"
+                and event["payload"].get("text", "").startswith("resume bot-04-sniper")
+            ]
+        finally:
+            store.close()
+        assert len(notes) == 1
+
+    def test_ticket_next_allocates_sequenced_id(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(tmp_path, monkeypatch, ["ticket", "next"])
+        assert code == 0
+        first = json.loads(out)["ticket_id"]
+        code, out, _ = self._run(tmp_path, monkeypatch, ["ticket", "next"])
+        assert code == 0
+        second = json.loads(out)["ticket_id"]
+        assert first != second
+        assert first[:-3] == second[:-3]
+        assert int(second[-3:]) == int(first[-3:]) + 1
+        assert (tmp_path / "var" / "ledger.sqlite").is_file()
+
+    def test_ticket_create_and_list_round_trip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(tmp_path, monkeypatch, ["ticket", "create", "--mint", _TRADE_MINT])
+        assert code == 0
+        created = json.loads(out)["ticket_id"]
+        code, out, _ = self._run(tmp_path, monkeypatch, ["ticket", "list"])
+        assert code == 0
+        assert created in json.loads(out)["tickets"]
+        code, out, _ = self._run(tmp_path, monkeypatch, ["ticket", "create", "--ticket", created])
+        assert code == 1
+        assert json.loads(out)["code"] == "ticket_taken"
 
     def test_hidden_tools_schema_prints_json_schema(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -447,12 +687,11 @@ class TestOperatorVerbs:
             ["chief", "pickup"],
             ["rug", "watch"],
             ["journal", "rollup", "--daily"],
-            ["ticket", "list"],
-            ["ticket", "create", "--mint", _TRADE_MINT],
             ["report", "--daily"],
             ["audit"],
             ["live", "confirm"],
             ["replay", "trim"],
+            ["replay", "rebuild-ticks"],
         ],
     )
     def test_find_only_verbs_print_json_exit_5(
@@ -516,25 +755,30 @@ class TestCliRegressionSweep:
             (_trade_flags("bot-04-sniper", side="sell"), 1),
             (["state", "status", "--seat", "desk"], 0),
             (["state", "halt", "--seat", "desk"], 0),
-            (["state", "halt", "--clear", "--by", "op", "--reason", "r", "--seat", "desk"], 5),
-            (["state", "autonomy", "manual-ticket", "--seat", "desk"], 5),
+            (
+                ["state", "halt", "--clear", "--by", "human:op", "--reason", "r", "--seat", "desk"],
+                1,
+            ),
+            (["state", "autonomy", "manual-ticket", "--by", "human:op", "--seat", "desk"], 0),
+            (["state", "resume", "--seat", "sniper", "--by", "human:op"], 0),
             (["killswitch", "set", "--reason", "sweep"], 0),
             (["killswitch", "flatten", "--reason", "sweep"], 0),
             (["killswitch", "status"], 0),
-            (["killswitch", "clear", "--by", "op", "--reason", "sweep"], 5),
+            (["killswitch", "clear", "--by", "human:op", "--reason", "sweep"], 0),
             (["scout", "discover"], 5),
             (["scout", "pipeline", "--candidates"], 5),
             (["risk", "audit"], 5),
             (["chief", "pickup"], 5),
             (["rug", "watch"], 5),
             (["journal", "rollup", "--daily"], 5),
-            (["ticket", "next"], 5),
-            (["ticket", "create", "--mint", _TRADE_MINT], 5),
-            (["ticket", "list"], 5),
+            (["ticket", "next"], 0),
+            (["ticket", "create", "--mint", _TRADE_MINT], 0),
+            (["ticket", "list"], 0),
             (["report", "--daily"], 5),
             (["audit"], 5),
             (["live", "confirm"], 5),
             (["replay", "trim"], 5),
+            (["replay", "rebuild-ticks"], 5),
         ],
     )
     def test_every_wrapper_prints_json(

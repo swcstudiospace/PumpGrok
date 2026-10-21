@@ -7,6 +7,7 @@ from typing import Literal
 
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter import PaperAdapter, PriceSource
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.risk.engine import RiskEngine
@@ -26,12 +27,13 @@ def build_adapter(
     price_source: PriceSource | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     curve_origin: str = "fixture",
+    p_drop: float = P_DROP,
 ) -> PaperAdapter:
     """Build the PaperAdapter for live-paper and replay runs.
 
-    The ToolRegistry factory swap stays in plan 04-07; until then callers
-    (and tests) construct the adapter directly through this factory.
-    ``settings`` is accepted for the future registry signature and ignored.
+    Tests construct the adapter through this factory with scripted curves
+    and ``p_drop=0.0``. ``settings`` is accepted for the future registry
+    signature and ignored.
     """
     del settings
     return PaperAdapter(
@@ -45,4 +47,5 @@ def build_adapter(
         price_source=price_source,
         source=source,
         curve_origin=curve_origin,
+        p_drop=p_drop,
     )

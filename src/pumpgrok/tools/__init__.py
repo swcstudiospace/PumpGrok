@@ -1,11 +1,11 @@
 """Typed tool layer composition root (STRUCT-002, TOOL-001..008).
 
-`build_registry()` is the single place the CLI and the desk gateway obtain a
-`ToolRegistry`: an injected clock (`FixtureClock` for replays, `WallClock` in
-production), a list-backed audit sink owned by the caller, a fail-closed
-limits checker that refuses every approval-gated call until RiskEngine lands
-(Phase 4), and one `RateLimiter` per `rate_limit_key` held inside the
-registry. `build_operator_registry()` composes the full 37-tool Phase 3
+``build_registry()`` is the single place the CLI and the desk gateway obtain a
+``ToolRegistry``: an injected clock (``FixtureClock`` for replays, ``WallClock`` in
+production), a list-backed audit sink owned by the caller, a permitting limits
+checker (the PaperAdapter enforces approvals itself through its RiskEngine),
+and one ``RateLimiter`` per ``rate_limit_key`` held inside the
+registry. ``build_operator_registry()`` composes the full 37-tool Phase 4
 catalog over the same root for operator verbs (TOOL-011).
 """
 
@@ -17,17 +17,21 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from pumpgrok.core.adapter import OrderRequest
+import pumpgrok.execution
+from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
 from pumpgrok.core.binding_key import load_or_create_binding_key
 from pumpgrok.core.errors import NotYetImplemented
-from pumpgrok.core.ids import Clock
+from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
+from pumpgrok.execution.latency import P_DROP
+from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -72,14 +76,16 @@ from pumpgrok.tools.safety.score_report import build_score_report_tool
 if TYPE_CHECKING:
     from pumpgrok.config.settings import Settings
     from pumpgrok.core.bot import BotManifest
+    from pumpgrok.execution.paper_adapter import CurveSnapshot, PriceSource
 
 
 __all__ = ["build_operator_registry", "build_registry", "register_read_tools"]
 
 
-async def _refuse_all(request: OrderRequest, bot_id: str) -> bool:
-    """Fail-closed limits checker (skeleton): refuse until RiskEngine lands."""
-    return False
+async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
+    """Permitting limits checker: the PaperAdapter enforces approvals itself."""
+    del request, bot_id
+    return True
 
 
 class _NeverSendNotifier(Notifier):
@@ -105,7 +111,7 @@ def build_registry(
     registry = ToolRegistry(
         clock=clock if clock is not None else WallClock(),
         audit_sink=audits.append,
-        limits_checker=_refuse_all,
+        limits_checker=_permit_exec,
         rng=rng,
     )
     return registry, audits
@@ -141,12 +147,12 @@ def _register_trading(
     reg: ToolRegistry,
     *,
     rpc: RpcClient,
-    adapter: NotYetImplementedAdapter,
+    adapter: ExecutionAdapter,
     budget: RiskBudget,
     store: LedgerStore,
     clock: Clock,
 ) -> None:
-    """Scoring, quote/simulate/place/cancel and position tools (refusing adapter)."""
+    """Scoring, quote/simulate/place/cancel and position tools (real adapter)."""
     reg.register(build_score_report_tool(rpc))
     reg.register(build_quote_tool(adapter, clock))
     reg.register(build_simulate_tool(adapter, clock))
@@ -200,6 +206,31 @@ def _register_desk(
     reg.register(build_doctor_tool(settings, data_dir / "bindings", binding_key, clock))
 
 
+class _CachingPriceSource:
+    """Price source that records every observed curve for the sync risk check.
+
+    The PaperAdapter reads curves asynchronously, but RiskEngine's
+    liquidity-floor step needs a synchronous ``(sol, units)`` lookup. This
+    wrapper delegates to the injected source and caches the latest snapshot
+    per mint; ``last.get`` feeds ``RiskEngine(get_reserves=...)``. The cache
+    warms on any adapter read (the CLI paper flow simulates before placing),
+    and a cold mint fails closed with ``no curve reserves``.
+    """
+
+    def __init__(self, inner: PriceSource | None) -> None:
+        self._inner = inner
+        self.last: dict[str, tuple[int, int]] = {}
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        """Delegate the read and cache the observed reserves."""
+        if self._inner is None:
+            return None
+        snapshot = await self._inner.curve(mint)
+        if snapshot is not None:
+            self.last[mint] = (snapshot.s_lamports, snapshot.t_units)
+        return snapshot
+
+
 def build_operator_registry(
     *,
     data_dir: Path,
@@ -207,14 +238,22 @@ def build_operator_registry(
     settings: Settings,
     clock: Clock | None = None,
     ledger_path: Path | None = None,
+    price_source: PriceSource | None = None,
+    p_drop: float | None = None,
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
     Same wiring as the desk gateway and the least-privilege harness: every
-    catalog tool registers through its production factory with the refusing
-    execution adapter (Phase 3 backends land in Phase 4), so the CLI resolves
+    catalog tool registers through its production factory with the real
+    paper adapter (TOOL-004, R64), so the CLI resolves
     through ``registry.find`` and I1 holds on every verb. ``ledger_path``
     overrides the store location: the CLI passes the canonical paper ledger.
+    ``price_source`` injects curve reads (tests pass scripted curves;
+    production paper trading binds the RPC curve reader in Phase 4).
+    ``p_drop`` fixes the confirmation-drop rate with a seeded stream
+    (tests pass ``0.0`` for deterministic fills); ``None`` keeps the
+    production 2% drop on a system-entropy stream, because a fresh
+    default-seeded stream would drop the first order of every invocation.
     Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
     """
@@ -226,8 +265,30 @@ def build_operator_registry(
     client = httpx.AsyncClient()
     rpc = RpcClient(list(settings.rpc.endpoints), client, active_clock, make_rng())
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
-    adapter = NotYetImplementedAdapter()
+    live = settings.effective_mode == "live"
+    curves = _CachingPriceSource(price_source)
+    engine = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=IdFactory(active_clock, make_rng()),
+        clock=active_clock,
+        limits=EngineLimits(),
+        mode="live" if live else "paper",
+        autonomy="manual-ticket" if live else read_autonomy(store),  # type: ignore[arg-type]
+        killswitch_path=data_dir / "KILLSWITCH",
+        get_reserves=curves.last.get,
+    )
     budget = RiskBudget()
+    adapter = pumpgrok.execution.build_adapter(
+        settings,
+        store=store,
+        risk=engine,
+        ids=IdFactory(active_clock, make_rng()),
+        clock=active_clock,
+        rng=random.SystemRandom() if p_drop is None else make_rng(),
+        price_source=curves,
+        p_drop=P_DROP if p_drop is None else p_drop,
+    )
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
