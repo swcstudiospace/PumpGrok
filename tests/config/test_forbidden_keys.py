@@ -23,14 +23,14 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "WALLET_SECRET",
         "MY_MNEMONIC_BACKUP",
         "phantom_url",
-        "PUMPGROK_SOLANA__SECRET_KEY",
-        "PUMPGROK_KEYPAIR_PATH",
+        "PUMPGROK_SOLANA__SECRET_KEY",  # pragma: allowlist secret: forbidden env-name fixture
+        "PUMPGROK_KEYPAIR_PATH",  # pragma: allowlist secret: forbidden env-name fixture
     ],
 )
 def test_forbidden_env_name_refuses_without_value(
     clean_env: None, monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
-    planted = "PLANTED-SECRET-9f3k7z-no-echo"
+    planted = "PLANTED-SECRET-9f3k7z-no-echo"  # pragma: allowlist secret: planted no-echo value
     monkeypatch.setenv(name, planted)
     with pytest.raises(ConfigError) as excinfo:
         load_settings()

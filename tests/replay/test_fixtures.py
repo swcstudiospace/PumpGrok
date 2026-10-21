@@ -85,12 +85,12 @@ def test_manifest_with_path_traversal_name_is_rejected(tmp_path: Path) -> None:
 def test_manifest_error_report_carries_no_input_values(tmp_path: Path) -> None:
     dataset = _copy_smoke(tmp_path)
     raw = json.loads((dataset / "manifest.json").read_text())
-    raw["seed_hint"] = "SECRET-VALUE-DO-NOT-ECHO"
+    raw["seed_hint"] = "SECRET-VALUE-DO-NOT-ECHO"  # pragma: allowlist secret: planted no-echo value
     (dataset / "manifest.json").write_text(json.dumps(raw))
     with pytest.raises(CorruptFixture) as excinfo:
         verify_manifest(dataset)
-    assert "SECRET-VALUE-DO-NOT-ECHO" not in repr(excinfo.value.fields)
-    assert "SECRET-VALUE-DO-NOT-ECHO" not in str(excinfo.value)
+    assert "SECRET-VALUE-DO-NOT-ECHO" not in repr(excinfo.value.fields)  # pragma: allowlist secret
+    assert "SECRET-VALUE-DO-NOT-ECHO" not in str(excinfo.value)  # pragma: allowlist secret
 
 
 def test_out_of_order_timestamps_are_rejected(tmp_path: Path) -> None:
