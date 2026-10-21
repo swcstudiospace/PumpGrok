@@ -25,6 +25,6 @@ def atomic_write_json(path: str | Path, payload: Mapping[str, Any]) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, target)
-    except OSError:
+    except BaseException:
         tmp.unlink(missing_ok=True)
         raise

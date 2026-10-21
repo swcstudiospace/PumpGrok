@@ -95,6 +95,12 @@ def test_atomic_write_fails_loudly_and_leaves_no_tmp(tmp_path: Path) -> None:
     assert not (blocker / "state.json").exists()
 
 
+def test_atomic_write_non_os_failure_leaves_no_tmp(tmp_path: Path) -> None:
+    with pytest.raises(TypeError):
+        atomic_write_json(tmp_path / "state.json", {"amt": object()})
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_uuid_is_banned_from_src_pumpgrok() -> None:
     offenders: list[str] = []
     for path in sorted((REPO_ROOT / "src" / "pumpgrok").rglob("*.py")):
