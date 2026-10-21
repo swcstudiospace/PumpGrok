@@ -2,12 +2,12 @@
 phase: 01-foundation
 fix_scope: critical_warning
 findings_in_scope: 8
-fixed: 7
-partial: 1
+fixed: 8
+partial: 0
 skipped: 0
 failed: 0
 iteration: 2
-status: partial
+status: complete
 ---
 
 # Phase 1: Code Review Fix Report
@@ -21,7 +21,7 @@ status: partial
 
 | Finding | Severity | Outcome | Commit | Files |
 |---------|----------|---------|--------|-------|
-| CR-01 | Critical | partial: G-1 half fixed; G-4 half not fixed (decision needed, see below) | 104e708 | `ci/gates/check_ownership.py`, `ci/tests/test_gates.py` |
+| CR-01 | Critical | fixed: G-1 half in 104e708; G-4 half closed per binding resolution R56 in plan 01-11 | 104e708, 6af62c3, 0d31c12 | `ci/gates/check_ownership.py`, `ci/gates/check_contracts.py`, `ci/tests/test_gates.py`, `SECURITY.md`, `docs/cross-bot-protocol.md` |
 | WR-01 | Warning | fixed | adea028 | `ci/gates/check_secrets.py`, `ci/gates/check_contracts.py`, `ci/tests/test_gates.py` |
 | WR-02 | Warning | fixed | 5136509 | `ci/gates/check_ownership.py`, `ci/gates/check_contracts.py`, `ci/tests/test_gates.py` |
 | WR-03 | Warning | fixed | f51db58 | `ci/gates/check_rollback.py`, `ci/tests/test_gates.py` |
@@ -30,17 +30,13 @@ status: partial
 | WR-06 | Warning | fixed | 6fca20c | `src/pumpgrok/replay/fixtures.py`, `tests/replay/test_fixtures.py` |
 | WR-07 | Warning | fixed | af36e17 | `scripts/check.sh` |
 
-Skipped: none. Failed: none. Partial: CR-01 (see below).
+Skipped: none. Failed: none. Partial: none (CR-01 closed by R56, see below).
 
 ## CR-01: what was fixed and what was not
 
 **Fixed (commit 104e708):** `check_ownership.main` classified contract surfaces before checking ownership, so a non-owner editing a shared contract got a G-1 NOTE and passed. Ownership is now checked first. `contracts/tool-rosters/bot-03-whale.yaml` edited from `bot-04-sniper` now fails with FOREIGN (owned by bot-02-risk). A regression test covers it.
 
-**Not fixed: the G-4 half.** The review asks that `check_contracts` require `proposed_by == --bot` and reject any acknowledgement whose `bot` equals `proposed_by`. Neither is derivable from `docs/cross-bot-protocol.md`, and both conflict with it. Decisions needed:
-
-1. **Self-acknowledgement.** `ownership.yaml` lists `bot-02-risk` as a required consumer of `contracts/events/**` and `contracts/tool-rosters/**`, and RISK is also the owner. Rejecting an ack where `bot == proposed_by` makes every breaking change proposed by RISK on those surfaces impossible to pass. Either the proposer is exempt from its own acknowledgement, or it must acknowledge itself. The protocol does not say which.
-2. **Proposer binding.** Protocol step 2 says "the integrating seat opens the contract change", and G-1 lets only the owner commit under `contracts/**`. An integrating seat that is not the owner therefore cannot make the commit, so `proposed_by == --bot` would reject a protocol-conforming routed change. Either `proposed_by` may name a seat other than the committing seat, or routed changes must be proposed by the owner.
-3. **Residual limit (state in the gate docs, not fixable in code).** A consumer's acknowledgement is written by whoever commits the document. The gate cannot prove an ack came from the named seat. Only the owner's branch can carry a contract change after fix 104e708, so the exposure is the owner writing acks for other seats, which matches the protocol's "a seat writing its own acknowledgement ... for another seat" anti-pattern.
+**Closed (R56, plan 01-11).** The G-4 decisions are resolved by binding resolution R56 in 01-CONTEXT.md. Required acknowledgers are `contract_consumers(surface)` minus `proposed_by`. An acknowledgement from the proposer is ignored, not rejected. G-4 passes when every required acknowledger has an ack in the change file. The gate proves presence, not authorship; this residual limit is stated in SECURITY.md and docs/cross-bot-protocol.md. The earlier `proposed_by == --bot` requirement is superseded and is not implemented.
 
 ## Iterations (--auto)
 
