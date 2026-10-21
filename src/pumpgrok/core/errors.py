@@ -44,6 +44,16 @@ class DataStale(PumpgrokError):
     code = "data_stale"
 
 
+class NotYetImplemented(PumpgrokError):
+    """A backend that Phase 4 has not built yet (PaperAdapter, RiskEngine).
+
+    Tools wired to such a backend let this propagate: the CLI prints the JSON
+    error envelope and exits 5 (binding B5). It is never a fake fill/quote.
+    """
+
+    code = "not_yet_implemented"
+
+
 class DataBlind(PumpgrokError):
     """No price for longer than the blind window; the position uses last_good marks."""
 
