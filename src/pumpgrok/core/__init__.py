@@ -11,7 +11,7 @@ from pumpgrok.core.adapter import (
     Side,
     SimulationResult,
 )
-from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.approvals import ApprovalRecord, parse_human_phrase, record_human_approval
 from pumpgrok.core.atomic_write import atomic_write_json
 from pumpgrok.core.bot import Bot, BotManifest, Schedule, ToolGrant
 from pumpgrok.core.correlation import child_span, is_child_span, root_of
@@ -21,6 +21,8 @@ from pumpgrok.core.errors import (
     DataStale,
     LedgerUnavailable,
     LiveGateError,
+    OrderRejectedError,
+    OrderUnknownError,
     PermissionDenied,
     PumpgrokError,
     ToolRateLimited,
@@ -73,7 +75,9 @@ __all__ = [
     "IdFactory",
     "LedgerUnavailable",
     "LiveGateError",
+    "OrderRejectedError",
     "OrderRequest",
+    "OrderUnknownError",
     "PermissionDenied",
     "Position",
     "PumpgrokError",
@@ -105,6 +109,8 @@ __all__ = [
     "derive_idempotency_key",
     "is_child_span",
     "next_span",
+    "parse_human_phrase",
+    "record_human_approval",
     "root_of",
     "tool",
 ]

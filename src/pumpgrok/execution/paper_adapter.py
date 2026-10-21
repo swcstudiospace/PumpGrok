@@ -37,6 +37,7 @@ from pumpgrok.core.adapter import (
     Side,
     SimulationResult,
 )
+from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
 from pumpgrok.core.idempotency import canonical_json, exec_place_key
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
@@ -53,6 +54,7 @@ from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 __all__ = [
     "CurveSnapshot",
     "OrderRejectedError",
+    "OrderUnknownError",
     "PaperAdapter",
     "PriceSource",
 ]
@@ -75,19 +77,6 @@ class PriceSource(Protocol):
     """Curve reads. Live-paper binds RPC/REST; replay binds fixture ticks."""
 
     async def curve(self, mint: str) -> CurveSnapshot | None: ...
-
-
-class OrderRejectedError(Exception):
-    """A paper order was refused; the refusal is on the ledger."""
-
-    def __init__(
-        self, reason: str, detail: str = "", *, stage: str, fees_lamports: int = 0
-    ) -> None:
-        super().__init__(f"{reason} at {stage}: {detail}")
-        self.reason = reason
-        self.detail = detail
-        self.stage = stage
-        self.fees_lamports = fees_lamports
 
 
 class PaperAdapter(ExecutionAdapter):
@@ -476,6 +465,9 @@ class PaperAdapter(ExecutionAdapter):
                 impact=impact_buy(curve0.s_lamports, filled),
                 ledger_source=ledger_source,
                 correlation_id=correlation_id,
+                seat=seat,
+                exit_reason=exit_reason,
+                creator=creator,
             )
         except sqlite3.IntegrityError as exc:
             repeated = self._repeat_outcome(request)
@@ -636,6 +628,9 @@ class PaperAdapter(ExecutionAdapter):
                 impact=impact_sell(curve0.t_units, filled_units),
                 ledger_source=ledger_source,
                 correlation_id=correlation_id,
+                seat=seat,
+                exit_reason=exit_reason,
+                creator=creator,
             )
         except sqlite3.IntegrityError as exc:
             repeated = self._repeat_outcome(request)
@@ -778,6 +773,9 @@ class PaperAdapter(ExecutionAdapter):
         impact: Decimal,
         ledger_source: str,
         correlation_id: str,
+        seat: str | None = None,
+        exit_reason: str | None = None,
+        creator: str | None = None,
     ) -> None:
         quote_json = canonical_json(
             {
@@ -792,6 +790,9 @@ class PaperAdapter(ExecutionAdapter):
         )
         decision = self._risk.check(
             request,
+            seat=seat,
+            exit_reason=exit_reason,
+            creator=creator,
             source=ledger_source,
             correlation_id=correlation_id,
             stage="ACCEPTED",
@@ -945,8 +946,16 @@ class PaperAdapter(ExecutionAdapter):
                     route=str(body.get("route", "curve")),
                     ledger_seq=int(event.get("seq", 0)),
                 )
+            reason = str(body.get("reason", ""))
+            if reason == "confirmation_timeout":
+                return OrderUnknownError(
+                    reason,
+                    str(body.get("detail", "")),
+                    stage=str(body.get("stage", "ACCEPTED")),
+                    fees_lamports=int(body.get("fees_lamports", 0)),
+                )
             return OrderRejectedError(
-                str(body.get("reason", "")),
+                reason,
                 str(body.get("detail", "")),
                 stage=str(body.get("stage", "ACCEPTED")),
                 fees_lamports=int(body.get("fees_lamports", 0)),

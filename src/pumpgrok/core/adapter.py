@@ -23,7 +23,12 @@ class Side(enum.StrEnum):
 
 
 class OrderRequest(BaseModel):
-    """Input of exec.place / exec.simulate. The idempotency key is NOT a caller field."""
+    """Input of exec.place / exec.simulate. The idempotency key is NOT a caller field.
+
+    Buys carry `size_lamports`. Sells carry `token_units` (EXIT rule engine,
+    which knows the position) or `size_lamports` (SOL notional: the adapter
+    derives units at the decision curve; the CLI sell path).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -42,8 +47,8 @@ class OrderRequest(BaseModel):
     def _size_matches_side(self) -> Self:
         if self.side is Side.BUY and self.size_lamports is None:
             raise ValueError("buy requires size_lamports")
-        if self.side is Side.SELL and self.token_units is None:
-            raise ValueError("sell requires token_units")
+        if self.side is Side.SELL and self.token_units is None and self.size_lamports is None:
+            raise ValueError("sell requires token_units or size_lamports")
         return self
 
     @property

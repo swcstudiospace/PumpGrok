@@ -531,7 +531,7 @@ class RiskEngine:
         the stop and limit steps before a fill.
         """
         order_hash = order_hash_for(order)
-        cache_key = f"{stage}|{order_hash}"
+        cache_key = f"{stage}|{order_hash}|{order.approval_id or ''}"
         cached = self._decisions.get(cache_key)
         if cached is not None:
             return cached
@@ -733,11 +733,12 @@ class RiskEngine:
             ctx.approval = self._mint_autonomous(ctx.order, ctx.exit_reason)
             ctx.approval_id = ctx.approval.id
             return
-        ticket_approval = self._ticket_approval(ctx.approvals, ctx.order.ticket_id)
-        if ticket_approval is None:
-            raise _Fail("approval_missing", "no unconsumed approval for ticket")
-        ctx.approval = ticket_approval
-        ctx.approval_id = ticket_approval.id
+        presented = ctx.order.approval_id
+        approval = ctx.approvals.get(presented) if presented else None
+        if approval is None or approval.ticket_id != ctx.order.ticket_id:
+            raise _Fail("approval_missing", "no unconsumed approval for the presented id")
+        ctx.approval = approval
+        ctx.approval_id = approval.id
 
     def _step_approval_mismatch(self, ctx: _StepCtx) -> None:
         ctx.mark("approval_mismatch")
@@ -1028,15 +1029,6 @@ class RiskEngine:
 
     def _creator_open(self, creator: str, state: LedgerState) -> bool:
         return any(p.token_units > 0 and p.creator == creator for p in state.positions.values())
-
-    def _ticket_approval(
-        self, approvals: Mapping[str, ApprovalRecord], ticket_id: str
-    ) -> ApprovalRecord | None:
-        """First unconsumed approval for a ticket, any kind (step 7 gates kind)."""
-        for record in approvals.values():
-            if record.ticket_id == ticket_id:
-                return record
-        return None
 
 
 class _suppress_integrity:

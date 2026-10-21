@@ -64,3 +64,29 @@ class ReplayMissingRecord(PumpgrokError):
     """Replay asked for an LLM outcome the fixture does not record. Fail, never invent."""
 
     code = "replay_missing_record"
+
+
+class OrderRejectedError(Exception):
+    """A paper order was refused; the refusal is on the ledger.
+
+    Lives here (not in the execution package) so both the adapter and the
+    exec tools can import it without a package cycle. Re-exported from
+    ``pumpgrok.execution.paper_adapter`` for existing importers.
+    """
+
+    def __init__(
+        self, reason: str, detail: str = "", *, stage: str, fees_lamports: int = 0
+    ) -> None:
+        super().__init__(f"{reason} at {stage}: {detail}")
+        self.reason = reason
+        self.detail = detail
+        self.stage = stage
+        self.fees_lamports = fees_lamports
+
+
+class OrderUnknownError(OrderRejectedError):
+    """Confirmation timed out: outcome UNKNOWN, never resubmitted.
+
+    The `OrderPlaced` row persists with no outcome row; a repeat with the
+    same decision returns this same error (single-send rule, constitution 3).
+    """

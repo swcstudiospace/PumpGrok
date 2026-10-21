@@ -1,9 +1,10 @@
 """exec.place: single paper order with the TOOL-004 input contract (B7).
 
-Phase 3 scope: the input contract only (``decision_id`` required, key derived
-from ``(ticket_id, side, decision_id)`` only, ``approval_id`` required, g6
-flags). The atomic consume-and-order ledger transaction and
-repeat-returns-first-fill are Phase 4 work and must NOT be implemented here.
+Buys carry `size_lamports`. Sells carry `token_units` (EXIT rule engine) or
+`size_lamports` (SOL notional, derived at the decision curve). The adapter
+consumes the approval and appends `OrderPlaced` in one ledger transaction; a
+repeated decision returns the first Fill. Unknown/timed-out confirmations
+return `unknown` and are never retried (single-send rule).
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from typing import Any, Literal, Self
 from pydantic import Field, model_validator
 
 from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
+from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.core.ids import ULID_RE, Clock, ambient_correlation
 from pumpgrok.core.risk_budget import RiskBudget
@@ -47,8 +49,8 @@ class PlaceIn(ToolInput):
     def _size_matches_side(self) -> Self:
         if self.side == "buy" and self.size_lamports is None:
             raise ValueError("buy requires size_lamports")
-        if self.side == "sell" and self.token_units is None:
-            raise ValueError("sell requires token_units")
+        if self.side == "sell" and self.token_units is None and self.size_lamports is None:
+            raise ValueError("sell requires token_units or size_lamports")
         return self
 
 
@@ -72,7 +74,7 @@ PLACE_SPEC = ToolSpec(
     name="exec.place",
     description=(
         "Place exactly one paper order; fail-closed on approval, decision key, "
-        "and exit-BUY. Phase 3 validates the input contract only."
+        "and exit-BUY. Atomic approval consume-and-order; repeats return first."
     ),
     input_model=PlaceIn,
     output_model=PlaceOut,
@@ -81,7 +83,7 @@ PLACE_SPEC = ToolSpec(
     rate_limit_key="exec",
     requires_approval=True,
     idempotent=True,
-    backend="pumpgrok.execution.not_yet_implemented.NotYetImplementedAdapter.place",
+    backend="pumpgrok.execution.paper_adapter.PaperAdapter.place",
 )
 
 
@@ -105,9 +107,12 @@ async def run_place(
     """Validate the B7 contract, then hand the order to the adapter.
 
     Refusals (exit cannot BUY via ``seat_may_trade``) return a ``rejected``
-    payload before the adapter is touched. A valid shape reaches
-    ``adapter.place``, which raises ``not_yet_implemented`` in Phase 3 (B5).
+    payload before the adapter is touched. The adapter consumes the approval
+    and appends ``OrderPlaced`` in one ledger transaction; a repeated
+    decision returns the first Fill. An unknown/timed-out confirmation
+    returns ``unknown`` and is never retried (single-send rule).
     """
+
     key = exec_place_key(inp.ticket_id, inp.side, inp.decision_id)
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else None)
@@ -124,8 +129,32 @@ async def run_place(
             }
         ).model_dump()
     request = _request_of(inp)
-    # Phase 3: raises NotYetImplemented (code not_yet_implemented, no fake Fill).
-    fill = await adapter.place(request)
+    try:
+        fill = await adapter.place(request)
+    except OrderUnknownError as exc:
+        return PlaceOut.model_validate(
+            {
+                "ticket_id": inp.ticket_id,
+                "side": inp.side,
+                "decision_id": inp.decision_id,
+                "idempotency_key": key,
+                "status": "unknown",
+                "reason": exc.reason,
+                "meta": meta_now("exec", correlation, clock),
+            }
+        ).model_dump()
+    except OrderRejectedError as exc:
+        return PlaceOut.model_validate(
+            {
+                "ticket_id": inp.ticket_id,
+                "side": inp.side,
+                "decision_id": inp.decision_id,
+                "idempotency_key": key,
+                "status": "rejected",
+                "reason": exc.reason,
+                "meta": meta_now("exec", correlation, clock),
+            }
+        ).model_dump()
     return PlaceOut.model_validate(
         {
             "ticket_id": inp.ticket_id,
