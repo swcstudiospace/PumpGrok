@@ -86,9 +86,7 @@ def verify_manifest(dataset_dir: Path) -> FixtureManifest:
     """Check manifest shape, listed sha256 digests and stray data files. Writes nothing."""
     manifest_path = dataset_dir / MANIFEST_NAME
     try:
-        raw = json.loads(
-            manifest_path.read_text(encoding="utf-8"), parse_constant=_reject_constant
-        )
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"), parse_constant=_reject_constant)
     except (OSError, UnicodeDecodeError, ValueError):
         raise CorruptFixture("manifest is missing or not valid JSON", file=MANIFEST_NAME) from None
 
@@ -126,7 +124,9 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
                 try:
                     record = json.loads(text, parse_constant=_reject_constant)
                 except ValueError:
-                    raise CorruptFixture("line is not valid JSON", file=path.name, line=number) from None
+                    raise CorruptFixture(
+                        "line is not valid JSON", file=path.name, line=number
+                    ) from None
                 if not isinstance(record, dict):
                     raise CorruptFixture("line is not a JSON object", file=path.name, line=number)
                 records.append(record)
@@ -150,7 +150,9 @@ def load_dataset(dataset_dir: Path) -> FixtureDataset:
         try:
             stamp = parse_ts_utc(stamp_text)
         except ValueError:
-            raise CorruptFixture("event ts_utc is not a UTC timestamp", file=EVENTS_NAME, line=number) from None
+            raise CorruptFixture(
+                "event ts_utc is not a UTC timestamp", file=EVENTS_NAME, line=number
+            ) from None
         if stamp < previous:
             raise CorruptFixture("event timestamps go backwards", file=EVENTS_NAME, line=number)
         previous = stamp

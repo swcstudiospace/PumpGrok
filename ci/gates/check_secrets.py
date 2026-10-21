@@ -15,7 +15,6 @@ review still looks.
 from __future__ import annotations
 
 import argparse
-import base64
 import math
 import re
 import subprocess
@@ -27,33 +26,54 @@ ALLOWLIST_MARKER = "pragma: allowlist secret"
 
 # (name, pattern, description)
 PATTERNS: list[tuple[str, str, str]] = [
-    ("aws_access_key",   r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",            "AWS access key id"),
-    ("aws_secret",       r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?([A-Za-z0-9/+=]{40})",
-                                                                       "AWS secret access key"),
-    ("github_token",     r"\bgh[pousr]_[A-Za-z0-9]{36,}\b",           "GitHub token"),
-    ("github_pat",       r"\bgithub_pat_[A-Za-z0-9_]{60,}\b",         "GitHub fine-grained PAT"),
-    ("gitlab_token",     r"\bglpat-[A-Za-z0-9\-_]{20,}\b",            "GitLab token"),
-    ("slack_token",      r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b",        "Slack token"),
-    ("stripe_live",      r"\b[sr]k_live_[A-Za-z0-9]{20,}\b",          "Stripe live key"),
-    ("google_api",       r"\bAIza[0-9A-Za-z\-_]{30,}",                 "Google API key"),
-    ("openai",           r"\bsk-(?:proj-)?[A-Za-z0-9\-_]{32,}\b",     "OpenAI-style API key"),
-    ("anthropic",        r"\bsk-ant-[A-Za-z0-9\-_]{32,}\b",           "Anthropic API key"),
-    ("private_key",      r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----",
-                                                                       "private key block"),
-    ("jwt",              r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
-                                                                       "JWT"),
-    ("conn_string",      r"(?i)\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp)://"
-                         r"[^:\s/]+:[^@\s/]+@",                        "connection string with inline credentials"),
-    ("npm_token",        r"\bnpm_[A-Za-z0-9]{36}\b",                  "npm token"),
-    ("twilio",           r"\bSK[0-9a-fA-F]{32}\b",                    "Twilio key"),
-    ("sendgrid",         r"\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b", "SendGrid key"),
-    ("pypi_token",       r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}\b", "PyPI token"),
-    ("solana_base58_key", r"\b[1-9A-HJ-NP-Za-km-z]{86,88}\b",    "Solana 64-byte secret key, base58"),
-    ("solana_json_keypair", r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]", "Solana keypair as JSON byte array"),
-    ("helius_url_key",   r"(?i)helius(?:-rpc)?\.com/[^\s\"']*api-key=[A-Za-z0-9-]{20,}", "Helius RPC URL with key"),
-    ("quicknode_url",    r"(?i)[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}", "QuickNode endpoint with token"),
-    ("telegram_bot_token", r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b",     "Telegram bot token"),
-    ("xai_key",          r"\bxai-[A-Za-z0-9]{32,}\b",             "x.ai API key"),
+    ("aws_access_key", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "AWS access key id"),
+    (
+        "aws_secret",
+        r"(?i)aws_secret_access_key\s*[=:]\s*['\"]?([A-Za-z0-9/+=]{40})",
+        "AWS secret access key",
+    ),
+    ("github_token", r"\bgh[pousr]_[A-Za-z0-9]{36,}\b", "GitHub token"),
+    ("github_pat", r"\bgithub_pat_[A-Za-z0-9_]{60,}\b", "GitHub fine-grained PAT"),
+    ("gitlab_token", r"\bglpat-[A-Za-z0-9\-_]{20,}\b", "GitLab token"),
+    ("slack_token", r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b", "Slack token"),
+    ("stripe_live", r"\b[sr]k_live_[A-Za-z0-9]{20,}\b", "Stripe live key"),
+    ("google_api", r"\bAIza[0-9A-Za-z\-_]{30,}", "Google API key"),
+    ("openai", r"\bsk-(?:proj-)?[A-Za-z0-9\-_]{32,}\b", "OpenAI-style API key"),
+    ("anthropic", r"\bsk-ant-[A-Za-z0-9\-_]{32,}\b", "Anthropic API key"),
+    (
+        "private_key",
+        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----",
+        "private key block",
+    ),
+    ("jwt", r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b", "JWT"),
+    (
+        "conn_string",
+        r"(?i)\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp)://"
+        r"[^:\s/]+:[^@\s/]+@",
+        "connection string with inline credentials",
+    ),
+    ("npm_token", r"\bnpm_[A-Za-z0-9]{36}\b", "npm token"),
+    ("twilio", r"\bSK[0-9a-fA-F]{32}\b", "Twilio key"),
+    ("sendgrid", r"\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b", "SendGrid key"),
+    ("pypi_token", r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}\b", "PyPI token"),
+    ("solana_base58_key", r"\b[1-9A-HJ-NP-Za-km-z]{86,88}\b", "Solana 64-byte secret key, base58"),
+    (
+        "solana_json_keypair",
+        r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]",
+        "Solana keypair as JSON byte array",
+    ),
+    (
+        "helius_url_key",
+        r"(?i)helius(?:-rpc)?\.com/[^\s\"']*api-key=[A-Za-z0-9-]{20,}",
+        "Helius RPC URL with key",
+    ),
+    (
+        "quicknode_url",
+        r"(?i)[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}",
+        "QuickNode endpoint with token",
+    ),
+    ("telegram_bot_token", r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b", "Telegram bot token"),
+    ("xai_key", r"\bxai-[A-Za-z0-9]{32,}\b", "x.ai API key"),
 ]
 
 # Variable names that make a high-entropy value suspicious.
@@ -74,16 +94,58 @@ PLACEHOLDER_RE = re.compile(
     r"[0]{8,}|[a]{8,}|abcdef\w*|deadbeef\w*)$"
 )
 
-SKIP_DIRS = {".git", "node_modules", "target", "build", "dist", ".venv", "venv",
-             "__pycache__", ".next", "vendor", "Pods", ".gradle", ".terraform"}
-SKIP_EXT = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".pdf", ".zip", ".gz",
-            ".jar", ".apk", ".ipa", ".so", ".dylib", ".dll", ".woff", ".woff2", ".ttf",
-            ".mp4", ".mp3", ".webp", ".lock"}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "target",
+    "build",
+    "dist",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    "vendor",
+    "Pods",
+    ".gradle",
+    ".terraform",
+}
+SKIP_EXT = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".jar",
+    ".apk",
+    ".ipa",
+    ".so",
+    ".dylib",
+    ".dll",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".mp4",
+    ".mp3",
+    ".webp",
+    ".lock",
+}
 
 # Terraform state holds resource attributes verbatim, including generated passwords. Solana
 # keypair files are JSON byte arrays and carry no other marker, so their names are flagged.
-ALWAYS_FLAG_FILES = {"terraform.tfstate", "terraform.tfstate.backup", ".env", "id_rsa", "id_ed25519",
-                     "id.json", "keypair.json", "wallet.json"}
+ALWAYS_FLAG_FILES = {
+    "terraform.tfstate",
+    "terraform.tfstate.backup",
+    ".env",
+    "id_rsa",
+    "id_ed25519",
+    "id.json",
+    "keypair.json",
+    "wallet.json",
+}
 
 
 def shannon_entropy(s: str) -> float:
@@ -108,10 +170,15 @@ def scan_line(path: str, lineno: int, line: str) -> list[dict]:
 
     for name, pattern, desc in PATTERNS:
         for m in re.finditer(pattern, line):
-            findings.append({
-                "file": path, "line": lineno, "rule": name, "desc": desc,
-                "excerpt": _redact(line, m.group(0)),
-            })
+            findings.append(
+                {
+                    "file": path,
+                    "line": lineno,
+                    "rule": name,
+                    "desc": desc,
+                    "excerpt": _redact(line, m.group(0)),
+                }
+            )
 
     # High-entropy value assigned to a suspiciously named variable.
     if SECRET_NAME_RE.search(line):
@@ -120,11 +187,15 @@ def scan_line(path: str, lineno: int, line: str) -> list[dict]:
             if is_placeholder(value):
                 continue
             if shannon_entropy(value) > 3.5:
-                findings.append({
-                    "file": path, "line": lineno, "rule": "high_entropy",
-                    "desc": "high-entropy value assigned to a secret-named variable",
-                    "excerpt": _redact(line, value),
-                })
+                findings.append(
+                    {
+                        "file": path,
+                        "line": lineno,
+                        "rule": "high_entropy",
+                        "desc": "high-entropy value assigned to a secret-named variable",
+                        "excerpt": _redact(line, value),
+                    }
+                )
 
     return findings
 
@@ -137,10 +208,16 @@ def _redact(line: str, secret: str) -> str:
 
 def scan_file(path: Path, rel: str) -> list[dict]:
     if Path(rel).name in ALWAYS_FLAG_FILES:
-        return [{"file": rel, "line": 0, "rule": "forbidden_file",
-                 "desc": f"{Path(rel).name} must never be committed "
-                         "(holds credentials in plain text)",
-                 "excerpt": ""}]
+        return [
+            {
+                "file": rel,
+                "line": 0,
+                "rule": "forbidden_file",
+                "desc": f"{Path(rel).name} must never be committed "
+                "(holds credentials in plain text)",
+                "excerpt": "",
+            }
+        ]
 
     if path.suffix.lower() in SKIP_EXT:
         return []
@@ -159,14 +236,22 @@ def scan_file(path: Path, rel: str) -> list[dict]:
 
 
 def changed_files(base: str) -> list[str]:
-    out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                         capture_output=True, text=True, cwd=REPO_ROOT)
+    out = subprocess.run(
+        ["git", "diff", "--name-only", f"{base}...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
     return [l for l in out.stdout.splitlines() if l.strip()]
 
 
 def staged_files() -> list[str]:
-    out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-                         capture_output=True, text=True, cwd=REPO_ROOT)
+    out = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
     return [l for l in out.stdout.splitlines() if l.strip()]
 
 

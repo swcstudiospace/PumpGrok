@@ -25,28 +25,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # is a direct write to the event store; trade is live money or the halt and kill switch. The
 # infrastructure rows (terraform, kubectl, helm, aws) are dropped: this repo has no such infra.
 DESTRUCTIVE_PATTERNS: list[tuple[str, str, str]] = [
-    (r"\bDROP\s+(?:TABLE|DATABASE|SCHEMA)\b",    "data",    "drops a database object"),
-    (r"\bTRUNCATE\b",                            "data",    "empties a table"),
-    (r"\bDELETE\s+FROM\b(?!.*\bWHERE\b)",        "data",    "unbounded delete"),
-    (r"\bgit\s+push\b.*(?:--force|-f)\b",        "git",     "force push"),
-    (r"\bgit\s+reset\s+--hard\b",                "git",     "discards work irrecoverably"),
-    (r"\bgit\s+filter-(?:branch|repo)\b",        "git",     "rewrites history"),
-    (r"\brm\s+-rf?\b",                           "fs",      "recursive delete"),
-    (r"\bdocker\s+system\s+prune\b",             "fs",      "removes shared caches and volumes"),
-    (r"\bdocker\s+volume\s+rm\b",                "fs",      "removes a volume"),
-    (r"\bmkfs\b",                                "fs",      "formats a filesystem"),
-    (r"\bdd\s+.*of=/dev/",                       "fs",      "writes directly to a device"),
-    (r"\bexec\.place\b.*live",                   "trade",   "places a live order"),
-    (r"\bpumpgrok\s+live[-_ ]trade\b",           "trade",   "executes a live trade"),
-    (r"\bpumpgrok\s+live\s+confirm\b",           "trade",   "writes a live human confirmation"),
-    (r"\bwallet[-_ ]transfer\b",                 "trade",   "moves funds out of a wallet"),
-    (r"\bsend[-_ ]transaction\b",                "trade",   "sends an on-chain transaction"),
-    (r"\bpumpgrok\s+risk\s+raise-limit\b",       "trade",   "raises a risk limit"),
-    (r"\bpumpgrok\s+killswitch\s+clear\b",       "trade",   "clears the kill switch"),
-    (r"\bpumpgrok\s+state\s+halt\b.*--clear\b",  "trade",   "clears a halt (R22: human only)"),
-    (r"\brm\s+(?:-f\s+)?var/KILLSWITCH\b",       "trade",   "removes the kill switch file"),
-    (r"\bDELETE\s+FROM\s+events\b",              "ledger",  "deletes ledger events"),
-    (r"\bsqlite3\b.*var/ledger\.sqlite",         "ledger",  "writes to the ledger database directly"),
+    (r"\bDROP\s+(?:TABLE|DATABASE|SCHEMA)\b", "data", "drops a database object"),
+    (r"\bTRUNCATE\b", "data", "empties a table"),
+    (r"\bDELETE\s+FROM\b(?!.*\bWHERE\b)", "data", "unbounded delete"),
+    (r"\bgit\s+push\b.*(?:--force|-f)\b", "git", "force push"),
+    (r"\bgit\s+reset\s+--hard\b", "git", "discards work irrecoverably"),
+    (r"\bgit\s+filter-(?:branch|repo)\b", "git", "rewrites history"),
+    (r"\brm\s+-rf?\b", "fs", "recursive delete"),
+    (r"\bdocker\s+system\s+prune\b", "fs", "removes shared caches and volumes"),
+    (r"\bdocker\s+volume\s+rm\b", "fs", "removes a volume"),
+    (r"\bmkfs\b", "fs", "formats a filesystem"),
+    (r"\bdd\s+.*of=/dev/", "fs", "writes directly to a device"),
+    (r"\bexec\.place\b.*live", "trade", "places a live order"),
+    (r"\bpumpgrok\s+live[-_ ]trade\b", "trade", "executes a live trade"),
+    (r"\bpumpgrok\s+live\s+confirm\b", "trade", "writes a live human confirmation"),
+    (r"\bwallet[-_ ]transfer\b", "trade", "moves funds out of a wallet"),
+    (r"\bsend[-_ ]transaction\b", "trade", "sends an on-chain transaction"),
+    (r"\bpumpgrok\s+risk\s+raise-limit\b", "trade", "raises a risk limit"),
+    (r"\bpumpgrok\s+killswitch\s+clear\b", "trade", "clears the kill switch"),
+    (r"\bpumpgrok\s+state\s+halt\b.*--clear\b", "trade", "clears a halt (R22: human only)"),
+    (r"\brm\s+(?:-f\s+)?var/KILLSWITCH\b", "trade", "removes the kill switch file"),
+    (r"\bDELETE\s+FROM\s+events\b", "ledger", "deletes ledger events"),
+    (r"\bsqlite3\b.*var/ledger\.sqlite", "ledger", "writes to the ledger database directly"),
 ]
 
 # A trade operation's approval must name the notional the human accepted (G-6).
@@ -67,13 +67,16 @@ REQUIRED_APPROVAL_FIELDS = ["operation", "approved_by", "at", "blast_radius"]
 # A rollback plan must say more than "roll back".
 PLAN_MIN_WORDS = 12
 PLAN_SIGNALS = [
-     (r"(?i)\b(?:command|run|via|using|`|\bvercel\b|\bkubectl\b|\bterraform\b|\bgit\b|\bpumpgrok\b|\bkillswitch\b)",
-     "the command or procedure"),
+    (
+        r"(?i)\b(?:command|run|via|using|`|\bvercel\b|\bkubectl\b|\bterraform\b|\bgit\b|\bpumpgrok\b|\bkillswitch\b)",
+        "the command or procedure",
+    ),
     # NOTE: \bsecond\b does not match "seconds" — the trailing \b lands mid-word.
-    (r"(?i)(?:seconds?|minutes?|hours?|instant|immediate|~\s*\d|\d+\s*(?:s|m|min|h)\b)",
-     "the expected recovery time"),
-    (r"(?i)\b(?:data|schema|migration|cache|state|none|no data)\b",
-     "the data implications"),
+    (
+        r"(?i)(?:seconds?|minutes?|hours?|instant|immediate|~\s*\d|\d+\s*(?:s|m|min|h)\b)",
+        "the expected recovery time",
+    ),
+    (r"(?i)\b(?:data|schema|migration|cache|state|none|no data)\b", "the data implications"),
 ]
 
 
@@ -184,8 +187,10 @@ def main() -> int:
     if not destructive and not deploys:
         print("G-5/G-6 PASS — no deployments or destructive operations in this receipt")
     else:
-        print(f"\nG-5/G-6 PASS — {len(deploys)} deployment(s) with a rollback plan, "
-              f"{len(destructive)} destructive op(s) approved")
+        print(
+            f"\nG-5/G-6 PASS — {len(deploys)} deployment(s) with a rollback plan, "
+            f"{len(destructive)} destructive op(s) approved"
+        )
     return 0
 
 

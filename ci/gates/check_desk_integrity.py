@@ -66,28 +66,41 @@ WRITE_REQUIRED_FIELDS = ["approval_id", "rollback_plan"]
 
 # Assembled prompts are also written to these aliases under prompts/. They are output, not
 # source, so the placeholder check applies to them rather than the UUID check.
-ASSEMBLED_ALIASES = ["CHIEF", "SCOUT", "RISK", "WHALE", "SNIPER", "RUG", "EXIT", "SHILL",
-                     "SIGNAL", "JOURNAL"]
+ASSEMBLED_ALIASES = [
+    "CHIEF",
+    "SCOUT",
+    "RISK",
+    "WHALE",
+    "SNIPER",
+    "RUG",
+    "EXIT",
+    "SHILL",
+    "SIGNAL",
+    "JOURNAL",
+]
 
 # Nothing in a Grok Bot template may point at the desk's own infrastructure or credentials.
 # (pattern, description)
 TEMPLATE_FORBIDDEN: list[tuple[str, str]] = [
-    (r"sk-[A-Za-z0-9]{16,}",                              "API key shape (sk-...)"),
-    (r"ghp_[A-Za-z0-9]{20,}",                             "GitHub token shape (ghp_...)"),
-    (r"xox[abp]-",                                        "Slack token shape (xox?-...)"),
-    (r"AKIA[0-9A-Z]{16}",                                 "AWS access key shape (AKIA...)"),
-    (r"-----BEGIN",                                       "key block (-----BEGIN)"),
-    (r"tailscale-forwarder",                              "tailnet name (tailscale-forwarder)"),
-    (r"\.ts\.net",                                        "tailnet domain (.ts.net)"),
-    (r"100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.",    "tailnet address (100.64/10)"),
-    (UUID_RE.pattern,                                     "literal UUID"),
-    (r"railway\.internal",                                "Railway private hostname (railway.internal)"),
-    (r"[1-9A-HJ-NP-Za-km-z]{86,88}",                        "Solana 64-byte secret key shape (base58)"),
-    (r"helius(?:-rpc)?\.com/[^\s\"']*api-key=",             "Helius keyed RPC URL"),
-    (r"solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}",     "QuickNode keyed endpoint"),
-    (r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b",                     "Telegram bot token shape"),
-    (r"\bxai-[A-Za-z0-9]{32,}\b",                           "x.ai API key shape"),
-    (r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b(?=.*(?:mint|wallet))", "literal Solana address beside mint or wallet"),
+    (r"sk-[A-Za-z0-9]{16,}", "API key shape (sk-...)"),
+    (r"ghp_[A-Za-z0-9]{20,}", "GitHub token shape (ghp_...)"),
+    (r"xox[abp]-", "Slack token shape (xox?-...)"),
+    (r"AKIA[0-9A-Z]{16}", "AWS access key shape (AKIA...)"),
+    (r"-----BEGIN", "key block (-----BEGIN)"),
+    (r"tailscale-forwarder", "tailnet name (tailscale-forwarder)"),
+    (r"\.ts\.net", "tailnet domain (.ts.net)"),
+    (r"100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.", "tailnet address (100.64/10)"),
+    (UUID_RE.pattern, "literal UUID"),
+    (r"railway\.internal", "Railway private hostname (railway.internal)"),
+    (r"[1-9A-HJ-NP-Za-km-z]{86,88}", "Solana 64-byte secret key shape (base58)"),
+    (r"helius(?:-rpc)?\.com/[^\s\"']*api-key=", "Helius keyed RPC URL"),
+    (r"solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}", "QuickNode keyed endpoint"),
+    (r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b", "Telegram bot token shape"),
+    (r"\bxai-[A-Za-z0-9]{32,}\b", "x.ai API key shape"),
+    (
+        r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b(?=.*(?:mint|wallet))",
+        "literal Solana address beside mint or wallet",
+    ),
 ]
 
 
@@ -113,6 +126,7 @@ def load_yaml(path: Path) -> tuple[dict | None, str | None]:
 # ---------------------------------------------------------------------------
 # per-tool rules, shared by rosters and packs
 # ---------------------------------------------------------------------------
+
 
 def check_tool(tool: object, index: int) -> list[str]:
     """Rules every tool obeys wherever it is declared."""
@@ -182,6 +196,7 @@ def _names(tools: list) -> list[str]:
 # rosters
 # ---------------------------------------------------------------------------
 
+
 def load_core_tools(rosters_dir: Path) -> tuple[list, list[str]]:
     core_path = rosters_dir / CORE_ROSTER
     if not core_path.exists():
@@ -221,8 +236,11 @@ def check_roster(path: Path, core_tools: list) -> list[str]:
     effective = list(own_tools) + (list(core_tools) if has_core else [])
     n = len(effective)
     if not ROSTER_MIN_TOOLS <= n <= ROSTER_MAX_TOOLS:
-        breakdown = f"{len(own_tools)} own + {len(core_tools)} core" if has_core \
+        breakdown = (
+            f"{len(own_tools)} own + {len(core_tools)} core"
+            if has_core
             else f"{len(own_tools)} own, core: false"
+        )
         problems.append(
             f"{n} effective tool(s) ({breakdown}) — "
             f"must be within [{ROSTER_MIN_TOOLS}, {ROSTER_MAX_TOOLS}]"
@@ -243,6 +261,7 @@ def check_roster(path: Path, core_tools: list) -> list[str]:
 # ---------------------------------------------------------------------------
 # packs
 # ---------------------------------------------------------------------------
+
 
 def check_pack(path: Path) -> list[str]:
     doc, err = load_yaml(path)
@@ -282,6 +301,7 @@ def check_pack(path: Path) -> list[str]:
 # prompts
 # ---------------------------------------------------------------------------
 
+
 def _lines_matching(text: str, pattern: re.Pattern) -> list[int]:
     return [i for i, line in enumerate(text.splitlines(), start=1) if pattern.search(line)]
 
@@ -293,7 +313,9 @@ def check_prompt_source(path: Path) -> list[str]:
     if not lines:
         return []
     where = ", ".join(str(n) for n in lines[:5]) + (", ..." if len(lines) > 5 else "")
-    return [f"literal UUID at line(s) {where} — use {{{{DESK_CHANNEL_ID}}}} / {{{{SEAT_UUID:...}}}}"]
+    return [
+        f"literal UUID at line(s) {where} — use {{{{DESK_CHANNEL_ID}}}} / {{{{SEAT_UUID:...}}}}"
+    ]
 
 
 def check_assembled_prompt(path: Path) -> list[str]:
@@ -328,6 +350,7 @@ def prompt_files(prompts_dir: Path, assembled_dir: Path) -> tuple[list[Path], li
 # templates
 # ---------------------------------------------------------------------------
 
+
 def check_template(path: Path) -> list[str]:
     text = path.read_text(errors="replace")
     problems: list[str] = []
@@ -345,8 +368,15 @@ def check_template(path: Path) -> list[str]:
 # entry point
 # ---------------------------------------------------------------------------
 
-def run(repo: Path, rosters_dir: Path, packs_dir: Path, prompts_dir: Path,
-        assembled_dir: Path, templates_dir: Path) -> tuple[list[str], dict[str, int]]:
+
+def run(
+    repo: Path,
+    rosters_dir: Path,
+    packs_dir: Path,
+    prompts_dir: Path,
+    assembled_dir: Path,
+    templates_dir: Path,
+) -> tuple[list[str], dict[str, int]]:
     """Run every check. Returns (problems, counts); each problem is '<file>: <reason>'."""
     problems: list[str] = []
     counts = {"rosters": 0, "packs": 0, "prompts": 0, "templates": 0}
@@ -397,8 +427,12 @@ def run(repo: Path, rosters_dir: Path, packs_dir: Path, prompts_dir: Path,
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Gate G-7: desk integrity")
-    ap.add_argument("--repo", type=Path, default=Path.cwd(),
-                    help="Repository checkout to check (default: current directory)")
+    ap.add_argument(
+        "--repo",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository checkout to check (default: current directory)",
+    )
     ap.add_argument("--rosters-dir", type=Path, help=f"Override {ROSTERS_DIR}/")
     ap.add_argument("--packs-dir", type=Path, help=f"Override {PACKS_DIR}/")
     ap.add_argument("--prompts-dir", type=Path, help=f"Override {PROMPTS_DIR}/")
@@ -425,8 +459,10 @@ def main() -> int:
 
     if counts["templates"]:
         print(f"  {counts['templates']} template(s) clean")
-    print(f"G-7 PASS — desk integrity: {counts['rosters']} rosters, {counts['packs']} packs, "
-          f"{counts['prompts']} prompt files checked")
+    print(
+        f"G-7 PASS — desk integrity: {counts['rosters']} rosters, {counts['packs']} packs, "
+        f"{counts['prompts']} prompt files checked"
+    )
     return 0
 
 

@@ -76,7 +76,10 @@ def changed_files(base: str) -> list[str]:
     try:
         out = subprocess.run(
             ["git", "diff", "--name-only", f"{base}...HEAD"],
-            capture_output=True, text=True, check=True, cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
         )
     except subprocess.CalledProcessError as exc:
         sys.exit(f"check_ownership: git diff failed: {exc.stderr}")
@@ -87,7 +90,11 @@ def tracked_paths() -> list[str]:
     """Every path git tracks, repo-relative. The self-test walks this, not the working tree."""
     try:
         out = subprocess.run(
-            ["git", "ls-files", "-z"], capture_output=True, text=True, check=True, cwd=REPO_ROOT,
+            ["git", "ls-files", "-z"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
         )
     except subprocess.CalledProcessError as exc:
         sys.exit(f"check_ownership: git ls-files failed: {exc.stderr}")
@@ -130,7 +137,9 @@ def validate_manifest(manifest: dict, paths: list[str]) -> int:
     for surface, consumers in (manifest.get("contract_consumers") or {}).items():
         for consumer in consumers:
             if consumer not in bots:
-                problems.append(f"contract_consumers['{surface}'] names undeclared bot '{consumer}'")
+                problems.append(
+                    f"contract_consumers['{surface}'] names undeclared bot '{consumer}'"
+                )
 
     problems.extend(self_test(manifest, paths))
 
@@ -140,8 +149,10 @@ def validate_manifest(manifest: dict, paths: list[str]) -> int:
             print(f"  - {p}", file=sys.stderr)
         return 1
 
-    print(f"G-1 manifest OK — {len(bots)} bots, {len(manifest['ownership'])} rules; "
-          f"{len(paths)} tracked path(s), each with one declared owner")
+    print(
+        f"G-1 manifest OK — {len(bots)} bots, {len(manifest['ownership'])} rules; "
+        f"{len(paths)} tracked path(s), each with one declared owner"
+    )
     return 0
 
 
@@ -186,13 +197,17 @@ def main() -> int:
         print(f"G-1 FAIL — {args.bot}", file=sys.stderr)
         for path in unowned:
             print(f"  UNOWNED  {path}", file=sys.stderr)
-            print("           No ownership rule matches. Extend ownership.yaml (bot-02-risk).",
-                  file=sys.stderr)
+            print(
+                "           No ownership rule matches. Extend ownership.yaml (bot-02-risk).",
+                file=sys.stderr,
+            )
         for path, owner in foreign:
             print(f"  FOREIGN  {path}  (owned by {owner})", file=sys.stderr)
         if foreign:
-            print("\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
-                  file=sys.stderr)
+            print(
+                "\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
+                file=sys.stderr,
+            )
         return 1
 
     print(f"G-1 PASS — {args.bot}: {len(files)} file(s) within owned paths")

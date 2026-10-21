@@ -102,9 +102,7 @@ def test_default_seed_is_the_documented_constant() -> None:
 def test_same_seed_replays_identical_sequence() -> None:
     first = make_rng(42)
     second = make_rng(42)
-    assert [first.getrandbits(64) for _ in range(8)] == [
-        second.getrandbits(64) for _ in range(8)
-    ]
+    assert [first.getrandbits(64) for _ in range(8)] == [second.getrandbits(64) for _ in range(8)]
 
 
 def test_different_seeds_differ() -> None:

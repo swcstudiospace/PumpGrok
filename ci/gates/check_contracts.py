@@ -93,8 +93,12 @@ def _surface_match(pattern: str, path: str) -> bool:
 
 
 def changed_files(base: str) -> list[str]:
-    out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                         capture_output=True, text=True, cwd=REPO_ROOT)
+    out = subprocess.run(
+        ["git", "diff", "--name-only", f"{base}...HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
     return [l for l in out.stdout.splitlines() if l.strip()]
 
 
@@ -103,8 +107,9 @@ def touched_contracts(files: list[str], manifest: dict) -> list[str]:
     return [f for f in files if any(_match(p, f) for p in surfaces)]
 
 
-def check_change_doc(doc: dict, manifest: dict, touched: list[str] | None = None,
-                     change_path: Path | None = None) -> list[str]:
+def check_change_doc(
+    doc: dict, manifest: dict, touched: list[str] | None = None, change_path: Path | None = None
+) -> list[str]:
     problems: list[str] = []
 
     for field in REQUIRED_CHANGE_FIELDS:
@@ -147,8 +152,10 @@ def check_change_doc(doc: dict, manifest: dict, touched: list[str] | None = None
             return rel == "contracts/changes" or rel.startswith("contracts/changes/")
 
         undeclared = [
-            t for t in touched
-            if not _is_change_doc(t) and not _is_bookkeeping(t)
+            t
+            for t in touched
+            if not _is_change_doc(t)
+            and not _is_bookkeeping(t)
             and not any(_surface_match(p, t) for p in surfaces)
         ]
         if undeclared:
@@ -194,7 +201,7 @@ def check_change_doc(doc: dict, manifest: dict, touched: list[str] | None = None
 
         version = str(doc["version"])
         try:
-            major = int(version.split(".")[0])
+            major = int(version.split(".", maxsplit=1)[0])
         except (ValueError, IndexError):
             problems.append(f"version '{version}' is not semver")
             major = None
@@ -280,13 +287,17 @@ def main() -> int:
         print(f"\nG-4 FAIL — {args.change}", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
-        print("\n  See docs/cross-bot-protocol.md and skills/contract-first-changes/SKILL.md",
-              file=sys.stderr)
+        print(
+            "\n  See docs/cross-bot-protocol.md and skills/contract-first-changes/SKILL.md",
+            file=sys.stderr,
+        )
         return 1
 
     kind = "BREAKING" if doc["breaking"] else "non-breaking"
     n_acks = sum(1 for a in doc.get("acknowledgements", []) if a.get("ack"))
-    print(f"\nG-4 PASS — {doc['change_id']}: {kind}, v{doc['version']}, {n_acks} acknowledgement(s)")
+    print(
+        f"\nG-4 PASS — {doc['change_id']}: {kind}, v{doc['version']}, {n_acks} acknowledgement(s)"
+    )
     return 0
 
 

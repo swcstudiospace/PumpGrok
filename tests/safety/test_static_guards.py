@@ -75,14 +75,14 @@ def _scan_file(path: Path, rel: str) -> list[str]:
         found.append((line, reason))
 
     def check_module(module: str, line: int) -> None:
-        root = module.split(".")[0]
+        root = module.split(".", maxsplit=1)[0]
         if root in _BANNED_MODULES:
             flag(line, f"import of {root} is banned")
         elif root == "time" and not clock_ok:
             flag(line, "time module used outside replay/clock.py")
 
     def check_reference(resolved: str, line: int) -> None:
-        head = resolved.split(".")[0]
+        head = resolved.split(".", maxsplit=1)[0]
         tail = ".".join(resolved.split(".")[-2:])
         if head in _BANNED_MODULES:
             flag(line, f"use of {head} is banned")
@@ -129,7 +129,7 @@ def test_src_pumpgrok_has_no_forbidden_primitives() -> None:
 
 
 def test_clock_allowlist_is_exactly_the_replay_clock_module() -> None:
-    assert CLOCK_ALLOWLIST == frozenset({"replay/clock.py"})
+    assert frozenset({"replay/clock.py"}) == CLOCK_ALLOWLIST
     assert (SRC / "replay" / "clock.py").is_file()
 
 

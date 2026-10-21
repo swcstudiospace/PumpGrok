@@ -28,32 +28,40 @@ def convert(json_path: str, sarif_path: str) -> None:
     for r in data.get("results", []):
         rule_id = r["test_id"]
         rules.setdefault(rule_id, r.get("test_name", rule_id))
-        results.append({
-            "ruleId": rule_id,
-            "level": SEVERITY_TO_LEVEL.get(r.get("issue_severity", ""), "warning"),
-            "message": {"text": r.get("issue_text", "")},
-            "locations": [{
-                "physicalLocation": {
-                    # SARIF artifactLocation.uri is a URI, not a bare path: a literal '#' would
-                    # be read as a fragment separator and a literal space makes the URI invalid
-                    # outright — quote() percent-encodes both, keeping '/' as a path separator.
-                    "artifactLocation": {"uri": quote(r["filename"], safe="/")},
-                    "region": {"startLine": r.get("line_number", 1)},
-                }
-            }],
-        })
+        results.append(
+            {
+                "ruleId": rule_id,
+                "level": SEVERITY_TO_LEVEL.get(r.get("issue_severity", ""), "warning"),
+                "message": {"text": r.get("issue_text", "")},
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            # SARIF artifactLocation.uri is a URI, not a bare path: a literal '#' would
+                            # be read as a fragment separator and a literal space makes the URI invalid
+                            # outright — quote() percent-encodes both, keeping '/' as a path separator.
+                            "artifactLocation": {"uri": quote(r["filename"], safe="/")},
+                            "region": {"startLine": r.get("line_number", 1)},
+                        }
+                    }
+                ],
+            }
+        )
 
     sarif = {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {"driver": {
-                "name": "Bandit",
-                "informationUri": "https://bandit.readthedocs.io/",
-                "rules": [{"id": rid, "name": name} for rid, name in rules.items()],
-            }},
-            "results": results,
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "Bandit",
+                        "informationUri": "https://bandit.readthedocs.io/",
+                        "rules": [{"id": rid, "name": name} for rid, name in rules.items()],
+                    }
+                },
+                "results": results,
+            }
+        ],
     }
     json.dump(sarif, open(sarif_path, "w"), indent=2)
 

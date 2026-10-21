@@ -75,7 +75,6 @@ def gates() -> dict:
 
 
 class TestWorkflowsParseAndRunOnHostedRunners:
-
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
     def test_parses_as_yaml_with_jobs(self, name):
         assert _load_yaml(name)["jobs"]
@@ -87,7 +86,6 @@ class TestWorkflowsParseAndRunOnHostedRunners:
 
 
 class TestNoExpressionInterpolationInRunBlocks:
-
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
     def test_run_blocks_never_interpolate_expressions(self, name):
         # Branch and base-ref names may hold shell metacharacters. They reach a step only
@@ -97,7 +95,6 @@ class TestNoExpressionInterpolationInRunBlocks:
 
 
 class TestGatesWorkflow:
-
     def test_triggers_on_pull_request_and_push_to_main(self, gates):
         trigger = _trigger(gates)
         assert trigger["pull_request"]["branches"] == ["main"]
@@ -106,8 +103,11 @@ class TestGatesWorkflow:
     def test_base_ref_overlay_runs_in_both_jobs(self, gates):
         for job_name in ("gates", "gate-self-test"):
             steps = gates["jobs"][job_name]["steps"]
-            overlay = [s for s in steps
-                       if 'git checkout "origin/$BASE_REF" -- ci/gates/' in s.get("run", "")]
+            overlay = [
+                s
+                for s in steps
+                if 'git checkout "origin/$BASE_REF" -- ci/gates/' in s.get("run", "")
+            ]
             assert overlay, job_name
             assert overlay[0]["env"]["BASE_REF"] == "${{ github.base_ref || 'main' }}"
 
@@ -132,7 +132,6 @@ class TestGatesWorkflow:
 
 
 class TestSecurityGatesStillBlock:
-
     def test_no_bypass_snippets_in_any_run_block(self, security_pr):
         for block in _run_blocks(security_pr):
             for snippet in BYPASS_SNIPPETS:
@@ -147,7 +146,7 @@ class TestSecurityGatesStillBlock:
     def test_gitleaks_scans_only_pr_commits_and_fails_on_a_leak(self, security_pr):
         run = _step(security_pr, "Gitleaks — scan")["run"]
         assert "--exit-code 1" in run
-        assert 'origin/$BASE_REF..HEAD' in run
+        assert "origin/$BASE_REF..HEAD" in run
         assert "--config ci/security/gitleaks.toml" in run
 
     def test_semgrep_blocks_error_severity_against_the_baseline(self, security_pr):
@@ -163,7 +162,7 @@ class TestSecurityGatesStillBlock:
     def test_bandit_baseline_fails_closed(self, security_pr):
         run = _step(security_pr, "Bandit baseline")["run"]
         assert "refusing to compare against an untrustworthy baseline" in run
-        assert '-gt 1' in run
+        assert "-gt 1" in run
 
     def test_trivy_fails_on_high_and_critical_without_ignore_unfixed(self, security_pr):
         with_ = _step(security_pr, "Trivy filesystem scan")["with"]
@@ -185,7 +184,6 @@ class TestSecurityGatesStillBlock:
 
 
 class TestGitleaksConfig:
-
     @pytest.fixture(scope="module")
     def config(self) -> dict:
         return tomllib.loads(GITLEAKS_CONFIG.read_text())
@@ -202,15 +200,15 @@ class TestGitleaksConfig:
             assert rule["regex"], rule["id"]
 
     def test_sarif_converter_exposes_convert(self):
-        spec = importlib.util.spec_from_file_location("bandit_json_to_sarif",
-                                                      BANDIT_SARIF_CONVERTER)
+        spec = importlib.util.spec_from_file_location(
+            "bandit_json_to_sarif", BANDIT_SARIF_CONVERTER
+        )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         assert callable(module.convert)
 
 
 class TestCiWorkflow:
-
     def test_runs_the_canonical_make_targets(self):
         runs = " ".join(_run_blocks(_load_yaml("ci.yml")))
         assert "make lint typecheck test audit" in runs
@@ -226,7 +224,6 @@ class TestCiWorkflow:
 
 
 class TestPreCommitHooks:
-
     @pytest.fixture(scope="module")
     def hooks(self) -> dict:
         config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text())
@@ -246,7 +243,6 @@ class TestPreCommitHooks:
 
 
 class TestReceiptDirectories:
-
     @pytest.fixture(scope="module")
     def seats(self) -> list[str]:
         manifest = yaml.safe_load((REPO_ROOT / "ownership.yaml").read_text())
@@ -262,6 +258,9 @@ class TestReceiptDirectories:
     def test_no_receipt_json_is_tracked_by_git(self):
         tracked = subprocess.run(
             ["git", "ls-files", "--", ".receipts"],
-            capture_output=True, text=True, check=True, cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO_ROOT,
         ).stdout.split()
         assert not [path for path in tracked if path.endswith(".json")]
