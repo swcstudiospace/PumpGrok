@@ -118,6 +118,8 @@ ownership:
     owner: bot-02-risk
   - pattern: "docker-compose.yml"
     owner: bot-02-risk
+  - pattern: ".dockerignore"
+    owner: bot-02-risk
   - pattern: ".env.example"
     owner: bot-02-risk
   - pattern: "plugin.json"
