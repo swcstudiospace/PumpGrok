@@ -10,6 +10,12 @@ skills:
   - solana-api-reference
   - solana-market-data
   - grokbot-pipeline
+  - verification-receipts
+  - paper-broker
+  - rpc-hygiene
+  - key-custody
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: true
 ---
 

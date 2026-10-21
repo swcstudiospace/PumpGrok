@@ -8,6 +8,13 @@ skills:
   - desk-monitoring
   - grokbot-pipeline
   - solana-market-data
+  - risk-audit
+  - hermes-cron-desk
+  - safety-scoring
+  - verification-receipts
+  - rpc-hygiene
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: false
 ---
 

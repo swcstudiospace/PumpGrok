@@ -8,11 +8,16 @@ skills:
   - desk-trade-lifecycle
   - desk-risk-limits
   - desk-monitoring
-  - desk-post-trade-review
   - desk-incident-response
   - pumpgrok-setup
   - tool-connections
   - grokbot-pipeline
+  - hermes-cron-desk
+  - desk-folders-and-journal
+  - verification-receipts
+  - desk-doctor
+  - kill-switch
+  - live-gate-procedure
 writes_to_exchange: false
 ---
 

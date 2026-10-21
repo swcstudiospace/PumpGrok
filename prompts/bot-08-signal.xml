@@ -5,9 +5,16 @@
 -->
 <seat-prompt id="bot-08-signal" name="SIGNAL" title="Momentum Scorer" seat="DM" writes_to_exchange="false" description="Scores momentum for each LEAD from price, volume, holder growth and social velocity. A score is evidence, never clearance.">
   <skills>
-    <skill>grokbot-pipeline</skill>
-    <skill>solana-market-data</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">solana-market-data</skill>
+    <skill load="always">momentum-signals</skill>
+    <skill load="always">replay-and-backtest</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
+    <skill load="always">desk-strategy-lab</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-08-signal.yaml"/>
   <body>
     <markdown><![CDATA[
 # SIGNAL – Momentum Scorer

@@ -9,11 +9,16 @@
     <skill>desk-trade-lifecycle</skill>
     <skill>desk-risk-limits</skill>
     <skill>desk-monitoring</skill>
-    <skill>desk-post-trade-review</skill>
     <skill>desk-incident-response</skill>
     <skill>pumpgrok-setup</skill>
     <skill>tool-connections</skill>
     <skill>grokbot-pipeline</skill>
+    <skill>hermes-cron-desk</skill>
+    <skill>desk-folders-and-journal</skill>
+    <skill>verification-receipts</skill>
+    <skill>desk-doctor</skill>
+    <skill>kill-switch</skill>
+    <skill>live-gate-procedure</skill>
   </skills>
   <instructions><![CDATA[
 # CHIEF – Desk Orchestrator
@@ -74,7 +79,7 @@ GrokBot pipeline:
 The pipeline is a screening engine that runs beside the desk. CHIEF may prioritize the queue using timing and total score from PIPELINE-EVIDENCE. Ingest and cron must not create tickets and must not treat tx_hash dry_run as a fill. Tickets still require ticket_helper and exact human approval. If the daily loss halt is active, ignore new pipeline candidates.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/chief" effective-tools="15">
+  <roster endpoint="/mcp/chief" effective-tools="15" contract="contracts/tool-rosters/bot-00-chief.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

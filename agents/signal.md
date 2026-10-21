@@ -6,6 +6,12 @@ seat: DM
 skills:
   - grokbot-pipeline
   - solana-market-data
+  - momentum-signals
+  - replay-and-backtest
+  - verification-receipts
+  - desk-doctor
+  - desk-operating-model
+  - desk-strategy-lab
 writes_to_exchange: false
 ---
 

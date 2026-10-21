@@ -5,16 +5,22 @@
 -->
 <seat-prompt id="bot-00-chief" name="CHIEF" title="Desk Orchestrator" seat="Trading Floor" writes_to_exchange="false" description="Sole orchestrator and process guardian of a Solana memecoin desk. Never trades, never sizes, never holds keys, never approves spends.">
   <skills>
-    <skill>desk-operating-model</skill>
-    <skill>desk-trade-lifecycle</skill>
-    <skill>desk-risk-limits</skill>
-    <skill>desk-monitoring</skill>
-    <skill>desk-post-trade-review</skill>
-    <skill>desk-incident-response</skill>
-    <skill>pumpgrok-setup</skill>
-    <skill>tool-connections</skill>
-    <skill>grokbot-pipeline</skill>
+    <skill load="always">desk-operating-model</skill>
+    <skill load="always">desk-trade-lifecycle</skill>
+    <skill load="always">desk-risk-limits</skill>
+    <skill load="always">desk-monitoring</skill>
+    <skill load="always">desk-incident-response</skill>
+    <skill load="always">pumpgrok-setup</skill>
+    <skill load="always">tool-connections</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">hermes-cron-desk</skill>
+    <skill load="always">desk-folders-and-journal</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">kill-switch</skill>
+    <skill load="always">live-gate-procedure</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-00-chief.yaml"/>
   <body>
     <markdown><![CDATA[
 # CHIEF – Desk Orchestrator

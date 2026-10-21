@@ -9,6 +9,10 @@
     <skill>solana-market-data</skill>
     <skill>discovery-tools</skill>
     <skill>grokbot-pipeline</skill>
+    <skill>verification-receipts</skill>
+    <skill>rpc-hygiene</skill>
+    <skill>desk-doctor</skill>
+    <skill>desk-operating-model</skill>
   </skills>
   <instructions><![CDATA[
 # WHALE – Smart-Money Analyst
@@ -60,7 +64,7 @@ NEVER:
 - Treat pure social mentions as smart-money evidence.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/whale" effective-tools="14">
+  <roster endpoint="/mcp/whale" effective-tools="14" contract="contracts/tool-rosters/bot-03-whale.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

@@ -7,7 +7,8 @@ tool rosters. Nothing here writes files.
 A seat source is prompts/bot-0N-<seat>.xml:
 
     <seat-prompt id name title seat writes_to_exchange description>
-      <skills><skill>...</skill></skills>
+      <skills><skill load="always">...</skill></skills>
+      <tools contract="contracts/tool-rosters/<seat>.yaml"/>
       <body>
         <markdown><![CDATA[ ...markdown... ]]></markdown>
         <core ref="security-constitution"/>        include a shared section here, once
@@ -58,6 +59,7 @@ class SeatSource:
     channel: str
     writes_to_exchange: bool
     skills: tuple[str, ...]
+    tools_contract: str
     parts: tuple[tuple[str, str], ...]  # ("markdown", text) or ("core", section id)
 
     @property
@@ -121,9 +123,30 @@ def load_seat(path: Path) -> SeatSource:
     if channel not in CHANNELS:
         raise PromptError(f"{path.name}: seat {channel!r} must be one of {CHANNELS}")
 
-    skills = tuple(s.text.strip() for s in root.findall("skills/skill") if s.text)
+    skills: list[str] = []
+    for el in root.findall("skills/skill"):
+        if not el.text:
+            continue
+        load = el.get("load", "always")
+        if load != "always":
+            raise PromptError(
+                f"{path.name}: skill {el.text.strip()!r} load {load!r} must be 'always'"
+            )
+        skills.append(el.text.strip())
     if not skills:
         raise PromptError(f"{path.name}: <skills> lists no skill")
+
+    tools_el = root.find("tools")
+    if tools_el is None:
+        raise PromptError(f"{path.name}: missing <tools contract=.../>")
+    contract = (tools_el.get("contract") or "").strip()
+    if not contract:
+        raise PromptError(f"{path.name}: <tools> is missing attribute 'contract'")
+    expected = f"contracts/tool-rosters/{seat}.yaml"
+    if contract != expected:
+        raise PromptError(f"{path.name}: <tools> contract {contract!r} must be {expected!r}")
+    if not (REPO_ROOT / contract).exists():
+        raise PromptError(f"{path.name}: <tools> contract {contract} not found")
 
     parts: list[tuple[str, str]] = []
     body = root.find("body")
@@ -147,7 +170,8 @@ def load_seat(path: Path) -> SeatSource:
         description=_attr(root, "description", path),
         channel=channel,
         writes_to_exchange=writes == "true",
-        skills=skills,
+        skills=tuple(skills),
+        tools_contract=contract,
         parts=tuple(parts),
     )
 

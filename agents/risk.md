@@ -9,6 +9,17 @@ skills:
   - grokbot-pipeline
   - solana-market-data
   - solana-rpc-and-wallet
+  - holder-and-flow-analysis
+  - desk-incident-response
+  - hermes-cron-desk
+  - verification-receipts
+  - kill-switch
+  - live-gate-procedure
+  - key-custody
+  - safety-scoring
+  - portfolio-ledger
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: false
 ---
 

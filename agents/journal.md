@@ -7,6 +7,12 @@ skills:
   - desk-post-trade-review
   - desk-folders-and-journal
   - hermes-cron-desk
+  - portfolio-ledger
+  - daily-report
+  - verification-receipts
+  - desk-doctor
+  - desk-operating-model
+  - grokbot-pipeline
 writes_to_exchange: false
 ---
 

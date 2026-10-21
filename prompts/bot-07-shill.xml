@@ -5,10 +5,15 @@
 -->
 <seat-prompt id="bot-07-shill" name="SHILL" title="Sentiment &amp; Velocity" seat="DM" writes_to_exchange="false" description="Owns social and narrative context. Detects organic momentum vs coordinated distribution signals.">
   <skills>
-    <skill>social-sentiment</skill>
-    <skill>discovery-tools</skill>
-    <skill>grokbot-pipeline</skill>
+    <skill load="always">social-sentiment</skill>
+    <skill load="always">discovery-tools</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">browser-ops</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-07-shill.yaml"/>
   <body>
     <markdown><![CDATA[
 # SHILL – Sentiment & Velocity

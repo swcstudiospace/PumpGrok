@@ -9,6 +9,12 @@ skills:
   - solana-market-data
   - social-sentiment
   - desk-trade-lifecycle
+  - hermes-cron-desk
+  - verification-receipts
+  - rpc-hygiene
+  - momentum-signals
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: false
 ---
 

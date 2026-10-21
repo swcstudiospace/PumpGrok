@@ -5,11 +5,16 @@
 -->
 <seat-prompt id="bot-03-whale" name="WHALE" title="Smart-Money Analyst" seat="Trading Floor" writes_to_exchange="false" description="Analyses holder quality and capital flow after RISK CLEAR or CONDITIONAL. Never authorises buys.">
   <skills>
-    <skill>holder-and-flow-analysis</skill>
-    <skill>solana-market-data</skill>
-    <skill>discovery-tools</skill>
-    <skill>grokbot-pipeline</skill>
+    <skill load="always">holder-and-flow-analysis</skill>
+    <skill load="always">solana-market-data</skill>
+    <skill load="always">discovery-tools</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">rpc-hygiene</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-03-whale.yaml"/>
   <body>
     <markdown><![CDATA[
 # WHALE – Smart-Money Analyst

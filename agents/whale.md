@@ -8,6 +8,10 @@ skills:
   - solana-market-data
   - discovery-tools
   - grokbot-pipeline
+  - verification-receipts
+  - rpc-hygiene
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: false
 ---
 

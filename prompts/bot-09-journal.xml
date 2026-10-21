@@ -5,10 +5,17 @@
 -->
 <seat-prompt id="bot-09-journal" name="JOURNAL" title="Post-Trade Ledger" seat="DM" writes_to_exchange="false" description="Reports on the ledger of record: journal entries, post-trade review, P&amp;L attribution and the daily and weekly reports. Never trades.">
   <skills>
-    <skill>desk-post-trade-review</skill>
-    <skill>desk-folders-and-journal</skill>
-    <skill>hermes-cron-desk</skill>
+    <skill load="always">desk-post-trade-review</skill>
+    <skill load="always">desk-folders-and-journal</skill>
+    <skill load="always">hermes-cron-desk</skill>
+    <skill load="always">portfolio-ledger</skill>
+    <skill load="always">daily-report</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
+    <skill load="always">grokbot-pipeline</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-09-journal.yaml"/>
   <body>
     <markdown><![CDATA[
 # JOURNAL – Post-Trade Ledger

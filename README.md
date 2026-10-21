@@ -2,14 +2,14 @@
 
 ![PumpGrok banner](banner.jpg)
 
-PumpGrok is an eight-role Solana memecoin trading desk packaged as agent instructions, 23 skills, a hard security constitution, and read-only Python helpers. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
+PumpGrok is an eight-role Solana memecoin trading desk packaged as agent instructions, 35 skills, a hard security constitution, and read-only Python helpers. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
 
 Version 1.0.0.
 
 ## Capabilities
 
 - Eight specialist roles: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL (`agents/`)
-- 23 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
+- 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
 - Read-only CLI helpers for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence (`tools/pipeline_evidence.py`)
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)

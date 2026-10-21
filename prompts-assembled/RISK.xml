@@ -10,6 +10,17 @@
     <skill>grokbot-pipeline</skill>
     <skill>solana-market-data</skill>
     <skill>solana-rpc-and-wallet</skill>
+    <skill>holder-and-flow-analysis</skill>
+    <skill>desk-incident-response</skill>
+    <skill>hermes-cron-desk</skill>
+    <skill>verification-receipts</skill>
+    <skill>kill-switch</skill>
+    <skill>live-gate-procedure</skill>
+    <skill>key-custody</skill>
+    <skill>safety-scoring</skill>
+    <skill>portfolio-ledger</skill>
+    <skill>desk-doctor</skill>
+    <skill>desk-operating-model</skill>
   </skills>
   <instructions><![CDATA[
 # RISK – Absolute Safety Gate
@@ -70,7 +81,7 @@ GrokBot pipeline:
 Analyzer, audit, and checker are additional evidence for checklist items 6-9. The live 10-check remains mandatory (authority_check.py / holder_check.py). Checker approve:false is counter-evidence, not a KILL substitute. Checker approve:true is not CLEAR. Missing pipeline log: continue live checks or output BLIND. Never skip checks because of a high score.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/risk" effective-tools="15">
+  <roster endpoint="/mcp/risk" effective-tools="15" contract="contracts/tool-rosters/bot-02-risk.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

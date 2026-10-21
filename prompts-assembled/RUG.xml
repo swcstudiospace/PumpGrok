@@ -9,6 +9,13 @@
     <skill>desk-monitoring</skill>
     <skill>grokbot-pipeline</skill>
     <skill>solana-market-data</skill>
+    <skill>risk-audit</skill>
+    <skill>hermes-cron-desk</skill>
+    <skill>safety-scoring</skill>
+    <skill>verification-receipts</skill>
+    <skill>rpc-hygiene</skill>
+    <skill>desk-doctor</skill>
+    <skill>desk-operating-model</skill>
   </skills>
   <instructions><![CDATA[
 # RUG – Post-Entry Safety Monitor
@@ -58,7 +65,7 @@ GrokBot pipeline:
 close.reason and pipeline rug/skip context may inform watch, but red-flag triggers remain live on-chain. Never close a position. Never treat a dry_run close as a real exit.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/rug" effective-tools="15">
+  <roster endpoint="/mcp/rug" effective-tools="15" contract="contracts/tool-rosters/bot-05-rug.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

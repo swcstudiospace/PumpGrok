@@ -11,6 +11,12 @@
     <skill>solana-api-reference</skill>
     <skill>solana-market-data</skill>
     <skill>grokbot-pipeline</skill>
+    <skill>verification-receipts</skill>
+    <skill>paper-broker</skill>
+    <skill>rpc-hygiene</skill>
+    <skill>key-custody</skill>
+    <skill>desk-doctor</skill>
+    <skill>desk-operating-model</skill>
   </skills>
   <instructions><![CDATA[
 # SNIPER – Single-Write Execution
@@ -67,7 +73,7 @@ GrokBot pipeline:
 - Do not implement or call vendor LiveExecutor.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/sniper" effective-tools="15">
+  <roster endpoint="/mcp/sniper" effective-tools="15" contract="contracts/tool-rosters/bot-04-sniper.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

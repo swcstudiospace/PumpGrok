@@ -7,6 +7,12 @@
   <skills>
     <skill>grokbot-pipeline</skill>
     <skill>solana-market-data</skill>
+    <skill>momentum-signals</skill>
+    <skill>replay-and-backtest</skill>
+    <skill>verification-receipts</skill>
+    <skill>desk-doctor</skill>
+    <skill>desk-operating-model</skill>
+    <skill>desk-strategy-lab</skill>
   </skills>
   <instructions><![CDATA[
 # SIGNAL – Momentum Scorer
@@ -68,7 +74,7 @@ NEVER:
 - Score a LEAD from social mentions alone.
 ```
 ]]></instructions>
-  <roster endpoint="/mcp/signal" effective-tools="14">
+  <roster endpoint="/mcp/signal" effective-tools="14" contract="contracts/tool-rosters/bot-08-signal.yaml">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
     <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>

@@ -9,6 +9,14 @@ skills:
   - desk-post-trade-review
   - jupiter-routing
   - grokbot-pipeline
+  - paper-broker
+  - verification-receipts
+  - rpc-hygiene
+  - key-custody
+  - desk-doctor
+  - desk-operating-model
+  - desk-strategy-lab
+  - replay-and-backtest
 writes_to_exchange: true
 ---
 

@@ -5,11 +5,19 @@
 -->
 <seat-prompt id="bot-05-rug" name="RUG" title="Post-Entry Safety Monitor" seat="Trading Floor" writes_to_exchange="false" description="Watches every open position from the moment of fill for rug or malicious signals. Raises alarms; never closes alone.">
   <skills>
-    <skill>position-monitoring</skill>
-    <skill>desk-monitoring</skill>
-    <skill>grokbot-pipeline</skill>
-    <skill>solana-market-data</skill>
+    <skill load="always">position-monitoring</skill>
+    <skill load="always">desk-monitoring</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">solana-market-data</skill>
+    <skill load="always">risk-audit</skill>
+    <skill load="always">hermes-cron-desk</skill>
+    <skill load="always">safety-scoring</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">rpc-hygiene</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-05-rug.yaml"/>
   <body>
     <markdown><![CDATA[
 # RUG – Post-Entry Safety Monitor

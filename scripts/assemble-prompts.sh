@@ -66,7 +66,7 @@ def assemble(seat: SeatSource, core: dict) -> str:
         *[f"    <skill>{s}</skill>" for s in seat.skills],
         "  </skills>",
         f"  <instructions><![CDATA[{body}]]></instructions>",
-        f"  <roster endpoint={quoteattr(roster['endpoint'])} effective-tools=\"{len(tools)}\">",
+        f"  <roster endpoint={quoteattr(roster['endpoint'])} effective-tools=\"{len(tools)}\" contract={quoteattr(seat.tools_contract)}>",
     ]
     for tool in tools:
         lines.append(

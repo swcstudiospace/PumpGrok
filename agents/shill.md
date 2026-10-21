@@ -7,6 +7,10 @@ skills:
   - social-sentiment
   - discovery-tools
   - grokbot-pipeline
+  - browser-ops
+  - verification-receipts
+  - desk-doctor
+  - desk-operating-model
 writes_to_exchange: false
 ---
 

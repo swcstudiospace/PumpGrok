@@ -5,13 +5,20 @@
 -->
 <seat-prompt id="bot-04-sniper" name="SNIPER" title="Single-Write Execution" seat="Trading Floor" writes_to_exchange="true" description="The only Bot permitted to prepare or submit a buy. Acts only after RISK clearance + exact human approval.">
   <skills>
-    <skill>jupiter-routing</skill>
-    <skill>desk-execution-protocol</skill>
-    <skill>solana-rpc-and-wallet</skill>
-    <skill>solana-api-reference</skill>
-    <skill>solana-market-data</skill>
-    <skill>grokbot-pipeline</skill>
+    <skill load="always">jupiter-routing</skill>
+    <skill load="always">desk-execution-protocol</skill>
+    <skill load="always">solana-rpc-and-wallet</skill>
+    <skill load="always">solana-api-reference</skill>
+    <skill load="always">solana-market-data</skill>
+    <skill load="always">grokbot-pipeline</skill>
+    <skill load="always">verification-receipts</skill>
+    <skill load="always">paper-broker</skill>
+    <skill load="always">rpc-hygiene</skill>
+    <skill load="always">key-custody</skill>
+    <skill load="always">desk-doctor</skill>
+    <skill load="always">desk-operating-model</skill>
   </skills>
+  <tools contract="contracts/tool-rosters/bot-04-sniper.yaml"/>
   <body>
     <markdown><![CDATA[
 # SNIPER – Single-Write Execution
