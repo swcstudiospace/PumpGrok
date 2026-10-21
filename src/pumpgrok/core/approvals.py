@@ -39,6 +39,7 @@ class ApprovalRecord(BaseModel):
     ticket_id: str | None = Field(default=None, pattern=r"^SOL-\d{8}-\d{3}$")
     mint: str | None = None
     size_lamports: int | None = Field(default=None, gt=0)
+    token_units: int | None = Field(default=None, gt=0)
     max_slippage_bps: int | None = None
     exit_rule_id: str | None = None
     approved_by: str  # 'human:<name>' for human kinds; 'risk_engine' for autonomous_paper
@@ -57,18 +58,26 @@ class ApprovalRecord(BaseModel):
         }
     )
 
+    # The order side each kind may authorise. matches() refuses every other side.
+    ORDER_SIDES: ClassVar[dict[str, str]] = {
+        "human_buy": "buy",
+        "human_sell": "sell",
+        "exit_rule": "sell",
+    }
+
     @model_validator(mode="after")
     def _human_kinds_need_human(self) -> Self:
         if self.kind in self.HUMAN_KINDS:
             if not self.approved_by.startswith("human:"):
                 raise ValueError("human approval must be signed by a human, not a seat")
             if self.kind in ("human_buy", "human_sell") and (
-                self.ticket_id is None
-                or self.mint is None
-                or self.size_lamports is None
-                or self.max_slippage_bps is None
+                self.ticket_id is None or self.mint is None or self.max_slippage_bps is None
             ):
-                raise ValueError("human trade approval must carry ticket, mint, size, slippage")
+                raise ValueError("human trade approval must carry ticket, mint and slippage")
+            if self.kind == "human_buy" and self.size_lamports is None:
+                raise ValueError("human_buy approval must carry size_lamports")
+            if self.kind in ("human_sell", "exit_rule") and self.token_units is None:
+                raise ValueError(f"{self.kind} approval must carry token_units")
             if self.kind == "exit_rule" and (self.ticket_id is None or self.exit_rule_id is None):
                 raise ValueError("exit_rule approval must name the ticket and the rule (R17)")
         elif self.approved_by != "risk_engine":
@@ -76,12 +85,13 @@ class ApprovalRecord(BaseModel):
         return self
 
     def matches(self, request: OrderRequest) -> bool:
-        return (
-            self.ticket_id == request.ticket_id
-            and self.mint == request.mint
-            and self.max_slippage_bps == request.max_slippage_bps
-            and (
-                self.size_lamports == request.size_lamports if request.side.value == "buy" else True
-            )
-            and not self.consumed
-        )
+        """True only for an unconsumed approval of this order's side that binds this order."""
+        if self.consumed or self.ORDER_SIDES.get(self.kind) != request.side.value:
+            return False
+        if self.ticket_id != request.ticket_id or self.mint != request.mint:
+            return False
+        if self.max_slippage_bps != request.max_slippage_bps:
+            return False
+        if request.side.value == "buy":
+            return self.size_lamports == request.size_lamports
+        return self.token_units == request.token_units

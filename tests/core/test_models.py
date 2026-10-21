@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.idempotency import canonical_json, derive_idempotency_key
@@ -95,9 +96,11 @@ def _base_approval(**over: object) -> dict[str, object]:
 
 def test_approval_record_all_r33_kinds() -> None:
     ApprovalRecord(**_base_approval(kind="human_buy"))
-    ApprovalRecord(**_base_approval(kind="human_sell"))
+    ApprovalRecord(**_base_approval(kind="human_sell", size_lamports=None, token_units=500_000))
     ApprovalRecord(
-        **_base_approval(kind="exit_rule", exit_rule_id="trailing_stop", size_lamports=None)
+        **_base_approval(
+            kind="exit_rule", exit_rule_id="trailing_stop", size_lamports=None, token_units=500_000
+        )
     )
     ApprovalRecord(
         **_base_approval(
@@ -123,6 +126,36 @@ def test_approval_record_all_r33_kinds() -> None:
         ApprovalRecord(**_base_approval(kind="autonomous_paper", approved_by="human:alice"))
     with pytest.raises(Exception):
         ApprovalRecord(**_base_approval(kind="human_buy", approved_by="risk_engine"))
+
+
+def _order_fields(**over: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "ticket_id": "SOL-20260101-001",
+        "mint": "7xKXtg2CW87d97TXJSDpbD5HgznomR9rzme8H7Xwq",
+        "side": "sell",
+        "decision_id": "01ARYZ6S41TSV4RRFF7Q3V9J6Q",
+        "token_units": 500_000,
+        "max_slippage_bps": 100,
+        "approval_id": _approval_id(),
+        "correlation_id": "01ARYZ6S41TSV4RRFF7Q3V9J6Q",
+    }
+    base.update(over)
+    return base
+
+
+def test_approval_matches_only_its_side_quantity_and_unconsumed() -> None:
+    sell = ApprovalRecord(
+        **_base_approval(kind="human_sell", size_lamports=None, token_units=500_000)
+    )
+    assert sell.matches(OrderRequest(**_order_fields()))
+    assert not sell.matches(OrderRequest(**_order_fields(token_units=600_000)))
+    buy_request = OrderRequest(**_order_fields(side="buy", size_lamports=1_000_000, token_units=None))
+    assert not sell.matches(buy_request)
+    consumed = sell.model_copy(update={"consumed": True})
+    assert not consumed.matches(OrderRequest(**_order_fields()))
+    buy = ApprovalRecord(**_base_approval(kind="human_buy"))
+    assert buy.matches(buy_request)
+    assert not buy.matches(OrderRequest(**_order_fields()))
 
 
 def test_bot_manifest_carries_risk_budget_and_forbidden() -> None:
