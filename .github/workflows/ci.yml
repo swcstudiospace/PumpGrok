@@ -1,0 +1,35 @@
+# CI: the canonical commands from the Makefile (lint, typecheck, test, audit).
+#
+# uv is installed through pip at the version that wrote uv.lock (0.13.4), so the lockfile is
+# honoured exactly. Runners are GitHub-hosted (ubuntu-latest).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv (pinned to the version that wrote uv.lock)
+        run: pip install "uv==0.13.4"
+
+      - name: Lint, typecheck, test and audit
+        run: make lint typecheck test audit

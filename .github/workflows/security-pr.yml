@@ -1,0 +1,259 @@
+# Security PR gate: secrets, SAST and SCA on every pull request into main.
+#
+# Each scanner runs independently so one tool's finding does not hide another's. Each writes a
+# SARIF file that is uploaded as a workflow artifact unconditionally (if: always()) and,
+# best-effort, to code scanning. The artifact upload is the guaranteed path; the code-scanning
+# upload is a bonus that never blocks the gate.
+#
+# Triggers on every pull request into main, not on a path filter: a required check behind a path
+# filter stays pending on pull requests that do not touch the filtered paths. The dependency job
+# audits the uv.lock export, so pyproject.toml and uv.lock changes are covered on every run.
+#
+# Runners are GitHub-hosted (ubuntu-latest). Self-hosted runners are not used.
+
+name: Security PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Gitleaks (secrets)
+    runs-on: ubuntu-latest
+    # security-events: write is declared per job, not at the workflow root. It is needed only
+    # by the optional code-scanning upload below.
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks scans the commit range against the base ref
+
+      - name: Fetch base ref
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        # Do not pass --depth here: a shallow fetch hides every ancestor of the base tip, so
+        # origin/$BASE_REF..HEAD would walk the whole branch. The refspec keeps history.
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+
+      - name: Gitleaks — scan only this PR's commits
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          tar xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --source . \
+            --config ci/security/gitleaks.toml \
+            --log-opts="origin/$BASE_REF..HEAD" \
+            --report-format sarif --report-path gitleaks.sarif \
+            --exit-code 1 \
+            -v
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-sarif
+          path: gitleaks.sarif
+          if-no-files-found: warn
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # --baseline-commit below needs the base ref's history
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Semgrep — repo rules + registry security/secrets packs
+        # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
+        # the high-severity findings. --baseline-commit scopes blocking findings to what this PR
+        # changed, so a pre-existing finding in untouched code does not fail an unrelated PR.
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          semgrep \
+            --config ci/security/semgrep.yml \
+            --config p/security-audit \
+            --config p/secrets \
+            --sarif --output semgrep.sarif \
+            --severity ERROR --error \
+            --baseline-commit "origin/$BASE_REF" \
+            .
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: warn
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  bandit:
+    name: Bandit (Python SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the baseline worktree below is checked out from the base ref
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Bandit baseline — snapshot the base ref's own findings
+        # A whole-repo scan fails every PR on findings already present on the base ref. Bandit's
+        # -b/--baseline suppresses findings present on both sides, so only new HIGH findings
+        # block. -b works with json output only, so this step writes JSON and the next step
+        # derives the SARIF artifact from the same filtered result.
+        #
+        # Relative paths must match between the two scans for the fingerprints to match, so the
+        # baseline scan runs from inside the worktree with `-r .`.
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # RUNNER_TEMP plus the run id and attempt keeps the worktree path unique per run, so a
+          # worktree left registered by a cancelled run cannot make `git worktree add` fail later.
+          WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git worktree add --detach "$WORKTREE_DIR" "origin/$BASE_REF"
+          set +e
+          (cd "$WORKTREE_DIR" && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
+          baseline_ec=$?
+          set -e
+          git worktree remove --force "$WORKTREE_DIR"
+          # 0 = clean, 1 = findings: both are a successful baseline scan. Anything else means the
+          # baseline cannot be trusted, so fail closed rather than compare against nothing.
+          if [ "$baseline_ec" -gt 1 ]; then
+            echo "::error::Bandit baseline scan against origin/$BASE_REF failed (exit $baseline_ec) — refusing to compare against an untrustworthy baseline."
+            exit 1
+          fi
+          python3 -c "import json; json.load(open('bandit-baseline.json'))"
+
+      - name: Bandit — whole repo, HIGH severity only, new findings vs. the base ref
+        # -lll raises the reported severity floor to HIGH. This step gates the PR: -b suppresses
+        # any finding already present on the base ref's tree, so only new HIGH findings fail.
+        run: |
+          bandit -r . \
+            --ini ci/security/bandit.ini \
+            -b bandit-baseline.json \
+            -lll \
+            -f json -o bandit.json
+
+      - name: Bandit — SARIF artifact from the same baselined results
+        # Converted from the already-baselined bandit.json, so the artifact lists exactly what
+        # gated the PR: new findings only.
+        if: always()
+        run: python3 ci/security/bandit_json_to_sarif.py bandit.json bandit.sarif
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-sarif
+          path: bandit.sarif
+          if-no-files-found: warn
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+  dependencies:
+    name: pip-audit / Trivy (SCA)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit — uv.lock export
+        # The lockfile is the dependency source of truth (pyproject.toml declares ranges; uv.lock
+        # pins them). uv export emits the exact set the Makefile audit target scans. pip-audit has
+        # no severity threshold, so it fails on any known vulnerability in the export; that is
+        # stricter than the HIGH+ policy of the Trivy step below, and is left that way on purpose.
+        run: |
+          set -euo pipefail
+          pip install "uv==0.13.4" pip-audit
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o req.txt
+          pip-audit -r req.txt --strict
+
+      - name: Trivy filesystem scan — HIGH+ dependency vulnerabilities
+        # ignore-unfixed is deliberately NOT set: a HIGH or CRITICAL finding with no fix released
+        # yet is still a HIGH or CRITICAL finding, and this gate fails on it.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy.sarif
+          if-no-files-found: warn
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy

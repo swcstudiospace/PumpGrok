@@ -1,0 +1,38 @@
+# Semgrep ruleset for the security PR gate (.github/workflows/security-pr.yml).
+#
+# Run alongside the public registry sets (p/security-audit, p/secrets) rather than instead of
+# them — this file only carries the handful of rules specific to this repo's shape, mainly
+# because the registry's generic secret rules don't know this repo's SECURITY.md convention
+# (secrets are referenced as ${VAR}, never as literals) or its subprocess-heavy CI tooling.
+#
+# Run in the workflow against the repo tree, with --baseline-commit so only findings this PR adds
+# block the gate. Rules here cover subprocess and eval use, plus hardcoded credential literals.
+rules:
+  - id: python-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess call with shell=True risks command injection when any part of the
+      command is built from external input. Build an argv list and use shell=False.
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: python-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      eval()/exec() on a dynamic string is a common RCE vector. Avoid evaluating
+      untrusted input as code.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+
+  - id: hardcoded-secret-literal
+    languages: [python, javascript, typescript, yaml]
+    severity: ERROR
+    message: >-
+      Possible hardcoded credential literal. Secrets belong in a secret manager or CI
+      secret, referenced by name (${VAR}), never as a literal — see SECURITY.md §2.
+    patterns:
+      - pattern-regex: '(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*["''][A-Za-z0-9_\-]{16,}["'']'

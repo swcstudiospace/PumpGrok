@@ -1,0 +1,32 @@
+minimum_pre_commit_version: "3.2.0"
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+fail_fast: false
+
+# Local hooks only. No third-party repos, and no auto-formatter: a reviewed artefact must equal
+# the committed artefact.
+repos:
+  - repo: local
+    hooks:
+      - id: g3-committed-secrets
+        name: "G-3 - committed secrets (staged files)"
+        entry: python3 ci/gates/check_secrets.py --staged
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: g1-ownership-manifest
+        name: "G-1 - ownership manifest self-check"
+        entry: python3 ci/gates/check_ownership.py --validate-manifest
+        language: python
+        additional_dependencies: ["pyyaml"]
+        files: ^ownership\.yaml$
+        pass_filenames: false
+
+      - id: gate-self-test
+        name: "Gate self-test (ci/tests)"
+        entry: python3 -m pytest ci/tests -q
+        language: python
+        additional_dependencies: ["pytest", "pyyaml"]
+        files: ^ci/(gates|tests)/
+        pass_filenames: false

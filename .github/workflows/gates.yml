@@ -1,0 +1,192 @@
+# Quality gates G-1..G-7 for pull requests into main.
+#
+# Gates are required status checks: they block the merge rather than merely reporting.
+#
+# Trust model: on pull_request, both jobs overlay ci/gates/ from the PR base ref before any
+# python3 ci/gates or pytest run. The PR tree is data under test (diffs, receipts, paths);
+# the gate implementations are never taken from the PR.
+#
+# Runners are GitHub-hosted (ubuntu-latest). Self-hosted runners are not used.
+
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    # Pull requests only. A push to main has no head ref, so the acting bot would resolve to
+    # "main" and fail attribution before any gate ran.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # gates diff against the base ref
+
+      - name: Use trusted gate scripts from base ref
+        # Overlay gate implementations from the PR base. BASE_REF arrives through env:, never
+        # ${{ }} inside run:, because git permits $, backtick, ( ) and ; in a ref name.
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git checkout "origin/$BASE_REF" -- ci/gates/
+          echo "Trusted ci/gates overlay from origin/$BASE_REF"
+          ls ci/gates/
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gate dependencies
+        run: pip install pyyaml
+
+      - name: Determine the acting bot
+        id: bot
+        run: |
+          # Convention: the branch name starts with the seat id, e.g.
+          #   bot-04-sniper/paper-fill-SOL-20261020-003
+          # Anchored at both ends: an unanchored prefix would carry a shell expansion such as
+          # bot-01-$(...) into later steps.
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          BOT="${BRANCH%%/*}"
+          if [[ ! "$BOT" =~ ^bot-0[0-9]-[a-z0-9-]+$ ]]; then
+            echo "::error::Branch '$BRANCH' does not start with a seat id (bot-0N-name/...)."
+            echo "::error::G-1 cannot attribute the change without one."
+            exit 1
+          fi
+          echo "bot=$BOT" >> "$GITHUB_OUTPUT"
+          echo "Acting bot: $BOT"
+
+      - name: G-1 — Manifest self-check
+        run: python3 ci/gates/check_ownership.py --validate-manifest
+
+      - name: G-1 — Path ownership
+        env:
+          BOT: ${{ steps.bot.outputs.bot }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          python3 ci/gates/check_ownership.py \
+            --bot "$BOT" \
+            --base "origin/$BASE_REF"
+
+      - name: Locate the verification receipt
+        id: receipt
+        env:
+          BOT: ${{ steps.bot.outputs.bot }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # The receipt must be the one THIS change adds, not whichever filename sorts first in
+          # the seat's directory. One change may add several receipts (a rebase replays earlier
+          # ones); exactly one must name this branch, otherwise the build stops rather than guess.
+          git diff --name-only --diff-filter=d \
+            "origin/$BASE_REF...HEAD" -- ".receipts/$BOT" \
+            | grep -E '\.json$' > receipts.txt || true
+          python3 - <<'SELECT' > receipt.path
+          import json, os, sys
+          from pathlib import Path
+
+          bot, head = os.environ["BOT"], os.environ.get("HEAD_REF") or ""
+          candidates = [p for p in Path("receipts.txt").read_text().split() if p]
+
+          if not candidates:
+              sys.exit(
+                  f"::error::G-2 — this change adds no verification receipt under .receipts/{bot}/\n"
+                  "::error::A completion claim requires a receipt for THIS task, not a previous one."
+              )
+
+          def branch_of(path):
+              try:
+                  return json.loads(Path(path).read_text()).get("branch")
+              except (OSError, ValueError):
+                  return None
+
+          if len(candidates) > 1:
+              matched = [p for p in candidates if branch_of(p) == head]
+              if len(matched) != 1:
+                  listing = "\n".join(f"::error::    {p}  (branch: {branch_of(p)!r})" for p in candidates)
+                  sys.exit(
+                      f"::error::G-2 — this change adds {len(candidates)} receipts under "
+                      f".receipts/{bot}/ and {len(matched)} name the branch {head!r}:\n"
+                      f"{listing}\n"
+                      "::error::Exactly one must name this branch. Set 'branch' on the receipt "
+                      "this change is for."
+                  )
+              candidates = matched
+
+          print(candidates[0])
+          SELECT
+          RECEIPT=$(cat receipt.path)
+          echo "Receipt for this change: $RECEIPT"
+          echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
+
+      - name: G-2 — Verification receipt
+        env:
+          RECEIPT: ${{ steps.receipt.outputs.path }}
+          BOT: ${{ steps.bot.outputs.bot }}
+        run: |
+          python3 ci/gates/check_receipt.py \
+            --receipt "$RECEIPT" \
+            --bot "$BOT" \
+            --strict
+
+      - name: G-3 — Committed secrets
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: python3 ci/gates/check_secrets.py --base "origin/$BASE_REF"
+
+      - name: G-4 — Contract-first changes
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          # The change document must be the one THIS change adds; an older valid document
+          # would otherwise clear a breaking change it never described.
+          CHANGE=$(git diff --name-only --diff-filter=d \
+            "origin/$BASE_REF...HEAD" -- contracts/changes \
+            | grep -E '\.ya?ml$' | head -n1 || true)
+          if [[ -n "$CHANGE" ]]; then
+            python3 ci/gates/check_contracts.py \
+              --base "origin/$BASE_REF" --change "$CHANGE"
+          else
+            python3 ci/gates/check_contracts.py --base "origin/$BASE_REF"
+          fi
+
+      - name: G-5/G-6 — Rollback and destructive operations
+        env:
+          RECEIPT: ${{ steps.receipt.outputs.path }}
+        run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"
+
+      - name: G-7 — Desk integrity
+        run: python3 ci/gates/check_desk_integrity.py --repo .
+
+  gate-self-test:
+    # The gates are only trustworthy if they still block what they claim to block.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use trusted gate scripts from base ref
+        if: github.event_name == 'pull_request'
+        # Same trust rule as the gates job: PR-authored gate modules must not run here.
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git checkout "origin/$BASE_REF" -- ci/gates/
+          echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml pytest
+      - name: Gate test suite
+        run: python3 -m pytest ci/tests/ -v

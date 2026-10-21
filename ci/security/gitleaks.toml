@@ -1,0 +1,57 @@
+# Gitleaks config for the security PR gate (.github/workflows/security-pr.yml).
+#
+# Extends gitleaks' default ruleset rather than replacing it. The rules below add the six
+# trading families from FOUNDATION_STACK section 4 (G-3), so the scanner and the secrets gate
+# agree on what a Solana, RPC or Telegram credential looks like.
+#
+# Scope: the workflow runs `gitleaks detect --log-opts="origin/$BASE_REF..HEAD"`, so only the
+# commits a PR adds are scanned, not the whole history.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "solana-base58-secret-key"
+description = "Solana 64-byte secret key, base58"
+regex = '''\b[1-9A-HJ-NP-Za-km-z]{86,88}\b'''
+tags = ["key", "solana"]
+
+[[rules]]
+id = "solana-json-keypair"
+description = "Solana keypair as JSON byte array"
+regex = '''\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]'''
+tags = ["key", "solana"]
+
+[[rules]]
+id = "helius-rpc-key"
+description = "Helius RPC URL with API key"
+regex = '''(?i)helius(?:-rpc)?\.com/[^\s"']*api-key=[A-Za-z0-9-]{20,}'''
+tags = ["key", "solana", "rpc"]
+
+[[rules]]
+id = "quicknode-endpoint-token"
+description = "QuickNode Solana endpoint with token"
+regex = '''(?i)[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}'''
+tags = ["key", "solana", "rpc"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram bot token"
+regex = '''\b\d{8,10}:[A-Za-z0-9_-]{35}\b'''
+tags = ["key", "telegram"]
+
+[[rules]]
+id = "xai-api-key"
+description = "x.ai API key"
+regex = '''\bxai-[A-Za-z0-9]{32,}\b'''
+tags = ["key", "xai"]
+
+[allowlist]
+description = "Repo-wide false-positive suppressions"
+
+# ${VAR} / $VAR are secret references by name (SECURITY.md), not credential values.
+# Lockfiles are deliberately not exempted here: check_secrets.py already skips *.lock by
+# extension, and a credential embedded in a lockfile must still reach a scanner.
+regexes = [
+  '''\$\{[A-Za-z_][A-Za-z0-9_]*\}''',
+]
