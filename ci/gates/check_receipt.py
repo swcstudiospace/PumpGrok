@@ -391,41 +391,48 @@ def load(path: Path) -> dict:
         raise ReceiptError(f"receipt is not valid JSON: {exc}") from exc
 
 
-def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list[str]:
+def _missing_field_problems(receipt: dict) -> list[str]:
+    """Every receipt names its task, bot, commands, claims, and unverified list."""
+    return [
+        f"missing required field '{field}'" for field in REQUIRED_FIELDS if field not in receipt
+    ]
+
+
+def _structural_problems(commands: object, claims: object, unverified: object) -> list[str]:
+    """Commands must be a non-empty list; claims and unverified must be lists."""
     problems: list[str] = []
-
-    for field in REQUIRED_FIELDS:
-        if field not in receipt:
-            problems.append(f"missing required field '{field}'")
-    if problems:
-        return problems
-
-    commands = receipt["commands"]
-    claims = receipt["claims"]
-    unverified = receipt["unverified"]
-
-    # --- structural ------------------------------------------------------
     if not isinstance(commands, list) or not commands:
         problems.append("no commands recorded — nothing was actually run, so nothing is verified")
     if not isinstance(claims, list):
         problems.append("'claims' must be a list")
     if not isinstance(unverified, list):
         problems.append("'unverified' must be a list (an empty list is allowed but rarely honest)")
+    return problems
 
+
+def _bot_problems(receipt: dict, expected_bot: str | None) -> list[str]:
+    """The receipt must name the bot the gate was invoked for."""
     if expected_bot and receipt.get("bot") != expected_bot:
-        problems.append(f"receipt bot '{receipt.get('bot')}' does not match --bot '{expected_bot}'")
+        return [f"receipt bot '{receipt.get('bot')}' does not match --bot '{expected_bot}'"]
+    return []
 
-    # --- self-approval ---------------------------------------------------
+
+def _self_approval_problems(receipt: dict) -> list[str]:
+    """Work must be reviewed by someone other than the bot that did it."""
     approved_by = receipt.get("approved_by")
     if not approved_by:
-        problems.append("'approved_by' is missing — work must be reviewed by someone else")
-    elif approved_by == receipt.get("bot"):
-        problems.append(
-            f"self-approval: approved_by == bot ({approved_by}). "
+        return ["'approved_by' is missing — work must be reviewed by someone else"]
+    if approved_by == receipt.get("bot"):
+        return [
+            f"self-approval: approved_by == {approved_by} ({approved_by}). "
             "A bot approving its own work removes the independent check."
-        )
+        ]
+    return []
 
-    # --- bypass commands -------------------------------------------------
+
+def _bypass_problems(commands: object) -> list[str]:
+    """Flag commands that produce a green result from work that never ran."""
+    problems: list[str] = []
     for i, cmd in enumerate(commands if isinstance(commands, list) else []):
         cmd_str = cmd.get("cmd", "") if isinstance(cmd, dict) else str(cmd)
         for pattern, why in BYPASS_PATTERNS:
@@ -433,8 +440,12 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 problems.append(
                     f"command[{i}] contains a bypass: {cmd_str!r}\n    matched {pattern!r} — {why}"
                 )
+    return problems
 
-    # --- exit codes present ----------------------------------------------
+
+def _exit_code_problems(commands: object) -> list[str]:
+    """Every command must record its exit code — an unrecorded code is not evidence."""
+    problems: list[str] = []
     for i, cmd in enumerate(commands if isinstance(commands, list) else []):
         if not isinstance(cmd, dict):
             problems.append(f"command[{i}] must be an object with 'cmd' and 'exit_code'")
@@ -445,253 +456,355 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
             problems.append(
                 f"command[{i}] has no 'exit_code' — an unrecorded exit code is not evidence"
             )
+    return problems
 
-    # --- claims cite valid, passing commands ------------------------------
+
+def _claim_problems(claims: object, commands: list, strict: bool) -> list[str]:
+    """Every claim must cite a real command whose exit code supports it."""
+    problems: list[str] = []
     for i, claim in enumerate(claims if isinstance(claims, list) else []):
-        if not isinstance(claim, dict):
-            problems.append(f"claim[{i}] must be an object")
-            continue
+        problems.extend(_check_claim(i, claim, commands, strict))
+    return problems
 
-        text = claim.get("claim", "<no text>")
-        idx = claim.get("evidence_command_index")
 
-        if idx is None:
-            problems.append(
-                f"claim[{i}] {text!r} cites no command — "
-                "a claim without evidence is a guess with confident phrasing"
+def _check_claim(i: int, claim: object, commands: list, strict: bool) -> list[str]:
+    """Validate one claim's evidence citation and, under --strict, its scope."""
+    if not isinstance(claim, dict):
+        return [f"claim[{i}] must be an object"]
+    text = claim.get("claim", "<no text>")
+    idx = claim.get("evidence_command_index")
+    if idx is None:
+        return [
+            f"claim[{i}] {text!r} cites no command — "
+            "a claim without evidence is a guess with confident phrasing"
+        ]
+    if not isinstance(idx, int) or not (0 <= idx < len(commands)):
+        return [f"claim[{i}] {text!r} cites command index {idx}, which does not exist"]
+    cited = commands[idx]
+    exit_code = cited.get("exit_code") if isinstance(cited, dict) else None
+    # A claim may legitimately cite a FAILING command: "reproduced the bug" is evidenced
+    # by a non-zero exit. That reproduction step is what makes the later green run mean
+    # something, so the gate must support it rather than forcing every claim to be green.
+    expects_failure = bool(claim.get("expects_failure"))
+    problems = _citation_problems(
+        i, text=text, idx=idx, cited=cited, exit_code=exit_code, expects_failure=expects_failure
+    )
+    if strict and EXHAUSTIVE_RE.search(text):
+        problems.extend(
+            _exhaustive_problems(
+                i,
+                text=text,
+                idx=idx,
+                cited=cited,
+                commands=commands,
+                expects_failure=expects_failure,
             )
-            continue
+        )
+    return problems
 
-        if not isinstance(idx, int) or not (0 <= idx < len(commands)):
-            problems.append(f"claim[{i}] {text!r} cites command index {idx}, which does not exist")
-            continue
 
-        cited = commands[idx]
-        exit_code = cited.get("exit_code") if isinstance(cited, dict) else None
+def _citation_problems(
+    i: int,
+    *,
+    text: str,
+    idx: int,
+    cited: object,
+    exit_code: object,
+    expects_failure: bool,
+) -> list[str]:
+    """The cited command's exit code must match what the claim expects of it."""
+    if expects_failure:
+        if exit_code == 0:
+            return [
+                f"claim[{i}] {text!r} sets expects_failure but command[{idx}] exited 0\n"
+                f"    {cited.get('cmd', '')!r}"
+                if isinstance(cited, dict)
+                else f"claim[{i}] {text!r} sets expects_failure but command[{idx}] exited 0"
+            ]
+        return []
+    if exit_code != 0:
+        return [
+            f"claim[{i}] {text!r} cites command[{idx}] which exited {exit_code}\n"
+            f"    {cited.get('cmd', '')!r}\n"
+            f'    If this is a reproduction step, set "expects_failure": true on the claim.'
+            if isinstance(cited, dict)
+            else f"claim[{i}] {text!r} cites command[{idx}] which exited {exit_code}"
+        ]
+    return []
 
-        # A claim may legitimately cite a FAILING command: "reproduced the bug" is evidenced
-        # by a non-zero exit. That reproduction step is what makes the later green run mean
-        # something, so the gate must support it rather than forcing every claim to be green.
-        expects_failure = bool(claim.get("expects_failure"))
 
-        if expects_failure:
-            if exit_code == 0:
-                problems.append(
-                    f"claim[{i}] {text!r} sets expects_failure but command[{idx}] exited 0\n"
-                    f"    {cited.get('cmd', '')!r}"
-                )
-        elif exit_code != 0:
-            problems.append(
-                f"claim[{i}] {text!r} cites command[{idx}] which exited {exit_code}\n"
-                f"    {cited.get('cmd', '')!r}\n"
-                f'    If this is a reproduction step, set "expects_failure": true on the claim.'
-            )
+def _exhaustive_problems(
+    i: int,
+    *,
+    text: str,
+    idx: int,
+    cited: object,
+    commands: list,
+    expects_failure: bool,
+) -> list[str]:
+    """Under --strict, an exhaustive claim needs evidence covering its whole scope."""
+    if expects_failure:
+        cmd_text = str(cited.get("cmd", "")) if isinstance(cited, dict) else ""
+        output_tail = str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
+        # A quiet-grep compound (`test -f X && grep -q PATTERN X`) with empty
+        # output_tail is ambiguous on its own exit code alone (see SILENT_SEARCH_RE
+        # above) — it needs one specific OTHER command as corroboration: a bare
+        # existence check on that same path, with the SAME flag as this compound's own
+        # gate, that itself exited 0. gate_path/gate_flag are set only when the cited
+        # command is exactly that shape, so every other claim keeps the single-command
+        # rule below unchanged.
+        gate_match = COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
+        gate_is_quiet_compound = (
+            gate_match and not output_tail.strip() and SILENT_SEARCH_RE.search(cmd_text)
+        )
+        gate_path = (
+            (gate_match.group("gate_path1") or gate_match.group("gate_path2"))
+            if gate_is_quiet_compound
+            else None
+        )
+        gate_flag = (
+            (gate_match.group("gate_flag1") or gate_match.group("gate_flag2"))
+            if gate_is_quiet_compound
+            else None
+        )
+        if _unexplained_padding(commands, idx, gate_path, gate_flag):
+            return [
+                f"claim[{i}] {text!r} sets expects_failure and asserts "
+                "exhaustiveness, and the receipt records other commands beyond the "
+                "one cited that are not an EARLIER sibling existence check "
+                "confirming the same exact path — they cannot be what makes this "
+                "claim exhaustive, so its cited command must be the receipt's only "
+                "command (or paired only with a command that tests the exact same "
+                "path and exits 0, recorded BEFORE it) for this to pass under "
+                "--strict"
+            ]
+        return _evidence_shape_problems(
+            i,
+            text=text,
+            idx=idx,
+            cmd_text=cmd_text,
+            output_tail=output_tail,
+            commands=commands,
+            gate_path=gate_path,
+            gate_flag=gate_flag,
+        )
+    if len(commands) < 2:
+        return [
+            f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
+            f"only {len(commands)} command(s)"
+        ]
+    return []
 
-        if strict and EXHAUSTIVE_RE.search(text):
-            if expects_failure:
-                cmd_text = str(cited.get("cmd", "")) if isinstance(cited, dict) else ""
-                output_tail = str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
 
-                # A quiet-grep compound (`test -f X && grep -q PATTERN X`) with empty
-                # output_tail is ambiguous on its own exit code alone (see SILENT_SEARCH_RE
-                # above) — it needs one specific OTHER command as corroboration: a bare
-                # existence check on that same path, with the SAME flag as this compound's own
-                # gate, that itself exited 0. gate_path/gate_flag are set only when the cited
-                # command is exactly that shape, so every other claim keeps the single-command
-                # rule below unchanged.
-                gate_match = COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
-                gate_is_quiet_compound = (
-                    gate_match and not output_tail.strip() and SILENT_SEARCH_RE.search(cmd_text)
-                )
-                gate_path = (
-                    (gate_match.group("gate_path1") or gate_match.group("gate_path2"))
-                    if gate_is_quiet_compound
-                    else None
-                )
-                gate_flag = (
-                    (gate_match.group("gate_flag1") or gate_match.group("gate_flag2"))
-                    if gate_is_quiet_compound
-                    else None
-                )
+def _unexplained_padding(
+    commands: list, idx: int, gate_path: str | None, gate_flag: str | None
+) -> list[int]:
+    """Other commands that neither prove the quiet search's target nor are the citation."""
+    # A single expected-failure command CAN be exhaustive evidence: a search
+    # that exits non-zero exactly when it finds nothing across its whole target
+    # (e.g. a grep for any populated value) is reproduction evidence and total
+    # coverage at once. What it must never do is borrow OTHER, unrelated
+    # commands elsewhere in the receipt to look better-supported than it is —
+    # that was the original bypass this check exists for (Greptile P1, PR #45):
+    # a claim citing one narrow, failing command, padded by an unrelated command
+    # recorded for something else (the fix that follows it, say). len(commands)
+    # is a receipt-wide count, but here it is used the other way around from the
+    # passing-evidence branch below: for THIS claim, more commands elsewhere in
+    # the receipt is exactly the sign that something else might be doing the
+    # padding, not more support — with one narrow exception: a command that
+    # EARLIER in the receipt confirms gate_path existed is not padding the
+    # claim's coverage, it is the only way a quiet-grep compound's ambiguous
+    # exit code can be trusted at all (Greptile P1, PR #45, "Missing file passes
+    # quiet-grep check"). That exception is order-sensitive: a matching command
+    # recorded AFTER idx proves nothing about whether gate_path existed when the
+    # quiet search ran (it could have been created afterward), so it still
+    # counts as unexplained padding, not corroboration (Greptile P1, PR #45,
+    # "Later check validates earlier search"). With no other, unexplained
+    # command in the receipt to borrow from, this claim's cited command is
+    # plainly its entire evidence, and its own scope is what a human reviewer
+    # judges (approved_by), same as any other evidence-matching question this
+    # gate cannot verify by itself.
+    return [
+        j
+        for j, other in enumerate(commands)
+        if j != idx
+        and not (
+            gate_path
+            and isinstance(other, dict)
+            and j < idx
+            and _is_positive_existence_check(other, gate_path, gate_flag)
+        )
+    ]
 
-                # A single expected-failure command CAN be exhaustive evidence: a search
-                # that exits non-zero exactly when it finds nothing across its whole target
-                # (e.g. a grep for any populated value) is reproduction evidence and total
-                # coverage at once. What it must never do is borrow OTHER, unrelated
-                # commands elsewhere in the receipt to look better-supported than it is —
-                # that was the original bypass this check exists for (Greptile P1, PR #45):
-                # a claim citing one narrow, failing command, padded by an unrelated command
-                # recorded for something else (the fix that follows it, say). len(commands)
-                # is a receipt-wide count, but here it is used the other way around from the
-                # passing-evidence branch below: for THIS claim, more commands elsewhere in
-                # the receipt is exactly the sign that something else might be doing the
-                # padding, not more support — with one narrow exception: a command that
-                # EARLIER in the receipt confirms gate_path existed is not padding the
-                # claim's coverage, it is the only way a quiet-grep compound's ambiguous
-                # exit code can be trusted at all (Greptile P1, PR #45, "Missing file passes
-                # quiet-grep check"). That exception is order-sensitive: a matching command
-                # recorded AFTER idx proves nothing about whether gate_path existed when the
-                # quiet search ran (it could have been created afterward), so it still
-                # counts as unexplained padding, not corroboration (Greptile P1, PR #45,
-                # "Later check validates earlier search"). With no other, unexplained
-                # command in the receipt to borrow from, this claim's cited command is
-                # plainly its entire evidence, and its own scope is what a human reviewer
-                # judges (approved_by), same as any other evidence-matching question this
-                # gate cannot verify by itself.
-                padding = [
-                    j
-                    for j, other in enumerate(commands)
-                    if j != idx
-                    and not (
-                        gate_path
-                        and isinstance(other, dict)
-                        and j < idx
-                        and _is_positive_existence_check(other, gate_path, gate_flag)
-                    )
-                ]
-                if padding:
-                    problems.append(
-                        f"claim[{i}] {text!r} sets expects_failure and asserts "
-                        "exhaustiveness, and the receipt records other commands beyond the "
-                        "one cited that are not an EARLIER sibling existence check "
-                        "confirming the same exact path — they cannot be what makes this "
-                        "claim exhaustive, so its cited command must be the receipt's only "
-                        "command (or paired only with a command that tests the exact same "
-                        "path and exits 0, recorded BEFORE it) for this to pass under "
-                        "--strict"
-                    )
-                # Clearing the padding concern above proves nothing by itself about WHY
-                # the command failed. A claim that "every value is empty" needs a
-                # failure that came from searching the content and finding nothing, not
-                # from the target being absent — those are different facts, and only a
-                # human (approved_by) can judge whether the command's own scope truly
-                # covers "every"/"all". This gate can at least catch the shapes of thin
-                # evidence that pattern most often: a missing-target error, a command
-                # that only checks existence and never looks at content either way, and
-                # a quiet-grep compound with no independent proof its target existed.
-                elif MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(
-                    _strip_quoted(cmd_text)
-                ):
-                    problems.append(
-                        f"claim[{i}] {text!r} sets expects_failure and asserts "
-                        f"exhaustiveness, but command[{idx}]'s evidence reads as the "
-                        'target being missing ("no such file", "not found", ...), '
-                        "not as a search that covered the claim's whole scope and found "
-                        "nothing — a missing target proves nothing about the content the "
-                        "claim describes"
-                    )
-                elif EXISTENCE_ONLY_RE.search(cmd_text):
-                    if not ABSENCE_CLAIM_RE.search(text):
-                        problems.append(
-                            f"claim[{i}] {text!r} asserts exhaustiveness over content, "
-                            f"but command[{idx}] ({cmd_text!r}) only tests whether a "
-                            "path exists — that proves nothing about the content "
-                            "inside it"
-                        )
-                    # else: the claim is about the path's absence, not its content —
-                    # the existence probe's exit code is direct, sufficient evidence.
-                elif COMPOUND_EXISTENCE_GATE_RE.match(cmd_text) and not output_tail.strip():
-                    if not SILENT_SEARCH_RE.search(cmd_text):
-                        problems.append(
-                            f"claim[{i}] {text!r} asserts exhaustiveness via a command "
-                            f"that chains a content search after an existence check "
-                            f"({cmd_text!r}) with no captured output — the existence "
-                            "check failing would short-circuit the chain and produce "
-                            "this exact same exit code without the search ever running. "
-                            "Record output_tail evidence that the search itself "
-                            "executed (e.g. a `grep -c` count), or cite the existence "
-                            "check and the search as separate commands"
-                        )
-                    elif not gate_path or not _confirmed_by_sibling_existence_check(
-                        commands, gate_path, gate_flag, idx
-                    ):
-                        problems.append(
-                            f"claim[{i}] {text!r} asserts exhaustiveness via a "
-                            f"quiet search chained after an existence check "
-                            f"({cmd_text!r}) with no captured output — `grep -q`/"
-                            "`--quiet` prints nothing whether it matches or not, so "
-                            "this exit code is identical whether the search ran and "
-                            f"found nothing, or the existence check on {gate_path!r} "
-                            "failed and the chain short-circuited before grep ever "
-                            "ran. Record a separate command in 'commands', BEFORE "
-                            f"this one, that tests the exact path {gate_path!r} and "
-                            "exits 0, proving the file was actually there when the "
-                            "search ran — the same check recorded AFTER this command "
-                            "only proves the file exists now, not that it did then"
-                        )
-                            # else: a separate, earlier command in the receipt already
-                            # proved the target present, so the chain's own exit code —
-                            # reachable only if its existence check passed too — is valid
-                            # negative content evidence.
-            elif len(commands) < 2:
-                problems.append(
-                    f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
-                    f"only {len(commands)} command(s)"
-                )
 
-    # --- loop_acks: degraded-mode turn acks (G-2) -------------------------
+def _evidence_shape_problems(
+    i: int,
+    *,
+    text: str,
+    idx: int,
+    cmd_text: str,
+    output_tail: str,
+    commands: list,
+    gate_path: str | None,
+    gate_flag: str | None,
+) -> list[str]:
+    """The failure itself must read as a searched-and-empty scope, not a missing target."""
+    # Clearing the padding concern above proves nothing by itself about WHY
+    # the command failed. A claim that "every value is empty" needs a
+    # failure that came from searching the content and finding nothing, not
+    # from the target being absent — those are different facts, and only a
+    # human (approved_by) can judge whether the command's own scope truly
+    # covers "every"/"all". This gate can at least catch the shapes of thin
+    # evidence that pattern most often: a missing-target error, a command
+    # that only checks existence and never looks at content either way, and
+    # a quiet-grep compound with no independent proof its target existed.
+    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(
+        _strip_quoted(cmd_text)
+    ):
+        return [
+            f"claim[{i}] {text!r} sets expects_failure and asserts "
+            f"exhaustiveness, but command[{idx}]'s evidence reads as the "
+            'target being missing ("no such file", "not found", ...), '
+            "not as a search that covered the claim's whole scope and found "
+            "nothing — a missing target proves nothing about the content the "
+            "claim describes"
+        ]
+    if EXISTENCE_ONLY_RE.search(cmd_text):
+        if not ABSENCE_CLAIM_RE.search(text):
+            return [
+                f"claim[{i}] {text!r} asserts exhaustiveness over content, "
+                f"but command[{idx}] ({cmd_text!r}) only tests whether a "
+                "path exists — that proves nothing about the content "
+                "inside it"
+            ]
+        # else: the claim is about the path's absence, not its content —
+        # the existence probe's exit code is direct, sufficient evidence.
+        return []
+    if COMPOUND_EXISTENCE_GATE_RE.match(cmd_text) and not output_tail.strip():
+        if not SILENT_SEARCH_RE.search(cmd_text):
+            return [
+                f"claim[{i}] {text!r} asserts exhaustiveness via a command "
+                f"that chains a content search after an existence check "
+                f"({cmd_text!r}) with no captured output — the existence "
+                "check failing would short-circuit the chain and produce "
+                "this exact same exit code without the search ever running. "
+                "Record output_tail evidence that the search itself "
+                "executed (e.g. a `grep -c` count), or cite the existence "
+                "check and the search as separate commands"
+            ]
+        if not gate_path or not _confirmed_by_sibling_existence_check(
+            commands, gate_path, gate_flag, idx
+        ):
+            return [
+                f"claim[{i}] {text!r} asserts exhaustiveness via a "
+                f"quiet search chained after an existence check "
+                f"({cmd_text!r}) with no captured output — `grep -q`/"
+                "`--quiet` prints nothing whether it matches or not, so "
+                "this exit code is identical whether the search ran and "
+                f"found nothing, or the existence check on {gate_path!r} "
+                "failed and the chain short-circuited before grep ever "
+                "ran. Record a separate command in 'commands', BEFORE "
+                f"this one, that tests the exact path {gate_path!r} and "
+                "exits 0, proving the file was actually there when the "
+                "search ran — the same check recorded AFTER this command "
+                "only proves the file exists now, not that it did then"
+            ]
+        # else: a separate, earlier command in the receipt already
+        # proved the target present, so the chain's own exit code —
+        # reachable only if its existence check passed too — is valid
+        # negative content evidence.
+    return []
+
+
+def _loop_ack_problems(receipt: dict) -> list[str]:
+    """Degraded-mode turn acks must each name a person, a condition, and this task."""
     # Optional: a receipt for a turn that never went degraded OMITS the field, or carries [].
     # A present-but-null field is a different shape from omission — `"loop_acks" in receipt`
     # (rather than `.get(...) is not None`) is what tells the two apart, so an explicit null
     # is caught here instead of silently reading the same as "no field at all".
-    if "loop_acks" in receipt:
-        loop_acks = receipt.get("loop_acks")
-        if not isinstance(loop_acks, list):
-            problems.append(
-                "'loop_acks' must be a list — omit the field entirely if this turn never "
-                "went degraded; do not set it to null"
-            )
-        else:
-            task_id = receipt.get("task_id")
-            for i, ack in enumerate(loop_acks):
-                if not isinstance(ack, dict):
-                    problems.append(f"loop_acks[{i}] must be an object")
-                    continue
-                missing = [f for f in REQUIRED_LOOP_ACK_FIELDS if not ack.get(f)]
-                if missing:
-                    problems.append(
-                        f"loop_acks[{i}] is missing {missing} — a degraded-mode ack records the "
-                        "condition, the operation, the ack id, the human who granted it, when, "
-                        "and the one turn it covers"
-                    )
+    if "loop_acks" not in receipt:
+        return []
+    loop_acks = receipt.get("loop_acks")
+    if not isinstance(loop_acks, list):
+        return [
+            "'loop_acks' must be a list — omit the field entirely if this turn never "
+            "went degraded; do not set it to null"
+        ]
+    task_id = receipt.get("task_id")
+    problems: list[str] = []
+    for i, ack in enumerate(loop_acks):
+        problems.extend(_check_loop_ack(i, ack, task_id))
+    return problems
 
-                granter = ack.get("human_granted_by")
-                if granter is not None and not isinstance(granter, str):
-                    # A truthy non-string (e.g. `true`, an id, an object) would otherwise be
-                    # silently stringified below and could dodge both the missing-field check
-                    # (it is truthy) and the seat-name regex (it does not look like a seat).
-                    problems.append(
-                        f"loop_acks[{i}] human_granted_by must be a string naming a person, "
-                        f"got {type(granter).__name__} ({granter!r})"
-                    )
-                elif granter and SEAT_ID_RE.match(granter):
-                    problems.append(
-                        f"loop_acks[{i}] human_granted_by is {granter!r}, which is a seat, not a "
-                        "human — degraded repo work needs a person's acknowledgement. The "
-                        "relaying seat goes in 'relayed_by'"
-                    )
 
-                cond = ack.get("condition")
-                if cond and (not isinstance(cond, str) or cond not in LOOP_ACK_CONDITIONS):
-                    problems.append(
-                        f"loop_acks[{i}] condition {cond!r} is not one of "
-                        f"{sorted(LOOP_ACK_CONDITIONS)}"
-                    )
+def _check_loop_ack(i: int, ack: object, task_id: object) -> list[str]:
+    """Validate one degraded-mode acknowledgement object."""
+    if not isinstance(ack, dict):
+        return [f"loop_acks[{i}] must be an object"]
+    problems: list[str] = []
+    missing = [f for f in REQUIRED_LOOP_ACK_FIELDS if not ack.get(f)]
+    if missing:
+        problems.append(
+            f"loop_acks[{i}] is missing {missing} — a degraded-mode ack records the "
+            "condition, the operation, the ack id, the human who granted it, when, "
+            "and the one turn it covers"
+        )
+    problems.extend(_granter_problems(i, ack))
+    problems.extend(_condition_problems(i, ack))
+    problems.extend(_scope_problems(i, ack, task_id))
+    return problems
 
-                scope = ack.get("scope")
-                if scope is not None and not isinstance(scope, str):
-                    problems.append(f"loop_acks[{i}] scope must be a string")
-                elif scope and isinstance(task_id, str) and task_id not in scope:
-                    # An ack's scope is supposed to bind it to *this* turn. A scope carried
-                    # over from another ticket, or a blanket phrase like "all turns", is
-                    # truthy and would otherwise pass unnoticed.
-                    problems.append(
-                        f"loop_acks[{i}] scope {scope!r} does not name this receipt's "
-                        f"task_id ({task_id!r}) — an ack scoped to another ticket, or a "
-                        "blanket scope, does not authorise this turn"
-                    )
 
-    # --- unverified honesty ----------------------------------------------
+def _granter_problems(i: int, ack: dict) -> list[str]:
+    """The granter must be a person, never a seat id."""
+    granter = ack.get("human_granted_by")
+    if granter is not None and not isinstance(granter, str):
+        # A truthy non-string (e.g. `true`, an id, an object) would otherwise be
+        # silently stringified below and could dodge both the missing-field check
+        # (it is truthy) and the seat-name regex (it does not look like a seat).
+        return [
+            f"loop_acks[{i}] human_granted_by must be a string naming a person, "
+            f"got {type(granter).__name__} ({granter!r})"
+        ]
+    if granter and SEAT_ID_RE.match(granter):
+        return [
+            f"loop_acks[{i}] human_granted_by is {granter!r}, which is a seat, not a "
+            "human — degraded repo work needs a person's acknowledgement. The "
+            "relaying seat goes in 'relayed_by'"
+        ]
+    return []
+
+
+def _condition_problems(i: int, ack: dict) -> list[str]:
+    """The condition must name a known degraded-mode cause."""
+    cond = ack.get("condition")
+    if cond and (not isinstance(cond, str) or cond not in LOOP_ACK_CONDITIONS):
+        return [
+            f"loop_acks[{i}] condition {cond!r} is not one of "
+            f"{sorted(LOOP_ACK_CONDITIONS)}"
+        ]
+    return []
+
+
+def _scope_problems(i: int, ack: dict, task_id: object) -> list[str]:
+    """The ack scope must bind the ack to this receipt's task."""
+    scope = ack.get("scope")
+    if scope is not None and not isinstance(scope, str):
+        return [f"loop_acks[{i}] scope must be a string"]
+    if scope and isinstance(task_id, str) and task_id not in scope:
+        # An ack's scope is supposed to bind it to *this* turn. A scope carried
+        # over from another ticket, or a blanket phrase like "all turns", is
+        # truthy and would otherwise pass unnoticed.
+        return [
+            f"loop_acks[{i}] scope {scope!r} does not name this receipt's "
+            f"task_id ({task_id!r}) — an ack scoped to another ticket, or a "
+            "blanket scope, does not authorise this turn"
+        ]
+    return []
+
+
+def _unverified_problems(unverified: object) -> list[str]:
+    """Unverified entries must name something specific, not a vague hand-wave."""
     if isinstance(unverified, list) and not unverified:
         # Not a hard failure — occasionally true — but it is worth surfacing, because an
         # empty list asserts complete verification and that is rarely the case.
@@ -700,7 +813,6 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
             "Confirm it is true rather than forgotten.",
             file=sys.stderr,
         )
-
     vague = {
         "some edge cases",
         "minor things",
@@ -710,12 +822,33 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
         "misc",
         "other cases",
     }
+    problems: list[str] = []
     for entry in unverified if isinstance(unverified, list) else []:
         if str(entry).strip().lower().rstrip(".") in vague:
             problems.append(
                 f"unverified entry {entry!r} is too vague to be useful — "
                 "name what was not verified and why"
             )
+    return problems
+
+
+def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list[str]:
+    problems = _missing_field_problems(receipt)
+    if problems:
+        return problems
+
+    commands = receipt["commands"]
+    claims = receipt["claims"]
+    unverified = receipt["unverified"]
+
+    problems.extend(_structural_problems(commands, claims, unverified))
+    problems.extend(_bot_problems(receipt, expected_bot))
+    problems.extend(_self_approval_problems(receipt))
+    problems.extend(_bypass_problems(commands))
+    problems.extend(_exit_code_problems(commands))
+    problems.extend(_claim_problems(claims, commands, strict))
+    problems.extend(_loop_ack_problems(receipt))
+    problems.extend(_unverified_problems(unverified))
 
     # --- deployment needs a rollback plan (G-5 handoff) --------------------
     if receipt.get("deployment") and not receipt.get("rollback_plan"):

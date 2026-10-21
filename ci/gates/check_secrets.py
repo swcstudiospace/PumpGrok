@@ -248,7 +248,7 @@ def _git_lines(args: list[str]) -> list[str]:
         # A failed diff must not read as "no files to scan": that would print PASS on a tree
         # that was never scanned.
         sys.exit(f"check_secrets: git {' '.join(args[:2])} failed: {exc.stderr}")
-    return [l for l in out.stdout.splitlines() if l.strip()]
+    return [line for line in out.stdout.splitlines() if line.strip()]
 
 
 def changed_files(base: str) -> list[str]:
@@ -305,7 +305,8 @@ def main() -> int:
             if f["excerpt"]:
                 print(f"    {f['excerpt']}", file=sys.stderr)
         print(
-            "\n  If a hit is real, the secret is COMPROMISED. Rotate it first, then clean history.\n"
+            "\n  If a hit is real, the secret is COMPROMISED. "
+            "Rotate it first, then clean history.\n"
             "  If it is a false positive, add '# pragma: allowlist secret' with a reason.\n"
             "  See skills/security/secrets-handling/SKILL.md",
             file=sys.stderr,

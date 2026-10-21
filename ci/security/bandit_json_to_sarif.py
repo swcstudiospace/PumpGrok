@@ -21,7 +21,8 @@ SEVERITY_TO_LEVEL = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note"}
 
 
 def convert(json_path: str, sarif_path: str) -> None:
-    data = json.load(open(json_path))
+    with open(json_path) as fh:
+        data = json.load(fh)
     results = []
     rules: dict[str, str] = {}
 
@@ -36,9 +37,10 @@ def convert(json_path: str, sarif_path: str) -> None:
                 "locations": [
                     {
                         "physicalLocation": {
-                            # SARIF artifactLocation.uri is a URI, not a bare path: a literal '#' would
-                            # be read as a fragment separator and a literal space makes the URI invalid
-                            # outright — quote() percent-encodes both, keeping '/' as a path separator.
+                            # SARIF artifactLocation.uri is a URI, not a bare path:
+                            # a literal '#' would be read as a fragment separator
+                            # and a literal space makes the URI invalid outright —
+                            # quote() percent-encodes both, keeping '/' as a separator.
                             "artifactLocation": {"uri": quote(r["filename"], safe="/")},
                             "region": {"startLine": r.get("line_number", 1)},
                         }
@@ -63,7 +65,8 @@ def convert(json_path: str, sarif_path: str) -> None:
             }
         ],
     }
-    json.dump(sarif, open(sarif_path, "w"), indent=2)
+    with open(sarif_path, "w") as fh:
+        json.dump(sarif, fh, indent=2)
 
 
 if __name__ == "__main__":

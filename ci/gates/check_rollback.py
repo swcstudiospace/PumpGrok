@@ -120,6 +120,69 @@ def check_plan(plan: str | None) -> list[str]:
     return problems
 
 
+def approval_problems(approvals: list, destructive_count: int) -> list[str]:
+    """Each destructive op needs its own complete approval record."""
+    if not approvals:
+        return [
+            "destructive operations with NO approvals recorded.\n"
+            "      These require explicit human approval BEFORE execution (G-6)."
+        ]
+    problems: list[str] = []
+    for i, ap_rec in enumerate(approvals):
+        missing = [f for f in REQUIRED_APPROVAL_FIELDS if not ap_rec.get(f)]
+        if missing:
+            problems.append(
+                f"approvals[{i}] is missing {missing} — an approval records what was "
+                "approved, by whom, when, and the blast radius"
+            )
+    if len(approvals) < destructive_count:
+        problems.append(
+            f"{destructive_count} destructive operation(s) but only {len(approvals)} "
+            "approval(s) — each needs its own"
+        )
+    return problems
+
+
+def trade_approval_problems(destructive: list, approvals: list) -> list[str]:
+    """A trade op needs an approval naming the human-accepted max notional."""
+    trade_hits = [hit for hit in destructive if hit[2] == "trade"]
+    if trade_hits and not any(
+        isinstance(a, dict)
+        and TRADE_BLAST_RADIUS_RE.match(str(a.get("blast_radius") or ""))
+        for a in approvals
+    ):
+        return [
+            f"{len(trade_hits)} trade operation(s) need an approval whose blast "
+            "radius is 'max_notional_sol=<float>' — the notional the human "
+            "approved (G-6)"
+        ]
+    return []
+
+
+def check_destructive(commands: list, approvals: list) -> tuple[list, list[str]]:
+    """G-6: match destructive ops and verify each one is approved."""
+    destructive = find_matches(commands, DESTRUCTIVE_PATTERNS)
+    if destructive:
+        print(f"G-6 — {len(destructive)} destructive operation(s) detected:")
+        for idx, cmd, category, desc in destructive:
+            print(f"    [{idx}] ({category}) {cmd}")
+            print(f"         {desc}")
+    problems = approval_problems(approvals, len(destructive)) if destructive else []
+    problems.extend(trade_approval_problems(destructive, approvals))
+    return destructive, problems
+
+
+def check_deployments(commands: list, receipt: dict) -> tuple[list, list[str]]:
+    """G-5: deployments need a rollback plan covering command, time, and data."""
+    deploys = find_matches(commands, DEPLOY_PATTERNS)
+    if deploys:
+        print(f"G-5 — {len(deploys)} deployment command(s) detected:")
+        for idx, cmd, _cat, _desc in deploys:
+            print(f"    [{idx}] {cmd}")
+    plans = check_plan(receipt.get("rollback_plan")) if deploys else []
+    return deploys, [f"G-5: {p}" for p in plans]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Gates G-5/G-6: rollback and destructive ops")
     ap.add_argument("--receipt", type=Path, required=True)
@@ -128,54 +191,12 @@ def main() -> int:
     receipt = load(args.receipt)
     commands = receipt.get("commands", [])
     approvals = receipt.get("approvals", []) or []
-    problems: list[str] = []
-
     # --- G-6: destructive operations --------------------------------------
-    destructive = find_matches(commands, DESTRUCTIVE_PATTERNS)
-    if destructive:
-        print(f"G-6 — {len(destructive)} destructive operation(s) detected:")
-        for idx, cmd, category, desc in destructive:
-            print(f"    [{idx}] ({category}) {cmd}")
-            print(f"         {desc}")
-
-        if not approvals:
-            problems.append(
-                "destructive operations with NO approvals recorded.\n"
-                "      These require explicit human approval BEFORE execution (G-6)."
-            )
-        else:
-            for i, ap_rec in enumerate(approvals):
-                missing = [f for f in REQUIRED_APPROVAL_FIELDS if not ap_rec.get(f)]
-                if missing:
-                    problems.append(
-                        f"approvals[{i}] is missing {missing} — an approval records what was "
-                        "approved, by whom, when, and the blast radius"
-                    )
-            if len(approvals) < len(destructive):
-                problems.append(
-                    f"{len(destructive)} destructive operation(s) but only {len(approvals)} "
-                    "approval(s) — each needs its own"
-                )
-        trade_hits = [hit for hit in destructive if hit[2] == "trade"]
-        if trade_hits and not any(
-            isinstance(a, dict) and TRADE_BLAST_RADIUS_RE.match(str(a.get("blast_radius") or ""))
-            for a in approvals
-        ):
-            problems.append(
-                f"{len(trade_hits)} trade operation(s) need an approval whose blast_radius is "
-                "'max_notional_sol=<float>' — the notional the human approved (G-6)"
-            )
+    destructive, problems = check_destructive(commands, approvals)
 
     # --- G-5: deployments need a rollback plan ----------------------------
-    deploys = find_matches(commands, DEPLOY_PATTERNS)
-    if deploys:
-        print(f"G-5 — {len(deploys)} deployment command(s) detected:")
-        for idx, cmd, _cat, _desc in deploys:
-            print(f"    [{idx}] {cmd}")
-
-        plan_problems = check_plan(receipt.get("rollback_plan"))
-        for p in plan_problems:
-            problems.append(f"G-5: {p}")
+    deploys, deploy_problems = check_deployments(commands, receipt)
+    problems.extend(deploy_problems)
 
     if problems:
         print("\nG-5/G-6 FAIL", file=sys.stderr)

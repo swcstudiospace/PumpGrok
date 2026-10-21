@@ -38,7 +38,7 @@ def _segments_match(pattern: str, path: str) -> bool:
     pat_parts = pattern.split("/")
     path_parts = path.split("/")
     return len(pat_parts) == len(path_parts) and all(
-        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts)
+        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts, strict=True)
     )
 
 
@@ -162,6 +162,48 @@ def validate_manifest(manifest: dict, paths: list[str]) -> int:
     return 0
 
 
+def classify_files(
+    files: list[str], manifest: dict, bot: str
+) -> tuple[list[str], list[tuple[str, str]], list[str]]:
+    """Sort changed paths into unowned, foreign-owned, and contract-surface buckets."""
+    unowned: list[str] = []
+    foreign: list[tuple[str, str]] = []
+    contracts: list[str] = []
+    for path in files:
+        owner, is_contract = resolve_owner(path, manifest)
+        if owner is None:
+            unowned.append(path)
+        elif owner != bot:
+            # Ownership is checked before the contract classification: a contract
+            # surface owned by another seat is FOREIGN, not a NOTE. Otherwise a
+            # non-owner edit to a shared contract passes G-1 on its flag alone.
+            foreign.append((path, owner))
+        elif is_contract:
+            contracts.append(path)
+    return unowned, foreign, contracts
+
+
+def report_ownership_failure(
+    bot: str, unowned: list[str], foreign: list[tuple[str, str]]
+) -> int:
+    """Print the G-1 failure detail. Always returns 1."""
+    print(f"G-1 FAIL — {bot}", file=sys.stderr)
+    for path in unowned:
+        print(f"  UNOWNED  {path}", file=sys.stderr)
+        print(
+            "           No ownership rule matches. Extend ownership.yaml (bot-02-risk).",
+            file=sys.stderr,
+        )
+    for path, owner in foreign:
+        print(f"  FOREIGN  {path}  (owned by {owner})", file=sys.stderr)
+    if foreign:
+        print(
+            "\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
+            file=sys.stderr,
+        )
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Gate G-1: path ownership")
     ap.add_argument("--bot", help="Bot id making the change")
@@ -186,38 +228,10 @@ def main() -> int:
         print("G-1 PASS — no files changed")
         return 0
 
-    unowned: list[str] = []
-    foreign: list[tuple[str, str]] = []
-    contracts: list[str] = []
-
-    for path in files:
-        owner, is_contract = resolve_owner(path, manifest)
-        if owner is None:
-            unowned.append(path)
-        elif owner != args.bot:
-            # Ownership is checked before the contract classification: a contract surface owned by
-            # another seat is FOREIGN, not a NOTE. Otherwise a non-owner edits a shared contract
-            # and passes G-1 on its contract_surface flag alone.
-            foreign.append((path, owner))
-        elif is_contract:
-            contracts.append(path)
+    unowned, foreign, contracts = classify_files(files, manifest, args.bot)
 
     if unowned or foreign:
-        print(f"G-1 FAIL — {args.bot}", file=sys.stderr)
-        for path in unowned:
-            print(f"  UNOWNED  {path}", file=sys.stderr)
-            print(
-                "           No ownership rule matches. Extend ownership.yaml (bot-02-risk).",
-                file=sys.stderr,
-            )
-        for path, owner in foreign:
-            print(f"  FOREIGN  {path}  (owned by {owner})", file=sys.stderr)
-        if foreign:
-            print(
-                "\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
-                file=sys.stderr,
-            )
-        return 1
+        return report_ownership_failure(args.bot, unowned, foreign)
 
     print(f"G-1 PASS — {args.bot}: {len(files)} file(s) within owned paths")
     if contracts:
