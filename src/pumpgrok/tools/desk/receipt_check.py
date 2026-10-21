@@ -91,9 +91,7 @@ def _run_gate(name: str, argv: list[str], repo_root: Path) -> dict:
         return {"gate": name, "exit_code": 127, "output_tail": f"gate launch failed: {exc}"}
 
 
-async def run_receipt_check(
-    inp: ReceiptCheckIn, gates_dir: Path, repo_root: Path
-) -> dict:
+async def run_receipt_check(inp: ReceiptCheckIn, gates_dir: Path, repo_root: Path) -> dict:
     """Materialize the receipt outside the repo, then run the four gates."""
     if inp.receipt_path is not None and Path(inp.receipt_path).is_file():
         receipt_file = str(inp.receipt_path)
@@ -108,13 +106,35 @@ async def run_receipt_check(
         cleanup = True
     try:
         gate_argv = [
-            ("G-2", [sys.executable, str(gates_dir / "check_receipt.py"), "--receipt", receipt_file, "--bot", inp.bot] + (["--strict"] if inp.strict else [])),
-            ("G-3", [sys.executable, str(gates_dir / "check_secrets.py"), "--files", receipt_file, "--root", str(repo_root)]),
-            ("G-5/G-6", [sys.executable, str(gates_dir / "check_rollback.py"), "--receipt", receipt_file]),
+            (
+                "G-2",
+                [
+                    sys.executable,
+                    str(gates_dir / "check_receipt.py"),
+                    "--receipt",
+                    receipt_file,
+                    "--bot",
+                    inp.bot,
+                ]
+                + (["--strict"] if inp.strict else []),
+            ),
+            (
+                "G-3",
+                [
+                    sys.executable,
+                    str(gates_dir / "check_secrets.py"),
+                    "--files",
+                    receipt_file,
+                    "--root",
+                    str(repo_root),
+                ],
+            ),
+            (
+                "G-5/G-6",
+                [sys.executable, str(gates_dir / "check_rollback.py"), "--receipt", receipt_file],
+            ),
         ]
-        gates = [
-            _run_gate(name, argv, repo_root) for name, argv in gate_argv
-        ]
+        gates = [_run_gate(name, argv, repo_root) for name, argv in gate_argv]
     finally:
         if cleanup:
             Path(receipt_file).unlink(missing_ok=True)
@@ -122,9 +142,7 @@ async def run_receipt_check(
     return ReceiptCheckOut.model_validate(
         {
             "gates": gates,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

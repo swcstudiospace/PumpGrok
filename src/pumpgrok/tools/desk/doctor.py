@@ -122,7 +122,9 @@ def _register_rows(
             }
         ]
     record.write_text(
-        json.dumps({"agent_uuid": inp.agent_uuid, "channel_id": inp.channel_id, "binding": binding}),
+        json.dumps(
+            {"agent_uuid": inp.agent_uuid, "channel_id": inp.channel_id, "binding": binding}
+        ),
         encoding="utf-8",
     )
     return True, [{"check": "register", "status": "ok", "detail": "binding recorded"}]
@@ -137,28 +139,27 @@ async def run_doctor(
     elif inp.action == "register":
         ok, rows = _register_rows(inp, bindings_dir, binding_key)
     else:
-        ok, rows = False, [
-            {
-                "check": inp.action,
-                "status": "fail",
-                "detail": f"{inp.action} needs seat-bound prompt assembly (Phase 4 gateway)",
-            }
-        ]
+        ok, rows = (
+            False,
+            [
+                {
+                    "check": inp.action,
+                    "status": "fail",
+                    "detail": f"{inp.action} needs seat-bound prompt assembly (Phase 4 gateway)",
+                }
+            ],
+        )
     ambient = ambient_correlation()
     return DoctorOut.model_validate(
         {
             "ok": ok,
             "rows": rows,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 
 
-def build_doctor_tool(
-    settings: Settings, bindings_dir: Path, binding_key: bytes
-) -> Tool:
+def build_doctor_tool(settings: Settings, bindings_dir: Path, binding_key: bytes) -> Tool:
     """Bind ``desk.doctor`` to settings, a bindings dir and an HMAC key."""
 
     @tool(DOCTOR_SPEC)

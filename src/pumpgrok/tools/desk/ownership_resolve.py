@@ -87,9 +87,7 @@ async def run_ownership_resolve(inp: OwnershipResolveIn, manifest_path: Path) ->
         {
             "resolved": resolved,
             "unowned": unowned,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

@@ -95,9 +95,7 @@ async def run_halt_status(
             "daily_loss_halt": halt_reason == "daily_loss",
             "breaker_open": False,
             "effective_mode": mode,
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

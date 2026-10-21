@@ -77,8 +77,7 @@ def scrub_payload(payload: dict) -> dict:
     the key set never changes.
     """
     scrubbed = {
-        key: ("***" if _SECRET_KEY_RE.search(key) else value)
-        for key, value in payload.items()
+        key: ("***" if _SECRET_KEY_RE.search(key) else value) for key, value in payload.items()
     }
     for key, value in scrubbed.items():
         if isinstance(value, str) and len(value) > 1024:
@@ -130,16 +129,12 @@ async def run_event_emit(
     return EventEmitOut.model_validate(
         {
             "seq": out["seq"],
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 
 
-def build_event_emit_tool(
-    store: LedgerStore, clock: Clock, journal_dir: Path, bot: str
-) -> Tool:
+def build_event_emit_tool(store: LedgerStore, clock: Clock, journal_dir: Path, bot: str) -> Tool:
     """Bind ``desk.event_emit`` to one store, clock, directory and seat."""
 
     @tool(EVENT_EMIT_SPEC)

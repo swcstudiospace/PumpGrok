@@ -72,9 +72,7 @@ async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter) -> dict:
     return QuoteOut.model_validate(
         {
             **quote.model_dump(mode="json"),
-            "meta": meta_now(
-                "jupiter", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("jupiter", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

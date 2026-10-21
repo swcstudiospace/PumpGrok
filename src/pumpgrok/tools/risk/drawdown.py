@@ -74,9 +74,7 @@ async def run_drawdown(inp: DrawdownIn, store: LedgerStore, budget: RiskBudget) 
             "drawdown_fraction": drawdown,
             "loss_velocity_lamports_per_h": loss_velocity,
             "halted": drawdown >= budget.drawdown_halt_fraction,
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

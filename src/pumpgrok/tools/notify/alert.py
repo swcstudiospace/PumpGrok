@@ -90,9 +90,7 @@ async def run_alert(inp: AlertIn, notifier: Notifier, clock: Clock) -> dict:
     return AlertOut.model_validate(
         {
             **result,
-            "meta": meta_now(
-                "notify", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("notify", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 
@@ -105,4 +103,3 @@ def build_alert_tool(notifier: Notifier, clock: Clock) -> Tool:
         return await run_alert(payload, notifier, clock)
 
     return _alert
-

@@ -70,9 +70,7 @@ async def run_positions(inp: PositionsIn, adapter: ExecutionAdapter) -> dict:
     return PositionsOut.model_validate(
         {
             "positions": rows,
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

@@ -35,9 +35,7 @@ class MemoryRecallOut(ToolOutput):
 
 MEMORY_RECALL_SPEC = ToolSpec(
     name="desk.memory_recall",
-    description=(
-        "Recall retained decisions from the own and shared banks. Read only."
-    ),
+    description=("Recall retained decisions from the own and shared banks. Read only."),
     input_model=MemoryRecallIn,
     output_model=MemoryRecallOut,
     side_effect=SideEffect.READ,
@@ -55,9 +53,7 @@ async def run_memory_recall(inp: MemoryRecallIn, bank: MemoryBank) -> dict:
     return MemoryRecallOut.model_validate(
         {
             "items": items,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

@@ -138,9 +138,7 @@ async def run_place(
     ).model_dump()
 
 
-def build_place_tool(
-    adapter: ExecutionAdapter, get_budget: Callable[[], RiskBudget]
-) -> Tool:
+def build_place_tool(adapter: ExecutionAdapter, get_budget: Callable[[], RiskBudget]) -> Tool:
     """Bind ``exec.place`` to one adapter and one budget provider (no globals)."""
 
     @tool(PLACE_SPEC)

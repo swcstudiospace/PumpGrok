@@ -64,11 +64,7 @@ async def test_simulate_writes_zero_ledger_events(tmp_path: Path) -> None:
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     tool = build_simulate_tool()
     with pytest.raises(NotYetImplemented) as excinfo:
-        await tool(
-            SimulateIn(
-                ticket_id=TICKET, mint=MINT, side="buy", size_lamports=100_000_000
-            )
-        )
+        await tool(SimulateIn(ticket_id=TICKET, mint=MINT, side="buy", size_lamports=100_000_000))
     assert excinfo.value.code == "not_yet_implemented"
     assert store.count() == 0
     store.close()
@@ -88,9 +84,7 @@ async def test_cancel_requires_approval_and_derives_key() -> None:
     with pytest.raises(ValidationError):
         CancelIn.model_validate({"order_id": ORDER, "ticket_id": TICKET})
     with pytest.raises(NotYetImplemented) as excinfo:
-        await tool(
-            CancelIn(order_id=ORDER, ticket_id=TICKET, approval_id=APPROVAL)
-        )
+        await tool(CancelIn(order_id=ORDER, ticket_id=TICKET, approval_id=APPROVAL))
     assert excinfo.value.code == "not_yet_implemented"
     assert exec_cancel_key(ORDER) == exec_cancel_key(ORDER)
     assert len(exec_cancel_key(ORDER)) == 32

@@ -31,7 +31,6 @@ __all__ = [
 ]
 
 
-
 class LedgerWriteIn(ToolInput):
     """One ledger event; ``type`` is a CamelCase R32 event, ``key`` required."""
 
@@ -66,9 +65,7 @@ LEDGER_WRITE_SPEC = ToolSpec(
 )
 
 
-async def run_ledger_write(
-    inp: LedgerWriteIn, store: LedgerStore, clock: Clock
-) -> dict:
+async def run_ledger_write(inp: LedgerWriteIn, store: LedgerStore, clock: Clock) -> dict:
     """Append the validated event; a duplicate key replays the stored row."""
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")

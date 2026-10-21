@@ -130,12 +130,8 @@ async def test_memory_retain_recall_round_trip(tmp_path: Path) -> None:
     retain = build_memory_retain_tool(bank)
     with pytest.raises(ValidationError):
         MemoryRetainIn(content="no provenance")
-    first = await retain(
-        MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json")
-    )
-    again = await retain(
-        MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json")
-    )
+    first = await retain(MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json"))
+    again = await retain(MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json"))
     assert first.id == again.id
     recall = build_memory_recall_tool(bank)
     out = await recall(MemoryRecallIn(query="exit rule"))
@@ -164,9 +160,7 @@ async def test_receipt_check_reports_gate_rows() -> None:
     tool = build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT)
     with pytest.raises(ValidationError):
         ReceiptCheckIn(bot="not-a-seat", receipt={})
-    out = await tool(
-        ReceiptCheckIn(bot="bot-04-sniper", receipt={"commands": []}, strict=False)
-    )
+    out = await tool(ReceiptCheckIn(bot="bot-04-sniper", receipt={"commands": []}, strict=False))
     names = [g["gate"] for g in out.gates]
     assert names == ["G-2", "G-3", "G-5/G-6"]
     assert all(isinstance(g["exit_code"], int) for g in out.gates)
@@ -229,9 +223,7 @@ async def test_doctor_register_and_fail_closed_prompt(tmp_path: Path) -> None:
     again = await tool(DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1"))
     assert again.ok is True
     other = build_doctor_tool(settings, tmp_path / "bindings", b"other-key")
-    mismatch = await other(
-        DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1")
-    )
+    mismatch = await other(DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1"))
     assert mismatch.ok is False
     prompt = await tool(DoctorIn(action="install_prompt"))
     assert prompt.ok is False and "Phase 4" in prompt.rows[0]["detail"]
@@ -254,7 +246,5 @@ def test_notify_settings_section() -> None:
     assert Settings.model_fields["notify"].is_required() is False
     import tomllib
 
-    overlay = tomllib.loads(
-        (REPO_ROOT / "src/pumpgrok/config/overlays/paper.toml").read_text()
-    )
+    overlay = tomllib.loads((REPO_ROOT / "src/pumpgrok/config/overlays/paper.toml").read_text())
     assert overlay["notify"]["allowlist"] == []

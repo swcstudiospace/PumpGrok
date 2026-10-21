@@ -84,9 +84,7 @@ async def run_brief(
             "halt": halt,
             "recall": recall,
             "etag": etag,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

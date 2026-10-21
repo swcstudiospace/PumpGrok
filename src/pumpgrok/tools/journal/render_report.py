@@ -151,16 +151,12 @@ async def run_render_report(
         {
             "report_path": str(target),
             "summary": summary,
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 
 
-def build_render_report_tool(
-    store: LedgerStore, clock: Clock, reports_dir: Path
-) -> Tool:
+def build_render_report_tool(store: LedgerStore, clock: Clock, reports_dir: Path) -> Tool:
     """Bind ``journal.render_report`` to one store, clock and directory."""
 
     @tool(RENDER_REPORT_SPEC)

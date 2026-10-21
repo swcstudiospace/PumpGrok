@@ -92,9 +92,7 @@ def _row(rule_id: str, status: str, value: object = None, limit: object = None) 
     return {"id": rule_id, "status": status, "value": value, "limit": limit}
 
 
-async def run_check_limits(
-    inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget
-) -> dict:
+async def run_check_limits(inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget) -> dict:
     """Evaluate structural checks; engine rules skip until Phase 4."""
     try:
         store.verify()
@@ -130,9 +128,7 @@ async def run_check_limits(
             "reason": first_fail,
             "rules": rules,
             "limits": limits,
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

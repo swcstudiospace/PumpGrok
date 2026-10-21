@@ -67,9 +67,7 @@ async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore) -> dict:
         {
             "events": events,
             "latest_snapshot": store.latest_snapshot(),
-            "meta": meta_now(
-                "ledger", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

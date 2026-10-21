@@ -142,9 +142,7 @@ async def run_journal_append(
     ).model_dump()
 
 
-def build_journal_append_tool(
-    store: LedgerStore, clock: Clock, journal_dir: Path
-) -> Tool:
+def build_journal_append_tool(store: LedgerStore, clock: Clock, journal_dir: Path) -> Tool:
     """Bind ``journal.append`` to one store, clock and directory."""
 
     @tool(APPEND_SPEC)

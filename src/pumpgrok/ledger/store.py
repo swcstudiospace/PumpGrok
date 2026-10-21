@@ -224,6 +224,7 @@ class LedgerStore:
         """Number of events stored."""
         row = self._db.execute("SELECT COUNT(*) FROM events;").fetchone()
         return int(row[0])
+
     def read(
         self,
         *,
@@ -335,7 +336,6 @@ class LedgerStore:
             return None
         seq, ts_utc, state_json = rows[0]
         return {"seq": seq, "ts_utc": ts_utc, "state": json.loads(state_json)}
-
 
     def write_snapshot(self, *, seq: int, ts_utc: str, state: Mapping[str, Any]) -> None:
         """Record state at seq. Append-only like events: a duplicate seq raises.

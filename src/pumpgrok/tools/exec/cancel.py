@@ -81,4 +81,3 @@ def build_cancel_tool() -> Tool:
         return await run_cancel(payload)
 
     return _cancel
-

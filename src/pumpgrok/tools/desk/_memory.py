@@ -41,9 +41,7 @@ class MemoryBank:
         existing = self._by_key.get(key)
         if existing is not None:
             return existing
-        digest = hashlib.sha256(
-            json.dumps(record, sort_keys=True).encode("utf-8")
-        ).hexdigest()[:16]
+        digest = hashlib.sha256(json.dumps(record, sort_keys=True).encode("utf-8")).hexdigest()[:16]
         stored = {"id": digest, "key": key, **record}
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._path, "a", encoding="utf-8") as handle:

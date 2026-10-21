@@ -89,9 +89,7 @@ async def run_memory_retain(inp: MemoryRetainIn, bank: MemoryBank) -> dict:
     return MemoryRetainOut.model_validate(
         {
             "id": record_id,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

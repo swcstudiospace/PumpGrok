@@ -61,7 +61,9 @@ class SimulateOut(ToolOutput):
     priority_fee_lamports: int = Field(ge=0)
     liquidity_ratio: Decimal
     rejection_reason: (
-        Literal["below_liquidity_floor", "size_too_small", "post_graduation_no_reserves", "data_stale"]
+        Literal[
+            "below_liquidity_floor", "size_too_small", "post_graduation_no_reserves", "data_stale"
+        ]
         | None
     ) = None
     latency_ms_estimate: int = Field(ge=0)

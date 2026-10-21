@@ -98,9 +98,7 @@ async def run_docs_search(inp: DocsSearchIn, repo_root: Path) -> dict:
     return DocsSearchOut.model_validate(
         {
             "chunks": chunks,
-            "meta": meta_now(
-                "desk", inp.correlation_id or (str(ambient) if ambient else None)
-            ),
+            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
         }
     ).model_dump()
 

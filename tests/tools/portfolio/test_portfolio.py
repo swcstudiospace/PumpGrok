@@ -98,9 +98,7 @@ def test_ledger_write_never_a_seat_grant() -> None:
         BotManifest(
             **{
                 **_manifest("bot-02-risk").model_dump(),
-                "allowed_tools": [
-                    {"name": "portfolio.ledger_write", "side_effect": "paper-write"}
-                ],
+                "allowed_tools": [{"name": "portfolio.ledger_write", "side_effect": "paper-write"}],
             }
         )
 

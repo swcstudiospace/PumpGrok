@@ -138,9 +138,7 @@ class Notifier(abc.ABC):
             except Exception as exc:  # noqa: BLE001 - sinks report, never raise
                 delivered.append({"sink": destination, "ok": False, "error": str(exc)})
         for destination in refused:
-            delivered.append(
-                {"sink": destination, "ok": False, "error": "not_allowlisted"}
-            )
+            delivered.append({"sink": destination, "ok": False, "error": "not_allowlisted"})
         return {"delivered": delivered, "suppressed": False}
 
     async def _with_j8(self, make_coro: Callable[[], Any]) -> Any:
