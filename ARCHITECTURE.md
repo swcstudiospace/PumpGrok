@@ -23,7 +23,7 @@ External systems named in skills or tools:
 
 | System | How PumpGrok uses it |
 |--------|----------------------|
-| Jupiter Quote API `https://lite-api.jup.ag/swap/v1/quote` | `tools/jupiter_quote.py` GET; never swap/send |
+| Jupiter Swap API `https://api.jup.ag/swap/v2/order` | `tools/jupiter_quote.py` quote-only GET via `x-api-key`; never swap/send |
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `authority_check.py` (`getAccountInfo`), `priority_fee.py` (`getRecentPrioritizationFees`), `holder_check.py` (`getTokenLargestAccounts`) |
 | Optional `--rpc` URL | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
@@ -170,7 +170,7 @@ Retry behavior that **is** implemented as policy (instructions, not code): on un
 
 Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON and the process exits 1. `ticket_helper.py` also exits 1 on invalid ids, duplicate proposals, and unknown commands.
 
-Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`paper_sim.py`), **micro-live** (throwaway wallet after explicit confirmation). Daily loss ≥ 5% of wallet equity → CHIEF posts `FLOOR HALTED – DAILY LOSS LIMIT` and refuses new entries until the human resets.
+Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`paper_sim.py`). There is no higher level on this desk. Daily loss ≥ 5% of wallet equity → CHIEF posts `FLOOR HALTED – DAILY LOSS LIMIT` and refuses new entries until the human resets.
 
 ## Persistence
 
@@ -231,13 +231,13 @@ Do not put seed phrases, private keys, or live RPC credentials in git. Connectio
 | New procedure | `skills/<name>/SKILL.md` with matching `name`, then add it to the relevant agent `skills:` list | Do not put strategy or return claims in skills (`rules` forbid it) |
 | New structured read | `tools/*.py` JSON CLI, fail closed, no signing | Do not add send/swap/sign paths |
 | Host packaging | The matching `plugin.json` / marketplace file | Do not invent a Bot-creation API |
-| Bootstrap steps | `SETUP.md` and `skills/pumpgrok-setup/SKILL.md` | Do not raise engagement to micro-live in setup |
+| Bootstrap steps | `SETUP.md` and `skills/pumpgrok-setup/SKILL.md` | Keep engagement at research in setup |
 | Lint rules | `scripts/check.sh` | Keep it offline |
 
 Keep tools read/prepare-only. Keep RISK KILL non-overridable. Keep SNIPER/EXIT as the only exchange writers.
 
 ## Unknowns
 
-- Plugin manifests still contain `"license": "MIT"` and placeholder `https://github.com/your-org/pumpgrok` URLs. The root [LICENSE](LICENSE) is GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace. Manifests were not changed in this documentation pass.
-- `jupiter-routing` and `tools/README.md` show `priority_fee.py --max-micro 50000`. The implemented flags are `--rpc`, `--percentile`, `--multiplier` (default 1.2).
+- Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
+- `jupiter-routing` and `tools/README.md` show `priority_fee.py --rpc/--percentile/--multiplier` (default 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.

@@ -5,13 +5,16 @@ All tools are **read / prepare only**. They never sign, send, or handle private 
 
 | Tool | Purpose | Primary users |
 |------|---------|---------------|
-| `jupiter_quote.py` | Best Jupiter route + expected out amount | SNIPER, EXIT |
+| `jupiter_quote.py` | Best Jupiter route + expected out amount (quote-only; never swap/send) | SNIPER, EXIT |
 | `authority_check.py` | Mint / freeze authority + Token-2022 flags | RISK |
 | `priority_fee.py` | Median + recommended prioritization fee | SNIPER, EXIT |
 | `ticket_helper.py` | Next ticket ID + optional proposal skeleton | CHIEF |
+| `desk_state.py` | Desk engagement + halt status and pending leads (file-bus state machine) | CHIEF, SCOUT, RISK, RUG |
 | `paper_sim.py` | Paper-trading fill logger | CHIEF, EXIT, strategy lab |
 | `holder_check.py` | Top-holder concentration snapshot | WHALE, RISK |
 | `pipeline_evidence.py` | Read vendored grokbot-pumpfun JSONL as PIPELINE-EVIDENCE; never signs | SCOUT, SNIPER, RISK, CHIEF, WHALE, SHILL, RUG, EXIT |
+
+Oracle wording note: the root skill-text oracle pins the `ticket_helper.py next` and `ticket_helper.py create` spellings (see `tests/test_tools_cli.py`), so this file and `skills/desk-trade-lifecycle/SKILL.md` keep them. New automation prefers the `pumpgrok ticket` verbs as the port lands them.
 
 ## Common conventions
 
@@ -35,7 +38,7 @@ python tools/jupiter_quote.py \
 python tools/authority_check.py --mint <TOKEN_MINT>
 
 # Priority fee
-python tools/priority_fee.py --multiplier 1.25 --max-micro 50000
+python tools/priority_fee.py --multiplier 1.2 --percentile 50
 
 # Next ticket / create proposal
 python tools/ticket_helper.py next

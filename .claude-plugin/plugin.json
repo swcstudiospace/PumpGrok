@@ -5,6 +5,6 @@
   "author": {
     "name": "PumpGrok"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "keywords": ["solana", "memecoin", "trading-desk", "grok-bot", "agents"]
 }

@@ -21,7 +21,7 @@ The desk runs autonomously in paper mode for 2-4 weeks and produces honest, repl
 - [x] Hermes cron isolation: six cron prompts, per-seat profiles with Telegram inbound only for chief, forbidden env keys (`PRIVATE_KEY, SECRET_KEY, SEED, MNEMONIC`) and `forbidden_owners: [sniper, exit]` (`docs/DISCOVERY.md` sections 3.2, 3.3, `hermes/cron/jobs.yaml`) - existing
 - [x] Plugin manifests for Claude, Grok and Cursor (`plugin.json`, `.claude-plugin/`, `.grok-plugin/`, `.cursor-plugin/`) describing the pack (`docs/DISCOVERY.md` section 6 items 4-5, `docs/MIGRATION_MAP.md` section 4.4) - existing
 - [x] `scripts/check.sh` markdown-pack linter with the emoji sweep (`docs/DISCOVERY.md` sections 3.2, 6 item 20; `scripts/check.sh:138-146`) - existing
-- ✓ FOUND (13 requirements, FOUND-001..013): packaging, toolchain, config precedence, core interfaces and registry, ownership, ported gates, contracts, prompt assembly, workflows, network-blocked test harness, ledger skeleton and the skip-only `pumpgrok run --replay` cycle — Phase 1
+- [x] FOUND (13 requirements, FOUND-001..013): packaging, toolchain, config precedence, core interfaces and registry, ownership, ported gates, contracts, prompt assembly, workflows, network-blocked test harness, ledger skeleton and the skip-only `pumpgrok run --replay` cycle - Phase 1
 
 ### Active
 

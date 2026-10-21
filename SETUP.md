@@ -173,7 +173,7 @@ Create or update `/workspace/trading-desk/desk.md` with:
 ```markdown
 # PumpGrok Desk Record
 Date: <UTC>
-Engagement: research          # research | paper | micro-live
+Engagement: research          # research | paper
 Throwaway wallet: not yet connected
 Daily loss limit: 5 %
 Bots created: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL
@@ -226,7 +226,7 @@ Next recommended steps for the human:
 1. Run the risk-limits interview with RISK / CHIEF
 2. Connect the throwaway wallet via screen hand-off (tool-connections skill)
 3. Optionally supply a private RPC URL
-4. Only after explicit confirmation move engagement to paper or micro-live
+4. Only after explicit confirmation move engagement to paper
 ```
 
 ---

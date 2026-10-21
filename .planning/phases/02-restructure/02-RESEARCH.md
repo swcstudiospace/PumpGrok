@@ -598,13 +598,13 @@ class JupiterSettings(BaseModel):
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
-| Python 3.12 | project pin `>=3.12,<3.13` | ✓ | 3.12.3 (`/usr/bin/python3`) | — |
-| uv | `uv run`, `uv lock`, `uv sync --frozen` | ✓ | 0.11.26 (pin in STACK V-2 is 0.13.4) | Use installed uv; record version |
-| `.venv` deps | root tests | ✓ except tenacity | httpx 0.28.1, websockets 17.3, pydantic 2.14.1, pydantic-settings 2.16.1, pytest 9.1.1, pytest-asyncio 1.4.0, requests 2.34.2 | Run `uv lock && uv sync` after adding tenacity |
-| tenacity | RPC client | ✗ in `.venv` and `uv.lock` | (9.2.1 on index) | Must add; no fallback (STRUCT-002) |
-| System python3 vendor deps | vendor oracle `python3 -m pytest -q` | ✓ | httpx 0.28.1, pydantic 2.13.4, websockets 16.0, pyyaml 6.0.3, pytest 9.1.1, pytest-asyncio 1.4.0 | No /tmp venv needed: vendor imports only these (grep of `vendor/grokbot-pumpfun/{src,tests,scripts}` shows no `solders` or `solana` import) |
-| solders / solana | vendor pyproject lists them | ✗ | — | Not needed; not imported |
-| PyPI network | `uv lock` | ✓ | `pip index versions tenacity` succeeded this session | — |
+| Python 3.12 | project pin `>=3.12,<3.13` | yes | 3.12.3 (`/usr/bin/python3`) | - |
+| uv | `uv run`, `uv lock`, `uv sync --frozen` | yes | 0.11.26 (pin in STACK V-2 is 0.13.4) | Use installed uv; record version |
+| `.venv` deps | root tests | yes except tenacity | httpx 0.28.1, websockets 17.3, pydantic 2.14.1, pydantic-settings 2.16.1, pytest 9.1.1, pytest-asyncio 1.4.0, requests 2.34.2 | Run `uv lock && uv sync` after adding tenacity |
+| tenacity | RPC client | no, missing in `.venv` and `uv.lock` | (9.2.1 on index) | Must add; no fallback (STRUCT-002) |
+| System python3 vendor deps | vendor oracle `python3 -m pytest -q` | yes | httpx 0.28.1, pydantic 2.13.4, websockets 16.0, pyyaml 6.0.3, pytest 9.1.1, pytest-asyncio 1.4.0 | No /tmp venv needed: vendor imports only these (grep of `vendor/grokbot-pumpfun/{src,tests,scripts}` shows no `solders` or `solana` import) |
+| solders / solana | vendor pyproject lists them | no | - | Not needed; not imported |
+| PyPI network | `uv lock` | yes | `pip index versions tenacity` succeeded this session | - |
 | Docker | `docker compose` gates | not checked | — | Not part of Phase 2 success criteria |
 
 **Missing dependencies with no fallback:** tenacity (must be added to pyproject and lock; STRUCT-002 mandates it).
@@ -618,18 +618,18 @@ Test framework: pytest 9.1.1 with pytest-asyncio 1.4.0 (`asyncio_mode = "auto"`)
 
 | Criterion | Requirement | Automated command | Exists now? |
 |-----------|-------------|-------------------|-------------|
-| SC1 | STRUCT-002 | `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` | ✗ Wave 0 |
-| SC2a | STRUCT-003 | `cd vendor/grokbot-pumpfun && python3 -m pytest -q` | ✓ (oracle, 264 tests) |
-| SC2b | STRUCT-003 | `uv run pytest -q tests/characterization/` | ✗ Wave 0 |
-| SC2c | STRUCT-003 | `! LC_ALL=C.UTF-8 grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` (add positive control) | ✗ engine missing |
-| SC3 | STRUCT-007 | `test "$(grep -l '^bots:' skills/*/SKILL.md \| wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md \| wc -l)" -eq 23 && ! /usr/bin/grep -rn -e lite-api -e '--max-micro' skills/` | ✗ currently 0 and fails on `--max-micro` (jupiter-routing:18) |
-| SC4a | STRUCT-005 | `uv run pumpgrok --help` | ✓ exits 0 today |
-| SC4b | STRUCT-005 | `uv run pumpgrok paper buy --help` lists `--ticket --mint --size-sol --slippage-bps --approval-id` | ✗ no `paper` verb today |
-| SC5 | SEC-003 | `uv run pytest -q tests/safety/test_no_signing_outside_live_stub.py` | ✗ Wave 0 |
-| Checkpoint | STRUCT-003 | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` prints one `skip` or `buy` | ✗ prints nothing today; exit 0 with JournalNote |
-| Regression | Phase 1 | `uv run pytest -q` (including `tests/test_skip_cycle.py`, `tests/safety/test_static_guards.py`, `tests/test_network_block.py`) | ✓ (update line 157 per Pitfall 18) |
-| Lint/type | all | `make lint typecheck` (`ruff check`, `ruff format --check`, `mypy src/`) | ✓ |
-| Gates | all | `python3 ci/gates/check_ownership.py --validate-manifest`, `python3 ci/gates/check_desk_integrity.py --repo .`, `./scripts/check.sh` | ✓ (check.sh requires skill rules; ownership needs Pitfall 31 rules) |
+| SC1 | STRUCT-002 | `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` | no (Wave 0) |
+| SC2a | STRUCT-003 | `cd vendor/grokbot-pumpfun && python3 -m pytest -q` | yes (oracle, 264 tests) |
+| SC2b | STRUCT-003 | `uv run pytest -q tests/characterization/` | no (Wave 0) |
+| SC2c | STRUCT-003 | `! LC_ALL=C.UTF-8 grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` (add positive control) | no (engine missing) |
+| SC3 | STRUCT-007 | `test "$(grep -l '^bots:' skills/*/SKILL.md \| wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md \| wc -l)" -eq 23 && ! /usr/bin/grep -rn -e lite-api -e '--max-micro' skills/` | no (currently 0 and fails on `--max-micro`, jupiter-routing:18) |
+| SC4a | STRUCT-005 | `uv run pumpgrok --help` | yes (exits 0 today) |
+| SC4b | STRUCT-005 | `uv run pumpgrok paper buy --help` lists `--ticket --mint --size-sol --slippage-bps --approval-id` | no (no `paper` verb today) |
+| SC5 | SEC-003 | `uv run pytest -q tests/safety/test_no_signing_outside_live_stub.py` | no (Wave 0) |
+| Checkpoint | STRUCT-003 | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` prints one `skip` or `buy` | no (prints nothing today; exit 0 with JournalNote) |
+| Regression | Phase 1 | `uv run pytest -q` (including `tests/test_skip_cycle.py`, `tests/safety/test_static_guards.py`, `tests/test_network_block.py`) | yes (update line 157 per Pitfall 18) |
+| Lint/type | all | `make lint typecheck` (`ruff check`, `ruff format --check`, `mypy src/`) | yes |
+| Gates | all | `python3 ci/gates/check_ownership.py --validate-manifest`, `python3 ci/gates/check_desk_integrity.py --repo .`, `./scripts/check.sh` | yes (check.sh requires skill rules; ownership needs Pitfall 31 rules) |
 
 Sampling rate: run the targeted test file after each port module; run `uv run pytest -q` after each deliverable; run the vendor oracle and the checkpoint once at phase end.
 

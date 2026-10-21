@@ -15,7 +15,7 @@ Version 1.0.0.
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
-The desk starts in **research** mode. **paper** logs simulated fills via `tools/paper_sim.py`. **micro-live** is only enabled after the risk-limits interview and explicit user confirmation. The desk ships no strategies and makes no return claims.
+The desk starts in **research** mode. **paper** logs simulated fills via `tools/paper_sim.py`. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
 
 ## Requirements
 

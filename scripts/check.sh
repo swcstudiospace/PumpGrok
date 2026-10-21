@@ -126,9 +126,7 @@ PLACEHOLDER = "your-org"
 PLACEHOLDER_ALLOWLIST = {
     ".claude-plugin/marketplace.json",
     ".grok-plugin/marketplace.json",
-    "ARCHITECTURE.md",
     "SETUP.md",
-    "plugin.json",
 }
 PLACEHOLDER_SKIP_DIRS = {"docs", "vendor", "var", "node_modules", "__pycache__"}
 PLACEHOLDER_SKIP_FILES = {"scripts/check.sh"}  # names the placeholder it checks for

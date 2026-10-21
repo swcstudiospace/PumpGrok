@@ -5,7 +5,7 @@
   "author": {
     "name": "PumpGrok"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "skills": "./skills/",
   "agents": "./agents/",
   "rules": "./rules/",
