@@ -131,6 +131,20 @@ class TestG1Ownership:
         assert "FOREIGN" in r.stderr
         assert "bot-04-sniper" in r.stderr
 
+    def test_foreign_contract_surface_is_blocked(self):
+        # A contract_surface flag must not exempt a path from ownership: a non-owner editing a
+        # shared contract is FOREIGN, not a G-4 NOTE.
+        r = run_gate(
+            "check_ownership.py",
+            "--bot",
+            "bot-04-sniper",
+            "--files",
+            "contracts/tool-rosters/bot-03-whale.yaml",
+        )
+        assert r.returncode == 1
+        assert "FOREIGN" in r.stderr
+        assert "bot-02-risk" in r.stderr
+
     def test_unowned_path_is_blocked(self):
         r = run_gate(
             "check_ownership.py", "--bot", "bot-02-risk", "--files", "some/unclaimed/file.xyz"

@@ -188,10 +188,13 @@ def main() -> int:
         owner, is_contract = resolve_owner(path, manifest)
         if owner is None:
             unowned.append(path)
+        elif owner != args.bot:
+            # Ownership is checked before the contract classification: a contract surface owned by
+            # another seat is FOREIGN, not a NOTE. Otherwise a non-owner edits a shared contract
+            # and passes G-1 on its contract_surface flag alone.
+            foreign.append((path, owner))
         elif is_contract:
             contracts.append(path)
-        elif owner != args.bot:
-            foreign.append((path, owner))
 
     if unowned or foreign:
         print(f"G-1 FAIL — {args.bot}", file=sys.stderr)
