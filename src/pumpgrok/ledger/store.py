@@ -184,7 +184,17 @@ class LedgerStore:
             " type, payload_json, prev_hash, hash FROM events ORDER BY seq ASC;"
         ).fetchall()
         expected_prev = GENESIS_PREV_HASH
-        for seq, ts_utc, source, correlation_id, idempotency_key, type, payload_json, prev_hash, hash_ in rows:
+        for (
+            seq,
+            ts_utc,
+            source,
+            correlation_id,
+            idempotency_key,
+            type,
+            payload_json,
+            prev_hash,
+            hash_,
+        ) in rows:
             if prev_hash != expected_prev:
                 raise LedgerInconsistent(
                     f"seq {seq}: prev_hash does not chain",
