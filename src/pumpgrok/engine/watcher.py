@@ -75,7 +75,7 @@ class PositionWatcher:
         self.sell_fn = sell_fn
         self.clock = clock
         self.price_failures: dict[str, int] = {}
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     @property
     def blind(self) -> list[str]:
@@ -149,7 +149,7 @@ class PositionWatcher:
                 log.exception("position watch failed a pass: %s", exc)
             await self.clock.sleep(interval)
 
-    def start(self) -> asyncio.Task:
+    def start(self) -> asyncio.Task[None]:
         self._task = asyncio.create_task(self.run(), name="position-watcher")
         return self._task
 
