@@ -321,6 +321,8 @@ ownership:
     owner: bot-05-rug
   - pattern: "src/pumpgrok/engine/exits.py"
     owner: bot-06-exit
+  - pattern: "src/pumpgrok/engine/reputation.py"
+    owner: bot-08-signal # settled: engine default; rug memory verdicts feed the filter
   - pattern: "src/pumpgrok/reporting/**"
     owner: bot-09-journal
   - pattern: "services/desk-gateway/**"
@@ -401,6 +403,21 @@ ownership:
     owner: bot-05-rug
   - pattern: "tests/characterization/test_jupiter_quote.py"
     owner: bot-01-scout
+
+  # STRUCT-003 flat files: last match wins, each follows its module owner (R36).
+  - pattern: "tests/characterization/test_monitor.py"
+    owner: bot-01-scout
+  - pattern: "tests/characterization/test_analyzer.py"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/test_scoring.py"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/test_reputation.py"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/test_exits.py"
+    owner: bot-06-exit
+  - pattern: "tests/characterization/test_watcher.py"
+    owner: bot-05-rug
+
 
   # --- Receipts: one rule per seat ----------------------------------------
   - pattern: ".receipts/bot-00-chief/**"
