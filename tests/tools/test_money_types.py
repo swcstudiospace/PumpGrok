@@ -13,18 +13,29 @@ import asyncio
 import random
 import sys
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 import pytest
+from pydantic import ValidationError
 
+from pumpgrok.cli import UsageError, _size_sol, size_sol_to_lamports
 from pumpgrok.core.adapter import Side
 from pumpgrok.core.bot import BotManifest, ToolGrant
-from pumpgrok.core.errors import PermissionDenied
+from pumpgrok.core.errors import DataBlind, DataStale, PermissionDenied
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.core.tool import ToolInput, ToolMeta, ToolOutput, ToolSpec, tool
+from pumpgrok.core.tool import (
+    ToolInput,
+    ToolMeta,
+    ToolOutput,
+    ToolSpec,
+    UpstreamModel,
+    parse_upstream,
+    tool,
+)
 from pumpgrok.replay.clock import FixtureClock, WallClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.tools import build_registry
@@ -167,3 +178,57 @@ async def test_tracer_wrap_applies_clock_timeout() -> None:
         resolved = reg.find("desk.probe", max_side_effect=SideEffect.READ, bot=bot)
         with pytest.raises(TimeoutError):
             await resolved(_ProbeIn())
+
+
+class _MoneyOut(ToolOutput):
+    price: Decimal
+
+
+class _UpstreamPrice(UpstreamModel):
+    price: Decimal
+
+
+def test_canonical_json_rejects_float_leaves() -> None:
+    from pumpgrok.core.idempotency import canonical_json
+
+    assert canonical_json({"price": Decimal("1.5")}) == '{"price":"1.5"}'
+    with pytest.raises(TypeError, match="float leaves are forbidden"):
+        canonical_json({"price": 1.5})
+    with pytest.raises(TypeError, match="float leaves are forbidden"):
+        canonical_json({"nested": {"price": 1.5}})
+
+
+def test_decimal_serializes_as_json_string() -> None:
+    dumped = _MoneyOut(meta=_meta(), price=Decimal("1.5")).model_dump(mode="json")
+    assert dumped["price"] == "1.5"
+
+
+def test_tool_envelopes_forbid_extra() -> None:
+    assert ToolInput.model_config.get("extra") == "forbid"
+    assert ToolOutput.model_config.get("extra") == "forbid"
+    assert UpstreamModel.model_config.get("extra") == "ignore"
+    with pytest.raises(ValidationError):
+        _ProbeIn(query="ping", unknown_field="nope")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        _ProbeOut(meta=_meta(), answer="pong", unknown_field="nope")  # type: ignore[call-arg]
+
+
+def test_upstream_model_ignores_extra_and_maps_errors() -> None:
+    parsed = parse_upstream(_UpstreamPrice, {"price": "1.5", "venue_noise": 123})
+    assert parsed.price == Decimal("1.5")
+    with pytest.raises(DataStale, match="unparsable"):
+        parse_upstream(_UpstreamPrice, {"price": "not-a-number"})
+    with pytest.raises(DataBlind, match="no last-good value"):
+        parse_upstream(_UpstreamPrice, {"price": "not-a-number"}, blind=True)
+    with pytest.raises(DataStale):
+        parse_upstream(_UpstreamPrice, {"price": None})
+
+
+def test_cli_size_sol_conversions() -> None:
+    assert _size_sol("0.5") == Decimal("0.5")
+    assert size_sol_to_lamports(Decimal("0.5")) == 500_000_000
+    assert size_sol_to_lamports(Decimal("0.0000000015")) == 2  # ROUND_HALF_UP
+    assert size_sol_to_lamports(_size_sol("1")) == 1_000_000_000
+    for bad in ("abc", "-1", "0", "NaN", "Infinity"):
+        with pytest.raises(UsageError):
+            _size_sol(bad)

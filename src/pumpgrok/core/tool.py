@@ -4,17 +4,23 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, Protocol, Self, runtime_checkable
+from typing import Any, Protocol, Self, TypeVar, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from pumpgrok.core.errors import DataBlind, DataStale
 from pumpgrok.core.side_effect import SideEffect
 
 TOOL_NAME_RE = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
 
 
 class RetryPolicy(BaseModel):
-    """Retry policy (D5). Not applied yet: ToolSpec refuses attempts > 1 until it is wired."""
+    """Retry policy (D5). `base_s`/`max_s` are seconds, never money.
+
+    `attempts > 1` is READ-only: write tools keep `attempts=1` (catalog "retry
+    none"). Timeouts retry in the registry; 5xx/429 retry at the transport
+    client, which reads the same policy.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -52,6 +58,35 @@ class ToolOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     meta: ToolMeta
+
+
+_M = TypeVar("_M", bound=BaseModel)
+
+
+class UpstreamModel(BaseModel):
+    """Base for untrusted upstream payloads (pump.fun, Jupiter, RPC, x.ai).
+
+    `extra="ignore"` mirrors the wire tolerance of external APIs: unknown
+    fields are dropped, never rejected. Malformed payloads never escape as
+    `ValidationError`/`TypeError`/`ValueError`: parse through
+    `parse_upstream`, which maps them to `DataStale`/`DataBlind`.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+
+def parse_upstream(model: type[_M], payload: object, *, blind: bool = False) -> _M:
+    """Validate an untrusted payload; malformed input becomes typed, never raw.
+
+    `DataStale` when a last-good value may exist (the caller serves cache);
+    `DataBlind` when `blind=True` (no last-good value exists).
+    """
+    try:
+        return model.model_validate(payload)
+    except (ValidationError, TypeError, ValueError) as exc:
+        if blind:
+            raise DataBlind(f"unparsable {model.__name__} payload, no last-good value") from exc
+        raise DataStale(f"unparsable {model.__name__} payload") from exc
 
 
 class ToolSpec(BaseModel):

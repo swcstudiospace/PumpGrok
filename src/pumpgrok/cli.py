@@ -23,12 +23,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
 import os
 import re
 import sys
 from collections.abc import Sequence
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NoReturn, TextIO
 
@@ -91,13 +90,15 @@ def _mint(value: str) -> str:
     return value
 
 
-def _size_sol(value: str) -> float:
+def _size_sol(value: str) -> Decimal:
+    """Parse --size-sol once, at the CLI boundary (R28): Decimal in, lamports out."""
     try:
-        size = float(value)
-    except ValueError:
+        size = Decimal(value)
+        valid = size.is_finite() and size > 0
+    except InvalidOperation:
+        valid = False
+    if not valid:
         raise UsageError(f"bad --size-sol {value!r}: want a positive number") from None
-    if not size > 0 or not math.isfinite(size):
-        raise UsageError(f"bad --size-sol {value!r}: want a positive number")
     return size
 
 
@@ -117,11 +118,9 @@ def _approval_id(value: str) -> str:
     return value
 
 
-def size_sol_to_lamports(size_sol: float) -> int:
+def size_sol_to_lamports(size_sol: Decimal) -> int:
     """Convert a SOL size to lamports once, here, so every path shares one rounding."""
-    return int(
-        (Decimal(str(size_sol)) * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP)
-    )
+    return int((size_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def _not_implemented(verb: str) -> int:
