@@ -65,7 +65,6 @@ class CreatorRecord(BaseModel):
 
 
 class ReputationBook(BaseModel):
-
     version: int = 1
     creators: dict[str, CreatorRecord] = Field(default_factory=dict)
     updated_at: float = 0.0
@@ -134,8 +133,7 @@ class ReputationBook(BaseModel):
         if rug_loss_pct and -pnl_pct >= rug_loss_pct:
             record.rugs += 1
             log.warning(
-                "creator %s: rug %d, worst %.1f%%, "
-                "its next tokens are rejected at ingress",
+                "creator %s: rug %d, worst %.1f%%, its next tokens are rejected at ingress",
                 creator[:8],
                 record.rugs,
                 record.worst_pnl_pct,
@@ -152,10 +150,7 @@ class ReputationBook(BaseModel):
         if record is None:
             return None
         if record.rugs >= block_after_rugs:
-            return (
-                f"creator_rugged {record.rugs}x "
-                f"(worst {record.worst_pnl_pct:.0f}%)"
-            )
+            return f"creator_rugged {record.rugs}x (worst {record.worst_pnl_pct:.0f}%)"
         return None
 
     # -- maintenance -------------------------------------------------------

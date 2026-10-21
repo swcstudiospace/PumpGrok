@@ -35,7 +35,7 @@ from pumpgrok.engine.analyzer import (
     parse_holder,
     parse_trade,
 )
-from pumpgrok.engine.models import Holder, Token, Trade
+from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
 
 NOW = 1_700_000_000.0
 
@@ -77,7 +77,7 @@ async def test_fetch_hits_three_endpoints(analyzer_parts: tuple) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request.url.path)
-        assert "authorization" not in {k.lower() for k in request.headers.keys()}
+        assert "authorization" not in {k.lower() for k in request.headers}
         if request.url.path.endswith("/holders"):
             return httpx.Response(200, json=_body("pumpfun_holder.json"))
         if "/trades/all/" in request.url.path:
@@ -125,7 +125,6 @@ async def test_analyze_rejects_token_without_trades(analyzer_parts: tuple) -> No
 async def test_risky_token_rejected_by_score(analyzer_parts: tuple) -> None:
     data, filter_cfg = analyzer_parts
     analyzer = Analyzer(data, filter_cfg, client(lambda request: httpx.Response(200, json=[])))
-    from pumpgrok.engine.models import TokenMetrics
 
     ok, _ = analyzer.passes(TokenMetrics(risk_score=6.9, trade_count=30))
     assert ok

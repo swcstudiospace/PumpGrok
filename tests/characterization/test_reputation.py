@@ -17,10 +17,12 @@ Divergences from the oracle (deliberate):
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+import pumpgrok.engine.reputation as reputation_module
 from pumpgrok.engine.reputation import MAX_CREATORS, CreatorRecord, ReputationBook
 from pumpgrok.replay.clock import FixtureClock
 
@@ -117,8 +119,6 @@ def test_survives_restart(tmp_path: Path) -> None:
 
 
 def test_save_keeps_vendor_json_shape(tmp_path: Path) -> None:
-    import json
-
     path = tmp_path / "creators.json"
     fresh = ReputationBook()
     rug(fresh)
@@ -173,9 +173,9 @@ def test_forget_disabled_by_zero(book: ReputationBook) -> None:
     assert "C1" in book.creators
 
 
-def test_eviction_prefers_clean_addresses(book: ReputationBook, monkeypatch: pytest.MonkeyPatch) -> None:
-    import pumpgrok.engine.reputation as reputation_module
-
+def test_eviction_prefers_clean_addresses(
+    book: ReputationBook, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(reputation_module, "MAX_CREATORS", 5)
     for i in range(5):
         book.observe(f"clean{i}")

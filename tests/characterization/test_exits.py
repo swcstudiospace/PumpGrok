@@ -11,12 +11,13 @@ Divergences from the oracle (deliberate):
 - Detail strings are English ASCII (``from entry``, ``from peak``; the
   vendor originals are Russian).
 """
+
 from __future__ import annotations
 
 import pytest
 
 from pumpgrok.config.settings import ExitsSettings
-from pumpgrok.engine.exits import EXIT_REASONS, exit_signal, pnl_pct, stop_loss_triggered
+from pumpgrok.engine.exits import EXIT_REASONS, exit_signal, stop_loss_triggered
 from pumpgrok.engine.models import ExitPosition
 
 NOW = 1_700_000_000.0

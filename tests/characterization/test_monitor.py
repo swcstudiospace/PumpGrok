@@ -82,6 +82,7 @@ class ManualClock:
     def timeout(self, seconds: float) -> Any:
         return asyncio.timeout(seconds)
 
+
 @pytest.fixture
 def cfg() -> FilterSettings:
     return FilterSettings(
@@ -231,8 +232,7 @@ def test_new_launch_is_buffered_not_emitted() -> None:
     skips: list = []
     mon = make_monitor(skips)
     assert (
-        mon.handle_event({"txType": "create", "mint": "A", "name": "n", "image": "i"}, NOW)
-        is None
+        mon.handle_event({"txType": "create", "mint": "A", "name": "n", "image": "i"}, NOW) is None
     )
     assert "A" in mon.pending
 

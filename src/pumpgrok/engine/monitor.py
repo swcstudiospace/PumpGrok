@@ -84,9 +84,7 @@ def parse_create_event(payload: dict[str, Any], now: float) -> Token | None:
     sol_in_curve = float(payload.get("vSolInBondingCurve") or 0.0)
     created = payload.get("timestamp") or payload.get("createdTimestamp")
     created_ts = (
-        float(created) / 1000.0
-        if created and float(created) > 1e11
-        else float(created or now)
+        float(created) / 1000.0 if created and float(created) > 1e11 else float(created or now)
     )
 
     return Token(
