@@ -3,8 +3,13 @@ name: grokbot-pipeline
 description: Operator-run pump.fun screening engine vendored as in-tree files from zostaff/grokbot-pumpfun (pin 409e74c). Produces dry-run trade evidence (nine-stage pipeline, four Grok agents, JSONL log, replay tooling) that feeds all eight desk roles via tools/pipeline_evidence.py (JSON plus PIPELINE-EVIDENCE). Never enables live trading.
 bots:
   - all
-gates:
-  - G-2
+gates: []
+required_tools: []
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # GrokBot Pipeline

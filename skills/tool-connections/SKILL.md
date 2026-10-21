@@ -3,8 +3,13 @@ name: tool-connections
 description: Open, authenticate, and persist browser sessions for every website and tool required by PumpGrok. Includes the safe wallet-connection handoff protocol.
 bots:
   - bot-00-chief
-gates:
-  - G-3
+gates: []
+required_tools: []
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Tool Connections

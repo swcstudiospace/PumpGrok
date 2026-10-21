@@ -3,8 +3,17 @@ name: desk-monitoring
 description: Continuous oversight of desk health, open positions, daily P&L, and circuit-breaker status. Used primarily by CHIEF.
 bots:
   - bot-00-chief
-  - bot-05-rug
 gates: []
+required_tools:
+  - risk.halt_status
+  - portfolio.exposure
+  - exec.positions
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Desk Monitoring
@@ -24,7 +33,7 @@ Daily P&L: ...
 Circuit Breaker: OK | APPROACHING | HALTED
 Active Alerts: ...
 ```
-2. Engagement is `research` (no money, observation only) or `paper` (simulated fills via `tools/paper_sim.py`). There is no higher level on this desk.
+2. Engagement is `research` (no money, observation only) or `paper` (simulated fills recorded in the ledger). There is no higher level on this desk.
 3. Circuit breaker: when daily loss reaches 5 % of wallet equity, CHIEF posts `FLOOR HALTED - DAILY LOSS LIMIT` and refuses all new tickets until a human resets the halt.
 
 ## Failure modes

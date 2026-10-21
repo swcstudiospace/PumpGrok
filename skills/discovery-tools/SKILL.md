@@ -6,6 +6,14 @@ bots:
   - bot-03-whale
   - bot-07-shill
 gates: []
+required_tools:
+  - market.trades
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Discovery Tools

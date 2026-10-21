@@ -7,6 +7,18 @@ bots:
 gates:
   - G-2
   - G-6
+required_tools:
+  - exec.quote
+  - exec.simulate
+  - exec.place
+  - onchain.priority_fee
+required_data:
+  - jupiter
+  - solana_rpc
+permissions:
+  max_side_effect: paper-write
+  network: true
+  filesystem: var
 ---
 
 # Desk Execution Protocol

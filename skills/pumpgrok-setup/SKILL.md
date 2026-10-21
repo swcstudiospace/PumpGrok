@@ -2,9 +2,16 @@
 name: pumpgrok-setup
 description: Bootstrap the entire PumpGrok Solana memecoin trading desk from zero. Clone or unpack the repository, create folders, install skills, create the 8 specialist Bots, set up the Trading Floor, and produce a clean desk record. This is the first skill a Bot must run when it receives the SETUP.md.
 bots:
-  - all
+  - bot-00-chief
 gates:
   - G-7
+required_tools:
+  - desk.doctor
+required_data: []
+permissions:
+  max_side_effect: paper-write
+  network: true
+  filesystem: none
 ---
 
 # PumpGrok Setup
@@ -13,17 +20,17 @@ gates:
 First-run bootstrap that turns a fresh machine into a fully operational eight-role desk. Runs once per desk; never used for day-to-day trading. Leaves the desk in `research` with no wallet connected.
 
 ## L2 - Method
-1. Follow `/workspace/pumpgrok/SETUP.md` top to bottom exactly. Key stages:
+1. Follow `SETUP.md` top to bottom exactly. Key stages:
    - Ingest the repository.
    - Read the constitution (`rules/pumpgrok-team.mdc` plus `desk-operating-model`).
-   - Create working directories under `/workspace/trading-desk/`.
-   - Install all skills.
-   - Create the 8 Bots from `agents/`.
+   - Create working directories under `var/` (ledger, exports, replay).
+   - Install all 35 skills.
+   - Create the 10 seat agents from `agents/`.
    - Create the Trading Floor group chat.
    - Note the tools layer.
-   - Write `desk.md` and starter `risk-limits.md`.
+   - Write `desk.md` and starter risk numbers.
    - Run smoke tests.
-   - Return the receipt.
+   - Return the receipt (schema: `verification-receipts`).
 2. Output schema:
 ```
 PUMPGROK SETUP COMPLETE

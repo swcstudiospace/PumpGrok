@@ -3,12 +3,19 @@ name: solana-market-data
 description: Fetch and structure live market data for any Solana mint - price, liquidity, volume, bonding-curve progress, and multi-DEX depth.
 bots:
   - bot-01-scout
-  - bot-02-risk
   - bot-03-whale
   - bot-04-sniper
   - bot-05-rug
   - bot-08-signal
 gates: []
+required_tools: []
+required_data:
+  - solana_rpc
+  - jupiter
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Solana Market Data
@@ -17,7 +24,7 @@ gates: []
 Live market data for any Solana mint: price, liquidity, volume, bonding-curve progress, and multi-DEX depth. Shared by six seats; every figure carries a source and a UTC timestamp.
 
 ## L2 - Method
-1. Preferred sources: Jupiter v2 order quote (via `tools/jupiter_quote.py`), gmgn.ai, Solscan, Photon / Axiom.
+1. Preferred sources: Solana JSON-RPC (price, liquidity, holders), Jupiter v2 order quote (route reference), pump.fun REST (launch state), PumpPortal WS (migrations). Every seat uses its own granted `market.*` subset.
 2. Emit the output schema:
 ```
 MINT: ...
@@ -36,5 +43,5 @@ Sources: [list]
 - Graduated vs bonding-curve confusion: state which regime the token is in.
 
 ## References
-- Tools: `tools/jupiter_quote.py`; port: `src/pumpgrok/tools/market/jupiter.py`
+- Tools: `market.price`, `market.liquidity`, `market.trades`; port: `src/pumpgrok/tools/market/jupiter.py`
 - Handoff: LEAD block (`discovery-tools`); gate: `risk-audit`

@@ -6,8 +6,15 @@ bots:
   - bot-01-scout
   - bot-02-risk
   - bot-05-rug
-gates:
-  - G-7
+  - bot-09-journal
+gates: []
+required_tools:
+  - desk.brief
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Hermes Cron Desk
@@ -23,7 +30,7 @@ $PUMPGROK_DESK/
   desk.md          engagement plus Halt
   leads/           SCOUT
   briefs/          RISK
-  proposals/       CHIEF plus ticket_helper.py
+  proposals/       CHIEF tickets
   positions/       SNIPER/EXIT/RUG (paper)
   journal/         append-only
   incidents/       RUG
@@ -34,8 +41,8 @@ Ticket IDs are unique across every folder. Briefs and proposals reuse the lead I
 ```bash
 python "$PUMPGROK_ROOT/tools/desk_state.py" status
 python "$PUMPGROK_ROOT/tools/desk_state.py" pending-leads
-python "$PUMPGROK_ROOT/tools/ticket_helper.py" next
-python "$PUMPGROK_ROOT/tools/ticket_helper.py" create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
+pumpgrok ticket next
+pumpgrok ticket create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
 ```
 4. Cron owners: scout-discover, risk-audit-open-leads, chief-pickup, rug-watch-paper, chief-journal-rollup. NEVER cron SNIPER or EXIT. NEVER raise engagement from cron. If Halt is true or engagement is not `research` or `paper`, print `[SILENT]`.
 5. Telegram: only the chief profile may hold TELEGRAM_BOT_TOKEN. Other profiles notify via bot-chat:chief or files.

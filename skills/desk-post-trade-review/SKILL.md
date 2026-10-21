@@ -3,10 +3,17 @@ name: desk-post-trade-review
 description: Append-only journaling and structured review of every completed ticket. Separates process grade from outcome grade.
 bots:
   - bot-09-journal
-  - bot-06-exit
-  - bot-00-chief
 gates:
   - G-2
+required_tools:
+  - portfolio.ledger_read
+  - portfolio.pnl
+  - journal.append
+required_data: []
+permissions:
+  max_side_effect: paper-write
+  network: true
+  filesystem: var
 ---
 
 # Desk Post-Trade Review

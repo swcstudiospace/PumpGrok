@@ -3,8 +3,13 @@ name: browser-ops
 description: Safe browser hygiene, CAPTCHA/2FA hand-off protocol, session recovery, and handling of untrusted page content.
 bots:
   - bot-07-shill
-  - bot-01-scout
 gates: []
+required_tools: []
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Browser Ops

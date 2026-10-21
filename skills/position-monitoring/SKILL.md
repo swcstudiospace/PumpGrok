@@ -3,8 +3,18 @@ name: position-monitoring
 description: Continuous post-entry safety and performance watches for every open position. Used by RUG (safety) and EXIT (P&L and exit rules).
 bots:
   - bot-05-rug
-  - bot-06-exit
 gates: []
+required_tools:
+  - onchain.lp_status
+  - onchain.authorities
+  - onchain.top_holders
+  - market.price
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Position Monitoring

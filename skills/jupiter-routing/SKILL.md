@@ -6,6 +6,16 @@ bots:
   - bot-06-exit
 gates:
   - G-6
+required_tools:
+  - exec.quote
+  - onchain.priority_fee
+required_data:
+  - jupiter
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Jupiter Routing
@@ -17,10 +27,7 @@ Quote-only route preparation for the single approved buy (SNIPER) or sell (EXIT)
 1. Take the APPROVED ticket parameters only: input mint, output mint, amount (lamports), max slippage bps. Refuse when the ticket is not APPROVED or RISK verdict is not CLEAR (CONDITIONAL conditions met counts as CLEAR only for the listed conditions).
 2. Request a quote-only route: `GET https://api.jup.ag/swap/v2/order` with `inputMint`, `outputMint`, `amount`, `slippageBps`. Send the key as `x-api-key` from `JUPITER_API_KEY`. Never send `taker`. Never call `/execute`, `/build`, or `/submit`.
 3. Treat the response as informational. Map `priceImpact` (percentage points) to a ratio by dividing by 100. The quote is never the fill price (R38).
-4. Estimate the priority fee with the implemented flags:
-```bash
-python tools/priority_fee.py --rpc <RPC_URL> --percentile 50 --multiplier 1.2
-```
+4. Estimate the priority fee with `onchain.priority_fee`, capped by the `max_micro_lamports` field so a spike cannot drain the wallet. The quote is informational (route plus priority); only `exec.place` fills.
 5. Hand the prepared route to `exec.quote` (simulate) and then `exec.place` (paper fill). On any timeout or unknown result, stop and report `UNKNOWN RESULT - reconcile by signature`. Never retry without a new human approval.
 
 ## Failure modes

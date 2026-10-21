@@ -3,8 +3,13 @@ name: solana-api-reference
 description: Exact request shapes, response fields, and unit traps for every Solana surface the desk touches (JSON-RPC, Jupiter v2 order, pump.fun REST, PumpPortal WS). Read before writing any new call.
 bots:
   - bot-04-sniper
-  - bot-02-risk
 gates: []
+required_tools: []
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Solana API Reference

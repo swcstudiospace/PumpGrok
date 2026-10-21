@@ -2,9 +2,17 @@
 name: desk-trade-lifecycle
 description: Defines the exact end-to-end stages every Solana memecoin ticket must follow in PumpGrok. Enforces Lead to Audit to Context to Ticket to Human Approve to Single Buy to Monitor to Exit to Journal.
 bots:
-  - all
+  - bot-00-chief
+  - bot-01-scout
 gates:
   - G-2
+required_tools:
+  - journal.append
+required_data: []
+permissions:
+  max_side_effect: paper-write
+  network: true
+  filesystem: var
 ---
 
 # Desk Trade Lifecycle

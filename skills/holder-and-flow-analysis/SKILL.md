@@ -3,8 +3,17 @@ name: holder-and-flow-analysis
 description: Analyse early buyers, top-holder concentration, wallet clusters, and smart-money flows. Used by WHALE after RISK CLEAR or CONDITIONAL.
 bots:
   - bot-03-whale
-  - bot-02-risk
 gates: []
+required_tools:
+  - onchain.top_holders
+  - onchain.large_transfers
+  - market.holders_snapshot
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Holder and Flow Analysis

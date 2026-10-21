@@ -5,8 +5,14 @@ bots:
   - bot-02-risk
   - bot-00-chief
 gates:
-  - G-4
-  - G-6
+  - G-2
+required_tools:
+  - risk.check_limits
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Desk Risk Limits
@@ -22,7 +28,7 @@ The capital and loss rules that bound every ticket. RISK interviews the user, wr
    - Daily loss halt percentage (default 5 %).
    - Forbidden criteria.
    - Preferred engagement level (`research` or `paper`).
-2. Write `/workspace/trading-desk/risk-limits.md` with the agreed numbers.
+2. Write the `[risk]` block of the operator overlay given by `PUMPGROK_CONFIG=<file>` with the agreed numbers, through a human-signed change, never free text.
 3. Enforce: RISK refuses any ticket that violates these limits. CHIEF checks daily loss before allowing new tickets. Any change requires new human confirmation.
 
 ## Failure modes

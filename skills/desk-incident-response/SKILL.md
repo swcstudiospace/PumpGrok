@@ -2,10 +2,17 @@
 name: desk-incident-response
 description: Playbooks for the most common and dangerous failure modes in PumpGrok. Fail-closed and escalate early.
 bots:
-  - all
+  - bot-00-chief
+  - bot-02-risk
 gates:
   - G-2
-  - G-5
+required_tools:
+  - risk.halt_status
+required_data: []
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Desk Incident Response

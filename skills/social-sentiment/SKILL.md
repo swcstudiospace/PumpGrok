@@ -5,6 +5,15 @@ bots:
   - bot-07-shill
   - bot-01-scout
 gates: []
+required_tools:
+  - onchain.token_metadata
+  - market.trades
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Social Sentiment

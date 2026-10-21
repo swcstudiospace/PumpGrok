@@ -2,9 +2,19 @@
 name: risk-audit
 description: Absolute safety gate for every Solana token. Runs a fail-closed checklist and returns only CLEAR, CONDITIONAL, or KILL. Used exclusively by the RISK Bot. A KILL cannot be overridden.
 bots:
-  - bot-02-risk
+  - bot-05-rug
 gates:
   - G-2
+required_tools:
+  - safety.score_report
+  - onchain.authorities
+  - onchain.top_holders
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Risk Audit

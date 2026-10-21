@@ -2,10 +2,18 @@
 name: solana-rpc-and-wallet
 description: Safe patterns for reading balances, token accounts, metadata, Token-2022 extensions, and managing the throwaway wallet connection without ever handling private keys.
 bots:
-  - bot-02-risk
   - bot-04-sniper
+  - bot-06-exit
 gates:
   - G-3
+required_tools:
+  - onchain.priority_fee
+required_data:
+  - solana_rpc
+permissions:
+  max_side_effect: read
+  network: true
+  filesystem: none
 ---
 
 # Solana RPC and Wallet
@@ -19,7 +27,7 @@ Safe read patterns for balances, token accounts, metadata, and Token-2022 extens
    - Private keys and seed phrases never enter chat, files, or memory.
    - Connection is performed by the human via screen hand-off only.
    - The public address is recorded in `desk.md` after successful connection.
-2. Priority fees and compute: prefer the output of `tools/priority_fee.py`. Cap the maximum fee so a spike cannot drain the wallet.
+2. Priority fees and compute: prefer the output of `onchain.priority_fee` (RPC failover plus rate limits in `src/pumpgrok/tools/onchain/rpc.py`). Cap the maximum fee so a spike cannot drain the wallet.
 
 ## Failure modes
 - Key material requested, offered, or pasted: abort the flow and escalate.
@@ -27,5 +35,5 @@ Safe read patterns for balances, token accounts, metadata, and Token-2022 extens
 - Unbounded fee: any send path without a fee cap is refused.
 
 ## References
-- Tools: `tools/priority_fee.py` (`--rpc`, `--percentile`, `--multiplier`); `tools/authority_check.py`
+- Tools: `onchain.priority_fee`; cross-link: `key-custody` (secret handling)
 - Gate: G-3; constitution: `prompts/_shared/core-directives.xml`
