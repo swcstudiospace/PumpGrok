@@ -39,9 +39,7 @@ def test_forbidden_env_name_refuses_without_value(
     assert planted not in message
 
 
-def test_replay_seed_exempt(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_replay_seed_exempt(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_REPLAY__SEED", "7")
     assert load_settings().replay.seed == 7
 
@@ -56,9 +54,7 @@ def test_unknown_key_refuses_by_name(
     assert name in str(excinfo.value)
 
 
-def test_execution_mode_env_refused(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_execution_mode_env_refused(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_EXECUTION__MODE", "live")
     with pytest.raises(ConfigError) as excinfo:
         load_settings()
@@ -67,7 +63,11 @@ def test_execution_mode_env_refused(
 
 @pytest.mark.parametrize(
     "query",
-    ["?api-key=PLANTED-KEY-aaa111", "?key=PLANTED-KEY-bbb222", "?token=PLANTED-KEY-ccc333"],
+    [
+        "?api-key=PLANTED-KEY-aaa111",
+        "?key=PLANTED-KEY-bbb222",
+        "?token=PLANTED-KEY-ccc333",
+    ],
 )
 def test_key_bearing_url_refuses_without_echo(
     clean_env: None, monkeypatch: pytest.MonkeyPatch, query: str

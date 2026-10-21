@@ -49,16 +49,12 @@ def test_cli_init_beats_env_and_toml(
     assert load_settings(mode="live").effective_mode == "live"
 
 
-def test_nested_env_overrides_default(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_nested_env_overrides_default(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_RISK__MAX_TRADE_FRACTION", "0.01")
     assert load_settings().risk.max_trade_fraction == Decimal("0.01")
 
 
-def test_unknown_profile_raises(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unknown_profile_raises(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_PROFILE", "staging")
     with pytest.raises(ConfigError) as excinfo:
         load_settings()
@@ -89,13 +85,7 @@ def test_config_file_applies_after_overlay(
 
 
 def test_live_overlay_keeps_live_disabled(clean_env: None) -> None:
-    overlay = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "pumpgrok"
-        / "config"
-        / "overlays"
-    )
+    overlay = Path(__file__).resolve().parents[2] / "src" / "pumpgrok" / "config" / "overlays"
     for profile in ("dev", "paper", "live"):
         text = (overlay / f"{profile}.toml").read_text(encoding="utf-8")
         assert "[live]" in text

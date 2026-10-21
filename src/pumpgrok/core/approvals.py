@@ -47,7 +47,14 @@ class ApprovalRecord(BaseModel):
     consumed: bool = False  # single-send: one approval, one order
 
     HUMAN_KINDS: ClassVar[frozenset[str]] = frozenset(
-        {"human_buy", "human_sell", "exit_rule", "killswitch_clear", "halt_clear", "live_gate"}
+        {
+            "human_buy",
+            "human_sell",
+            "exit_rule",
+            "killswitch_clear",
+            "halt_clear",
+            "live_gate",
+        }
     )
 
     @model_validator(mode="after")
@@ -73,6 +80,8 @@ class ApprovalRecord(BaseModel):
             self.ticket_id == request.ticket_id
             and self.mint == request.mint
             and self.max_slippage_bps == request.max_slippage_bps
-            and (self.size_lamports == request.size_lamports if request.side.value == "buy" else True)
+            and (
+                self.size_lamports == request.size_lamports if request.side.value == "buy" else True
+            )
             and not self.consumed
         )

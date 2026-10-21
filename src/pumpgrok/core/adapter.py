@@ -145,13 +145,16 @@ class ExecutionAdapter(Protocol):
     mode: ClassVar[ExecutionMode]
     venue: ClassVar[str]  # 'paper' | 'disabled'
 
-    async def quote(self, input_mint: str, output_mint: str, amount: int, slippage_bps: int) -> Quote: ...
+    async def quote(
+        self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
+    ) -> Quote: ...
 
     async def simulate(self, request: OrderRequest) -> SimulationResult: ...
 
     async def place(self, request: OrderRequest) -> Fill: ...
 
     async def cancel(self, order_id: str, ticket_id: str, decision_id: str) -> bool: ...
+
     # True only while the order is ACCEPTED; False once the latency sleep has completed.
 
     async def positions(self, mint: str | None = None) -> Sequence[Position]: ...
@@ -168,10 +171,13 @@ class LiveAdapterStub:
         if unmet:
             raise LiveGateError("live adapter construction refused", unmet=list(unmet))
         raise LiveGateError(
-            "live adapters are not implemented in this release", unmet=["adapter_registered"]
+            "live adapters are not implemented in this release",
+            unmet=["adapter_registered"],
         )
 
-    async def quote(self, input_mint: str, output_mint: str, amount: int, slippage_bps: int) -> Quote:
+    async def quote(
+        self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
+    ) -> Quote:
         raise LiveGateError("live quote disabled")
 
     async def simulate(self, request: OrderRequest) -> SimulationResult:

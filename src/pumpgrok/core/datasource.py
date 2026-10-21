@@ -50,7 +50,9 @@ class DataSource(Protocol):
     name: str  # 'pumpfun_rest' | 'pumpportal_ws' | 'jupiter_lite' | 'solana_rpc' | 'xai_grok'
     rate_limit_key: str
 
-    async def fetch(self, request: Mapping[str, Any], *, max_age_s: float) -> tuple[Any, Freshness]: ...
+    async def fetch(
+        self, request: Mapping[str, Any], *, max_age_s: float
+    ) -> tuple[Any, Freshness]: ...
 
     def freshness(self, key: str) -> Freshness | None: ...
 

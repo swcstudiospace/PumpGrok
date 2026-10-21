@@ -120,7 +120,14 @@ class ToolRegistry:
         for t in sorted(candidates, key=lambda t: t.spec.name):
             spec = t.spec
             if spec.side_effect is SideEffect.LIVE_WRITE:
-                self._refuse(bot, spec.name, spec.side_effect, "live_write_never_resolvable", str(cid), live=True)
+                self._refuse(
+                    bot,
+                    spec.name,
+                    spec.side_effect,
+                    "live_write_never_resolvable",
+                    str(cid),
+                    live=True,
+                )
             grant = bot.grant_for(spec.name)
             if grant is None:
                 if capability == spec.name:
@@ -168,7 +175,9 @@ class ToolRegistry:
         )
         if live:
             raise LiveGateError(
-                f"{bot.id} attempted live-write tool {tool_name}", tool=tool_name, bot=bot.id
+                f"{bot.id} attempted live-write tool {tool_name}",
+                tool=tool_name,
+                bot=bot.id,
             )
         raise PermissionDenied(
             f"{bot.id} may not resolve {tool_name}: {reason}",

@@ -51,7 +51,11 @@ def test_canonical_json_sorts_rejects_float_decimal_as_str() -> None:
 
 
 def test_derive_idempotency_key_stable_and_scoped() -> None:
-    payload = {"ticket_id": "SOL-20260101-001", "scope": "s", "correlation_id": "root.9"}
+    payload = {
+        "ticket_id": "SOL-20260101-001",
+        "scope": "s",
+        "correlation_id": "root.9",
+    }
     first = derive_idempotency_key("exec.place", "bot-04-sniper", payload, scope="t:buy:d")
     again = derive_idempotency_key("exec.place", "bot-04-sniper", payload, scope="t:buy:d")
     assert first == again
@@ -60,7 +64,10 @@ def test_derive_idempotency_key_stable_and_scoped() -> None:
     other_scope = derive_idempotency_key("exec.place", "bot-04-sniper", payload, scope="t:sell:d")
     assert other_scope != first
     retry_same = derive_idempotency_key(
-        "exec.place", "bot-04-sniper", {**payload, "correlation_id": "root.10"}, scope="t:buy:d"
+        "exec.place",
+        "bot-04-sniper",
+        {**payload, "correlation_id": "root.10"},
+        scope="t:buy:d",
     )
     assert retry_same == first
 
@@ -104,7 +111,11 @@ def test_approval_record_all_r33_kinds() -> None:
     for kind in ("killswitch_clear", "halt_clear", "live_gate"):
         ApprovalRecord(
             **_base_approval(
-                kind=kind, ticket_id=None, mint=None, size_lamports=None, max_slippage_bps=None
+                kind=kind,
+                ticket_id=None,
+                mint=None,
+                size_lamports=None,
+                max_slippage_bps=None,
             )
         )
     with pytest.raises(Exception):

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, Self, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Literal,
+    Protocol,
+    Self,
+    runtime_checkable,
+)
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 

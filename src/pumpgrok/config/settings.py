@@ -98,16 +98,12 @@ class RiskBudget(BaseModel):
     max_trade_fraction: Decimal = Field(default=Decimal("0.02"), ge=0, le=1)
     max_token_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)
     # INV-C-06: the daily loss halt can never exceed 0.05.
-    daily_loss_halt_fraction: Decimal = Field(
-        default=Decimal("0.05"), ge=0, le=Decimal("0.05")
-    )
+    daily_loss_halt_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=Decimal("0.05"))
     drawdown_halt_fraction: Decimal = Field(default=Decimal("0.15"), ge=0, le=1)
     max_open_positions: int = Field(default=3, ge=0)
     max_trades_per_day: int = Field(default=20, ge=0)
     liquidity_floor_multiple: int = Field(default=10, ge=1)
-    partial_fill_fraction: Decimal = Field(
-        default=Decimal("0.02"), gt=0, le=1
-    )
+    partial_fill_fraction: Decimal = Field(default=Decimal("0.02"), gt=0, le=1)
 
 
 class ExecutionSettings(BaseModel):
@@ -196,10 +192,7 @@ def overlay_path(profile: str) -> Path:
     name = profile.strip() or DEFAULT_PROFILE
     if name not in OVERLAY_PROFILES:
         raise ConfigError(
-            [
-                f"unknown PUMPGROK_PROFILE: {name} "
-                f"(expected one of: {', '.join(OVERLAY_PROFILES)})"
-            ]
+            [f"unknown PUMPGROK_PROFILE: {name} (expected one of: {', '.join(OVERLAY_PROFILES)})"]
         )
     return Path(__file__).resolve().parent / "overlays" / f"{name}.toml"
 
@@ -313,8 +306,7 @@ def collect_startup_problems(environ: Mapping[str, str]) -> list[str]:
     profile = environ.get("PUMPGROK_PROFILE", "").strip() or DEFAULT_PROFILE
     if profile not in OVERLAY_PROFILES:
         problems.append(
-            f"unknown PUMPGROK_PROFILE: {profile} "
-            f"(expected one of: {', '.join(OVERLAY_PROFILES)})"
+            f"unknown PUMPGROK_PROFILE: {profile} (expected one of: {', '.join(OVERLAY_PROFILES)})"
         )
         return problems  # no valid overlay to scan further
 

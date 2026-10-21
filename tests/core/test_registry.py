@@ -114,9 +114,7 @@ def _registry(audits: list[GrantAudit], clock: _Clock) -> ToolRegistry:
     return reg
 
 
-def _bot(
-    bot_id: str, grants: list[ToolGrant], writes_to_exchange: bool = False
-) -> BotManifest:
+def _bot(bot_id: str, grants: list[ToolGrant], writes_to_exchange: bool = False) -> BotManifest:
     return BotManifest(
         id=bot_id,
         display=bot_id,
@@ -191,7 +189,11 @@ def test_find_ungranted_tool_refuses_and_audits() -> None:
     bot = _bot("bot-01-desk", [ToolGrant(name="market.price", side_effect=SideEffect.READ)])
     with bind_correlation(CorrelationId.new(factory)):
         with pytest.raises(PermissionDenied):
-            reg.find("market.price", max_side_effect=SideEffect.READ, bot=_bot("bot-03-x", []))
+            reg.find(
+                "market.price",
+                max_side_effect=SideEffect.READ,
+                bot=_bot("bot-03-x", []),
+            )
     assert audits[-1].allowed is False
 
 
