@@ -106,10 +106,15 @@ def _payload_of(inp: JournalAppendIn, seat: str) -> tuple[str, dict[str, Any]]:
     return "Escalation", {"source": "paper", "seat": seat, **inp.body}
 
 
+def _journal_file(journal_dir: Path, day: datetime) -> Path:
+    """Return the ``YYYY-MM-DD.jsonl`` export path for ``day``'s UTC date."""
+    return journal_dir / f"{day.strftime('%Y-%m-%d')}.jsonl"
+
+
 def _export_line(journal_dir: Path, now: datetime, line: str) -> Path:
     """Append one JSONL line to the day's journal file (blocking file I/O)."""
     journal_dir.mkdir(parents=True, exist_ok=True)
-    journal_path = journal_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
+    journal_path = _journal_file(journal_dir, now)
     with open(journal_path, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
     return journal_path
@@ -141,14 +146,18 @@ async def run_journal_append(
             type=event_type,
             payload=payload,
         )
-        seq = int(row["seq"])
     except sqlite3.IntegrityError:
         existing = store.by_key(key)
         if existing is None:  # pragma: no cover - defensive
             raise
+        # A repeat returns the prior result: same seq, same day file, no write.
         seq = int(existing["seq"])
-    line = json.dumps({"seq": seq, "kind": inp.kind, "payload": payload})
-    journal_path = await asyncio.to_thread(_export_line, journal_dir, now, line)
+        prior_day = datetime.fromisoformat(str(existing["ts_utc"]))
+        journal_path = _journal_file(journal_dir, prior_day)
+    else:
+        seq = int(row["seq"])
+        line = json.dumps({"seq": seq, "kind": inp.kind, "payload": payload})
+        journal_path = await asyncio.to_thread(_export_line, journal_dir, now, line)
     return JournalAppendOut.model_validate(
         {
             "seq": seq,
