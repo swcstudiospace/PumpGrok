@@ -11,6 +11,7 @@ globally, so differing account lists yield the same estimate.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import Field
 
@@ -58,7 +59,7 @@ PRIORITY_FEE_SPEC = ToolSpec(
 )
 
 
-async def run_priority_fee(inp: PriorityFeeIn, rpc: RpcClient) -> dict:
+async def run_priority_fee(inp: PriorityFeeIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported estimator and return a validated typed payload."""
     result = await estimate_priority_fee(
         rpc, percentile=inp.percentile, multiplier=float(inp.multiplier)
@@ -90,7 +91,7 @@ def build_priority_fee_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.priority_fee`` to one injected RPC client."""
 
     @tool(PRIORITY_FEE_SPEC)
-    async def _priority_fee(payload: PriorityFeeIn) -> dict:
+    async def _priority_fee(payload: PriorityFeeIn) -> dict[str, Any]:
         return await run_priority_fee(payload, rpc)
 
     return _priority_fee

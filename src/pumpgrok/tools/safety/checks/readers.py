@@ -7,12 +7,13 @@ Pure functions over the typed reader payloads; thresholds come from
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any, Literal
 
 from pumpgrok.config.settings import SafetyThresholds
 from pumpgrok.tools.safety.checks import CheckResult
 
 
-def check_lp_status(lp: dict) -> CheckResult:
+def check_lp_status(lp: dict[str, Any]) -> CheckResult:
     """Pass on an open curve; warn once graduated (lock state unwired)."""
     stage = str(lp.get("stage", "unknown"))
     if stage == "bonding_curve":
@@ -43,10 +44,11 @@ def check_lp_status(lp: dict) -> CheckResult:
     )
 
 
-def check_top10_concentration(top: dict, thresholds: SafetyThresholds) -> CheckResult:
+def check_top10_concentration(top: dict[str, Any], thresholds: SafetyThresholds) -> CheckResult:
     """Fail/warn/pass the top-10 supply share against configured pcts."""
     share = Decimal(str(top.get("top10_share", "0"))) * Decimal(100)
     pct = float(share)
+    status: Literal["fail", "warn", "pass"]
     if pct >= thresholds.top10_concentration_fail_pct:
         status = "fail"
     elif pct >= thresholds.top10_concentration_warn_pct:
@@ -55,7 +57,7 @@ def check_top10_concentration(top: dict, thresholds: SafetyThresholds) -> CheckR
         status = "pass"
     return CheckResult(
         id="top10_concentration",
-        status=status,  # type: ignore[arg-type]
+        status=status,
         value=pct,
         threshold=thresholds.top10_concentration_fail_pct,
         weight=Decimal("0.15"),
@@ -63,7 +65,7 @@ def check_top10_concentration(top: dict, thresholds: SafetyThresholds) -> CheckR
     )
 
 
-def check_deployer_history(dep: dict) -> CheckResult:
+def check_deployer_history(dep: dict[str, Any]) -> CheckResult:
     """Fail adjudicated-bad creators; warn prolific ones; pass the rest."""
     if bool(dep.get("is_known_bad")) or int(dep.get("rugs", 0)) > 0:
         return CheckResult(
@@ -94,7 +96,7 @@ def check_deployer_history(dep: dict) -> CheckResult:
     )
 
 
-def check_token2022_extensions(meta: dict) -> CheckResult:
+def check_token2022_extensions(meta: dict[str, Any]) -> CheckResult:
     """Warn when transfer-hook-style extensions are present."""
     extensions = meta.get("extensions") or []
     count = len(extensions)
@@ -113,7 +115,7 @@ def check_token2022_extensions(meta: dict) -> CheckResult:
 
 
 def check_liquidity_depth(
-    liq: dict, intended_size_lamports: int, thresholds: SafetyThresholds
+    liq: dict[str, Any], intended_size_lamports: int, thresholds: SafetyThresholds
 ) -> CheckResult:
     """Fail/warn/pass the liquidity multiple against configured floors."""
     liquidity = int(liq.get("liquidity_lamports", 0))
@@ -135,16 +137,8 @@ def check_liquidity_depth(
             weight=Decimal("0.15"),
             reason="no intended size; depth check vacuous",
         )
-    if liquidity <= 0:
-        return CheckResult(
-            id="liquidity_depth",
-            status="fail",
-            value=0.0,
-            threshold=thresholds.liquidity_multiple_min,
-            weight=Decimal("0.15"),
-            reason="no measurable liquidity for the intended size",
-        )
     multiple = liquidity / intended_size_lamports
+    status: Literal["fail", "warn", "pass"]
     if multiple < thresholds.liquidity_multiple_min:
         status = "fail"
     elif multiple < thresholds.liquidity_multiple_recommended:
@@ -153,7 +147,7 @@ def check_liquidity_depth(
         status = "pass"
     return CheckResult(
         id="liquidity_depth",
-        status=status,  # type: ignore[arg-type]
+        status=status,
         value=multiple,
         threshold=thresholds.liquidity_multiple_min,
         weight=Decimal("0.15"),

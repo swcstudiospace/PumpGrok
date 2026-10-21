@@ -9,7 +9,7 @@ and no websocket tail exist in this module (R44, R46, R47).
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -90,6 +90,45 @@ def _pubkeys(message: object) -> list[str]:
     return out
 
 
+def _token_net(meta: dict[str, Any], mint: str) -> int:
+    """Net ``mint`` units gained across pre and post token balances."""
+    net = 0
+    for side in ("preTokenBalances", "postTokenBalances"):
+        balances = meta.get(side, [])
+        if not isinstance(balances, list):
+            continue
+        for entry in balances:
+            if not isinstance(entry, dict) or entry.get("mint") != mint:
+                continue
+            try:
+                amount = int(entry.get("uiTokenAmount", {}).get("amount", "0"))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            net += amount if side == "postTokenBalances" else -amount
+    return net
+
+
+def _sol_delta(meta: dict[str, Any]) -> int | None:
+    """Fee-payer lamport change (index 0); ``None`` when the balances are unreadable."""
+    pre_bal = meta.get("preBalances", [])
+    post_bal = meta.get("postBalances", [])
+    if not isinstance(pre_bal, list) or not isinstance(post_bal, list):
+        return None
+    try:
+        return int(post_bal[0]) - int(pre_bal[0])
+    except (IndexError, ValueError, TypeError):
+        return None
+
+
+def _classify(token_net: int, sol_delta: int) -> Literal["buy", "sell"] | None:
+    """Tokens in with SOL out is a buy; tokens out with SOL in is a sell."""
+    if token_net > 0 and sol_delta < 0:
+        return "buy"
+    if token_net < 0 and sol_delta > 0:
+        return "sell"
+    return None
+
+
 def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> Trade | None:
     """Classify one parsed transaction; ``None`` when it is not a trade."""
     if not isinstance(tx, dict):
@@ -103,34 +142,12 @@ def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> T
         else {}
     )
     keys = _pubkeys(message)
-    if not keys:
+    sol_delta = _sol_delta(meta)
+    if not keys or sol_delta is None:
         return None
-    pre_bal = meta.get("preBalances", [])
-    post_bal = meta.get("postBalances", [])
-    if not isinstance(pre_bal, list) or not isinstance(post_bal, list):
-        return None
-    try:
-        sol_delta = int(post_bal[0]) - int(pre_bal[0])
-    except (IndexError, ValueError, TypeError):
-        return None
-    token_net = 0
-    for side in ("preTokenBalances", "postTokenBalances"):
-        balances = meta.get(side, [])
-        if not isinstance(balances, list):
-            continue
-        for entry in balances:
-            if not isinstance(entry, dict) or entry.get("mint") != mint:
-                continue
-            try:
-                amount = int(entry.get("uiTokenAmount", {}).get("amount", "0"))
-            except (ValueError, TypeError, AttributeError):
-                continue
-            token_net += amount if side == "postTokenBalances" else -amount
-    if token_net > 0 and sol_delta < 0:
-        side: Literal["buy", "sell"] = "buy"
-    elif token_net < 0 and sol_delta > 0:
-        side = "sell"
-    else:
+    token_net = _token_net(meta, mint)
+    side = _classify(token_net, sol_delta)
+    if side is None:
         return None
     ts = tx.get("blockTime")
     return Trade(
@@ -179,7 +196,7 @@ async def fetch_trades(
     return trades
 
 
-async def run_trades(inp: TradesIn, rpc: RpcClient) -> dict:
+async def run_trades(inp: TradesIn, rpc: RpcClient) -> dict[str, Any]:
     """Return a validated ``TradesOut`` payload for ``inp``."""
     trades = await fetch_trades(mint=inp.mint, rpc=rpc, limit=inp.limit, since_ts=inp.since_ts)
     buys = sum(1 for t in trades if t.side == "buy")
@@ -201,7 +218,7 @@ def build_trades_tool(rpc: RpcClient) -> Tool:
     """Bind ``market.trades`` to one injected RPC client (no globals)."""
 
     @tool(TRADES_SPEC)
-    async def _trades(payload: TradesIn) -> dict:
+    async def _trades(payload: TradesIn) -> dict[str, Any]:
         return await run_trades(payload, rpc)
 
     return _trades

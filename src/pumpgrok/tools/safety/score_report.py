@@ -15,9 +15,11 @@ veto is armed but dormant while off-chain enrichment is unwired.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -27,8 +29,28 @@ from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import RetryPolicy, Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
+from pumpgrok.tools.market.liquidity import LiquidityIn, run_liquidity
+from pumpgrok.tools.onchain.authorities_tool import AuthoritiesIn, run_authorities
+from pumpgrok.tools.onchain.deployer_history import DeployerHistoryIn, run_deployer_history
+from pumpgrok.tools.onchain.lp_status import LpStatusIn, run_lp_status
 from pumpgrok.tools.onchain.rpc import RpcClient
-from pumpgrok.tools.safety.checks import ADVISORY_IDS, CHECK_IDS, REQUIRED_IDS, CheckResult
+from pumpgrok.tools.onchain.token_metadata import TokenMetadataIn, run_token_metadata
+from pumpgrok.tools.onchain.top_holders import TopHoldersIn, run_top_holders
+from pumpgrok.tools.safety.checks import (
+    ADVISORY_IDS,
+    CHECK_IDS,
+    REQUIRED_IDS,
+    CheckId,
+    CheckResult,
+)
+from pumpgrok.tools.safety.checks.authority import check_freeze_authority, check_mint_authority
+from pumpgrok.tools.safety.checks.readers import (
+    check_deployer_history,
+    check_liquidity_depth,
+    check_lp_status,
+    check_token2022_extensions,
+    check_top10_concentration,
+)
 
 _WARN_PENALTY = Decimal(10)
 _FAIL_PENALTY = Decimal(25)
@@ -65,9 +87,9 @@ class ScoreReportOut(ToolOutput):
     verdict_recommendation: Literal["CLEAR", "CONDITIONAL", "KILL"]
     hard_veto: bool
     checks: list[CheckResult]
-    blind_checks: list[str] = []
-    evidence: list[Evidence] = []
-    thresholds_used: dict[str, float] = {}
+    blind_checks: list[str] = Field(default_factory=list)
+    evidence: list[Evidence] = Field(default_factory=list)
+    thresholds_used: dict[str, float] = Field(default_factory=dict)
 
 
 SCORE_SPEC = ToolSpec(
@@ -86,6 +108,18 @@ SCORE_SPEC = ToolSpec(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _Readings:
+    """Typed reader payloads; ``None`` marks a reader that was skipped or degraded."""
+
+    auth: dict[str, Any] | None
+    lp: dict[str, Any] | None
+    meta: dict[str, Any] | None
+    top: dict[str, Any] | None
+    dep: dict[str, Any] | None
+    liq: dict[str, Any] | None
+
+
 def resolve_thresholds(override: dict[str, float] | None) -> SafetyThresholds:
     """Merge a caller override over config defaults; unknown keys are refused."""
     if not override:
@@ -96,9 +130,9 @@ def resolve_thresholds(override: dict[str, float] | None) -> SafetyThresholds:
     return SafetyThresholds(**override)
 
 
-def _blind(check_id: str, weight: Decimal, reason: str) -> CheckResult:
+def _blind(check_id: CheckId, weight: Decimal, reason: str) -> CheckResult:
     return CheckResult(
-        id=check_id,  # type: ignore[arg-type]
+        id=check_id,
         status="blind",
         value=None,
         threshold=None,
@@ -107,91 +141,44 @@ def _blind(check_id: str, weight: Decimal, reason: str) -> CheckResult:
     )
 
 
-async def run_score_report(
-    inp: ScoreReportIn,
-    rpc: RpcClient,
-    *,
-    thresholds: SafetyThresholds | None = None,
-) -> dict:
-    """Compose the readers and return a validated ``ScoreReportOut`` payload."""
-    from pumpgrok.tools.market.liquidity import LiquidityIn, run_liquidity
-    from pumpgrok.tools.onchain.authorities_tool import AuthoritiesIn, run_authorities
-    from pumpgrok.tools.onchain.deployer_history import DeployerHistoryIn, run_deployer_history
-    from pumpgrok.tools.onchain.lp_status import LpStatusIn, run_lp_status
-    from pumpgrok.tools.onchain.token_metadata import TokenMetadataIn, run_token_metadata
-    from pumpgrok.tools.onchain.top_holders import TopHoldersIn, run_top_holders
-    from pumpgrok.tools.safety.checks.authority import (
-        check_freeze_authority,
-        check_mint_authority,
-    )
-    from pumpgrok.tools.safety.checks.readers import (
-        check_deployer_history,
-        check_liquidity_depth,
-        check_lp_status,
-        check_token2022_extensions,
-        check_top10_concentration,
-    )
+async def _fetch(call: Awaitable[dict[str, Any]]) -> dict[str, Any] | None:
+    """Await one reader; a ``DataStale`` degrades to ``None`` (blind), never raises."""
+    try:
+        return await call
+    except DataStale:
+        return None
 
-    active = thresholds if thresholds is not None else resolve_thresholds(inp.thresholds)
-    wanted = set(inp.checks) if inp.checks is not None else set(CHECK_IDS)
-    unknown = sorted(wanted - set(CHECK_IDS))
-    if unknown:
-        raise DataStale(f"safety.score_report unknown check ids: {unknown}")
-    runnable = [c for c in CHECK_IDS if c in wanted and c not in ADVISORY_IDS]
 
-    evidence: list[Evidence] = []
-
-    async def _fetch(reader: str, coro) -> dict | None:
-        try:
-            return await coro
-        except DataStale:
-            return None
-
-    def _note(check_id: str) -> None:
-        evidence.append(
-            Evidence(
-                check=check_id,
-                source=SOLANA_RPC_SOURCE,
-                slot=None,
-                fetched_at=utcnow(),
-            )
-        )
-
+async def _read_all(inp: ScoreReportIn, rpc: RpcClient, runnable: list[CheckId]) -> _Readings:
+    """Run only the readers the runnable checks need, in the fixed reader order."""
+    needed: set[str] = set(runnable)
     auth = (
-        await _fetch("authorities", run_authorities(AuthoritiesIn(mint=inp.mint), rpc))
-        if {"mint_authority", "freeze_authority"} & set(runnable)
+        await _fetch(run_authorities(AuthoritiesIn(mint=inp.mint), rpc))
+        if {"mint_authority", "freeze_authority"} & needed
         else None
     )
     lp = (
-        await _fetch(
-            "lp_status",
-            run_lp_status(LpStatusIn(mint=inp.mint, curve_account=inp.curve_account), rpc),
-        )
-        if "lp_status" in runnable
+        await _fetch(run_lp_status(LpStatusIn(mint=inp.mint, curve_account=inp.curve_account), rpc))
+        if "lp_status" in needed
         else None
     )
     meta = (
-        await _fetch("token_metadata", run_token_metadata(TokenMetadataIn(mint=inp.mint), rpc))
-        if "token2022_extensions" in runnable
+        await _fetch(run_token_metadata(TokenMetadataIn(mint=inp.mint), rpc))
+        if "token2022_extensions" in needed
         else None
     )
     top = (
-        await _fetch("top_holders", run_top_holders(TopHoldersIn(mint=inp.mint), rpc))
-        if "top10_concentration" in runnable
+        await _fetch(run_top_holders(TopHoldersIn(mint=inp.mint), rpc))
+        if "top10_concentration" in needed
         else None
     )
     dep = (
-        await _fetch(
-            "deployer_history",
-            run_deployer_history(DeployerHistoryIn(creator=inp.creator or ""), rpc),
-        )
-        if "deployer_history" in runnable and inp.creator is not None
+        await _fetch(run_deployer_history(DeployerHistoryIn(creator=inp.creator or ""), rpc))
+        if "deployer_history" in needed and inp.creator is not None
         else None
     )
-    dep_unresolved = "deployer_history" in runnable and inp.creator is None
     liq = (
         await _fetch(
-            "liquidity",
             run_liquidity(
                 LiquidityIn(
                     mint=inp.mint,
@@ -199,81 +186,138 @@ async def run_score_report(
                     order_size_lamports=inp.intended_size_lamports,
                 ),
                 rpc,
-            ),
+            )
         )
-        if "liquidity_depth" in runnable
+        if "liquidity_depth" in needed
         else None
     )
+    return _Readings(auth=auth, lp=lp, meta=meta, top=top, dep=dep, liq=liq)
 
+
+def _reader_row(
+    check_id: CheckId,
+    reading: dict[str, Any] | None,
+    evaluate: Callable[[dict[str, Any]], CheckResult],
+    *,
+    weight: Decimal,
+    blind_reason: str,
+    evidence: list[Evidence],
+) -> CheckResult:
+    """Score a check from its reader, or blind it; a live reading leaves evidence."""
+    if reading is None:
+        return _blind(check_id, weight, blind_reason)
+    evidence.append(
+        Evidence(check=check_id, source=SOLANA_RPC_SOURCE, slot=None, fetched_at=utcnow())
+    )
+    return evaluate(reading)
+
+
+def _reader_rows(
+    inp: ScoreReportIn,
+    runnable: list[CheckId],
+    readings: _Readings,
+    active: SafetyThresholds,
+    evidence: list[Evidence],
+) -> list[CheckResult]:
+    """Rows for the data-backed checks, in the stable report order."""
     rows: list[CheckResult] = []
     if "mint_authority" in runnable:
         rows.append(
-            check_mint_authority(auth)
-            if auth is not None
-            else _blind("mint_authority", Decimal("0.15"), "mint authority unreadable")
+            _reader_row(
+                "mint_authority",
+                readings.auth,
+                check_mint_authority,
+                weight=Decimal("0.15"),
+                blind_reason="mint authority unreadable",
+                evidence=evidence,
+            )
         )
-        if auth is not None:
-            _note("mint_authority")
     if "freeze_authority" in runnable:
         rows.append(
-            check_freeze_authority(auth)
-            if auth is not None
-            else _blind("freeze_authority", Decimal("0.15"), "freeze authority unreadable")
+            _reader_row(
+                "freeze_authority",
+                readings.auth,
+                check_freeze_authority,
+                weight=Decimal("0.15"),
+                blind_reason="freeze authority unreadable",
+                evidence=evidence,
+            )
         )
-        if auth is not None:
-            _note("freeze_authority")
     if "lp_status" in runnable:
         rows.append(
-            check_lp_status(lp)
-            if lp is not None
-            else _blind("lp_status", Decimal("0.15"), "curve account unreadable")
+            _reader_row(
+                "lp_status",
+                readings.lp,
+                check_lp_status,
+                weight=Decimal("0.15"),
+                blind_reason="curve account unreadable",
+                evidence=evidence,
+            )
         )
-        if lp is not None:
-            _note("lp_status")
     if "top10_concentration" in runnable:
         rows.append(
-            check_top10_concentration(top, active)
-            if top is not None
-            else _blind("top10_concentration", Decimal("0.15"), "holder sample unreadable")
+            _reader_row(
+                "top10_concentration",
+                readings.top,
+                lambda top: check_top10_concentration(top, active),
+                weight=Decimal("0.15"),
+                blind_reason="holder sample unreadable",
+                evidence=evidence,
+            )
         )
-        if top is not None:
-            _note("top10_concentration")
     if "deployer_history" in runnable:
-        if dep_unresolved:
+        if inp.creator is None:
             rows.append(
                 _blind(
-                    "deployer_history", Decimal("0.10"), "creator not supplied; window unscanned"
+                    "deployer_history",
+                    Decimal("0.10"),
+                    "creator not supplied; window unscanned",
                 )
             )
         else:
             rows.append(
-                check_deployer_history(dep)
-                if dep is not None
-                else _blind("deployer_history", Decimal("0.10"), "creator window unreadable")
+                _reader_row(
+                    "deployer_history",
+                    readings.dep,
+                    check_deployer_history,
+                    weight=Decimal("0.10"),
+                    blind_reason="creator window unreadable",
+                    evidence=evidence,
+                )
             )
-            if dep is not None:
-                _note("deployer_history")
     if "token2022_extensions" in runnable:
         rows.append(
-            check_token2022_extensions(meta)
-            if meta is not None
-            else _blind("token2022_extensions", Decimal("0.05"), "mint metadata unreadable")
+            _reader_row(
+                "token2022_extensions",
+                readings.meta,
+                check_token2022_extensions,
+                weight=Decimal("0.05"),
+                blind_reason="mint metadata unreadable",
+                evidence=evidence,
+            )
         )
-        if meta is not None:
-            _note("token2022_extensions")
     if "liquidity_depth" in runnable:
         rows.append(
-            check_liquidity_depth(liq, inp.intended_size_lamports, active)
-            if liq is not None
-            else _blind("liquidity_depth", Decimal("0.15"), "liquidity unreadable")
+            _reader_row(
+                "liquidity_depth",
+                readings.liq,
+                lambda liq: check_liquidity_depth(liq, inp.intended_size_lamports, active),
+                weight=Decimal("0.15"),
+                blind_reason="liquidity unreadable",
+                evidence=evidence,
+            )
         )
-        if liq is not None:
-            _note("liquidity_depth")
+    return rows
+
+
+def _advisory_rows(wanted: set[str], evidence: list[Evidence]) -> list[CheckResult]:
+    """Advisory checks are blind by construction in Phase 3 and carry no weight."""
+    rows: list[CheckResult] = []
     for check_id in CHECK_IDS:
         if check_id in ADVISORY_IDS and check_id in wanted:
             rows.append(
                 CheckResult(
-                    id=check_id,  # type: ignore[arg-type]
+                    id=check_id,
                     status="blind",
                     value=None,
                     threshold=None,
@@ -284,24 +328,54 @@ async def run_score_report(
             evidence.append(
                 Evidence(check=check_id, source="unwired", slot=None, fetched_at=utcnow())
             )
+    return rows
 
+
+def _score(rows: list[CheckResult]) -> Decimal:
     score = Decimal(100)
     for row in rows:
         if row.status == "warn":
             score -= _WARN_PENALTY
         elif row.status == "fail":
             score -= _FAIL_PENALTY
-    score = max(Decimal(0), score)
+    return max(Decimal(0), score)
 
+
+def _verdict(
+    score: Decimal, forced_kill: bool, active: SafetyThresholds
+) -> Literal["CLEAR", "CONDITIONAL", "KILL"]:
+    if forced_kill or score < Decimal(str(active.kill_below_score)):
+        return "KILL"
+    if score < Decimal(str(active.conditional_below_score)):
+        return "CONDITIONAL"
+    return "CLEAR"
+
+
+async def run_score_report(
+    inp: ScoreReportIn,
+    rpc: RpcClient,
+    *,
+    thresholds: SafetyThresholds | None = None,
+) -> dict[str, Any]:
+    """Compose the readers and return a validated ``ScoreReportOut`` payload."""
+    active = thresholds if thresholds is not None else resolve_thresholds(inp.thresholds)
+    wanted: set[str] = set(inp.checks) if inp.checks is not None else set(CHECK_IDS)
+    unknown = sorted(wanted - set(CHECK_IDS))
+    if unknown:
+        raise DataStale(f"safety.score_report unknown check ids: {unknown}")
+    runnable = [c for c in CHECK_IDS if c in wanted and c not in ADVISORY_IDS]
+
+    evidence: list[Evidence] = []
+    readings = await _read_all(inp, rpc, runnable)
+    rows = _reader_rows(inp, runnable, readings, active, evidence)
+    rows.extend(_advisory_rows(wanted, evidence))
+
+    score = _score(rows)
+    top = readings.top
     top5 = Decimal(str((top or {}).get("top5_share", "0")))
     hard_veto = bool(top is not None and top5 > Decimal(str(active.top5_share_veto)))
     blind_required = [r.id for r in rows if r.status == "blind" and r.id in REQUIRED_IDS]
-    if hard_veto or blind_required or score < Decimal(str(active.kill_below_score)):
-        verdict: Literal["CLEAR", "CONDITIONAL", "KILL"] = "KILL"
-    elif score < Decimal(str(active.conditional_below_score)):
-        verdict = "CONDITIONAL"
-    else:
-        verdict = "CLEAR"
+    verdict = _verdict(score, hard_veto or bool(blind_required), active)
 
     out = {
         "score": int(score),
@@ -323,7 +397,7 @@ def build_score_report_tool(rpc: RpcClient, thresholds: SafetyThresholds | None 
     """Bind ``safety.score_report`` to one injected RPC client and thresholds."""
 
     @tool(SCORE_SPEC)
-    async def _score_report(payload: ScoreReportIn) -> dict:
+    async def _score_report(payload: ScoreReportIn) -> dict[str, Any]:
         return await run_score_report(payload, rpc, thresholds=thresholds)
 
     return _score_report

@@ -11,14 +11,14 @@ import os
 
 import httpx
 
-__all__ = ["TELEGRAM_TOKEN_ENV", "TelegramSender", "read_telegram_token"]
+__all__ = ["TELEGRAM_ENV_VAR", "TelegramSender", "read_telegram_token"]
 
-TELEGRAM_TOKEN_ENV = "PUMPGROK_TELEGRAM_TOKEN"
+TELEGRAM_ENV_VAR = "PUMPGROK_TELEGRAM_TOKEN"
 
 
 def read_telegram_token() -> str:
     """Token from the environment; empty when unset (sink then refuses)."""
-    return os.environ.get(TELEGRAM_TOKEN_ENV, "").strip()
+    return os.environ.get(TELEGRAM_ENV_VAR, "").strip()
 
 
 class TelegramSender:

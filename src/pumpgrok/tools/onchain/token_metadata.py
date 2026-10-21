@@ -9,7 +9,7 @@ social client is composed by a later plan. Untrusted by construction.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
@@ -59,7 +59,7 @@ TOKEN_METADATA_SPEC = ToolSpec(
 )
 
 
-async def run_token_metadata(inp: TokenMetadataIn, rpc: RpcClient) -> dict:
+async def run_token_metadata(inp: TokenMetadataIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported mint check and return a validated typed payload."""
     result = await check_mint(inp.mint, rpc)
     if not result.get("ok"):
@@ -96,7 +96,7 @@ def build_token_metadata_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.token_metadata`` to one injected RPC client."""
 
     @tool(TOKEN_METADATA_SPEC)
-    async def _token_metadata(payload: TokenMetadataIn) -> dict:
+    async def _token_metadata(payload: TokenMetadataIn) -> dict[str, Any]:
         return await run_token_metadata(payload, rpc)
 
     return _token_metadata

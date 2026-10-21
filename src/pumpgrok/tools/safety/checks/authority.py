@@ -6,11 +6,12 @@ A live authority is a fail: whoever holds it can dilute or freeze holders.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pumpgrok.tools.safety.checks import CheckResult
 
 
-def check_mint_authority(auth: dict) -> CheckResult:
+def check_mint_authority(auth: dict[str, Any]) -> CheckResult:
     """Pass when the mint authority is revoked; fail while one is live."""
     live = bool(auth.get("has_mint_authority"))
     return CheckResult(
@@ -27,7 +28,7 @@ def check_mint_authority(auth: dict) -> CheckResult:
     )
 
 
-def check_freeze_authority(auth: dict) -> CheckResult:
+def check_freeze_authority(auth: dict[str, Any]) -> CheckResult:
     """Pass when the freeze authority is revoked; fail while one is live."""
     live = bool(auth.get("has_freeze_authority"))
     return CheckResult(

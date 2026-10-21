@@ -7,7 +7,7 @@ destinations (R39). Escalation kinds include the supervisor-relay set
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -46,7 +46,7 @@ class AlertIn(ToolInput):
     ]
     text: str = Field(min_length=1, max_length=4000)
     ticket_id: str | None = Field(default=None, pattern=r"^SOL-\d{8}-\d{3}$")
-    fields: dict = Field(default_factory=dict)
+    fields: dict[str, Any] = Field(default_factory=dict)
     destinations: list[str] | None = None
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -54,7 +54,7 @@ class AlertIn(ToolInput):
 class AlertOut(ToolOutput):
     """Per-sink delivery rows; ``suppressed`` on idempotent repeat."""
 
-    delivered: list[dict] = Field(default_factory=list)
+    delivered: list[dict[str, Any]] = Field(default_factory=list)
     suppressed: bool = False
 
 
@@ -74,7 +74,7 @@ ALERT_SPEC = ToolSpec(
 )
 
 
-async def run_alert(inp: AlertIn, notifier: Notifier, clock: Clock) -> dict:
+async def run_alert(inp: AlertIn, notifier: Notifier, clock: Clock) -> dict[str, Any]:
     """Fan out through the notifier with a derived key when omitted."""
     ambient = ambient_correlation()
     key = inp.idempotency_key or alert_key(inp.kind, inp.ticket_id, inp.severity, clock)
@@ -99,7 +99,7 @@ def build_alert_tool(notifier: Notifier, clock: Clock) -> Tool:
     """Bind ``notify.alert`` to one notifier and clock (no globals)."""
 
     @tool(ALERT_SPEC)
-    async def _alert(payload: AlertIn) -> dict:
+    async def _alert(payload: AlertIn) -> dict[str, Any]:
         return await run_alert(payload, notifier, clock)
 
     return _alert

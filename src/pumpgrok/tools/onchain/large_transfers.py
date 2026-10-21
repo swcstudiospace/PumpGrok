@@ -13,7 +13,7 @@ counterparties yield ``unknown``.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -85,20 +85,8 @@ async def _supply_units(mint: str, rpc: RpcClient) -> int:
     return supply
 
 
-def parse_transfer_tx(
-    mint: str,
-    signature: str,
-    wallet: str,
-    supply_units: int,
-    min_share: Decimal,
-    tx: object,
-) -> Transfer | None:
-    """Extract the largest qualifying ``mint`` movement touching ``wallet``."""
-    if not isinstance(tx, dict):
-        return None
-    meta = tx.get("meta")
-    if not isinstance(meta, dict) or meta.get("err") is not None:
-        return None
+def _account_keys(tx: dict[str, Any]) -> list[str]:
+    """Account keys as plain strings; jsonParsed entries carry them under ``pubkey``."""
     message = tx.get("transaction", {}) if isinstance(tx.get("transaction"), dict) else {}
     raw_keys = message.get("message", {}).get("accountKeys", [])
     keys: list[str] = []
@@ -107,6 +95,11 @@ def parse_transfer_tx(
             keys.append(key)
         elif isinstance(key, dict) and isinstance(key.get("pubkey"), str):
             keys.append(key["pubkey"])
+    return keys
+
+
+def _index_deltas(meta: dict[str, Any], mint: str) -> dict[int, int]:
+    """Net ``mint`` units per token-account index across pre and post balances."""
     deltas: dict[int, int] = {}
     for side in ("preTokenBalances", "postTokenBalances"):
         balances = meta.get(side, [])
@@ -123,6 +116,47 @@ def parse_transfer_tx(
             deltas[index] = deltas.get(index, 0) + (
                 amount if side == "postTokenBalances" else -amount
             )
+    return deltas
+
+
+def _sol_delta_at(meta: dict[str, Any], index: int) -> int:
+    """Lamport change of account ``index``; 0 when the balance arrays are unreadable."""
+    pre_bal = meta.get("preBalances", [])
+    post_bal = meta.get("postBalances", [])
+    try:
+        return int(post_bal[index]) - int(pre_bal[index])
+    except (IndexError, ValueError, TypeError):
+        return 0
+
+
+def _transfer_kind(
+    decrease_units: int, increase_units: int, from_sol_delta: int
+) -> Literal["sell", "transfer", "unknown"]:
+    """``sell`` when the drained wallet also gained SOL, else ``transfer``."""
+    if decrease_units < 0:
+        return "sell" if from_sol_delta > 0 else "transfer"
+    if increase_units > 0 and decrease_units >= 0:
+        return "transfer"
+    return "unknown"
+
+
+def parse_transfer_tx(
+    mint: str,
+    signature: str,
+    wallet: str,
+    tx: object,
+    *,
+    supply_units: int,
+    min_share: Decimal,
+) -> Transfer | None:
+    """Extract the largest qualifying ``mint`` movement touching ``wallet``."""
+    if not isinstance(tx, dict):
+        return None
+    meta = tx.get("meta")
+    if not isinstance(meta, dict) or meta.get("err") is not None:
+        return None
+    keys = _account_keys(tx)
+    deltas = _index_deltas(meta, mint)
     if not deltas:
         return None
     decrease_idx = min(deltas, key=lambda i: deltas[i])
@@ -134,17 +168,7 @@ def parse_transfer_tx(
     to_key = keys[increase_idx] if 0 <= increase_idx < len(keys) else ""
     if not from_key or not to_key:
         return None
-    kind: Literal["sell", "transfer", "lp_remove", "unknown"] = "unknown"
-    pre_bal = meta.get("preBalances", [])
-    post_bal = meta.get("postBalances", [])
-    try:
-        from_sol_delta = int(post_bal[decrease_idx]) - int(pre_bal[decrease_idx])
-    except (IndexError, ValueError, TypeError):
-        from_sol_delta = 0
-    if deltas[decrease_idx] < 0:
-        kind = "sell" if from_sol_delta > 0 else "transfer"
-    elif deltas[increase_idx] > 0 and deltas[decrease_idx] >= 0:
-        kind = "transfer"
+    kind = _transfer_kind(deltas[decrease_idx], amount, _sol_delta_at(meta, decrease_idx))
     ts = tx.get("blockTime")
     return Transfer.model_validate(
         {
@@ -159,7 +183,7 @@ def parse_transfer_tx(
     )
 
 
-async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict:
+async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str, Any]:
     """Scan watched wallets and return a validated typed payload."""
     supply = await _supply_units(inp.mint, rpc)
     if inp.wallets:
@@ -198,7 +222,12 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict:
             except RpcError:
                 continue
             transfer = parse_transfer_tx(
-                inp.mint, entry["signature"], wallet, supply, inp.min_share, tx
+                inp.mint,
+                entry["signature"],
+                wallet,
+                tx,
+                supply_units=supply,
+                min_share=inp.min_share,
             )
             if transfer is not None:
                 found.append(transfer)
@@ -217,7 +246,7 @@ def build_large_transfers_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.large_transfers`` to one injected RPC client."""
 
     @tool(LARGE_TRANSFERS_SPEC)
-    async def _large_transfers(payload: LargeTransfersIn) -> dict:
+    async def _large_transfers(payload: LargeTransfersIn) -> dict[str, Any]:
         return await run_large_transfers(payload, rpc)
 
     return _large_transfers

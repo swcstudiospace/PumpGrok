@@ -9,6 +9,7 @@ sampled largest accounts only; on-chain truth is ``onchain.top_holders``.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -63,7 +64,7 @@ HOLDERS_SNAPSHOT_SPEC = ToolSpec(
 )
 
 
-async def run_holders_snapshot(inp: HoldersSnapshotIn, rpc: RpcClient) -> dict:
+async def run_holders_snapshot(inp: HoldersSnapshotIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported snapshot and return a validated typed payload."""
     snap = await holder_snapshot(inp.mint, rpc, limit=inp.limit)
     if not snap.get("ok"):
@@ -98,7 +99,7 @@ def build_holders_snapshot_tool(rpc: RpcClient) -> Tool:
     """Bind ``market.holders_snapshot`` to one injected RPC client."""
 
     @tool(HOLDERS_SNAPSHOT_SPEC)
-    async def _holders_snapshot(payload: HoldersSnapshotIn) -> dict:
+    async def _holders_snapshot(payload: HoldersSnapshotIn) -> dict[str, Any]:
         return await run_holders_snapshot(payload, rpc)
 
     return _holders_snapshot

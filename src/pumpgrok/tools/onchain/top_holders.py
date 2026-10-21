@@ -10,6 +10,7 @@ stays null: largest-accounts entries carry no owner without extra calls.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -49,7 +50,7 @@ class TopHoldersOut(ToolOutput):
     top5_share: Decimal = Field(ge=0, le=1)
     top10_share: Decimal = Field(ge=0, le=1)
     supply_units: int = Field(ge=0)
-    excluded: list[str] = []
+    excluded: list[str] = Field(default_factory=list)
 
 
 TOP_HOLDERS_SPEC = ToolSpec(
@@ -68,7 +69,7 @@ TOP_HOLDERS_SPEC = ToolSpec(
 )
 
 
-async def run_top_holders(inp: TopHoldersIn, rpc: RpcClient) -> dict:
+async def run_top_holders(inp: TopHoldersIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported snapshot and return a validated typed payload."""
     snap = await holder_snapshot(inp.mint, rpc, limit=inp.limit)
     if not snap.get("ok"):
@@ -125,7 +126,7 @@ def build_top_holders_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.top_holders`` to one injected RPC client."""
 
     @tool(TOP_HOLDERS_SPEC)
-    async def _top_holders(payload: TopHoldersIn) -> dict:
+    async def _top_holders(payload: TopHoldersIn) -> dict[str, Any]:
         return await run_top_holders(payload, rpc)
 
     return _top_holders

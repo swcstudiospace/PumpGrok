@@ -9,6 +9,7 @@ virtual SOL reserve. Impact math is a plain constant-product share
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import Field
 
@@ -61,7 +62,7 @@ LIQUIDITY_SPEC = ToolSpec(
 )
 
 
-async def run_liquidity(inp: LiquidityIn, rpc: RpcClient) -> dict:
+async def run_liquidity(inp: LiquidityIn, rpc: RpcClient) -> dict[str, Any]:
     """Fetch the curve account and return a validated ``LiquidityOut`` payload."""
     try:
         result = await rpc.call("getAccountInfo", [inp.curve_account, {"encoding": "base64"}])
@@ -96,7 +97,7 @@ def build_liquidity_tool(rpc: RpcClient) -> Tool:
     """Bind ``market.liquidity`` to one injected RPC client (no globals)."""
 
     @tool(LIQUIDITY_SPEC)
-    async def _liquidity(payload: LiquidityIn) -> dict:
+    async def _liquidity(payload: LiquidityIn) -> dict[str, Any]:
         return await run_liquidity(payload, rpc)
 
     return _liquidity

@@ -8,7 +8,7 @@ fallback and no Jupiter quote path exist in this module (R44, R46, R47).
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -61,7 +61,7 @@ PRICE_SPEC = ToolSpec(
 )
 
 
-async def run_price(inp: PriceIn, rpc: RpcClient) -> dict:
+async def run_price(inp: PriceIn, rpc: RpcClient) -> dict[str, Any]:
     """Fetch the curve account and return a validated ``PriceOut`` payload."""
     try:
         result = await rpc.call("getAccountInfo", [inp.curve_account, {"encoding": "base64"}])
@@ -95,7 +95,7 @@ def build_price_tool(rpc: RpcClient) -> Tool:
     """Bind ``market.price`` to one injected RPC client (no globals)."""
 
     @tool(PRICE_SPEC)
-    async def _price(payload: PriceIn) -> dict:
+    async def _price(payload: PriceIn) -> dict[str, Any]:
         return await run_price(payload, rpc)
 
     return _price

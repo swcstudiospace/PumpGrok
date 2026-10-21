@@ -8,7 +8,7 @@ The venue exposes no candle endpoint, so this tool fetches movements with
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,7 +94,7 @@ def build_ohlcv(trades: list[Trade], interval_s: int, limit: int) -> list[Candle
     return candles[-limit:] if limit else []
 
 
-async def run_ohlcv(inp: OhlcvIn, rpc: RpcClient) -> dict:
+async def run_ohlcv(inp: OhlcvIn, rpc: RpcClient) -> dict[str, Any]:
     """Fetch the trade stream and return a validated ``OhlcvOut`` payload."""
     try:
         trades = await fetch_trades(mint=inp.mint, rpc=rpc, limit=min(inp.limit, _SIG_PAGE))
@@ -116,7 +116,7 @@ def build_ohlcv_tool(rpc: RpcClient) -> Tool:
     """Bind ``market.ohlcv`` to one injected RPC client (no globals)."""
 
     @tool(OHLCV_SPEC)
-    async def _ohlcv(payload: OhlcvIn) -> dict:
+    async def _ohlcv(payload: OhlcvIn) -> dict[str, Any]:
         return await run_ohlcv(payload, rpc)
 
     return _ohlcv

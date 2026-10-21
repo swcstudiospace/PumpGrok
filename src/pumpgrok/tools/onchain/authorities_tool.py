@@ -8,6 +8,8 @@ re-fetch the account for a single field.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
@@ -49,7 +51,7 @@ AUTHORITIES_SPEC = ToolSpec(
 )
 
 
-async def run_authorities(inp: AuthoritiesIn, rpc: RpcClient) -> dict:
+async def run_authorities(inp: AuthoritiesIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported mint check and return a validated typed payload."""
     result = await check_mint(inp.mint, rpc)
     if not result.get("ok"):
@@ -72,7 +74,7 @@ def build_authorities_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.authorities`` to one injected RPC client."""
 
     @tool(AUTHORITIES_SPEC)
-    async def _authorities(payload: AuthoritiesIn) -> dict:
+    async def _authorities(payload: AuthoritiesIn) -> dict[str, Any]:
         return await run_authorities(payload, rpc)
 
     return _authorities

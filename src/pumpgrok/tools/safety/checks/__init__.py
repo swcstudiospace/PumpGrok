@@ -26,7 +26,7 @@ CheckId = Literal[
     "liquidity_depth",
 ]
 
-CHECK_IDS: tuple[str, ...] = (
+CHECK_IDS: tuple[CheckId, ...] = (
     "mint_authority",
     "freeze_authority",
     "lp_status",

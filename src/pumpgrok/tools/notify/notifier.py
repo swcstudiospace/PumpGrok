@@ -12,9 +12,12 @@ from __future__ import annotations
 import abc
 import hashlib
 import json
+import sys
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from tenacity import (
     AsyncRetrying,
@@ -29,8 +32,8 @@ from pumpgrok.tools.notify.allowlist import partition_destinations
 
 __all__ = [
     "ALERT_KINDS",
-    "HttpxNotifier",
     "J8",
+    "HttpxNotifier",
     "Notifier",
     "alert_key",
 ]
@@ -125,24 +128,24 @@ class Notifier(abc.ABC):
         for destination in allowed:
             try:
                 if destination.startswith(("http://", "https://")):
-                    payload = {
+                    payload: dict[str, Any] = {
                         "event": kind,
                         "text": text,
                         "ticket_id": ticket_id,
                         "fields": fields or {},
                     }
-                    await self._with_j8(lambda: self.send_webhook(destination, payload))
+                    await self._with_j8(partial(self.send_webhook, destination, payload))
                 else:
-                    await self._with_j8(lambda: self.send_telegram(destination, text))
+                    await self._with_j8(partial(self.send_telegram, destination, text))
                 delivered.append({"sink": destination, "ok": True, "error": None})
-            except Exception as exc:  # noqa: BLE001 - sinks report, never raise
+            except Exception as exc:  # sinks report, never raise
                 delivered.append({"sink": destination, "ok": False, "error": str(exc)})
         for destination in refused:
             delivered.append({"sink": destination, "ok": False, "error": "not_allowlisted"})
         return {"delivered": delivered, "suppressed": False}
 
-    async def _with_j8(self, make_coro: Callable[[], Any]) -> Any:
-        """Retry a coroutine factory (a coroutine object cannot be re-awaited)."""
+    async def _with_j8(self, make_coro: Callable[[], Awaitable[None]]) -> None:
+        """Retry an awaitable factory (a coroutine object cannot be re-awaited)."""
         policy = J8
         async for attempt in AsyncRetrying(
             sleep=self._clock.sleep,
@@ -152,7 +155,8 @@ class Notifier(abc.ABC):
             reraise=True,
         ):
             with attempt:
-                return await make_coro()
+                await make_coro()
+                return
         raise AssertionError("unreachable")
 
     def _write_stdout_and_file(
@@ -164,7 +168,7 @@ class Notifier(abc.ABC):
         fields: dict[str, Any],
     ) -> None:
         line = f"[pumpgrok:{severity}] {kind} {ticket_id or '-'} {text}"
-        print(line)
+        sys.stdout.write(f"{line}\n")
         self._alert_file.parent.mkdir(parents=True, exist_ok=True)
         record = {
             "severity": severity,

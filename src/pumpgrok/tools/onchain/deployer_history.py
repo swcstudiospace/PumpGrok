@@ -8,6 +8,7 @@ book lands (Phase 4+).
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import Field
 
@@ -38,7 +39,7 @@ class DeployerHistoryOut(ToolOutput):
     worst_pnl_pct: float | None = None
     is_known_bad: bool = False
     first_seen_at: datetime | None = None
-    recent_signatures: list[str] = []
+    recent_signatures: list[str] = Field(default_factory=list)
 
 
 DEPLOYER_HISTORY_SPEC = ToolSpec(
@@ -57,7 +58,7 @@ DEPLOYER_HISTORY_SPEC = ToolSpec(
 )
 
 
-async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict:
+async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict[str, Any]:
     """Scan the signature window and return a validated typed payload."""
     try:
         sigs = await rpc.call("getSignaturesForAddress", [inp.creator, {"limit": _SIG_LIMIT}])
@@ -66,7 +67,7 @@ async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict:
     if not isinstance(sigs, list):
         raise DataStale(f"onchain.deployer_history malformed creator={inp.creator}")
     cutoff = utcnow().timestamp() - inp.lookback_days * _DAY_S
-    kept: list[dict] = []
+    kept: list[dict[str, Any]] = []
     for entry in sigs:
         if not isinstance(entry, dict) or not isinstance(entry.get("signature"), str):
             continue
@@ -95,7 +96,7 @@ def build_deployer_history_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.deployer_history`` to one injected RPC client."""
 
     @tool(DEPLOYER_HISTORY_SPEC)
-    async def _deployer_history(payload: DeployerHistoryIn) -> dict:
+    async def _deployer_history(payload: DeployerHistoryIn) -> dict[str, Any]:
         return await run_deployer_history(payload, rpc)
 
     return _deployer_history

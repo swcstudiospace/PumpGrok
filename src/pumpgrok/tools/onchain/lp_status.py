@@ -8,7 +8,9 @@ stay null: no graduated-pool data source is wired in Phase 3.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic import Field
 
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
@@ -39,7 +41,7 @@ class LpStatusOut(ToolOutput):
     lp_locked_pct: float | None = None
     locker: str | None = None
     lock_expires_at: datetime | None = None
-    checked: list[str] = []
+    checked: list[str] = Field(default_factory=list)
 
 
 LP_STATUS_SPEC = ToolSpec(
@@ -58,7 +60,7 @@ LP_STATUS_SPEC = ToolSpec(
 )
 
 
-async def run_lp_status(inp: LpStatusIn, rpc: RpcClient) -> dict:
+async def run_lp_status(inp: LpStatusIn, rpc: RpcClient) -> dict[str, Any]:
     """Fetch the curve account and return a validated ``LpStatusOut`` payload."""
     try:
         result = await rpc.call("getAccountInfo", [inp.curve_account, {"encoding": "base64"}])
@@ -91,7 +93,7 @@ def build_lp_status_tool(rpc: RpcClient) -> Tool:
     """Bind ``onchain.lp_status`` to one injected RPC client."""
 
     @tool(LP_STATUS_SPEC)
-    async def _lp_status(payload: LpStatusIn) -> dict:
+    async def _lp_status(payload: LpStatusIn) -> dict[str, Any]:
         return await run_lp_status(payload, rpc)
 
     return _lp_status
