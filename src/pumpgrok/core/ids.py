@@ -56,7 +56,8 @@ class CorrelationId(str):
 
     The root is a ULID; child spans are `<ulid>.<n>` with `n` the 1-based span
     counter of the root's dynamic extent. The ledger `correlation_id` column
-    stores the root.
+    stores the span an event was produced under: the root for cycle-level events,
+    `<root>.<n>` for a tool call.
     """
 
     __slots__ = ()
@@ -79,9 +80,14 @@ _correlation: contextvars.ContextVar[CorrelationId | None] = contextvars.Context
 _span_counter: contextvars.ContextVar[int] = contextvars.ContextVar("pumpgrok_span", default=0)
 
 
+def ambient_correlation() -> CorrelationId | None:
+    """Return the bound id, or None outside any bind_correlation extent (logging reads this)."""
+    return _correlation.get()
+
+
 def current_correlation() -> CorrelationId:
     """Return the ambient id. An unbound call is a programming error, never a silent new id."""
-    cid = _correlation.get()
+    cid = ambient_correlation()
     if cid is None:
         raise PumpgrokError("no correlation id bound")
     return cid

@@ -1,7 +1,7 @@
 """Correlation helpers: ULID roots and child spans (OBS-002).
 
 The root is a plain ULID; children append `.<n>`. The ledger `correlation_id`
-column stores the root. Context binding lives in `ids.py`.
+column stores the span an event was produced under. Context binding lives in `ids.py`.
 """
 
 from __future__ import annotations

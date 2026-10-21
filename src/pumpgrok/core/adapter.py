@@ -14,7 +14,6 @@ from typing import Any, ClassVar, Literal, Protocol, Self, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import ULID_RE
 
 
@@ -158,42 +157,3 @@ class ExecutionAdapter(Protocol):
     # True only while the order is ACCEPTED; False once the latency sleep has completed.
 
     async def positions(self, mint: str | None = None) -> Sequence[Position]: ...
-
-
-class LiveAdapterStub:
-    """Base of `LiveAdapter`. Every method raises; nothing here submits a transaction."""
-
-    mode: ClassVar[ExecutionMode] = ExecutionMode.LIVE
-    venue: ClassVar[str] = "disabled"
-
-    def __init__(self, gate: LiveGate) -> None:
-        unmet = gate.check()
-        if unmet:
-            raise LiveGateError("live adapter construction refused", unmet=list(unmet))
-        raise LiveGateError(
-            "live adapters are not implemented in this release",
-            unmet=["adapter_registered"],
-        )
-
-    async def quote(
-        self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
-    ) -> Quote:
-        raise LiveGateError("live quote disabled")
-
-    async def simulate(self, request: OrderRequest) -> SimulationResult:
-        raise LiveGateError("live simulate disabled")
-
-    async def place(self, request: OrderRequest) -> Fill:
-        raise LiveGateError("live place disabled")
-
-    async def cancel(self, order_id: str, ticket_id: str, decision_id: str) -> bool:
-        raise LiveGateError("live cancel disabled")
-
-    async def positions(self, mint: str | None = None) -> Sequence[Position]:
-        raise LiveGateError("live positions disabled")
-
-
-class LiveGate(Protocol):
-    """Startup gate: `check()` returns the ids of every UNMET precondition."""
-
-    def check(self) -> Sequence[str]: ...
