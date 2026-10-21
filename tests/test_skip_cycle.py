@@ -1,4 +1,4 @@
-"""Skip-only replay cycle through the CLI: exit-code map and ledger effects (FOUND-013, R37)."""
+"""Replay engine cycle through the CLI: exit-code map and ledger effects (FOUND-013, R37)."""
 
 from __future__ import annotations
 
@@ -68,13 +68,16 @@ def test_skip_cycle_writes_one_replay_journal_note(
     payload = json.loads(str(row[1]))
     assert payload["source"] == "replay"
     assert payload["seat"] == "desk"
-    assert payload["note_kind"] == "note"
+    assert payload["note_kind"] == "verdict"
+    assert "engine decision=skip reason=data_unavailable" in payload["text"]
+    assert "model resolution skipped (replay)" in payload["text"]
 
-    log_records = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line]
+    captured = capsys.readouterr()
+    assert "engine decision=skip reason=data_unavailable" in captured.out
+    log_records = [json.loads(line) for line in captured.err.splitlines() if line]
     (cycle_end,) = [record for record in log_records if record["event"] == "cycle_end"]
     assert cycle_end["correlation_id"] == row[0]
     assert cycle_end["data"]["events_read"] == 4
-
 
 def test_second_run_recreates_the_replay_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

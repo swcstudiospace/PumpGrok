@@ -1,15 +1,17 @@
 """Command line: parse, check, main (FOUND-013, R30, R37; port of grokbot `pipeline.py` shape).
 
-Verbs: `run` (paper, `--once --replay <dir>` runs one skip-only cycle) and `doctor`.
+Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and `doctor`.
 
 Exit codes: 0 ok; 1 config or usage; 2 ledger inconsistent; 3 live refused; 4 corrupt
 fixture; 5 not implemented. argparse's own exit 2 is overridden so that 2 means only a
-ledger inconsistency. Stdout carries the doctor report; diagnostics go to stderr.
+ledger inconsistency. Stdout carries the doctor report and the engine decision;
+diagnostics go to stderr.
 
 Run order: refuse key-bearing CLI values -> parse -> settings (mode R30) -> logging ->
-live gate (live exits 3 before any other work) -> verb. For the skip cycle: manifest
-verification (exit 4, before any ledger file exists) -> recreate ledger -> read fixture
-events -> append one `JournalNote` (source=replay) -> verify chain -> exit 0.
+live gate (live exits 3 before any other work) -> verb. For the replay cycle: manifest
+verification (exit 4, before any ledger file exists) -> recreate ledger -> map fixture
+ticks to evidence-less engine candidates -> run the pure filter stage -> print one
+`engine decision=` line -> append one `JournalNote` (source=replay) -> verify chain.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from pumpgrok.config.settings import (
 from pumpgrok.core.idempotency import derive_idempotency_key
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.doctor import doctor_report
+from pumpgrok.engine.pipeline import decide_replay, format_decision
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore, recreate_ledger_db
 from pumpgrok.logging.json import bind_seat, setup_logging
@@ -103,10 +106,10 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             "not implemented: this release runs only `run --mode paper --once --replay <dir>`",
         )
         return EXIT_NOT_IMPLEMENTED
-    return _skip_cycle(Path(args.replay), settings.replay.seed)
+    return _skip_cycle(Path(args.replay), settings)
 
 
-def _skip_cycle(source: Path, seed: int) -> int:
+def _skip_cycle(source: Path, settings: Settings) -> int:
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
@@ -114,13 +117,18 @@ def _skip_cycle(source: Path, seed: int) -> int:
 
     start = event_epoch(dataset.events[0]) if dataset.events else 0.0
     clock = FixtureClock(start=start)
-    ids = IdFactory(clock, make_rng(seed))
+    ids = IdFactory(clock, make_rng(settings.replay.seed))
     cycle = CorrelationId.new(ids)
     ledger_path = recreate_ledger_db(LEDGER_ROOT / dataset_name / "ledger.sqlite")
 
     with bind_correlation(cycle), bind_seat(CYCLE_SEAT):
         for event in dataset.events:
             clock.advance_to(event_epoch(event))
+        # Pure engine stage only: fixture ticks become evidence-less
+        # candidates, so the fail-closed filter decides. No monitor stream,
+        # no analyzer fetch, no model lookup of any kind.
+        decision = decide_replay(dataset.events, settings.filter, clock.now())
+        _say(sys.stdout, format_decision(decision))
         store = LedgerStore(ledger_path)
         try:
             row = store.append(
@@ -137,10 +145,13 @@ def _skip_cycle(source: Path, seed: int) -> int:
                 payload={
                     "source": "replay",
                     "seat": CYCLE_SEAT,
-                    "note_kind": "note",
+                    "note_kind": "verdict",
                     "text": (
-                        f"skip-only replay cycle: read {len(dataset.events)} fixture events "
-                        f"from {dataset_name}; no engine ran"
+                        f"replay engine cycle: {format_decision(decision)}; "
+                        "model resolution skipped (replay); "
+                        f"read {len(dataset.events)} fixture events from {dataset_name}; "
+                        "metadata and age gates satisfied by construction, "
+                        "buyer evidence absent by construction"
                     ),
                     "refs": [],
                 },
@@ -149,10 +160,12 @@ def _skip_cycle(source: Path, seed: int) -> int:
         finally:
             store.close()
         log.info(
-            "skip-only replay cycle complete",
+            "replay engine cycle complete",
             extra={
                 "event": "cycle_end",
                 "events_read": len(dataset.events),
+                "engine_decision": decision.decision,
+                "engine_reason": decision.reason,
                 "ledger_seq": row["seq"],
             },
         )

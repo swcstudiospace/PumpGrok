@@ -280,7 +280,7 @@ class Escalation(_ClosedModel):
 
 
 class JournalNote(_ClosedModel):
-    """Seat journal entry; the skip cycle uses seat=desk, note_kind=note."""
+    """Seat journal entry; the replay cycle uses seat=desk, note_kind=verdict."""
 
     source: EventSource
     seat: str = "desk"
