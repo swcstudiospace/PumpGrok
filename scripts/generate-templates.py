@@ -24,7 +24,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from prompt_sources import (  # noqa: E402
+from prompt_sources import (
     AGENTS_DIR,
     PLACEHOLDER_RE,
     PromptError,
@@ -43,7 +43,8 @@ def render(seat: SeatSource, core: dict) -> str:
     text = f"---\n{frontmatter(seat)}---\n{body}"
     # The frontmatter must parse back to exactly the values it was built from.
     meta = yaml.safe_load(frontmatter(seat))
-    if meta["name"] != seat.name or meta["seat"] != seat.channel or meta["skills"] != list(seat.skills):
+    same_name = meta["name"] == seat.name
+    if not same_name or meta["seat"] != seat.channel or meta["skills"] != list(seat.skills):
         raise PromptError(f"{seat.path.name}: frontmatter does not round-trip")
     match = PLACEHOLDER_RE.search(text)
     if match:

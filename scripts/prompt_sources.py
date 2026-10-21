@@ -87,7 +87,8 @@ def _attr(el: ET.Element, key: str, path: Path) -> str:
 def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
     if not path.exists():
         raise PromptError(f"{path}: shared directives not found")
-    root = ET.parse(path).getroot()
+    # Repo-owned prompt sources reviewed under G-1/G-3, not untrusted input.
+    root = ET.parse(path).getroot()  # noqa: S314
     if root.tag != "core-directives":
         raise PromptError(f"{path.name}: root must be <core-directives>")
     sections: dict[str, CoreSection] = {}
@@ -95,7 +96,9 @@ def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
         sid = _attr(el, "id", path)
         audience = _attr(el, "audience", path)
         if audience not in AUDIENCES:
-            raise PromptError(f"{path.name}: section '{sid}' audience '{audience}' not in {AUDIENCES}")
+            raise PromptError(
+                f"{path.name}: section '{sid}' audience '{audience}' not in {AUDIENCES}"
+            )
         if sid in sections:
             raise PromptError(f"{path.name}: section '{sid}' is declared twice")
         sections[sid] = CoreSection(audience=audience, text=el.text or "")
@@ -103,7 +106,7 @@ def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
 
 
 def load_seat(path: Path) -> SeatSource:
-    root = ET.parse(path).getroot()
+    root = ET.parse(path).getroot()  # noqa: S314 - repo-owned prompt source, see load_core
     if root.tag != "seat-prompt":
         raise PromptError(f"{path.name}: root must be <seat-prompt>")
     seat = _attr(root, "id", path)
