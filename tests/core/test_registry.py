@@ -201,7 +201,6 @@ def test_find_ungranted_tool_refuses_and_audits() -> None:
     audits: list[GrantAudit] = []
     reg = _registry(audits, _Clock(1469918176.385))
     factory = IdFactory(_Clock(1469918176.385), random.Random(3))
-    bot = _bot("bot-01-desk", [ToolGrant(name="market.price", side_effect=SideEffect.READ)])
     with bind_correlation(CorrelationId.new(factory)):
         with pytest.raises(PermissionDenied):
             reg.find(
