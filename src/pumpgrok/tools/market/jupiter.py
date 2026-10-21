@@ -64,28 +64,38 @@ async def get_quote(
         resp = await client.get(quote_url, params=params, headers=headers, timeout=timeout_seconds)
         resp.raise_for_status()
         data = resp.json()
+        if not isinstance(data, dict):
+            return {"ok": False, "error": "jupiter quote failed"}
+        route = data.get("routePlan") or []
+        if not isinstance(route, list):
+            return {"ok": False, "error": "jupiter quote failed"}
+        price_impact = data.get("priceImpact")
+        ratio: float | None = None
+        if price_impact is not None:
+            try:
+                ratio = float(price_impact) / 100
+            except (TypeError, ValueError):
+                ratio = None
+        return {
+            "ok": True,
+            "inputMint": data.get("inputMint"),
+            "outputMint": data.get("outputMint"),
+            "inAmount": data.get("inAmount"),
+            "outAmount": data.get("outAmount"),
+            "otherAmountThreshold": data.get("otherAmountThreshold"),
+            "slippageBps": data.get("slippageBps"),
+            "priceImpactRatio": ratio,
+            "routePlan": [
+                {
+                    "swapInfo": r.get("swapInfo", {}),
+                    "percent": r.get("percent"),
+                }
+                for r in route
+                if isinstance(r, dict)
+            ],
+            "router": data.get("router"),
+            "requestId": data.get("requestId"),
+            "raw": data,
+        }
     except Exception:
         return {"ok": False, "error": "jupiter quote failed"}
-
-    route = data.get("routePlan") or []
-    price_impact = data.get("priceImpact")
-    return {
-        "ok": True,
-        "inputMint": data.get("inputMint"),
-        "outputMint": data.get("outputMint"),
-        "inAmount": data.get("inAmount"),
-        "outAmount": data.get("outAmount"),
-        "otherAmountThreshold": data.get("otherAmountThreshold"),
-        "slippageBps": data.get("slippageBps"),
-        "priceImpactRatio": (float(price_impact) / 100) if price_impact is not None else None,
-        "routePlan": [
-            {
-                "swapInfo": r.get("swapInfo", {}),
-                "percent": r.get("percent"),
-            }
-            for r in route
-        ],
-        "router": data.get("router"),
-        "requestId": data.get("requestId"),
-        "raw": data,
-    }
