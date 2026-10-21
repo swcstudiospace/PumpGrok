@@ -60,9 +60,7 @@ class RpcSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    endpoints: list[str] = Field(
-        default_factory=lambda: ["https://api.mainnet-beta.solana.com"]
-    )
+    endpoints: list[str] = Field(default_factory=lambda: ["https://api.mainnet-beta.solana.com"])
     api_key: SecretStr = SecretStr("")
 
 
