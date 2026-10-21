@@ -1,5 +1,7 @@
 """Screening engine: monitor, analyzer, scoring, reputation, exits, watcher, agents, pipeline, tune.
 
+Also edge-triggered alert transitions (``alerts``) for the supervisor.
+
 Ported from ``vendor/grokbot-pumpfun/src/`` (oracle, kept byte-identical per
 R53). Every module runs on the injected clock with seeded randomness only,
 so a Phase 4 replay reproduces each decision from the fixture alone (R27).
