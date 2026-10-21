@@ -85,7 +85,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
   2. `test "$(ls -d skills/*/ | wc -l)" -eq 35` and `grep -q 'bot-09-journal' skills/desk-post-trade-review/SKILL.md` both exit 0, and `! grep -rn "23 skills" plugin.json .claude-plugin .grok-plugin .cursor-plugin agents` prints nothing (SKILL-001, SKILL-004)
   3. `uv run pytest -q -k "least_privilege or gateway"` exits 0, and the desk gateway suite in `services/desk-gateway/` passes under `uv run pytest -q` (TOOL-009, TOOL-010)
   4. `uv run pumpgrok paper buy --help` lists `--ticket`, `--mint`, `--size-sol`, `--slippage-bps` and `--approval-id`, and `! grep -rnE "\b(post|put|patch|delete)\b|method=['\"](POST|PUT|PATCH|DELETE)" src/pumpgrok/tools/social/` prints nothing (TOOL-011, TOOL-009)
-  5. `! grep -rnE "(lamports|units|sol)[A-Za-z_]*: *float" src/pumpgrok/` prints nothing and `uv run pytest -q` exits 0 (TOOL-008)
+  5. `! grep -rnE "(lamports|units|sol)[A-Za-z_]*: *float" src/pumpgrok/tools src/pumpgrok/core src/pumpgrok/cli.py` prints nothing and `uv run pytest -q` exits 0 (TOOL-008). Scope narrowed to the new layers by user approval (ask: float, Narrow criterion 5); vendor-parity float fields in src/pumpgrok/engine/ are exempt until Phase 4 retires the oracle.
 
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` still completes one cycle and the canonical gates pass.
 

@@ -124,3 +124,9 @@ desk.doctor P 60 - desk d(tool,bot,sha(input))
 - B12: keep the setting name rpc.api_key (env PUMPGROK_RPC__API_KEY). TOOL-002 text naming solana.rpc_api_key is not edited here; flagged for user confirmation.
 - B13: tests use httpx.MockTransport. respx is not added.
 - Registry defects in 03-RESEARCH.md section 1.2 (prefix resolution, retry validator, idempotency key mixing tool and bot) are in scope: fix them so TOOL-001..007 and R23 hold.
+
+## User approvals recorded (binding, Phase 3 ask answers)
+- A1 roster contract (ask: roster, Approve the additive version bump): each seat roster gains a manifest block that loads as BotManifest; contracts/tool-rosters version 1.0.0 to 1.1.0; change document contracts/changes/phase-3-seat-manifests.yaml lists each roster file. G-4 acknowledgements from the ten seat consumers are recorded as pending; the initial publication is additive.
+- A2 float money scope (ask: float, Narrow criterion 5): ROADMAP criterion 5 now covers src/pumpgrok/tools, src/pumpgrok/core and src/pumpgrok/cli.py. Vendor-parity float fields in src/pumpgrok/engine/ are exempt until Phase 4.
+- A3 partial deliveries (ask: partial, Accept): TOOL-004 atomic consume-and-order transaction (a repeated decision returns the first fill) moves to Phase 4 (R64). TOOL-011 full verb coverage moves to Phase 4 (R64). Phase 3 delivers the input contract and the wired-verb path with exit 5 for unbuilt backends.
+- A4 assumptions (ask: assume, Keep and mark for live confirmation): the bonding-curve layout in curve_layout.py stays ASSUMED with its fixture marked ASSUMED; the setting remains rpc.api_key (env PUMPGROK_RPC__API_KEY). Phase 4 runs a live probe before any entry depends on RPC prices (R65).
