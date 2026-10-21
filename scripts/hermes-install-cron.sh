@@ -40,15 +40,13 @@ if ! command -v hermes >/dev/null 2>&1; then
   DRY_RUN=1
 fi
 
-export PUMPGROK_ROOT="${ROOT}"
-export PUMPGROK_DESK="${DESK}"
-
 prompt_body() {
   local file="$1"
   cat <<EOF
-PUMPGROK_ROOT=${ROOT}
-PUMPGROK_DESK=${DESK}
+REPO=${ROOT}
+DESK=${DESK}
 Read and follow these instructions exactly. Files beat memory.
+Run the desk CLI as: uv run --project "\$REPO" pumpgrok <verb> ... (substitute \$REPO/\$DESK from the two lines above; never export PUMPGROK_* names into the process env, Settings refuses them).
 
 $(cat "${ROOT}/hermes/cron/prompts/${file}")
 EOF

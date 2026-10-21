@@ -34,25 +34,37 @@ FORBIDDEN_KEYS='PRIVATE_KEY|SECRET_KEY|SEED|MNEMONIC|PHANTOM|WALLET_SECRET'
 [[ -f "${ROOT}/tools/desk_state.py" ]] || err "missing tools/desk_state.py"
 [[ -f "${ROOT}/skills/hermes-cron-desk/SKILL.md" ]] || err "missing hermes-cron-desk skill"
 
-for prompt in scout-discover risk-audit chief-pickup rug-watch chief-journal; do
+for prompt in scout-discover scout-pipeline risk-audit chief-pickup rug-watch chief-journal; do
   [[ -f "${ROOT}/hermes/cron/prompts/${prompt}.md" ]] || err "missing prompt ${prompt}.md"
 done
+
+if grep -RIn -E 'tools/(desk_state|pipeline_evidence|ticket_helper)\.py' "${ROOT}/hermes/cron/prompts/"; then
+  err "cron prompt still wraps a root tool; prompts must call pumpgrok only"
+else
+  ok "cron prompts wrap pumpgrok only"
+fi
+
+if grep -RIn '^export PUMPGROK_' "${ROOT}/scripts/"*.sh; then
+  err "hermes script exports PUMPGROK_* names that Settings refuses"
+else
+  ok "no hermes script exports PUMPGROK_* names"
+fi
 
 if grep -Eq 'owner:[[:space:]]*(sniper|exit)' "${ROOT}/hermes/cron/jobs.yaml"; then
   err "jobs.yaml assigns cron to sniper or exit"
 else
   ok "jobs.yaml has no sniper/exit owners"
 fi
-
 [[ -d "${DESK}" ]] || err "desk missing: ${DESK}"
 for child in proposals briefs leads research journal incidents positions watch; do
   [[ -d "${DESK}/${child}" ]] || err "desk child missing: ${DESK}/${child}"
 done
 [[ -f "${DESK}/desk.md" ]] || err "missing ${DESK}/desk.md"
-if grep -Ei 'engagement:[[:space:]]*micro-live' "${DESK}/desk.md"; then
-  err "desk.md engagement is micro-live; cron state machine is research/paper only"
+engagement="$(grep -Ei '^[[:space:]]*engagement:' "${DESK}/desk.md" 2>/dev/null | head -1 | sed -E 's/^[^:]*:[[:space:]]*//')"
+if [[ "${engagement}" != "research" && "${engagement}" != "paper" ]]; then
+  err "desk.md engagement is '${engagement:-missing}'; cron state machine is research/paper only"
 else
-  ok "desk.md present"
+  ok "desk.md engagement=${engagement}"
 fi
 
 for role in "${ROLES[@]}"; do
