@@ -22,6 +22,7 @@ from typing import Any
 from pumpgrok.core.atomic_write import atomic_write_json
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.idempotency import canonical_json
+from pumpgrok.ledger.events import EVENT_MODELS, EventType
 
 GENESIS_PREV_HASH = "0" * 64
 SCHEMA_VERSION = "1"
@@ -127,7 +128,9 @@ class LedgerStore:
             raise ValueError(f"source must be one of {sorted(SOURCES)}, got {source!r}")
         if not correlation_id or not idempotency_key or not type or not ts_utc:
             raise ValueError("ts_utc, correlation_id, idempotency_key and type are required")
-        payload_json = canonical_json(dict(payload))
+        # Raises ValueError for a type outside the R32 vocabulary or a payload that fails its model.
+        model = EVENT_MODELS[EventType(type)]
+        payload_json = canonical_json(model.model_validate(dict(payload)).model_dump(mode="json"))
         db = self._db
         db.execute("BEGIN IMMEDIATE;")
         try:

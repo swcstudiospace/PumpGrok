@@ -20,7 +20,7 @@ def _event(**overrides):
         "correlation_id": "01J0000000000000000000000",
         "idempotency_key": "aaaabbbbccccdddd",
         "type": "JournalNote",
-        "payload": {"seat": "desk", "note_kind": "note", "text": "skip"},
+        "payload": {"source": "paper", "seat": "desk", "note_kind": "note", "text": "skip"},
     }
     base.update(overrides)
     return base
@@ -71,3 +71,12 @@ def test_snapshots_are_append_only(tmp_path) -> None:
         store._db.execute("UPDATE snapshots SET state_json='{}' WHERE seq=1")
     with pytest.raises(sqlite3.IntegrityError):
         store._db.execute("DELETE FROM snapshots WHERE seq=1")
+
+
+def test_unknown_type_and_bad_payload_refused(tmp_path) -> None:
+    store = LedgerStore(tmp_path / "ledger.sqlite")
+    with pytest.raises(ValueError):
+        store.append(**_event(type="NotARealEvent", payload={"anything": "goes"}))
+    with pytest.raises(ValueError):
+        store.append(**_event(payload={"source": "paper", "text": "skip", "surprise": 1}))
+    assert store.count() == 0
