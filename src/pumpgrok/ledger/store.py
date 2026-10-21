@@ -11,12 +11,11 @@ sqlite plus -wal/-shm before opening); they are never migrated.
 Ids arrive via ``core/ids.py``; the store mints none.
 """
 
-from __future__ import annotations
-
 import contextlib
 import hashlib
+import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -225,6 +224,118 @@ class LedgerStore:
         """Number of events stored."""
         row = self._db.execute("SELECT COUNT(*) FROM events;").fetchone()
         return int(row[0])
+    def read(
+        self,
+        *,
+        since_seq: int = 0,
+        types: Sequence[str] | None = None,
+        ticket_id: str | None = None,
+        source: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Read events in seq order (TOOL-005 portfolio.ledger_read backend).
+
+        Read-only: no locks, no chain mutation. ``ticket_id`` filters on the
+        parsed payload in Python (there is no ticket column by design).
+        """
+        query = (
+            "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
+            " type, payload_json, prev_hash, hash FROM events"
+            " WHERE seq >= ?"
+        )
+        args: list[Any] = [since_seq]
+        if source is not None:
+            query += " AND source = ?"
+            args.append(source)
+        if types:
+            query += " AND type IN (%s)" % ",".join("?" for _ in types)
+            args.extend(types)
+        query += " ORDER BY seq ASC LIMIT ?"
+        args.append(limit)
+        rows = self._db.execute(query, args).fetchall()
+        events: list[dict[str, Any]] = []
+        for (
+            seq,
+            ts_utc,
+            event_source,
+            correlation_id,
+            idempotency_key,
+            type,
+            payload_json,
+            prev_hash,
+            hash_,
+        ) in rows:
+            payload = json.loads(payload_json)
+            if ticket_id is not None and payload.get("ticket_id") != ticket_id:
+                continue
+            events.append(
+                {
+                    "seq": seq,
+                    "ts_utc": ts_utc,
+                    "source": event_source,
+                    "correlation_id": correlation_id,
+                    "idempotency_key": idempotency_key,
+                    "type": type,
+                    "payload": payload,
+                    "prev_hash": prev_hash,
+                    "hash": hash_,
+                }
+            )
+        return events
+
+    def by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        """Return the event stored under ``idempotency_key`` (repeat lookup)."""
+        rows = self._db.execute(
+            "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
+            " type, payload_json, prev_hash, hash FROM events"
+            " WHERE idempotency_key = ? LIMIT 1;",
+            (idempotency_key,),
+        ).fetchall()
+        if not rows:
+            return None
+        (
+            seq,
+            ts_utc,
+            source,
+            correlation_id,
+            key,
+            type,
+            payload_json,
+            prev_hash,
+            hash_,
+        ) = rows[0]
+        return {
+            "seq": seq,
+            "ts_utc": ts_utc,
+            "source": source,
+            "correlation_id": correlation_id,
+            "idempotency_key": key,
+            "type": type,
+            "payload": json.loads(payload_json),
+            "prev_hash": prev_hash,
+            "hash": hash_,
+        }
+
+    def read_snapshots(self) -> list[dict[str, Any]]:
+        """All snapshots in seq order with parsed state (drawdown backend)."""
+        rows = self._db.execute(
+            "SELECT seq, ts_utc, state_json FROM snapshots ORDER BY seq ASC;"
+        ).fetchall()
+        return [
+            {"seq": seq, "ts_utc": ts_utc, "state": json.loads(state_json)}
+            for seq, ts_utc, state_json in rows
+        ]
+
+    def latest_snapshot(self) -> dict[str, Any] | None:
+        """Newest snapshot, or None when nothing was ever snapshotted."""
+        rows = self._db.execute(
+            "SELECT seq, ts_utc, state_json FROM snapshots ORDER BY seq DESC LIMIT 1;"
+        ).fetchall()
+        if not rows:
+            return None
+        seq, ts_utc, state_json = rows[0]
+        return {"seq": seq, "ts_utc": ts_utc, "state": json.loads(state_json)}
+
 
     def write_snapshot(self, *, seq: int, ts_utc: str, state: Mapping[str, Any]) -> None:
         """Record state at seq. Append-only like events: a duplicate seq raises.

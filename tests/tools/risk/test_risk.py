@@ -54,7 +54,7 @@ def test_check_limits_reports_r34_rule_ids() -> None:
     assert CHECK_LIMITS_SPEC.side_effect is SideEffect.READ
     assert CHECK_LIMITS_SPEC.timeout_s == 5.0
     assert CHECK_LIMITS_SPEC.rate_limit_key == "ledger"
-    assert R34_RULE_IDS == [
+    assert list(R34_RULE_IDS) == [
         "ledger_inconsistent",
         "kill_switch",
         "halted",
@@ -85,7 +85,7 @@ async def test_check_limits_missing_approval_fails_closed(tmp_path: Path) -> Non
     )
     assert out.approved is False
     assert out.reason == "approval_missing"
-    assert [r["id"] for r in out.rules] == R34_RULE_IDS
+    assert [r["id"] for r in out.rules] == list(R34_RULE_IDS)
     store.close()
 
 

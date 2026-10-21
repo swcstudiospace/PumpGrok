@@ -60,7 +60,7 @@ Per-tool fields:
   exposure time and is never stored here.
 - `kind`: `read` never mutates a system of record and fails open. `write` mutates and fails closed.
 - `side_effect`: `read` or `paper-write`. `live-write` is never permitted in a roster.
-- `gates`: `g6` on every write tool. The tool's `input.required` must include `approval_id`.
+- `gates`: `g6` on approval-gated write tools (`exec.place`, `exec.cancel`); the tool's `input.required` must include `approval_id`. `risk.kill_switch` carries no gate tag because `clear` is not a tool action (R22).
 - `rollback_plan`: required in `input.required` of every write tool (G-7 `WRITE_REQUIRED_FIELDS`).
 - `backend`: the registry capability that implements the tool.
 - `input`: JSON Schema, `type: object`, `additionalProperties: false`.
@@ -70,7 +70,7 @@ G-7 (`ci/gates/check_desk_integrity.py`) fails the build when:
 - an effective roster has fewer than 8 or more than 15 tools;
 - a tool name is duplicated, or does not match the dotted pattern;
 - a tool has no input schema, or a g5/g6 tool's schema does not require its gate's fields;
-- a write tool is not tagged `g6`;
+- an approval-gated write tool (`exec.place`, `exec.cancel`) is not tagged `g6`;
 - any tool name starts with `exec.live`. No seat may resolve a live-write tool.
 
 The seat's `endpoint` must equal `/mcp/<short>`.
