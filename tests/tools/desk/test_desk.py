@@ -15,7 +15,7 @@ from pumpgrok.config.settings import NotifySettings, Settings
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.doctor import doctor_report
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, WallClock
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk._tokens import digest_compare, digest_token
 from pumpgrok.tools.desk.brief import BRIEF_SPEC, BriefIn, build_brief_tool
@@ -159,7 +159,7 @@ async def test_ownership_last_match_wins() -> None:
 
 
 async def test_receipt_check_reports_gate_rows() -> None:
-    tool = build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT)
+    tool = build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, WallClock())
     with pytest.raises(ValidationError):
         ReceiptCheckIn(bot="not-a-seat", receipt={})
     out = await tool(ReceiptCheckIn(bot="bot-04-sniper", receipt={"commands": []}, strict=False))

@@ -158,7 +158,7 @@ def build_gateway_registry(
     reg.register(build_memory_retain_tool(bank))
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
-    reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root))
+    reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, active_clock))
     reg.register(build_event_emit_tool(store, active_clock, data_dir / "journal", "bot-00-chief"))
     reg.register(
         build_doctor_tool(

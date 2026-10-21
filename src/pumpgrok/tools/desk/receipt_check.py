@@ -23,6 +23,7 @@ from pydantic import Field, model_validator
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
+from pumpgrok.replay.clock import Clock
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -101,7 +102,9 @@ def _gate_row(
     }
 
 
-async def _run_gate(name: str, argv: list[str], repo_root: Path) -> dict[str, str | int]:
+async def _run_gate(
+    name: str, argv: list[str], repo_root: Path, clock: Clock
+) -> dict[str, str | int]:
     """Run one gate under a bounded timeout; failures become rows, not raises."""
     try:
         process = await asyncio.create_subprocess_exec(
@@ -117,7 +120,8 @@ async def _run_gate(name: str, argv: list[str], repo_root: Path) -> dict[str, st
             "output_tail": f"gate launch failed: {exc}",
         }
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=_GATE_TIMEOUT_S)
+        async with clock.timeout(_GATE_TIMEOUT_S):
+            stdout, stderr = await process.communicate()
     except TimeoutError:
         with contextlib.suppress(ProcessLookupError):
             process.kill()
@@ -127,7 +131,7 @@ async def _run_gate(name: str, argv: list[str], repo_root: Path) -> dict[str, st
 
 
 async def run_receipt_check(
-    inp: ReceiptCheckIn, gates_dir: Path, repo_root: Path
+    inp: ReceiptCheckIn, gates_dir: Path, repo_root: Path, clock: Clock
 ) -> dict[str, Any]:
     """Materialize the receipt outside the repo, then run the four gates."""
     receipt_file, cleanup = await asyncio.to_thread(_materialize_receipt, inp)
@@ -161,7 +165,7 @@ async def run_receipt_check(
                 [sys.executable, str(gates_dir / "check_rollback.py"), "--receipt", receipt_file],
             ),
         ]
-        gates = [await _run_gate(name, argv, repo_root) for name, argv in gate_argv]
+        gates = [await _run_gate(name, argv, repo_root, clock) for name, argv in gate_argv]
     finally:
         if cleanup:
             await asyncio.to_thread(_discard, receipt_file)
@@ -174,11 +178,11 @@ async def run_receipt_check(
     ).model_dump()
 
 
-def build_receipt_check_tool(gates_dir: Path, repo_root: Path) -> Tool:
-    """Bind ``desk.receipt_check`` to one gates directory and repo root."""
+def build_receipt_check_tool(gates_dir: Path, repo_root: Path, clock: Clock) -> Tool:
+    """Bind ``desk.receipt_check`` to one gates directory, repo root and clock."""
 
     @tool(RECEIPT_CHECK_SPEC)
     async def _receipt_check(payload: ReceiptCheckIn) -> dict[str, Any]:
-        return await run_receipt_check(payload, gates_dir, repo_root)
+        return await run_receipt_check(payload, gates_dir, repo_root, clock)
 
     return _receipt_check

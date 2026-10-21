@@ -31,7 +31,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, WallClock
 from pumpgrok.tools import build_registry, register_read_tools
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
@@ -125,7 +125,7 @@ def build_full_registry(
     reg.register(build_memory_retain_tool(bank))
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml"))
-    reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT))
+    reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, WallClock()))
     reg.register(build_event_emit_tool(store, clock, tmp_path / "journal", "bot-00-chief"))
     reg.register(build_doctor_tool(Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key"))
 
