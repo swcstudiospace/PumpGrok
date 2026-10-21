@@ -36,15 +36,15 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 
 ### Tools (TOOL)
 
-- [ ] **TOOL-001**: `market.{price,ohlcv,liquidity,trades,holders_snapshot}` (`docs/TOOL_CATALOG.md` section 1) return typed outputs carrying `freshness` and `source` fields and pass tests on recorded respx fixtures with no live network.
-- [ ] **TOOL-002**: `onchain.{token_metadata,authorities,lp_status,top_holders,deployer_history,large_transfers,priority_fee}` (section 2) go through the single RPC client `src/pumpgrok/tools/onchain/rpc.py` with tenacity jittered retries and ordered failover over `rpc.endpoints[]`; the API key travels in `solana.rpc_api_key`, never inside a URL or a log line; `deployer_history` and `large_transfers` are WHALE grants (R35).
-- [ ] **TOOL-003**: `safety.score_report` (section 3) produces a scored report with per-check reasons and thresholds read from config; a check without data returns `BLIND`, never an exception.
+- [x] **TOOL-001**: `market.{price,ohlcv,liquidity,trades,holders_snapshot}` (`docs/TOOL_CATALOG.md` section 1) return typed outputs carrying `freshness` and `source` fields and pass tests on recorded respx fixtures with no live network.
+- [x] **TOOL-002**: `onchain.{token_metadata,authorities,lp_status,top_holders,deployer_history,large_transfers,priority_fee}` (section 2) go through the single RPC client `src/pumpgrok/tools/onchain/rpc.py` with tenacity jittered retries and ordered failover over `rpc.endpoints[]`; the API key travels in `solana.rpc_api_key`, never inside a URL or a log line; `deployer_history` and `large_transfers` are WHALE grants (R35).
+- [x] **TOOL-003**: `safety.score_report` (section 3) produces a scored report with per-check reasons and thresholds read from config; a check without data returns `BLIND`, never an exception.
 - [ ] **TOOL-004**: `exec.{quote,simulate,place,cancel,positions}` (section 4) call the configured `ExecutionAdapter`; `exec.place` and `exec.cancel` carry `g6` and require `approval_id`; `exec.place` input carries `decision_id` (a ULID minted per decision) and the idempotency key is derived by the tool from `(ticket_id, side, decision_id)`, never caller-supplied; approval consumption is written in the same ledger transaction as the order (R23); `exec.simulate` writes no ledger event.
-- [ ] **TOOL-005**: `portfolio.{ledger_read,ledger_write,exposure,pnl}`, `risk.{check_limits,drawdown,kill_switch,halt_status}` and `journal.{append,render_report}` (sections 5, 6, 8) exist with the catalog schemas; `risk.check_limits` reports the R34 rule ids; `risk.kill_switch` accepts only `set` and `flatten_request` (R22); `journal.append` and `desk.event_emit` `kind` is the snake_case form of an R32 event type and seats may write only `journal_note` and `escalation` (every other type is appended by the engine, risk, adapter or supervisor); `portfolio.ledger_write` is `PermissionDenied` for all ten seats (`docs/design/interfaces.md` section 4).
-- [ ] **TOOL-006**: `notify.alert` (section 7) dispatches through an abstract `Notifier` whose stdout and file sinks are always on and whose Telegram and webhook sinks are enabled only by config and send only to a configured allowlist of chat ids and URLs (R39); RISK and RUG rosters do not carry `notify.alert` (R35) and escalate via `desk.event_emit kind=escalation`, which the supervisor relays to `notify.alert`; the alert `kind` enum includes the escalation kinds `bot_restart_exhausted, heartbeat_stale, persistence_down, clock_skew, ledger_inconsistent` (R40); sends are rate limited and idempotent.
-- [ ] **TOOL-007**: The desk core eight `desk.{brief,docs_search,memory_retain,memory_recall,ownership_resolve,receipt_check,event_emit,doctor}` (section 9) are resolvable by every seat, `desk.event_emit` `kind` follows R32 snake_case, and `desk.doctor check` is the same code path as `pumpgrok doctor`.
-- [ ] **TOOL-008**: Every registered tool has a pydantic v2 input and output model (`additionalProperties: false`), a `side_effect` in `{read, paper-write}`, `timeout_s`, a `RetryPolicy` and a `rate_limit_key`; money fields are integers in base units named `<x>_lamports: int` and `<x>_units: int` (token base units), prices and ratios are `Decimal` strings, no float money anywhere, and only the CLI boundary accepts `--size-sol` (R28); untrusted upstream payloads (pump.fun, PumpPortal, Jupiter, RPC, x.ai) are parsed with `extra="ignore"` models and a malformed payload yields a typed error (`DataStale`/`BLIND`), never an escaping exception.
-- [ ] **TOOL-009**: The least-privilege tests of `docs/design/interfaces.md` section 4 pass: no seat resolves a live-write tool, only sniper and exit resolve `exec.place`, exit cannot place a BUY, chief has no exposure tools, shill's only write is `journal.append`, every roster name exists in the registry, and `tools/social/` (bot-07-shill, R31) issues GET only.
+- [x] **TOOL-005**: `portfolio.{ledger_read,ledger_write,exposure,pnl}`, `risk.{check_limits,drawdown,kill_switch,halt_status}` and `journal.{append,render_report}` (sections 5, 6, 8) exist with the catalog schemas; `risk.check_limits` reports the R34 rule ids; `risk.kill_switch` accepts only `set` and `flatten_request` (R22); `journal.append` and `desk.event_emit` `kind` is the snake_case form of an R32 event type and seats may write only `journal_note` and `escalation` (every other type is appended by the engine, risk, adapter or supervisor); `portfolio.ledger_write` is `PermissionDenied` for all ten seats (`docs/design/interfaces.md` section 4).
+- [x] **TOOL-006**: `notify.alert` (section 7) dispatches through an abstract `Notifier` whose stdout and file sinks are always on and whose Telegram and webhook sinks are enabled only by config and send only to a configured allowlist of chat ids and URLs (R39); RISK and RUG rosters do not carry `notify.alert` (R35) and escalate via `desk.event_emit kind=escalation`, which the supervisor relays to `notify.alert`; the alert `kind` enum includes the escalation kinds `bot_restart_exhausted, heartbeat_stale, persistence_down, clock_skew, ledger_inconsistent` (R40); sends are rate limited and idempotent.
+- [x] **TOOL-007**: The desk core eight `desk.{brief,docs_search,memory_retain,memory_recall,ownership_resolve,receipt_check,event_emit,doctor}` (section 9) are resolvable by every seat, `desk.event_emit` `kind` follows R32 snake_case, and `desk.doctor check` is the same code path as `pumpgrok doctor`.
+- [x] **TOOL-008**: Every registered tool has a pydantic v2 input and output model (`additionalProperties: false`), a `side_effect` in `{read, paper-write}`, `timeout_s`, a `RetryPolicy` and a `rate_limit_key`; money fields are integers in base units named `<x>_lamports: int` and `<x>_units: int` (token base units), prices and ratios are `Decimal` strings, no float money anywhere, and only the CLI boundary accepts `--size-sol` (R28); untrusted upstream payloads (pump.fun, PumpPortal, Jupiter, RPC, x.ai) are parsed with `extra="ignore"` models and a malformed payload yields a typed error (`DataStale`/`BLIND`), never an escaping exception.
+- [x] **TOOL-009**: The least-privilege tests of `docs/design/interfaces.md` section 4 pass: no seat resolves a live-write tool, only sniper and exit resolve `exec.place`, exit cannot place a BUY, chief has no exposure tools, shill's only write is `journal.append`, every roster name exists in the registry, and `tools/social/` (bot-07-shill, R31) issues GET only.
 - [x] **TOOL-010**: `services/desk-gateway/` serves `/mcp/<seat>` from the in-process registry so that `tools/list` equals `contracts/tool-rosters/<seat>.yaml` plus `_core.yaml`, transport names are the dotted ids with `.` replaced by `_` derived at exposure time and never stored (R19), and a token for seat A on `/mcp/<seat B>` is 403.
 - [ ] **TOOL-011**: Operator can run every verb of `docs/TOOL_CATALOG.md` section 12 plus the R12 and R40 additions; each verb is a thin wrapper over catalog tools and prints JSON by default; `pumpgrok paper buy | sell` requires `--ticket --mint --size-sol --slippage-bps --approval-id`.
 
@@ -52,7 +52,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 
 - [x] **SKILL-001**: The twelve new skills of `docs/design/interfaces.md` section 3.2 exist (35 skills total) with frontmatter `name, description, bots, gates, required_tools, permissions.max_side_effect` and the L1/L2 body; `skills/desk-post-trade-review/**` is owned by bot-09-journal (R36).
 - [x] **SKILL-002**: `tests/test_skill_manifests.py` passes: every `skills/*/SKILL.md` parses into `SkillManifest`, `name == dirname`, every `required_tools` entry is granted to every listed bot, and `permissions.max_side_effect != LIVE_WRITE`.
-- [ ] **SKILL-003**: `tests/test_bot_manifests.py` passes: exactly ten `BotManifest`s load from `contracts/tool-rosters/*.yaml`, ids `bot-00-chief` .. `bot-09-journal`, `writes_to_exchange` true only for sniper and exit, each with the R20 `risk_budget` keys and forbidden actions, every roster 8..15 tools including the core eight with RISK = 15 and RUG = 15 exactly as R35 lists them.
+- [x] **SKILL-003**: `tests/test_bot_manifests.py` passes: exactly ten `BotManifest`s load from `contracts/tool-rosters/*.yaml`, ids `bot-00-chief` .. `bot-09-journal`, `writes_to_exchange` true only for sniper and exit, each with the R20 `risk_budget` keys and forbidden actions, every roster 8..15 tools including the core eight with RISK = 15 and RUG = 15 exactly as R35 lists them.
 - [x] **SKILL-004**: Each seat prompt source lists its `load="always"` skills and a `<tools contract="contracts/tool-rosters/<seat>.yaml">` section; `agents/<seat>.md` and the plugin manifests enumerate the same skills (description count updated from "23 skills"); `./scripts/check.sh` passes.
 
 ### Paper trading (PAPER)
@@ -155,20 +155,20 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | STRUCT-006 | Phase 4 Paper Trading and Autonomy | Pending |
 | STRUCT-007 | Phase 2 Restructure | Complete |
 | STRUCT-008 | Phase 1 Foundation | Complete |
-| TOOL-001 | Phase 3 Tools and Skills | Pending |
-| TOOL-002 | Phase 3 Tools and Skills | Pending |
-| TOOL-003 | Phase 3 Tools and Skills | Pending |
+| TOOL-001 | Phase 3 Tools and Skills | Complete |
+| TOOL-002 | Phase 3 Tools and Skills | Complete |
+| TOOL-003 | Phase 3 Tools and Skills | Complete |
 | TOOL-004 | Phase 3 Tools and Skills | Pending |
-| TOOL-005 | Phase 3 Tools and Skills | Pending |
-| TOOL-006 | Phase 3 Tools and Skills | Pending |
-| TOOL-007 | Phase 3 Tools and Skills | Pending |
-| TOOL-008 | Phase 3 Tools and Skills | Pending |
-| TOOL-009 | Phase 3 Tools and Skills | Pending |
+| TOOL-005 | Phase 3 Tools and Skills | Complete |
+| TOOL-006 | Phase 3 Tools and Skills | Complete |
+| TOOL-007 | Phase 3 Tools and Skills | Complete |
+| TOOL-008 | Phase 3 Tools and Skills | Complete |
+| TOOL-009 | Phase 3 Tools and Skills | Complete |
 | TOOL-010 | Phase 3 Tools and Skills | Complete |
 | TOOL-011 | Phase 3 Tools and Skills | Pending |
 | SKILL-001 | Phase 3 Tools and Skills | Complete |
 | SKILL-002 | Phase 3 Tools and Skills | Complete |
-| SKILL-003 | Phase 3 Tools and Skills | Pending |
+| SKILL-003 | Phase 3 Tools and Skills | Complete |
 | SKILL-004 | Phase 3 Tools and Skills | Complete |
 | PAPER-001 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-002 | Phase 4 Paper Trading and Autonomy | Pending |

@@ -10,7 +10,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 
 - [x] **Phase 1: Foundation** - Package, layered config, ownership, ported gates, contracts, network-blocked harness and ledger with a skip-only replay cycle (19 requirements) (completed 2026-10-21)
 - [x] **Phase 2: Restructure** - Read-only tools and vendor engine ported into `src/pumpgrok` with characterization tests, skills rewritten, CLI verbs exposed (5 requirements) (completed 2026-10-21)
-- [ ] **Phase 3: Tools and Skills** - Dotted typed tool layer, least-privilege rosters, desk gateway and the 35-skill set (15 requirements)
+- [x] **Phase 3: Tools and Skills** - Dotted typed tool layer, least-privilege rosters, desk gateway and the 35-skill set (15 requirements) (completed 2026-10-21)
 - [ ] **Phase 4: Paper Trading and Autonomy** - Curve-faithful paper fills, risk engine, deterministic replay, supervised ten-seat loop, reports, live refusal and vendor retirement (24 requirements)
 - [ ] **Phase 5: Hardening** - Multi-day soak, fault injection, metrics, runbooks, go-live gate proof and security evidence (8 requirements)
 
@@ -64,7 +64,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 
   1. `uv run pytest -q tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py tests/characterization/test_jupiter_quote.py tests/characterization/test_priority_fee.py` exits 0, reproducing the 6 root unittest cases that exercise these four ported tools (STRUCT-002)
   2. `cd vendor/grokbot-pumpfun && python3 -m pytest -q` exits 0, `uv run pytest -q tests/characterization/` exits 0, and `! grep -rlP '\p{Cyrillic}' src/pumpgrok/engine/` prints nothing (STRUCT-003)
-  3. `test "$(grep -l '^bots:' skills/*/SKILL.md | wc -l)" -eq 23 && test "$(grep -l '^gates:' skills/*/SKILL.md | wc -l)" -eq 23 && ! grep -rn -e lite-api -e '--max-micro' skills/` exits 0 (STRUCT-007)
+  3. `test "$(ls -d skills/*/ | wc -l)" -eq "$(grep -l '^bots:' skills/*/SKILL.md | wc -l)" && test "$(grep -l '^bots:' skills/*/SKILL.md | wc -l)" -eq "$(grep -l '^gates:' skills/*/SKILL.md | wc -l)" && ! grep -rn -e lite-api -e '--max-micro' skills/` exits 0 (STRUCT-007). Superseded by Phase 3 SC2a: the count of 23 became 35 when Phase 3 added twelve skills, so the invariant is now every skill directory carrying both bots and gates frontmatter.
   4. `uv run pumpgrok --help` exits 0, and `uv run pumpgrok paper buy --help` lists `--ticket`, `--mint`, `--size-sol`, `--slippage-bps` and `--approval-id` (STRUCT-005)
   5. `uv run pytest -q tests/safety/test_no_signing_outside_live_stub.py` exits 0 (SEC-003)
 
@@ -111,7 +111,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] 03-04-PLAN.md
 - [x] 03-05-PLAN.md
 - [x] 03-06-PLAN.md
-- [ ] 03-07-PLAN.md
+- [x] 03-07-PLAN.md
 
 ### Phase 4: Paper Trading and Autonomy
 
@@ -178,6 +178,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
-| 3. Tools and Skills | 6/7 | In Progress|  |
+| 3. Tools and Skills | 7/7 | Complete    | 2026-10-21 |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
 | 5. Hardening | 0/TBD | Not started | - |
