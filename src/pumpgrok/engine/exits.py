@@ -93,3 +93,21 @@ def exit_signal(
             )
 
     return None
+
+
+def apply_price(
+    position: ExitPosition,
+    price: float,
+    cfg: ExitsSettings,
+    now: float,
+) -> ExitSignal | None:
+    """Ratchet the trailing-stop peak, then evaluate. Single entry point.
+
+    ``exit_signal`` stays pure (it never writes ``peak_price``), so every
+    caller that only calls it must replicate the ratchet or the trailing
+    stop never advances. Call this instead: the mutation is the contract,
+    and the watcher routes through here so the invariant lives in one
+    place instead of two modules.
+    """
+    position.peak_price = max(position.peak_price, price)
+    return exit_signal(position, price, cfg, now)

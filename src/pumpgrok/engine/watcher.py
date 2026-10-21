@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
 from pumpgrok.config.settings import ExitsSettings
-from pumpgrok.engine.exits import exit_signal
+from pumpgrok.engine.exits import apply_price
 from pumpgrok.engine.models import ExitPosition
 from pumpgrok.replay.clock import Clock
 
@@ -103,13 +103,10 @@ class PositionWatcher:
                 continue
             self.price_failures.pop(position.mint, None)
 
-            if price > position.peak_price:
-                peak_grew = peak_grew or (
-                    price >= position.peak_price * self.PEAK_PERSIST_STEP
-                )
-                position.peak_price = price
-
-            signal = exit_signal(position, price, self.book.exit_config, now)
+            old_peak = position.peak_price
+            signal = apply_price(position, price, self.book.exit_config, now)
+            if price > old_peak:
+                peak_grew = peak_grew or (price >= old_peak * self.PEAK_PERSIST_STEP)
             if signal is None:
                 continue
 
