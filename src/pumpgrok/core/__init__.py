@@ -14,6 +14,7 @@ from pumpgrok.core.adapter import (
     SimulationResult,
 )
 from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.atomic_write import atomic_write_json
 from pumpgrok.core.bot import Bot, BotManifest, RiskBudget, Schedule, ToolGrant
 from pumpgrok.core.correlation import child_span, is_child_span, root_of
 from pumpgrok.core.datasource import DataSource, Freshness, Health, HealthStatus
@@ -97,6 +98,7 @@ __all__ = [
     "ToolRateLimited",
     "ToolTimeout",
     "ULID_RE",
+    "atomic_write_json",
     "bind_correlation",
     "canonical_json",
     "child_span",
