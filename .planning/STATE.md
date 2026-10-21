@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 
 ## Current Position
 
-Phase: 3 (tools-and-skills) — EXECUTING (wave 2)
-Plan: 03-02 complete (read-side tools, safety, social)
-Status: 03-01 + 03-02 committed; 03-03+ pending orchestrator dispatch
-Last activity: 2026-10-21 — Phase 3 plan 03-02 executed (6 commits, plan pytest exit 0, full suite exit 0)
+Phase: 3 (tools-and-skills) — EXECUTING (wave 3)
+Plan: 03-03 complete (write-side tools, notify, desk eight; 4 commits, plan pytest exit 0, full suite exit 0)
+Status: 03-01 + 03-02 + 03-03 committed; 03-04+ pending orchestrator dispatch
+Last activity: 2026-10-21 — Phase 3 plan 03-03 executed (4 task commits, full suite 641 green)
 
 Progress: [████░░░░░░] 40%
 
