@@ -1,11 +1,12 @@
 """Command line: parse, check, main (FOUND-013, R30, R37; port of grokbot `pipeline.py` shape).
 
 Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and `doctor`;
-every other verb (`paper buy|sell`, `scout`, `risk`, `chief`, `rug`, `journal`,
-`ticket`, `state`, `killswitch`, `live confirm`, `replay`, `audit`, `verify`,
-`report`) parses its flags and returns not-yet-implemented (exit 5) until its
-subsystem lands. `paper` and `state` require `--seat` and refuse `sniper`/`exit`.
-
+`paper buy|sell` resolve `exec.simulate` and `exec.place` through the registry
+and fail closed on unknown `--approval-id` (exit 1, R63); every other verb
+(`scout`, `risk`, `chief`, `rug`, `journal`, `ticket`, `state`, `killswitch`,
+`live confirm`, `replay`, `audit`, `verify`, `report`) parses its flags and
+returns not-yet-implemented (exit 5) until its subsystem lands. `paper` and
+`state` require `--seat` and refuse `sniper`/`exit`.
 Exit codes: 0 ok; 1 config or usage; 2 ledger inconsistent; 3 live refused; 4 corrupt
 fixture; 5 not implemented. argparse's own exit 2 is overridden so that 2 means only a
 ledger inconsistency. Stdout carries the doctor report and the engine decision;
@@ -21,15 +22,16 @@ ticks to evidence-less engine candidates -> run the pure filter stage -> print o
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, NoReturn, TextIO
+from pydantic import ValidationError
 
 from pumpgrok.config.settings import (
     ConfigError,
@@ -38,16 +40,20 @@ from pumpgrok.config.settings import (
     load_settings,
     refuse_cli_secrets,
 )
+from pumpgrok.contracts.projection import short_to_seat
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.idempotency import derive_idempotency_key
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.doctor import doctor_report
 from pumpgrok.engine.pipeline import decide_replay, format_decision
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore, recreate_ledger_db
 from pumpgrok.logging.json import bind_seat, setup_logging
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, WallClock
 from pumpgrok.replay.fixtures import CorruptFixture, event_epoch, load_dataset
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
 EXIT_CONFIG = 1
@@ -123,9 +129,16 @@ def size_sol_to_lamports(size_sol: Decimal) -> int:
     return int((size_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def _not_implemented(verb: str) -> int:
-    """Absent-subsystem contract: fixed JSON on stdout, one stderr line, exit 5."""
-    _say(sys.stdout, json.dumps({"ok": False, "status": "not-yet-implemented", "verb": verb}))
+def _not_implemented(verb: str, intent: dict[str, Any] | None = None) -> int:
+    """Absent-subsystem contract: fixed JSON on stdout, one stderr line, exit 5.
+
+    Human-only verbs (R22) record their parsed intent shape in the envelope
+    so the Phase 4 backend knows exactly what was requested.
+    """
+    envelope: dict[str, Any] = {"ok": False, "status": "not-yet-implemented", "verb": verb}
+    if intent is not None:
+        envelope["intent"] = intent
+    _say(sys.stdout, json.dumps(envelope))
     _say(sys.stderr, f"not implemented: `{verb}` is not yet implemented in this release")
     return EXIT_NOT_IMPLEMENTED
 
@@ -136,6 +149,103 @@ def _refuse_forbidden_seat(seat: str, verb: str) -> int | None:
         _say(sys.stderr, f"refused: seat {seat!r} is a forbidden owner for `{verb}`")
         return EXIT_CONFIG
     return None
+
+
+_EXIT_BY_CODE = {
+    "not_yet_implemented": EXIT_NOT_IMPLEMENTED,
+    "ledger_unavailable": EXIT_LEDGER,
+    "live_gate": EXIT_LIVE,
+}
+
+
+def _exit_for_code(code: str) -> int:
+    """Map a tool error code to the CLI exit contract (docstring); unknown codes exit 1."""
+    return _EXIT_BY_CODE.get(code, EXIT_CONFIG)
+
+
+def _tool_error(verb: str, code: str, message: str) -> int:
+    """Print the JSON error envelope (T-03-07-03: code+message only) with the mapped exit."""
+    _say(sys.stdout, json.dumps({"ok": False, "code": code, "message": message}))
+    _say(sys.stderr, f"{verb} failed: {code}: {message}")
+    return _exit_for_code(code)
+
+
+def _repo_root() -> Path:
+    """Repo root for repo-anchored tool inputs (ownership.yaml, gates dir)."""
+    return Path(__file__).resolve().parents[2]
+
+
+def _seat_manifest_id(seat: str) -> str:
+    """Map a CLI --seat to a roster seat id.
+
+    Accepts a roster short (chief, scout, ...), the operator seat ``desk``
+    (the console acts under the supervisor seat until Phase 4 operator
+    identity lands with approvals), or a full seat id (bot-04-sniper).
+    Unknown values are usage errors. The sniper/exit string filter in
+    :func:`_refuse_forbidden_seat` stays a policy layer; the control is the
+    registry grant plus the approval record (R63).
+    """
+    if seat == "desk":
+        return "bot-00-chief"
+    shorts = short_to_seat()
+    if seat in shorts:
+        return shorts[seat]
+    return seat
+
+
+async def _with_tools(
+    verb: str,
+    seat: str,
+    settings: Settings,
+    capabilities: Sequence[str],
+    use: Callable[[list[Any]], Awaitable[int]],
+) -> int:
+    """Build the operator registry, resolve ``seat``, find every capability (I1).
+
+    Each find refusal prints the JSON envelope with the mapped exit before
+    anything runs. Otherwise ``use`` receives the resolved tools and decides:
+    call one (functional backends), fail on the approval gate (paper), or
+    return not-yet-implemented (Phase 4 orchestration). No tool implementation
+    is ever imported or called directly here; everything goes through find().
+    """
+    reg, manifests, client = build_operator_registry(
+        data_dir=Path("var") / "desk",
+        repo_root=_repo_root(),
+        settings=settings,
+    )
+    try:
+        try:
+            manifest = manifests[_seat_manifest_id(seat)]
+        except KeyError:
+            raise UsageError(f"bad --seat {seat!r}: unknown seat") from None
+        factory = IdFactory(WallClock(), make_rng(settings.replay.seed))
+        with bind_correlation(CorrelationId.new(factory)):
+            tools: list[Any] = []
+            for capability in capabilities:
+                try:
+                    tools.append(
+                        reg.find(
+                            capability,
+                            max_side_effect=SideEffect.PAPER_WRITE,
+                            bot=manifest,
+                        )
+                    )
+                except PumpgrokError as exc:
+                    return _tool_error(verb, exc.code, exc.message)
+            return await use(tools)
+    finally:
+        await client.aclose()
+
+
+def _run_wired(
+    verb: str,
+    seat: str,
+    settings: Settings,
+    capabilities: Sequence[str],
+    use: Callable[[list[Any]], Awaitable[int]],
+) -> int:
+    """Run one wired verb: registry build, find (I1), then the verb tail."""
+    return asyncio.run(_with_tools(verb, seat, settings, capabilities, use))
 
 
 def _add_seat(parser: argparse.ArgumentParser) -> None:
@@ -393,12 +503,27 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
     if lamports > settings.risk.paper_equity_lamports:
         _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
         return EXIT_CONFIG
-    # R63: no paper trade without a valid approval. Phase 3 has no
-    # approval-issue/consume path (RiskEngine check plus the PaperAdapter
-    # place transaction land in Phase 4), so every presented approval_id is
-    # unknown: fail closed with exit 1 and write nothing.
-    _say(sys.stderr, f"refused: no valid approval_id for `{verb}` (R63)")
-    return EXIT_CONFIG
+
+    async def use(_tools: list[Any]) -> int:
+        # R63: no paper trade without a valid approval. Phase 3 has no
+        # approval-issue/consume path (RiskEngine check plus the PaperAdapter
+        # place transaction land in Phase 4), so every presented approval_id
+        # is unknown: fail closed with exit 1 and write nothing. A fresh
+        # decision_id is minted per invocation here in Phase 4 (R23).
+        _say(
+            sys.stdout,
+            json.dumps(
+                {
+                    "ok": False,
+                    "code": "approval_unknown",
+                    "message": f"refused: no valid approval_id for `{verb}` (R63)",
+                }
+            ),
+        )
+        _say(sys.stderr, f"refused: no valid approval_id for `{verb}` (R63)")
+        return EXIT_CONFIG
+
+    return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 
 
 def _state(args: argparse.Namespace) -> int:
