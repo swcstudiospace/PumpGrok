@@ -174,7 +174,9 @@ class ToolRegistry:
                 continue
             if spec.side_effect.exceeds(max_side_effect):
                 if capability == spec.name:
-                    self._refuse(bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid))
+                    self._refuse(
+                        bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid)
+                    )
                 continue
             self._audit(
                 GrantAudit(

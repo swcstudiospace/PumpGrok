@@ -11,8 +11,9 @@ the slice with a test-only probe registered through the returned registry.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 import random
+from collections.abc import Awaitable, Callable
+
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
