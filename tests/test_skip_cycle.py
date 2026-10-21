@@ -79,6 +79,7 @@ def test_skip_cycle_writes_one_replay_journal_note(
     assert cycle_end["correlation_id"] == row[0]
     assert cycle_end["data"]["events_read"] == 4
 
+
 def test_second_run_recreates_the_replay_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
