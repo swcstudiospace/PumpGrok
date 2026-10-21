@@ -102,18 +102,18 @@ gaps:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Locked install: `uv sync --frozen` green | ✓ VERIFIED | `uv sync --frozen --group dev` → "Checked 53 packages"; `uv lock --check` exit 0; pyproject/uv.lock/Makefile/`.python-version` exist |
-| 2 | `make lint` green (ruff check + format --check) | ✗ FAILED | `ruff check .` → 171 issues (src 4, tests 21, ci 24, tools 122 legacy); `ruff format --check` → 15 files would reformat |
-| 3 | `make typecheck` green (mypy --strict src/) | ✗ FAILED | 4 errors: events.py:341,349 `type-arg` on bare `dict`; registry.py:27 + core/__init__.py:30 `Clock` not explicitly exported from ids |
-| 4 | `make test` green (`uv run pytest -q`) | ✓ VERIFIED | 301 passed, exit 0 (incl. 159 ci/tests). Note: bare `uv run pytest -q` prints dots; count confirmed via verbose run |
-| 5 | `make audit` green (pip-audit over uv export) | ✓ VERIFIED | `pip-audit -r /tmp/pumpgrok-req.txt --strict` → "No known vulnerabilities found", exit 0 |
-| 6 | Layered settings load, refuse forbidden/unknown/key-bearing inputs, default paper, no root config/ | ✓ VERIFIED | settings tests pass in suite; `test ! -d config` ✓; `grep -rn -e JitoConfig -e wallet_private_key src/pumpgrok` empty ✓ |
-| 7 | Core contracts hold (registry I1–I5, LIVE_WRITE refusal, ULIDs, uuid ban) | ✓ VERIFIED | tests/core pass (incl. `test_uuid_is_banned_from_src_pumpgrok`); F841 fix confirmed (commit 67a6640 removed the dead `bot` binding; no F841 in current ruff output for that file) |
-| 8 | Ownership + ported gates green (SC2) | ✓ VERIFIED | check_ownership --validate-manifest exit 0 (10 bots, 170 rules, 329 paths); check_desk_integrity --repo . exit 0 (G-7 PASS, 10 rosters); check_secrets --base origin/main exit 0 (222 files); ci/tests 159 passed |
-| 9 | Contracts tree + prompt pipeline byte-stable | ✗ FAILED | Rosters/prompts --check pass; BUT generate-event-schemas.py --check exits 1 (3 drifted schemas). Committed inputs identical to generation commit (EVENTS_IDENTICAL/GEN_IDENTICAL) yet output differs → schemas were generated outside the locked env |
-| 10 | Skip-only replay writes exactly one source=replay JournalNote; live refused exit 3 | ✓ VERIFIED | Observed: replay exit 0, `cycle_end` log with correlation_id; sqlite count = 1 ✓; `run --mode live --once` → LIVE_EXIT:3 with 8/9 unmet preconditions ✓ |
-| 11 | JSON logs redacted + correlation chain (OBS-001/002) | ✓ VERIFIED | tests/test_logging.py + test_correlation.py pass; replay stdout shows `correlation_id`, `seat`, `mode`, redacted shape |
-| 12 | 01-09 container/docs/hygiene complete (SC4) | ✗ FAILED | No Dockerfile/compose/.dockerignore; 6 tracked *.pyc; no docs/VENDOR_PIN.md; check.sh exits 0 but is the legacy script (still references vendor PUMPGROK.md per MIGRATION_MAP:166) |
+| 1 | Locked install: `uv sync --frozen` green | PASS VERIFIED | `uv sync --frozen --group dev` → "Checked 53 packages"; `uv lock --check` exit 0; pyproject/uv.lock/Makefile/`.python-version` exist |
+| 2 | `make lint` green (ruff check + format --check) | FAIL FAILED | `ruff check .` → 171 issues (src 4, tests 21, ci 24, tools 122 legacy); `ruff format --check` → 15 files would reformat |
+| 3 | `make typecheck` green (mypy --strict src/) | FAIL FAILED | 4 errors: events.py:341,349 `type-arg` on bare `dict`; registry.py:27 + core/__init__.py:30 `Clock` not explicitly exported from ids |
+| 4 | `make test` green (`uv run pytest -q`) | PASS VERIFIED | 301 passed, exit 0 (incl. 159 ci/tests). Note: bare `uv run pytest -q` prints dots; count confirmed via verbose run |
+| 5 | `make audit` green (pip-audit over uv export) | PASS VERIFIED | `pip-audit -r /tmp/pumpgrok-req.txt --strict` → "No known vulnerabilities found", exit 0 |
+| 6 | Layered settings load, refuse forbidden/unknown/key-bearing inputs, default paper, no root config/ | PASS VERIFIED | settings tests pass in suite; `test ! -d config` PASS; `grep -rn -e JitoConfig -e wallet_private_key src/pumpgrok` empty PASS |
+| 7 | Core contracts hold (registry I1–I5, LIVE_WRITE refusal, ULIDs, uuid ban) | PASS VERIFIED | tests/core pass (incl. `test_uuid_is_banned_from_src_pumpgrok`); F841 fix confirmed (commit 67a6640 removed the dead `bot` binding; no F841 in current ruff output for that file) |
+| 8 | Ownership + ported gates green (SC2) | PASS VERIFIED | check_ownership --validate-manifest exit 0 (10 bots, 170 rules, 329 paths); check_desk_integrity --repo . exit 0 (G-7 PASS, 10 rosters); check_secrets --base origin/main exit 0 (222 files); ci/tests 159 passed |
+| 9 | Contracts tree + prompt pipeline byte-stable | FAIL FAILED | Rosters/prompts --check pass; BUT generate-event-schemas.py --check exits 1 (3 drifted schemas). Committed inputs identical to generation commit (EVENTS_IDENTICAL/GEN_IDENTICAL) yet output differs → schemas were generated outside the locked env |
+| 10 | Skip-only replay writes exactly one source=replay JournalNote; live refused exit 3 | PASS VERIFIED | Observed: replay exit 0, `cycle_end` log with correlation_id; sqlite count = 1 PASS; `run --mode live --once` → LIVE_EXIT:3 with 8/9 unmet preconditions PASS |
+| 11 | JSON logs redacted + correlation chain (OBS-001/002) | PASS VERIFIED | tests/test_logging.py + test_correlation.py pass; replay stdout shows `correlation_id`, `seat`, `mode`, redacted shape |
+| 12 | 01-09 container/docs/hygiene complete (SC4) | FAIL FAILED | No Dockerfile/compose/.dockerignore; 6 tracked *.pyc; no docs/VENDOR_PIN.md; check.sh exits 0 but is the legacy script (still references vendor PUMPGROK.md per MIGRATION_MAP:166) |
 
 **Score:** 8/12 truths verified (0 present-but-unverified)
 
@@ -121,14 +121,14 @@ gaps:
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| pyproject.toml / uv.lock / Makefile / .python-version | locked install | ✓ VERIFIED | present; sync + lock --check green |
-| src/pumpgrok/config/{settings,overlays} | R30 loader, 3 overlays live.enabled=false | ✓ VERIFIED | tests pass; doctor `mode=paper` |
-| src/pumpgrok/core/* | interfaces/registry/ids/approvals | ✓ VERIFIED | WR-08 domain half closed (see gaps) |
-| src/pumpgrok/ledger/{store,events}.py | hash chain + 18 R32 models | ✓ VERIFIED | substantive + wired (replay writes sqlite; tamper/exit-4/5 tests pass) |
-| src/pumpgrok/{replay,harness,logging,execution/cli/doctor} | offline tests, clock/rng, redacted logs, live gate | ✓ VERIFIED | replay exit 0 observed; doctor exit 0 (6 present, 5 not-yet-implemented warns — expected pre-Phase-2..4) |
-| ownership.yaml + ci/gates/*.py + workflows + receipts + pre-commit | G-1..G-7, 3 workflows, 10 receipt dirs | ✓ VERIFIED | all exist; .receipts/bot-* x10, ci/gates.yml/security-pr.yml/ci.yml, .pre-commit-config.yaml |
-| contracts/{events x18,tool-rosters x11} + prompts pipeline | G-7 green, --check stable | ⚠️ PARTIAL | tree exists, G-7 green, prompts --check green; 3 schemas drifted |
-| Dockerfile / compose / VENDOR_PIN / docs | 01-09 | ✗ MISSING | plan not executed |
+| pyproject.toml / uv.lock / Makefile / .python-version | locked install | PASS VERIFIED | present; sync + lock --check green |
+| src/pumpgrok/config/{settings,overlays} | R30 loader, 3 overlays live.enabled=false | PASS VERIFIED | tests pass; doctor `mode=paper` |
+| src/pumpgrok/core/* | interfaces/registry/ids/approvals | PASS VERIFIED | WR-08 domain half closed (see gaps) |
+| src/pumpgrok/ledger/{store,events}.py | hash chain + 18 R32 models | PASS VERIFIED | substantive + wired (replay writes sqlite; tamper/exit-4/5 tests pass) |
+| src/pumpgrok/{replay,harness,logging,execution/cli/doctor} | offline tests, clock/rng, redacted logs, live gate | PASS VERIFIED | replay exit 0 observed; doctor exit 0 (6 present, 5 not-yet-implemented warns — expected pre-Phase-2..4) |
+| ownership.yaml + ci/gates/*.py + workflows + receipts + pre-commit | G-1..G-7, 3 workflows, 10 receipt dirs | PASS VERIFIED | all exist; .receipts/bot-* x10, ci/gates.yml/security-pr.yml/ci.yml, .pre-commit-config.yaml |
+| contracts/{events x18,tool-rosters x11} + prompts pipeline | G-7 green, --check stable | WARN PARTIAL | tree exists, G-7 green, prompts --check green; 3 schemas drifted |
+| Dockerfile / compose / VENDOR_PIN / docs | 01-09 | FAIL MISSING | plan not executed |
 
 ### Key Link Verification
 
@@ -146,30 +146,30 @@ gaps:
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| replay run | events_read=4, ledger_seq=1 | tests/fixtures/replay/smoke manifest | ✓ FLOWING | observed cycle_end JSON |
-| ledger sqlite | JournalNote row | skip-cycle writer | ✓ FLOWING | count = 1 queried |
-| live refusal | 8 unmet preconditions | live_gate nine R21 ids | ✓ FLOWING | printed block observed, exit 3 |
+| replay run | events_read=4, ledger_seq=1 | tests/fixtures/replay/smoke manifest | PASS FLOWING | observed cycle_end JSON |
+| ledger sqlite | JournalNote row | skip-cycle writer | PASS FLOWING | count = 1 queried |
+| live refusal | 8 unmet preconditions | live_gate nine R21 ids | PASS FLOWING | printed block observed, exit 3 |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| replay cycle | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` | exit 0, cycle_end | ✓ PASS |
-| ledger row | sqlite count JournalNote/source=replay | `1` | ✓ PASS |
-| live refusal | `uv run pumpgrok run --mode live --once` | exit 3, 8/9 unmet | ✓ PASS |
-| doctor | `uv run pumpgrok doctor` | exit 0, 6 present / 5 warned absent | ✓ PASS |
-| suite | `uv run pytest -q` | 301 passed | ✓ PASS |
-| ci suite | `python3 -m pytest ci/tests/` | 159 passed | ✓ PASS |
-| ownership | `check_ownership.py --validate-manifest` | exit 0 | ✓ PASS |
-| desk integrity | `check_desk_integrity.py --repo .` | G-7 PASS exit 0 | ✓ PASS |
-| secrets | `check_secrets.py --base origin/main` | exit 0, 222 files | ✓ PASS |
-| audit | `pip-audit --strict` | no vulns, exit 0 | ✓ PASS |
-| mypy | `uv run mypy src/` | 4 errors, exit 1 | ✗ FAIL |
-| ruff check | `uv run ruff check .` | 171 issues (src 4 / tests 21 / ci 24 / tools 122) | ✗ FAIL |
-| ruff format | `ruff format --check .` | 15 files reformat, exit 1 | ✗ FAIL |
-| schemas | `generate-event-schemas.py --check` | exit 1, 3 drifted | ✗ FAIL |
-| prompts/templates | `assemble-prompts.sh --check`, `generate-templates.py --check` | both exit 0 | ✓ PASS |
-| check.sh | `./scripts/check.sh` | exit 0 | ✓ PASS (legacy script; rewrite pending) |
+| replay cycle | `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` | exit 0, cycle_end | PASS PASS |
+| ledger row | sqlite count JournalNote/source=replay | `1` | PASS PASS |
+| live refusal | `uv run pumpgrok run --mode live --once` | exit 3, 8/9 unmet | PASS PASS |
+| doctor | `uv run pumpgrok doctor` | exit 0, 6 present / 5 warned absent | PASS PASS |
+| suite | `uv run pytest -q` | 301 passed | PASS PASS |
+| ci suite | `python3 -m pytest ci/tests/` | 159 passed | PASS PASS |
+| ownership | `check_ownership.py --validate-manifest` | exit 0 | PASS PASS |
+| desk integrity | `check_desk_integrity.py --repo .` | G-7 PASS exit 0 | PASS PASS |
+| secrets | `check_secrets.py --base origin/main` | exit 0, 222 files | PASS PASS |
+| audit | `pip-audit --strict` | no vulns, exit 0 | PASS PASS |
+| mypy | `uv run mypy src/` | 4 errors, exit 1 | FAIL FAIL |
+| ruff check | `uv run ruff check .` | 171 issues (src 4 / tests 21 / ci 24 / tools 122) | FAIL FAIL |
+| ruff format | `ruff format --check .` | 15 files reformat, exit 1 | FAIL FAIL |
+| schemas | `generate-event-schemas.py --check` | exit 1, 3 drifted | FAIL FAIL |
+| prompts/templates | `assemble-prompts.sh --check`, `generate-templates.py --check` | both exit 0 | PASS PASS |
+| check.sh | `./scripts/check.sh` | exit 0 | PASS PASS (legacy script; rewrite pending) |
 
 ### Probe Execution
 
@@ -179,25 +179,25 @@ No phase-declared `probe-*.sh` files exist; conventional `scripts/*/tests/probe-
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| FOUND-001 | 01-01 | uv_build package, lockfile, sync --frozen | ✓ SATISFIED | sync + lock --check green |
-| FOUND-002 | 01-01 | make lint typecheck test audit exit 0 | ✗ BLOCKED | lint + typecheck red; test + audit green |
-| FOUND-003 | 01-09 | compose builds + runs, doctor healthcheck | ✗ BLOCKED | no Dockerfile/compose (01-09 pending) |
-| FOUND-004 | 01-02 | layered settings, guards, no root config/ | ✓ SATISFIED | tests pass; no config/ dir |
-| FOUND-005 | 01-03 | core contracts, LIVE_WRITE refusal, ULIDs | ✓ SATISFIED | tests/core pass |
-| FOUND-006 | 01-06 | ownership.yaml + G-1 exit 0 | ✓ SATISFIED | observed exit 0 |
-| FOUND-007 | 01-06 | ported gates + ci/tests pass | ✓ SATISFIED | 159 passed |
-| FOUND-008 | 01-07 | contracts tree, 18 schemas, G-7 green | ⚠️ PARTIAL | tree + G-7 green; 3 schemas drifted; ApprovalRecorded lacks token_units |
-| FOUND-009 | 01-07 | prompts assemble, no placeholders | ✓ SATISFIED | both --check exit 0 |
-| FOUND-010 | 01-06 | receipts, workflows, scanners, pre-commit | ✓ SATISFIED | all artifacts exist; gate tests pass |
-| FOUND-011 | 01-09 | check.sh, docs, vendor pin | ⚠️ PARTIAL | check.sh exits 0 but legacy; docs/pin pending |
-| FOUND-012 | 01-05 | offline harness, clock/rng/fixtures, static guards | ✓ SATISFIED | static-guard + network-block tests pass |
-| FOUND-013 | 01-04 + 01-08 | hash-chained ledger + skip-only cycle | ✓ SATISFIED | replay exit 0 + JournalNote=1 observed |
-| STRUCT-001 | 01-09 | no tracked *.pyc/tissue.json, VENDOR_PIN 409e74c | ✗ BLOCKED | 6 tracked .pyc; no VENDOR_PIN.md |
-| STRUCT-008 | 01-02 | no JitoConfig/wallet_private_key | ✓ SATISFIED | grep empty |
-| OBS-001 | 01-08 | JSON logs, redaction | ✓ SATISFIED | logging tests pass; JSON observed |
-| OBS-002 | 01-08 | ULID correlation chain | ✓ SATISFIED | correlation tests pass; id observed |
-| SEC-001 | 01-06 | no committed secrets, gate on diff | ✓ SATISFIED | G-3 exit 0 |
-| SEC-002 | 01-02 | forbidden keys refused, values never printed | ✓ SATISFIED | forbidden-key + redaction tests pass |
+| FOUND-001 | 01-01 | uv_build package, lockfile, sync --frozen | PASS SATISFIED | sync + lock --check green |
+| FOUND-002 | 01-01 | make lint typecheck test audit exit 0 | FAIL BLOCKED | lint + typecheck red; test + audit green |
+| FOUND-003 | 01-09 | compose builds + runs, doctor healthcheck | FAIL BLOCKED | no Dockerfile/compose (01-09 pending) |
+| FOUND-004 | 01-02 | layered settings, guards, no root config/ | PASS SATISFIED | tests pass; no config/ dir |
+| FOUND-005 | 01-03 | core contracts, LIVE_WRITE refusal, ULIDs | PASS SATISFIED | tests/core pass |
+| FOUND-006 | 01-06 | ownership.yaml + G-1 exit 0 | PASS SATISFIED | observed exit 0 |
+| FOUND-007 | 01-06 | ported gates + ci/tests pass | PASS SATISFIED | 159 passed |
+| FOUND-008 | 01-07 | contracts tree, 18 schemas, G-7 green | WARN PARTIAL | tree + G-7 green; 3 schemas drifted; ApprovalRecorded lacks token_units |
+| FOUND-009 | 01-07 | prompts assemble, no placeholders | PASS SATISFIED | both --check exit 0 |
+| FOUND-010 | 01-06 | receipts, workflows, scanners, pre-commit | PASS SATISFIED | all artifacts exist; gate tests pass |
+| FOUND-011 | 01-09 | check.sh, docs, vendor pin | WARN PARTIAL | check.sh exits 0 but legacy; docs/pin pending |
+| FOUND-012 | 01-05 | offline harness, clock/rng/fixtures, static guards | PASS SATISFIED | static-guard + network-block tests pass |
+| FOUND-013 | 01-04 + 01-08 | hash-chained ledger + skip-only cycle | PASS SATISFIED | replay exit 0 + JournalNote=1 observed |
+| STRUCT-001 | 01-09 | no tracked *.pyc/tissue.json, VENDOR_PIN 409e74c | FAIL BLOCKED | 6 tracked .pyc; no VENDOR_PIN.md |
+| STRUCT-008 | 01-02 | no JitoConfig/wallet_private_key | PASS SATISFIED | grep empty |
+| OBS-001 | 01-08 | JSON logs, redaction | PASS SATISFIED | logging tests pass; JSON observed |
+| OBS-002 | 01-08 | ULID correlation chain | PASS SATISFIED | correlation tests pass; id observed |
+| SEC-001 | 01-06 | no committed secrets, gate on diff | PASS SATISFIED | G-3 exit 0 |
+| SEC-002 | 01-02 | forbidden keys refused, values never printed | PASS SATISFIED | forbidden-key + redaction tests pass |
 
 All 19 phase requirement IDs accounted for (13 satisfied, 2 partial, 4 blocked). No orphaned IDs: every ID maps to exactly one executed-or-pending plan.
 
@@ -206,8 +206,8 @@ All 19 phase requirement IDs accounted for (13 satisfied, 2 partial, 4 blocked).
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
 | (none blocking) | — | `TBD/FIXME/XXX` in phase-touched src | — | `grep` finds no debt markers in src/pumpgrok |
-| tools/*.py (legacy) | many | 122 ruff issues (I001, UP-*, T201, PLR0912, …) | ℹ️ Info | legacy dir Phase 2 removes; counts against `ruff check .` until scoped |
-| tests/**, ci/** | many | B017/SIM117/PLC0415/E501 style | ⚠️ Warning | test-only style; no behavior impact |
+| tools/*.py (legacy) | many | 122 ruff issues (I001, UP-*, T201, PLR0912, …) | ℹ Info | legacy dir Phase 2 removes; counts against `ruff check .` until scoped |
+| tests/**, ci/** | many | B017/SIM117/PLC0415/E501 style | WARN Warning | test-only style; no behavior impact |
 
 ### Open Items From This Run
 

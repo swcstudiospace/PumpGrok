@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lints the PumpGrok repository's instruction files.
-# Stdlib Python only; no network.
+# Stdlib Python only; no network. Keep this file ASCII (research Pitfall 10).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -59,16 +59,11 @@ for d in skills:
 # ------------------------------------------------------------------
 agents = sorted(glob.glob("agents/*.md"))
 agent_names = set()
-writers = []
 for path in agents:
     if os.path.basename(path) == "README.md":
         continue
     fm, body = frontmatter(path)
     stem = os.path.basename(path)[:-3]
-    name = fm.get("name")
-    if name and name.lower() != stem.lower() and name != stem.upper():
-        # allow CHIEF vs chief
-        pass
     agent_names.add(stem)
     for key in ("title", "description"):
         if key not in fm:
@@ -76,17 +71,6 @@ for path in agents:
     for s in fm.get("skills", []) or []:
         if s not in skill_names and skill_names:
             err(f"{path}: references unknown skill '{s}'")
-    writes = str(fm.get("writes_to_exchange", "false")).lower()
-    if writes in ("true", "yes", "1"):
-        writers.append(stem)
-
-# One-writer style rule adapted for PumpGrok:
-# Exactly the expected write agents should be present (SNIPER for buys, EXIT for sells)
-expected_writers = {"sniper", "exit"}
-actual_writers = {w.lower() for w in writers}
-if actual_writers and not actual_writers.issubset(expected_writers | {"sniper.md", "exit.md"}):
-    # soft check – warn but do not hard-fail if skills not yet fully materialised
-    pass
 
 # ------------------------------------------------------------------
 # Security constitution presence (spot-check)
@@ -112,14 +96,13 @@ if not os.path.exists("rules/pumpgrok-team.mdc"):
     err("rules/pumpgrok-team.mdc is missing")
 
 # ------------------------------------------------------------------
-# Vendored engine (in-tree files, not a gitlink)
+# Vendor pin: the upstream pin lives in docs/VENDOR_PIN.md (STRUCT-001)
 # ------------------------------------------------------------------
-for path in (
-    "vendor/grokbot-pumpfun/src/pipeline.py",
-    "vendor/grokbot-pumpfun/PUMPGROK.md",
-):
-    if not os.path.exists(path):
-        err(f"{path} is missing")
+pin_doc = "docs/VENDOR_PIN.md"
+if not os.path.exists(pin_doc):
+    err(f"{pin_doc} is missing")
+elif "409e74c905faa0e9de42e918efe2c604f206856e" not in open(pin_doc, encoding="utf-8").read():
+    err(f"{pin_doc} does not record the vendor pin 409e74c905faa0e9de42e918efe2c604f206856e")
 
 # ------------------------------------------------------------------
 # Hermes helper scripts must be executable (./scripts/...)
@@ -135,12 +118,54 @@ for path in (
         err(f"{path} is not executable")
 
 # ------------------------------------------------------------------
-# No emoji in instruction files
+# Placeholder organisation: `your-org` may remain only in the allowlisted manifests and
+# setup docs until STRUCT-007 supplies the real organisation. An allowlisted file that no
+# longer contains the placeholder must leave the list, so the list only shrinks.
 # ------------------------------------------------------------------
-emoji_re = re.compile("[\U0001F300-\U0001FAFF☀-➿]")
+PLACEHOLDER = "your-org"
+PLACEHOLDER_ALLOWLIST = {
+    ".claude-plugin/marketplace.json",
+    ".grok-plugin/marketplace.json",
+    "ARCHITECTURE.md",
+    "SETUP.md",
+    "plugin.json",
+}
+PLACEHOLDER_SKIP_DIRS = {"docs", "vendor", "var", "node_modules", "__pycache__"}
+PLACEHOLDER_SKIP_FILES = {"scripts/check.sh"}  # names the placeholder it checks for
+
+def _walk_text_files():
+    for root, dirs, files in os.walk("."):
+        dirs[:] = [
+            d for d in dirs
+            if d not in PLACEHOLDER_SKIP_DIRS
+            and (not d.startswith(".") or d in {".github", ".claude-plugin", ".grok-plugin", ".cursor-plugin"})
+        ]
+        for name in files:
+            yield os.path.normpath(os.path.join(root, name))
+
+placeholder_hits = set()
+for path in _walk_text_files():
+    if path in PLACEHOLDER_SKIP_FILES:
+        continue
+    try:
+        text = open(path, encoding="utf-8").read()
+    except (UnicodeDecodeError, OSError):
+        continue
+    if PLACEHOLDER in text:
+        placeholder_hits.add(path)
+for path in sorted(placeholder_hits - PLACEHOLDER_ALLOWLIST):
+    err(f"{path}: contains placeholder '{PLACEHOLDER}' outside the STRUCT-007 allowlist")
+for path in sorted(PLACEHOLDER_ALLOWLIST - placeholder_hits):
+    err(f"{path}: on the '{PLACEHOLDER}' allowlist but no longer contains it; remove the entry")
+
+# ------------------------------------------------------------------
+# No emoji in instruction files, including the planning docs (research Pitfall 10)
+# ------------------------------------------------------------------
+emoji_re = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 md_files = [p for p in glob.glob("**/*.md", recursive=True)
             if not p.startswith(("node_modules", ".git", "vendor/"))]
-for path in md_files + glob.glob("rules/*.mdc"):
+planning_files = glob.glob(".planning/**/*.md", recursive=True)
+for path in sorted(set(md_files + planning_files)) + glob.glob("rules/*.mdc"):
     try:
         if emoji_re.search(open(path, encoding="utf-8").read()):
             err(f"{path}: contains emoji")
@@ -156,6 +181,6 @@ if errors:
     sys.exit(1)
 
 print(f"ok: {len(skills)} skills, {len([a for a in agents if not a.endswith('README.md')])} agents, "
-      f"{len(md_files)} markdown files checked")
+      f"{len(md_files) + len(planning_files)} markdown files checked")
 print("PumpGrok repository structure looks healthy.")
 PY
