@@ -110,7 +110,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] 03-03-PLAN.md
 - [x] 03-04-PLAN.md
 - [x] 03-05-PLAN.md
-- [ ] 03-06-PLAN.md
+- [x] 03-06-PLAN.md
 - [ ] 03-07-PLAN.md
 
 ### Phase 4: Paper Trading and Autonomy
@@ -178,6 +178,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
-| 3. Tools and Skills | 5/7 | In Progress|  |
+| 3. Tools and Skills | 6/7 | In Progress|  |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
 | 5. Hardening | 0/TBD | Not started | - |

@@ -50,10 +50,10 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 
 ### Skills (SKILL)
 
-- [ ] **SKILL-001**: The twelve new skills of `docs/design/interfaces.md` section 3.2 exist (35 skills total) with frontmatter `name, description, bots, gates, required_tools, permissions.max_side_effect` and the L1/L2 body; `skills/desk-post-trade-review/**` is owned by bot-09-journal (R36).
-- [ ] **SKILL-002**: `tests/test_skill_manifests.py` passes: every `skills/*/SKILL.md` parses into `SkillManifest`, `name == dirname`, every `required_tools` entry is granted to every listed bot, and `permissions.max_side_effect != LIVE_WRITE`.
+- [x] **SKILL-001**: The twelve new skills of `docs/design/interfaces.md` section 3.2 exist (35 skills total) with frontmatter `name, description, bots, gates, required_tools, permissions.max_side_effect` and the L1/L2 body; `skills/desk-post-trade-review/**` is owned by bot-09-journal (R36).
+- [x] **SKILL-002**: `tests/test_skill_manifests.py` passes: every `skills/*/SKILL.md` parses into `SkillManifest`, `name == dirname`, every `required_tools` entry is granted to every listed bot, and `permissions.max_side_effect != LIVE_WRITE`.
 - [ ] **SKILL-003**: `tests/test_bot_manifests.py` passes: exactly ten `BotManifest`s load from `contracts/tool-rosters/*.yaml`, ids `bot-00-chief` .. `bot-09-journal`, `writes_to_exchange` true only for sniper and exit, each with the R20 `risk_budget` keys and forbidden actions, every roster 8..15 tools including the core eight with RISK = 15 and RUG = 15 exactly as R35 lists them.
-- [ ] **SKILL-004**: Each seat prompt source lists its `load="always"` skills and a `<tools contract="contracts/tool-rosters/<seat>.yaml">` section; `agents/<seat>.md` and the plugin manifests enumerate the same skills (description count updated from "23 skills"); `./scripts/check.sh` passes.
+- [x] **SKILL-004**: Each seat prompt source lists its `load="always"` skills and a `<tools contract="contracts/tool-rosters/<seat>.yaml">` section; `agents/<seat>.md` and the plugin manifests enumerate the same skills (description count updated from "23 skills"); `./scripts/check.sh` passes.
 
 ### Paper trading (PAPER)
 
@@ -166,10 +166,10 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | TOOL-009 | Phase 3 Tools and Skills | Pending |
 | TOOL-010 | Phase 3 Tools and Skills | Complete |
 | TOOL-011 | Phase 3 Tools and Skills | Pending |
-| SKILL-001 | Phase 3 Tools and Skills | Pending |
-| SKILL-002 | Phase 3 Tools and Skills | Pending |
+| SKILL-001 | Phase 3 Tools and Skills | Complete |
+| SKILL-002 | Phase 3 Tools and Skills | Complete |
 | SKILL-003 | Phase 3 Tools and Skills | Pending |
-| SKILL-004 | Phase 3 Tools and Skills | Pending |
+| SKILL-004 | Phase 3 Tools and Skills | Complete |
 | PAPER-001 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-002 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-003 | Phase 4 Paper Trading and Autonomy | Pending |

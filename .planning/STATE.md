@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 3
 current_phase_name: tools-and-skills
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-10-21T13:48:31.560Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-10-21T14:04:25.804Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 2 complete, transitioned to Phase 03
-state_head: dba886ac68ebdc365712bf7a41d419352dbf1ad8
+state_head: 839bc9ecf04e10a1f33b16e4ea8d38b0e3903e8f
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 40
 ---
 
@@ -61,6 +61,7 @@ Progress: [████░░░░░░] 40%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 03-tools-and-skills P05 | 27min | 3 tasks | 14 files |
+| Phase 03-tools-and-skills P06 | 10min | 4 tasks | 65 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,7 @@ Recent decisions affecting current work:
 - [Roadmap]: Phase 1 checkpoint uses skip-only replay semantics (docs/upgrade-plan-desk-v2.md section 6.1)
 - [Binding]: R44 Jupiter quote via api.jup.ag/swap/v2/order, quote-only; R45 no PumpPortal trade key; R46 trade events from Solana JSON-RPC logsSubscribe; R48 x.ai models grok-4.3 and grok-4.20-0309-non-reasoning
 - [Phase 3]: 03-05: owner-thread tool loop for sqlite affinity; seat-map miss falls back to registry-wide map for permission_denied
+- [Phase 3]: B10 applied as listing-AND-grants: grant violations shrink skill bots, prompt listings expand where grants allow; roster manifests untouched
 
 ### Pending Todos
 
@@ -98,6 +100,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T13:48:31.467Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-10-21T14:04:25.718Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
