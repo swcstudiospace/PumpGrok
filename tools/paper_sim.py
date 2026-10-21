@@ -76,7 +76,7 @@ def main():
         record["ok"] = False
         record["error"] = str(e)
 
-    print(json.dumps(record, indent=2))
+    sys.stdout.write(json.dumps(record, indent=2) + "\n")
     sys.exit(0 if record.get("ok") else 1)
 
 

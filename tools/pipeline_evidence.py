@@ -184,8 +184,8 @@ def load_records(path: Path) -> tuple[list[dict[str, Any]], int]:
     records: list[dict[str, Any]] = []
     skipped = 0
     with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
+        for raw_line in fh:
+            line = raw_line.strip()
             if not line:
                 continue
             try:
@@ -210,14 +210,14 @@ def matches(
         return False
     if rtype is not None and record.get("type") != rtype:
         return False
-    if candidates:
-        if record.get("type") != "buy" or record.get("tx_hash") != "dry_run":
-            return False
-    return True
+    return not (
+        candidates
+        and (record.get("type") != "buy" or record.get("tx_hash") != "dry_run")
+    )
 
 
 def fail(error: str) -> int:
-    print(json.dumps({"ok": False, "error": error}, indent=2))
+    sys.stdout.write(json.dumps({"ok": False, "error": error}, indent=2) + "\n")
     return 1
 
 
@@ -279,7 +279,7 @@ def main() -> int:
     limit = max(0, args.limit)
     selected = filtered[-limit:] if limit else []
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "ok": True,
         "log": str(log_path),
         "count": len(selected),
@@ -289,7 +289,7 @@ def main() -> int:
     if args.block or args.candidates:
         payload["evidence_blocks"] = [evidence_block(rec) for rec in selected]
 
-    print(json.dumps(payload, indent=2))
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
     return 0
 
 

@@ -228,6 +228,18 @@ def status_payload(desk: Path) -> dict[str, object]:
     }
 
 
+def read_command_payload(command: str, desk: Path) -> dict[str, object] | None:
+    if command == "status":
+        return status_payload(desk)
+    if command == "pending-leads":
+        return {"ok": True, "items": pending_leads(desk)}
+    if command == "pending-tickets":
+        return {"ok": True, "items": pending_tickets(desk)}
+    if command == "open-positions":
+        return {"ok": True, "items": open_positions(desk)}
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="PumpGrok desk file-bus status")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -244,29 +256,26 @@ def main() -> int:
     desk = desk_root()
     if args.command == "ensure":
         ensure_desk(desk)
-        print(json.dumps({"ok": True, "desk": str(desk)}, indent=2))
-        return 0
-    if args.command == "status":
-        print(json.dumps(status_payload(desk), indent=2))
-        return 0
-    if args.command == "pending-leads":
-        print(json.dumps({"ok": True, "items": pending_leads(desk)}, indent=2))
-        return 0
-    if args.command == "pending-tickets":
-        print(json.dumps({"ok": True, "items": pending_tickets(desk)}, indent=2))
-        return 0
-    if args.command == "open-positions":
-        print(json.dumps({"ok": True, "items": open_positions(desk)}, indent=2))
+        sys.stdout.write(json.dumps({"ok": True, "desk": str(desk)}, indent=2) + "\n")
         return 0
     if args.command == "next-id":
         ensure_desk(desk)
-        print(json.dumps({"ok": True, "ticket": next_ticket_id(desk), "desk": str(desk)}, indent=2))
+        sys.stdout.write(
+            json.dumps(
+                {"ok": True, "ticket": next_ticket_id(desk), "desk": str(desk)}, indent=2
+            )
+            + "\n"
+        )
         return 0
     if args.command == "halt":
-        print(json.dumps(write_halt(desk, args.reason), indent=2))
+        sys.stdout.write(json.dumps(write_halt(desk, args.reason), indent=2) + "\n")
         return 0
-    print(json.dumps({"ok": False, "error": "unknown command"}))
-    return 1
+    payload = read_command_payload(args.command, desk)
+    if payload is None:
+        sys.stdout.write(json.dumps({"ok": False, "error": "unknown command"}) + "\n")
+        return 1
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    return 0
 
 
 if __name__ == "__main__":

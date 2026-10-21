@@ -16,7 +16,9 @@ from typing import Any
 try:
     import requests
 except ImportError:
-    print(json.dumps({"error": "requests library required. Run: pip install requests"}))
+    sys.stdout.write(
+        json.dumps({"error": "requests library required. Run: pip install requests"}) + "\n"
+    )
     sys.exit(1)
 
 DEFAULT_RPC = "https://api.mainnet-beta.solana.com"
@@ -83,7 +85,7 @@ def main():
     args = parser.parse_args()
 
     result = check_mint(args.mint, args.rpc)
-    print(json.dumps(result, indent=2))
+    sys.stdout.write(json.dumps(result, indent=2) + "\n")
     sys.exit(0 if result.get("ok") else 1)
 
 

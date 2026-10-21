@@ -168,7 +168,7 @@ def main():
 
     if args.command == "next":
         result = {"ok": True, "ticket": next_ticket_id(), "desk": str(desk_root())}
-        print(json.dumps(result, indent=2))
+        sys.stdout.write(json.dumps(result, indent=2) + "\n")
     elif args.command == "create":
         result = create_proposal(
             args.mint,
@@ -177,19 +177,20 @@ def main():
             ticket=args.ticket,
             status=args.status,
         )
-        print(json.dumps(result, indent=2))
+        sys.stdout.write(json.dumps(result, indent=2) + "\n")
         if not result.get("ok"):
             sys.exit(1)
     elif args.command == "list":
         ids = list_existing_ids()
-        print(
+        sys.stdout.write(
             json.dumps(
                 {"ok": True, "tickets": ids, "count": len(ids), "desk": str(desk_root())},
                 indent=2,
             )
+            + "\n"
         )
     else:
-        print(json.dumps({"ok": False, "error": "unknown command"}))
+        sys.stdout.write(json.dumps({"ok": False, "error": "unknown command"}) + "\n")
         sys.exit(1)
 
 

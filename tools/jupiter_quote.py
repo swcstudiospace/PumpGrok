@@ -17,10 +17,11 @@ from typing import Any
 try:
     import requests
 except ImportError:
-    print(
+    sys.stdout.write(
         json.dumps(
             {"ok": False, "error": "requests library required. Run: pip install requests"}
         )
+        + "\n"
     )
     sys.exit(1)
 
@@ -82,7 +83,7 @@ def main():
     args = parser.parse_args()
 
     result = get_quote(args.input_mint, args.output_mint, args.amount, args.slippage_bps)
-    print(json.dumps(result, indent=2))
+    sys.stdout.write(json.dumps(result, indent=2) + "\n")
     sys.exit(0 if result.get("ok") else 1)
 
 
