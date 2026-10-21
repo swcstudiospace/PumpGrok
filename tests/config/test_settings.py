@@ -10,6 +10,8 @@ import pytest
 
 from pumpgrok.config.settings import (
     ConfigError,
+    allowed_env_names,
+    find_unknown_env,
     load_settings,
 )
 
@@ -90,3 +92,15 @@ def test_live_overlay_keeps_live_disabled(clean_env: None) -> None:
         text = (overlay / f"{profile}.toml").read_text(encoding="utf-8")
         assert "[live]" in text
         assert "enabled = false" in text
+
+
+def test_env_example_keys_are_declared() -> None:
+    """Every key in the operator template must be a setting the loader accepts."""
+    template = Path(__file__).resolve().parents[2] / ".env.example"
+    keys = [
+        line.split("=", 1)[0].strip()
+        for line in template.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#") and "=" in line
+    ]
+    assert keys
+    assert find_unknown_env({key: "x" for key in keys}, allowed_env_names()) == []
