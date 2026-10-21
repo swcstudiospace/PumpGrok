@@ -1,6 +1,6 @@
 """Grok agent base: one prompt plus one response schema, on injected time.
 
-Port of ``vendor/grokbot-pumpfun/src/agents/base.py``. The retry loop keeps
+Port of the retired oracle ``src/agents/base.py``. The retry loop keeps
 its vendor shape (ops precheck on every attempt, one backoff sleep between
 attempts, no retry on 4xx other than 429), but wall time is gone:
 ``asyncio.sleep`` becomes ``clock.sleep`` and ``random.random`` becomes the

@@ -48,9 +48,7 @@ EXIT_5_HANDOFF = [
     ["chief", "pickup"],
     ["rug", "watch"],
     ["journal", "rollup", "--daily"],
-    ["report", "--daily"],
     ["audit"],
-    ["live", "confirm"],
     ["replay", "trim"],
     ["replay", "rebuild-ticks"],
 ]
@@ -479,7 +477,7 @@ class TestServedVerbCoverage:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        assert len(EXIT_5_HANDOFF) == 11
+        assert len(EXIT_5_HANDOFF) == 9
         for argv in EXIT_5_HANDOFF:
             code, out, err = _run(argv)
             assert code == 5, argv

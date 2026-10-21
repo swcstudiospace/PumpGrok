@@ -1,6 +1,6 @@
 """Lamport position sizer with vendor-identical constants.
 
-Port of the ``position_size`` half of ``vendor/grokbot-pumpfun/src/risk.py``.
+Port of the ``position_size`` half of the retired oracle ``src/risk.py``.
 All prose is English; the vendor text is Russian.
 
 Deliberate divergences from the oracle:

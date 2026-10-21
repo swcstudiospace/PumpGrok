@@ -8,7 +8,7 @@ as a skip with a per-component breakdown and never reaches grok-4.
 Weights from the settings are normalized: if the user writes 0.5/0.5/0.5/
 0.5, the total still lands in 0..1 and the proportions survive.
 
-Port of ``vendor/grokbot-pumpfun/src/scoring.py``. Logic is 1:1; only the
+Port of the retired oracle ``src/scoring.py``. Logic is 1:1; only the
 config travels differently (settings sections instead of the vendor
 ``Config``) and the prose is English.
 """

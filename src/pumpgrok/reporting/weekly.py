@@ -124,9 +124,8 @@ class WeeklyReport:
             daily_loss_pct=base.daily_loss_pct,
             trade_rows=base.trade_rows,
             position_rows=base.position_rows,
-            rejected=base.rejected or (
-                (("rejected_total", rejected_total),) if rejected_total else ()
-            ),
+            rejected=base.rejected
+            or ((("rejected_total", rejected_total),) if rejected_total else ()),
             verdicts=base.verdicts,
             risk_events=base.risk_events,
             approvals_cleared=base.approvals_cleared,

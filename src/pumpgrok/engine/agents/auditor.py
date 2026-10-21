@@ -1,6 +1,6 @@
 """Wallet-audit agent: what the aggregates hide, on the fast model.
 
-Port of ``vendor/grokbot-pumpfun/src/agents/auditor.py`` with the prompt
+Port of the retired oracle ``src/agents/auditor.py`` with the prompt
 translated to English. Metrics see shares, counts, and averages; the
 auditor reads the raw trade stream and holder list for coordinated buying,
 wash trading, creator dump preparation, bundled launches, and the organic

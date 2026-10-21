@@ -23,7 +23,7 @@ def _append(store: LedgerStore, seq: int, type: str, payload: dict, ts: str) -> 
         ts_utc=ts,
         source="paper",
         correlation_id=CID,
-        idempotency_key="test-{0}-{1}".format(type, seq),
+        idempotency_key=f"test-{type}-{seq}",
         type=type,
         payload=payload,
     )
@@ -147,7 +147,7 @@ def test_daily_snapshot_pins_summary_and_trades(tmp_path: Path) -> None:
     assert "slippage_exceeded | 1" in body
     assert "CLEAR | 1" in body
     for section in field_names():
-        assert "## {0}".format(section) in body
+        assert f"## {section}" in body
 
 
 def test_daily_uses_no_jinja2_and_ascii_only(tmp_path: Path) -> None:

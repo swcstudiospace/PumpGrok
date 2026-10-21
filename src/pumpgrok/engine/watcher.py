@@ -1,6 +1,6 @@
 """Position watcher: polls open positions and calls the sell callback.
 
-Port of the watcher half of ``vendor/grokbot-pumpfun/src/risk.py``. All
+Port of the watcher half of the retired oracle ``src/risk.py``. All
 prose is English; the vendor text is Russian.
 
 Deliberate divergences from the oracle:

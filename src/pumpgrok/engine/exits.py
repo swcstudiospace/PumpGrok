@@ -1,6 +1,6 @@
 """Position exit rules: stop-loss first, then profit, then time.
 
-Port of the exit half of ``vendor/grokbot-pumpfun/src/risk.py``. All prose
+Port of the exit half of the retired oracle ``src/risk.py``. All prose
 is English; the vendor text is Russian.
 
 Deliberate divergences from the oracle:

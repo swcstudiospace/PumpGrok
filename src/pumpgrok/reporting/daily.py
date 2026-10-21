@@ -12,6 +12,7 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Any
+
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.views import (
     drawdown_fraction,
@@ -23,26 +24,6 @@ from pumpgrok.ledger.views import (
     win_rate,
 )
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
-
-_WINDOW_TYPES = frozenset(
-    {
-        "FillRecorded",
-        "PositionClosed",
-        "PositionOpened",
-        "OrderRejected",
-        "MarkToMarket",
-        "HaltSet",
-        "HaltCleared",
-        "KillSwitchSet",
-        "KillSwitchCleared",
-        "BreakerTripped",
-        "BreakerReset",
-        "DailyRollover",
-        "JournalNote",
-        "ApprovalRecorded",
-        "Escalation",
-    }
-)
 
 
 def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
@@ -85,7 +66,6 @@ def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
             }
         )
     return events
-
 
 
 def day_next(day: str) -> str:
@@ -181,7 +161,9 @@ class DailyReport:
             verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
 
         risk_events = tuple(
-            "{0} {1} {2}".format(event["type"], event.get("ts_utc", ""), event.get("correlation_id", ""))
+            "{0} {1} {2}".format(
+                event["type"], event.get("ts_utc", ""), event.get("correlation_id", "")
+            )
             for event in window
             if event["type"]
             in (
@@ -206,8 +188,11 @@ class DailyReport:
         unverified = tuple(
             ["frozen mtm positions: {0}".format(len(frozen))] if frozen else []
         ) + tuple(
-            ["ledger_inconsistent day" for e in window if e["type"] == "Escalation"
-             and e["payload"].get("kind") == "ledger_inconsistent"]
+            [
+                "ledger_inconsistent day"
+                for e in window
+                if e["type"] == "Escalation" and e["payload"].get("kind") == "ledger_inconsistent"
+            ]
         )
 
         mtm_ts = [str(e.get("ts_utc", "")) for e in events if e["type"] == "MarkToMarket"]

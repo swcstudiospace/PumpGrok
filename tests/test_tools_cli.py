@@ -687,9 +687,7 @@ class TestOperatorVerbs:
             ["chief", "pickup"],
             ["rug", "watch"],
             ["journal", "rollup", "--daily"],
-            ["report", "--daily"],
             ["audit"],
-            ["live", "confirm"],
             ["replay", "trim"],
             ["replay", "rebuild-ticks"],
         ],
@@ -774,9 +772,7 @@ class TestCliRegressionSweep:
             (["ticket", "next"], 0),
             (["ticket", "create", "--mint", _TRADE_MINT], 0),
             (["ticket", "list"], 0),
-            (["report", "--daily"], 5),
             (["audit"], 5),
-            (["live", "confirm"], 5),
             (["replay", "trim"], 5),
             (["replay", "rebuild-ticks"], 5),
         ],
@@ -807,6 +803,43 @@ class TestCliRegressionSweep:
         second, out2, _ = _run_cli(tmp_path, monkeypatch, ["verify", "--fixture", "smoke"])
         assert second == 0
         assert out2 == out
+
+    def test_report_daily_prints_ascii_markdown_exit_0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """report is a real verb (04-09 PAPER-006): ASCII markdown, never JSON."""
+        code, out, err = _run_cli(tmp_path, monkeypatch, ["report", "--daily"])
+        assert code == 0
+        assert "# PumpGrok paper report - daily - " in out
+        assert "## Summary" in out
+        assert "## Trades" in out
+        assert "## Live gate" in out
+        out.encode("ascii")
+        assert "Traceback" not in err
+        assert not (tmp_path / "var").exists()
+
+    def test_report_weekly_prints_ascii_markdown_exit_0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """weekly adds the per-day table and the nine live-gate ids."""
+        code, out, err = _run_cli(tmp_path, monkeypatch, ["report", "--weekly"])
+        assert code == 0
+        assert "# PumpGrok paper report - weekly - " in out
+        assert "## Per day" in out
+        assert "## Live gate" in out
+        for gate_id in ("adapter_registered", "confirmation_record", "no_active_stop"):
+            assert gate_id in out
+        out.encode("ascii")
+        assert "Traceback" not in err
+
+    def test_live_confirm_bare_is_usage_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """confirm without --by/--notional-cap/--expires exits 1, never 5."""
+        code, _, err = _run_cli(tmp_path, monkeypatch, ["live", "confirm"])
+        assert code == 1
+        assert "usage error" in err
+        assert "Traceback" not in err
 
 
 if __name__ == "__main__":

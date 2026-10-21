@@ -128,7 +128,7 @@ PLACEHOLDER_ALLOWLIST = {
     ".grok-plugin/marketplace.json",
     "SETUP.md",
 }
-PLACEHOLDER_SKIP_DIRS = {"docs", "vendor", "var", "node_modules", "__pycache__"}
+PLACEHOLDER_SKIP_DIRS = {"docs", "var", "node_modules", "__pycache__"}
 PLACEHOLDER_SKIP_FILES = {"scripts/check.sh"}  # names the placeholder it checks for
 
 def _walk_text_files():
@@ -161,7 +161,7 @@ for path in sorted(PLACEHOLDER_ALLOWLIST - placeholder_hits):
 # ------------------------------------------------------------------
 emoji_re = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 md_files = [p for p in glob.glob("**/*.md", recursive=True)
-            if not p.startswith(("node_modules", ".git", "vendor/"))]
+            if not p.startswith(("node_modules", ".git"))]
 planning_files = glob.glob(".planning/**/*.md", recursive=True)
 for path in sorted(set(md_files + planning_files)) + glob.glob("rules/*.mdc"):
     try:

@@ -6,7 +6,7 @@ Every emitted document is verified ASCII-only before return.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 LAMPORTS_PER_SOL = 1_000_000_000
 
@@ -98,11 +98,17 @@ _SUMMARY_TEMPLATE = (
     "max drawdown: {drawdown} % | daily loss: {daily_loss} % (halt at {halt_limit} %)\n"
 )
 
-_TRADES_HEADER = "## Trades\nticket | mint | size SOL | reason | pnl SOL | pnl % | fees lamports | correlation_id\n"
+_TRADES_HEADER = (
+    "## Trades\nticket | mint | size SOL | reason | pnl SOL | pnl % | "
+    "fees lamports | correlation_id\n"
+)
 _TRADES_ROW = "{ticket} | {mint} | {size} | {reason} | {pnl} | {pnl_pct} | {fees} | {cid}\n"
 _TRADES_EMPTY = "## Trades\nnone closed in this window\n"
 
-_POSITIONS_HEADER = "## Open positions\nmint | entry SOL | mtm SOL | unrealized SOL | age | mtm_source | mtm_frozen\n"
+_POSITIONS_HEADER = (
+    "## Open positions\nmint | entry SOL | mtm SOL | unrealized SOL | "
+    "age | mtm_source | mtm_frozen\n"
+)
 _POSITIONS_ROW = "{mint} | {entry} | {mtm} | {unrealized} | {age} | {source} | {frozen}\n"
 _POSITIONS_EMPTY = "## Open positions\nnone open\n"
 
@@ -118,7 +124,9 @@ _RISK_HEADER = "## Risk events\n"
 _RISK_ROW = "- {event}\n"
 _RISK_EMPTY = "## Risk events\nnone\n"
 
-_HEALTH_HEADER = "## Bot health\nseat | cycles | crashes | restarts | observe_only | p50_s | p95_s\n"
+_HEALTH_HEADER = (
+    "## Bot health\nseat | cycles | crashes | restarts | observe_only | p50_s | p95_s\n"
+)
 _HEALTH_ROW = "{line}\n"
 _HEALTH_EMPTY = "## Bot health\nno heartbeat rows recorded\n"
 
@@ -134,7 +142,10 @@ _UNVERIFIED_HEADER = "## Unverified\n"
 _UNVERIFIED_ROW = "- {line}\n"
 _UNVERIFIED_EMPTY = "## Unverified\nnone: every figure derives from curve prices\n"
 
-_PER_DAY_HEADER = "## Per day\n(segment totals; positions opened one day and closed the next split unrealized/realized across days)\n"
+_PER_DAY_HEADER = (
+    "## Per day\n(segment totals; positions opened one day and closed the next "
+    "split unrealized/realized across days)\n"
+)
 _PER_DAY_ROW = "{line}\n"
 _PER_DAY_EMPTY = "## Per day\nno per-day rows\n"
 

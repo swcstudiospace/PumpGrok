@@ -1,6 +1,6 @@
 """Weight and threshold grid search over a closed-trades log.
 
-Port of ``vendor/grokbot-pumpfun/scripts/tune.py``. The math (``total``,
+Port of the retired oracle ``scripts/tune.py``. The math (``total``,
 ``evaluate``, ``rank``, ``simplex``) is 1:1; the surroundings change: the
 vendor reads its own ``TradeLog`` rotation, while this module reads plain
 JSONL trade records, so the unported ``TradeLog`` stays out of the picture.

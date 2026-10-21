@@ -10,7 +10,7 @@ whose token already closed deep in the red is rejected at ingress, before
 a single Grok call. Decisions rest only on our own closed trades — not an
 internet blocklist, not a heuristic, but a fact from our own log.
 
-Port of ``vendor/grokbot-pumpfun/src/reputation.py``. All prose is
+Port of the retired oracle ``src/reputation.py``. All prose is
 English; the vendor text is Russian.
 
 Deliberate divergences from the oracle:

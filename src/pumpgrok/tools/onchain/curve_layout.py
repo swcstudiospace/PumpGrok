@@ -35,7 +35,7 @@ CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
 LAYOUT_STATUS: Final[str] = "ASSUMED"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
-#: 85 SOL, ``vendor/grokbot-pumpfun/src/monitor.py:30``). [ASSUMED] threshold.
+#: 85 SOL, the retired oracle ``src/monitor.py:30``). [ASSUMED] threshold.
 COMPLETION_SOL_LAMPORTS = 85 * LAMPORTS_PER_SOL
 
 

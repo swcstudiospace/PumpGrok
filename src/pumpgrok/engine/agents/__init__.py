@@ -1,6 +1,6 @@
 """Grok agents: auditor, narrative, timing, and the adversarial checker.
 
-Ported from ``vendor/grokbot-pumpfun/src/agents/`` (oracle, kept
+Ported from the retired oracle ``src/agents/`` (pin 409e74c,
 byte-identical per R53). Every agent runs on the injected clock with seeded
 randomness only, posts to the x.ai base URL plus ``/chat/completions``, and
 selects its model from settings per R48: the checker uses the strong model

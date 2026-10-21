@@ -1,6 +1,6 @@
 """Adversarial-check agent: the last gate before money, on the strong model.
 
-Port of ``vendor/grokbot-pumpfun/src/agents/checker.py`` with the prompt
+Port of the retired oracle ``src/agents/checker.py`` with the prompt
 translated to English. It is forbidden from finding reasons to buy: it gets
 every earlier verdict and looks for contradictions, missed red flags, and a
 weak evidence base. ``approve: false`` is the normal, expected outcome, and

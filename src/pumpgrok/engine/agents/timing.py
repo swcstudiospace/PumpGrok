@@ -1,6 +1,6 @@
 """Market-moment agent: not the token, the backdrop it launches into.
 
-Port of ``vendor/grokbot-pumpfun/src/agents/timing.py`` with the prompt
+Port of the retired oracle ``src/agents/timing.py`` with the prompt
 translated to English. The verdict is identical for every token inside one
 window, so it is cached for ``cache_seconds`` (15 minutes by default):
 without the cache every launch would pay for the same verdict. The cache

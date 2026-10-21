@@ -56,6 +56,7 @@ from pumpgrok.config.settings import (
 from pumpgrok.contracts.projection import short_to_seat
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import DataStale, PumpgrokError, ReplayMissingRecord
+from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
@@ -70,6 +71,9 @@ from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import CorruptFixture
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import run_replay
+from pumpgrok.reporting.daily import DailyReport
+from pumpgrok.reporting.render import render_daily, render_weekly
+from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
@@ -383,9 +387,9 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     report_period = report.add_mutually_exclusive_group(required=True)
     report_period.add_argument("--daily", action="store_true", help="daily report")
     report_period.add_argument("--weekly", action="store_true", help="weekly report")
-    report.add_argument("--day", default=None, help="report day YYYY-MM-DD (default today UTC)")
+    report.add_argument("--day", default=None, help="report day YYYY-MM-DD (default today)")
     report.add_argument("--week", default=None, help="week Monday YYYY-MM-DD (default this week)")
-    report.add_argument("--out", default=None, help="write markdown to this path (default stdout only)")
+    report.add_argument("--out", default=None, help="write markdown to this path as well")
 
 
 def _add_scout(verbs: _VerbsAction, mode_option: _Parser) -> None:
@@ -475,7 +479,7 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
     live_confirm = live_cmd.add_parser("confirm", help="record a human live-gate confirmation")
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
-    live_confirm.add_argument("--notional-cap", required=True, help="per-order cap in SOL (0 < cap <= 1.0)")
+    live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
@@ -1038,19 +1042,20 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
     by = _human_by(args.by, "live confirm")
     try:
         cap_sol = Decimal(str(args.notional_cap))
-    except InvalidOperation:
-        raise UsageError("bad --notional-cap {0!r}: want decimal SOL".format(args.notional_cap))
+    except InvalidOperation as exc:
+        raise UsageError(
+            "bad --notional-cap {0!r}: want decimal SOL".format(args.notional_cap)
+        ) from exc
     if not (Decimal("0") < cap_sol <= Decimal("1.0")):
         raise UsageError("bad --notional-cap {0!r}: want 0 < cap <= 1.0".format(args.notional_cap))
     try:
         expires = datetime.fromisoformat(str(args.expires).replace("Z", "+00:00"))
-    except ValueError:
-        raise UsageError("bad --expires {0!r}: want ISO-8601 UTC".format(args.expires))
+    except ValueError as exc:
+        raise UsageError("bad --expires {0!r}: want ISO-8601 UTC".format(args.expires)) from exc
     key = os.environ.get("PUMPGROK_CONFIRMATION_KEY", "")
     if not key:
         _say(sys.stderr, "live confirm refused: PUMPGROK_CONFIRMATION_KEY is not set")
         return EXIT_CONFIG
-    from pumpgrok.core.idempotency import canonical_json
 
     config_hash = hashlib.sha256(
         canonical_json(_jsonable(settings.model_dump(mode="json"))).encode("utf-8")
@@ -1134,9 +1139,6 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
     Reads the ledger read-only: the path is guarded and sqlite opens it with
     ``mode=ro``, so reporting never creates ``var/`` files.
     """
-    from pumpgrok.reporting.daily import DailyReport
-    from pumpgrok.reporting.render import render_daily, render_weekly
-    from pumpgrok.reporting.weekly import WeeklyReport
 
     ledger = Path.cwd() / "var" / "ledger.sqlite"
     mode = settings.effective_mode

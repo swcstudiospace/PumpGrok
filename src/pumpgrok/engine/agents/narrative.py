@@ -1,6 +1,6 @@
 """Meme-potential agent: not the chain, the meme itself.
 
-Port of ``vendor/grokbot-pumpfun/src/agents/narrative.py`` with the prompt
+Port of the retired oracle ``src/agents/narrative.py`` with the prompt
 translated to English. The question is whether the launch can spread or is
 another clone of yesterday: four independent 0..1 scores. Missing data is a
 low score, never an average one; clones of popular tickers score harshly.

@@ -1,6 +1,6 @@
 """PumpPortal new-launch monitor: filter on the fly, no trade subscription.
 
-Port of ``vendor/grokbot-pumpfun/src/monitor.py``. All prose is English;
+Port of the retired oracle ``src/monitor.py``. All prose is English;
 the vendor text is Russian.
 
 Deliberate divergences from the oracle (see STRUCT-003, R45/R46):

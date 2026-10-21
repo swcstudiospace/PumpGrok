@@ -1,6 +1,6 @@
 """Risk engine pieces: 19-step check, limits, lamport sizing, R34 mapping.
 
-Ported from ``vendor/grokbot-pumpfun/src/risk.py`` (oracle, kept
+Ported from the retired oracle ``src/risk.py`` (pin 409e74c,
 byte-identical per R53). The check engine (``risk/engine.py``) owns every
 ``HaltSet`` and ``BreakerTripped`` append (R24); the characterization suite
 pins the vendor vocabulary it replaced.

@@ -84,15 +84,15 @@ If `desk.md` Halt is true, or engagement is not `research` or `paper`,
 cron jobs print `[SILENT]` and stop. Cron never raises engagement and
 never sends a live transaction.
 
-## Vendor pipeline ingest
+## Retired pipeline ingest
 
-The grokbot-pumpfun vendor engine is a separate operator process. Hermes
-cron never starts it, and never starts it in live mode.
+The grokbot-pumpfun engine is retired (pin 409e74c in docs/VENDOR_PIN.md).
+Hermes cron never starts it, and never starts it in live mode.
 
 The `scout-pipeline` job (every 60m, owner scout, deliver `bot-chat:chief`)
-only reads `vendor/grokbot-pumpfun/logs/trades.jsonl` through
-`tools/pipeline_evidence.py` and writes leads under `$PUMPGROK_DESK/leads/`.
-A missing log is normal before the first vendor dry-run. `tx_hash: dry_run`
+reads the archived dry-run JSONL log through `tools/pipeline_evidence.py`
+and writes leads under `$PUMPGROK_DESK/leads/`.
+A missing log is normal when no dry-run archive is present. `tx_hash: dry_run`
 is not a fill. SNIPER and EXIT remain the only exchange writers after exact
 human approval.
 

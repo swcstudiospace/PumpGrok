@@ -1,6 +1,6 @@
 """Risk breakers: vendor CircuitBreaker port plus three domain breakers.
 
-``Breaker`` is a faithful port of ``vendor/grokbot-pumpfun/src/ops.py:131-182``
+``Breaker`` is a faithful port of the retired oracle ``src/ops.py:131-182``
 with two additions from paper-engine.md 5.3: an explicit ``half_open`` state
 that admits exactly one probe, and hysteresis (``reset_after_ok``
 consecutive successes before ``closed``). The characterization suite

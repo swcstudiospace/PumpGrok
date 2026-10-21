@@ -60,11 +60,12 @@ class LiveGate:
         mode_live = self._mode == "live"
         env_enabled = self._environ.get("PUMPGROK_LIVE_ENABLE", "").strip() == "1"
         days_met, days_reason, perf_met, perf_reason = _paper_window(self._root)
+        if mode_live:
+            mode_reason = "effective mode is live"
+        else:
+            mode_reason = "effective mode is {0}".format(self._mode)
         rows: tuple[tuple[bool, str], ...] = (
-            (
-                mode_live,
-                "effective mode is live" if mode_live else "effective mode is {0}".format(self._mode),
-            ),
+            (mode_live, mode_reason),
             (
                 env_enabled,
                 "PUMPGROK_LIVE_ENABLE=1" if env_enabled else "PUMPGROK_LIVE_ENABLE is not 1",
@@ -101,20 +102,8 @@ def _paper_window(root: Path) -> tuple[bool, str, bool, str]:
     never creates ``var/`` files. Any ``source=replay`` row refuses both
     metrics (a FixtureClock must never fabricate the paper window).
     """
-    ledger = root / "var" / "ledger.sqlite"
-    if not ledger.exists():
-        reason = "no source=paper ledger at var/ledger.sqlite"
-        return (False, reason, False, reason)
-    try:
-        uri = "file:{0}?mode=ro".format(ledger.resolve().as_posix())
-        db = sqlite3.connect(uri, uri=True)
-        try:
-            rows = db.execute(
-                "SELECT source, ts_utc, type, payload_json FROM events ORDER BY seq ASC"
-            ).fetchall()
-        finally:
-            db.close()
-    except sqlite3.Error:
+    rows = _read_gate_rows(root / "var" / "ledger.sqlite")
+    if rows is None:
         reason = "no source=paper ledger at var/ledger.sqlite"
         return (False, reason, False, reason)
     if any(source == "replay" for source, _, _, _ in rows):
@@ -124,55 +113,93 @@ def _paper_window(root: Path) -> tuple[bool, str, bool, str]:
     if not paper:
         reason = "no source=paper events in var/ledger.sqlite"
         return (False, reason, False, reason)
+    return (*_paper_days(paper), *_paper_perf(paper))
+
+
+def _read_gate_rows(ledger: Path) -> list[tuple[str, str, str, str]] | None:
+    """Raw gate rows, or None when the ledger is absent or unreadable."""
+    if not ledger.exists():
+        return None
+    try:
+        uri = "file:{0}?mode=ro".format(ledger.resolve().as_posix())
+        db = sqlite3.connect(uri, uri=True)
+        try:
+            return list(
+                db.execute(
+                    "SELECT source, ts_utc, type, payload_json FROM events ORDER BY seq ASC"
+                ).fetchall()
+            )
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return None
+
+
+def _paper_days(paper: list[tuple[str, str, str]]) -> tuple[bool, str]:
+    """Precondition 3: elapsed UTC days since the first source=paper event."""
     first_day = str(paper[0][0])[:10]
     today = datetime.now(UTC).strftime("%Y-%m-%d")
-    days = max(0, (datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(first_day, "%Y-%m-%d")).days)
-    days_met = days >= MIN_PAPER_DAYS
-    days_reason = "{0} of {1} days on source=paper events".format(days, MIN_PAPER_DAYS)
+    span = datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(first_day, "%Y-%m-%d")
+    days = max(0, span.days)
+    reason = "{0} of {1} days on source=paper events".format(days, MIN_PAPER_DAYS)
+    return (days >= MIN_PAPER_DAYS, reason)
+
+
+def _paper_perf(paper: list[tuple[str, str, str]]) -> tuple[bool, str]:
+    """Precondition 4: closed count, profit factor and drawdown on paper rows."""
     closed = 0
     gains = 0
     losses = 0
     peak = 0
-    trough = 0
     equity = 0
     for _, type, payload_json in paper:
         try:
             payload = json.loads(str(payload_json))
         except ValueError:
             continue
-        if type == "PositionClosed":
-            closed += 1
-            pnl = int(payload.get("realized_pnl_lamports", 0))
-            if pnl >= 0:
-                gains += pnl
-            else:
-                losses -= pnl
-        elif type == "MarkToMarket":
-            equity = int(payload.get("equity_lamports", equity))
-            peak = max(peak, equity)
-            trough = min(trough, equity) if trough else equity
+        closed, gains, losses, peak, equity = _fold_perf_row(
+            type, payload, closed=closed, gains=gains, losses=losses, peak=peak, equity=equity
+        )
     drawdown = (peak - equity) / peak if peak else 0.0
-    if losses:
-        profit_factor = gains / losses
-    else:
-        profit_factor = float("inf") if gains else 0.0
-    perf_met = (
+    profit_factor = gains / losses if losses else (float("inf") if gains else 0.0)
+    met = (
         closed >= MIN_CLOSED_TRADES
         and profit_factor >= MIN_PROFIT_FACTOR
         and drawdown <= MAX_DRAWDOWN_FRACTION
     )
-    perf_reason = "closed {0}, pf {1:.2f}, dd {2:.1f} % on source=paper events".format(
+    reason = "closed {0}, pf {1:.2f}, dd {2:.1f} % on source=paper events".format(
         closed, profit_factor, drawdown * 100
     )
-    return (days_met, days_reason, perf_met, perf_reason)
+    return (met, reason)
+
+
+def _fold_perf_row(
+    type: str,
+    payload: dict,
+    *,
+    closed: int,
+    gains: int,
+    losses: int,
+    peak: int,
+    equity: int,
+) -> tuple[int, int, int, int, int]:
+    """Fold one paper row into the performance accumulators."""
+    if type == "PositionClosed":
+        pnl = int(payload.get("realized_pnl_lamports", 0))
+        return (closed + 1, gains + max(pnl, 0), losses - min(pnl, 0), peak, equity)
+    if type == "MarkToMarket":
+        equity = int(payload.get("equity_lamports", equity))
+        return (closed, gains, losses, max(peak, equity), equity)
+    return (closed, gains, losses, peak, equity)
 
 
 def refusal_lines(preconditions: Sequence[Precondition]) -> list[str]:
     """The stderr block for a refused live start: one [x]/[ ] line per precondition."""
     unmet = [item for item in preconditions if not item.met]
     lines = [
-        "LIVE GATE: refusing to start in mode=live. {0} of "
-        "{1} preconditions unmet:".format(len(unmet), len(preconditions))
+        "LIVE GATE: refusing to start in mode=live. {0} of {1} preconditions unmet:".format(
+            len(unmet), len(preconditions)
+        )
     ]
     for item in preconditions:
         mark = "x" if item.met else " "

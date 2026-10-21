@@ -10,6 +10,7 @@ refuses the window. No signing symbols exist outside execution/live.
 from __future__ import annotations
 
 import ast
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -20,10 +21,11 @@ from pathlib import Path
 import pytest
 
 from pumpgrok.cli import main
+from pumpgrok.config.settings import load_settings
+from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate
-from pumpgrok.execution.live.live_gate import refusal_lines
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -38,7 +40,7 @@ def _append(store: LedgerStore, seq: int, type: str, payload: dict, ts: str) -> 
         ts_utc=ts,
         source=payload.pop("envelope_source", "paper"),
         correlation_id=CID,
-        idempotency_key="gate-{0}-{1}".format(type, seq),
+        idempotency_key=f"gate-{type}-{seq}",
         type=type,
         payload=payload,
     )
@@ -63,6 +65,7 @@ def test_live_run_exits_3_with_nine_ordered_lines(tmp_path: Path, monkeypatch, c
         parts = line.split()
         ids.append(parts[2] if parts[1].isdigit() else parts[3])
     assert tuple(ids) == PRECONDITION_IDS
+
 
 def test_live_mode_with_paper_overlay_still_runs_gate(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
@@ -97,7 +100,7 @@ def test_mature_paper_window_meets_days_and_thresholds(tmp_path: Path) -> None:
                     "realized_pnl_lamports": 3000000,
                     "reason": "take_profit",
                 },
-                "2026-08-01T10:{0:02d}:00Z".format(seq % 60),
+                f"2026-08-01T10:{seq % 60:02d}:00Z",
             )
         _append(
             store,
@@ -167,7 +170,7 @@ def test_paper_metrics_ignore_replay_rows(tmp_path: Path) -> None:
                     "realized_pnl_lamports": 3000000,
                     "reason": "take_profit",
                 },
-                "2026-08-01T10:{0:02d}:00Z".format(seq % 60),
+                f"2026-08-01T10:{seq % 60:02d}:00Z",
             )
         _append(
             store,
@@ -203,19 +206,16 @@ def _stub(tmp_path: Path) -> tuple[LiveAdapterStub, LedgerStore]:
 
 
 def test_place_and_cancel_raise_after_audit_row(tmp_path: Path, caplog) -> None:
-    import asyncio
-
-    from pumpgrok.core.adapter import OrderRequest, Side
-
     adapter, ledger = _stub(tmp_path)
+    decision = _ulid()
     request = OrderRequest(
         ticket_id="SOL-20260101-001",
         mint=MINT,
         side=Side.BUY,
-        decision_id=_ulid(),
+        decision_id=decision,
         size_lamports=1000,
         max_slippage_bps=100,
-        approval_id="apr-{0}".format(_ulid()),
+        approval_id=f"apr-{decision}",
         correlation_id="01J0000000000000000000000",
     )
     with caplog.at_level("CRITICAL"):
@@ -262,7 +262,8 @@ def test_live_confirm_writes_hmac_record_without_changing_mode(
     assert record["statement"].startswith("I confirm live trading")
     body = {key: record[key] for key in record if key != "signature"}
     expected = hmac.new(
-        b"operator-secret-for-tests", json.dumps(body, sort_keys=True, separators=(",", ":")).encode(),
+        b"operator-secret-for-tests",
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode(),
         hashlib.sha256,
     ).digest()
     assert base64.b64decode(record["signature"]) == expected
@@ -274,11 +275,11 @@ def test_live_confirm_writes_hmac_record_without_changing_mode(
     finally:
         conn.close()
     approvals = [json.loads(str(payload)) for (payload,) in rows]
-    assert any(a.get("kind") == "live_gate" and a.get("approved_by") == "human:alice" for a in approvals)
+    assert any(
+        a.get("kind") == "live_gate" and a.get("approved_by") == "human:alice" for a in approvals
+    )
     out = capsys.readouterr().out
     assert "confirmation_record" in out
-    from pumpgrok.config.settings import load_settings
-
     assert load_settings().effective_mode == "paper"
 
 
@@ -291,7 +292,7 @@ def test_no_signing_symbols_outside_live_package() -> None:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and node.id in ("Keypair", "send_transaction"):
-                offenders.append("{0}:{1}".format(path, node.lineno))
-            elif isinstance(node, ast.Attribute) and node.attr in ("sign", "send_transaction"):
-                offenders.append("{0}:{1}".format(path, node.lineno))
+                offenders.append(f"{path}:{node.lineno}")
+            if isinstance(node, ast.Attribute) and node.attr in ("sign", "send_transaction"):
+                offenders.append(f"{path}:{node.lineno}")
     assert offenders == []

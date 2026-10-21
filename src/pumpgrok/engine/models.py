@@ -1,6 +1,6 @@
 """Engine domain models: tokens, metrics, agent results, scores, exits.
 
-Port of the domain half of ``vendor/grokbot-pumpfun/src/models.py`` (the
+Port of the domain half of the retired oracle ``src/models.py`` (the
 config half lives in ``pumpgrok/config/settings.py``). All prose is English;
 the vendor text is Russian.
 

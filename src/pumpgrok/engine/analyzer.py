@@ -1,6 +1,6 @@
 """REST analyzer for token metrics. Second stage, still no LLM.
 
-Port of ``vendor/grokbot-pumpfun/src/analyzer.py``. All prose is English;
+Port of the retired oracle ``src/analyzer.py``. All prose is English;
 the vendor text is Russian.
 
 Deliberate divergences from the oracle:

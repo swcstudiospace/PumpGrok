@@ -1,7 +1,7 @@
 """Edge-triggered alert transitions for the supervisor.
 
-Port of the ``_check_transitions`` half of
-``vendor/grokbot-pumpfun/src/pipeline.py:334-368``. All prose is English;
+Port of the ``_check_transitions`` half of the retired oracle
+``src/pipeline.py:334-368``. All prose is English;
 the vendor text is Russian.
 
 Deliberate divergences from the oracle:
