@@ -45,7 +45,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] 01-01-PLAN.md
 - [x] 01-02-PLAN.md
 - [x] 01-03-PLAN.md
-- [ ] 01-04-PLAN.md
+- [x] 01-04-PLAN.md
 - [ ] 01-05-PLAN.md
 - [ ] 01-06-PLAN.md
 - [ ] 01-07-PLAN.md
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/9 | In Progress | - |
+| 1. Foundation | 3/9 | In Progress | - |
 | 2. Restructure | 0/TBD | Not started | - |
 | 3. Tools and Skills | 0/TBD | Not started | - |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
