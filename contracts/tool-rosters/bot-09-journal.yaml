@@ -1,7 +1,7 @@
 # JOURNAL roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-09-journal.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-09-journal
 short: journal
 endpoint: /mcp/journal
@@ -254,3 +254,67 @@ tools:
         description: How this write is undone or compensated if it is wrong.
     required:
     - period
+manifest:
+  id: bot-09-journal
+  display: JOURNAL - Post-Trade Ledger
+  channel: DM
+  purpose: 'Reporting seat over the ledger of record: post-trade review
+    grading, P and L attribution, daily/weekly reports that the paper
+    evaluation is judged on.'
+  inputs:
+  - every ledger event via portfolio.ledger_read
+  - portfolio.pnl
+  outputs:
+  - journal entries (journal.append)
+  - JSONL export
+  - daily report (journal.render_report)
+  - weekly report
+  - ticket close records for CHIEF
+  skills:
+  - desk-post-trade-review
+  - desk-folders-and-journal
+  - hermes-cron-desk
+  - portfolio-ledger
+  - daily-report
+  - verification-receipts
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - place or cancel orders
+  - mutate past journal entries (append-only)
+  - write portfolio.ledger_write (only the execution path writes fills)
+  - D7 manipulation actions
+  fail_safe: 'Ledger unwritable: raise LedgerUnavailable, supervisor sets
+    orders_refused and alerts; report rendering failure: alert, no silent
+    skip.'
+  schedule:
+  - kind: cron
+    expr: '0 12 * * *'
+  - kind: event
+    expr: journal.append on every ledger event
+  escalation:
+  - Human via notify.alert on ledger reconciliation mismatch after restart
+  owned_paths:
+  - src/pumpgrok/reporting/**
+  - src/pumpgrok/tools/journal/**
+  - src/pumpgrok/tools/portfolio/**
+  - skills/portfolio-ledger/**
+  - skills/daily-report/**
+  - skills/desk-post-trade-review/**
+  - prompts/bot-09-journal.xml
+  - tests/reporting/**
+  - tests/tools/journal/**
+  - tests/tools/portfolio/**
+  - .receipts/bot-09-journal/**
+  receipts_dir: .receipts/bot-09-journal/
+  prompt_source: prompts/bot-09-journal.xml
+  writes_to_exchange: false

@@ -1,7 +1,7 @@
 # SCOUT roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-01-scout.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-01-scout
 short: scout
 endpoint: /mcp/scout
@@ -185,3 +185,72 @@ tools:
       then:
         required:
         - note_kind
+manifest:
+  id: bot-01-scout
+  display: SCOUT - Alpha Hunter
+  channel: Trading Floor
+  purpose: 'Continuous discovery: new launches, early-volume anomalies,
+    launch-platform monitoring; emits structured LEADs.'
+  inputs:
+  - market.trades
+  - market.liquidity
+  - market.holders_snapshot
+  - onchain.token_metadata
+  - onchain.authorities
+  - ported engine monitor filter
+  - social priors from SHILL
+  outputs:
+  - LEAD events (JournalNote, note_kind lead) with mint, source, age,
+    liquidity, visible mint authority, early signals, optional pipeline score
+  skills:
+  - discovery-tools
+  - grokbot-pipeline
+  - solana-market-data
+  - social-sentiment
+  - desk-trade-lifecycle
+  - hermes-cron-desk
+  - verification-receipts
+  - rpc-hygiene
+  - momentum-signals
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - recommend size or urgency
+  - clear risk
+  - surface leads without verifiable mint plus source
+  - flood
+  - treat pipeline score as clearance
+  - D7 manipulation actions
+  fail_safe: 'Data source stale or WS disconnected: emit no leads, set data_stale
+    on heartbeat; never invents scores.'
+  schedule:
+  - kind: cron
+    expr: '0 * * * *'
+  - kind: event
+    expr: monitor stream in pumpgrok run
+  escalation:
+  - To CHIEF on data-source outage beyond 2 cycles
+  - never to human directly
+  owned_paths:
+  - src/pumpgrok/engine/monitor.py
+  - src/pumpgrok/tools/market/**
+  - skills/discovery-tools/**
+  - skills/solana-market-data/**
+  - skills/grokbot-pipeline/**
+  - prompts/bot-01-scout.xml
+  - tests/engine/test_monitor*.py
+  - tests/tools/market/**
+  - tests/characterization/engine/test_monitor*.py
+  - .receipts/bot-01-scout/**
+  receipts_dir: .receipts/bot-01-scout/
+  prompt_source: prompts/bot-01-scout.xml
+  writes_to_exchange: false

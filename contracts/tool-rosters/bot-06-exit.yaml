@@ -1,7 +1,7 @@
 # EXIT roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-06-exit.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-06-exit
 short: exit
 endpoint: /mcp/exit
@@ -247,3 +247,67 @@ tools:
           maxLength: 44
         maxItems: 20
         default: []
+manifest:
+  id: bot-06-exit
+  display: EXIT - Position Manager
+  channel: DM
+  purpose: 'Owns the sell side only. Evaluates pre-agreed take-profit /
+    stop-loss / trailing / max-hold rules and executes paper sells through
+    exec.quote to exec.simulate to exec.place (side sell).'
+  inputs:
+  - open positions (exec.positions)
+  - market.price
+  - RUG alerts
+  - exit-rule config
+  - ApprovalRecords of kind exit_rule, autonomous_paper or human_sell
+  - fresh decision_id (ULID) per sell decision
+  outputs:
+  - fill events (FillRecorded, side sell) with signature, realised P and L,
+    reason code, holding time, remaining balance
+  skills:
+  - position-monitoring
+  - desk-execution-protocol
+  - desk-post-trade-review
+  - jupiter-routing
+  - grokbot-pipeline
+  - paper-broker
+  - verification-receipts
+  - rpc-hygiene
+  - key-custody
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 20
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - open new positions
+  - increase size
+  - sell without an ApprovalRecord of an allowed kind
+  - auto-sell because the dry-run engine closed
+  - any live-write
+  - D7 manipulation actions
+  fail_safe: 'No price for blind_max_s: force-close at last_good with reason
+    blind_flatten and escalate; missing data never leaves a position
+    unprotected; timeout: UNKNOWN RESULT, no retry; kill-switch flatten: the
+    supervisor closes positions in-process, EXIT places no competing sells.'
+  schedule:
+  - kind: event
+    expr: exit evaluator poll on open positions in pumpgrok run
+  escalation:
+  - Human on every rug_alert, blind_flatten and graduated close (via CHIEF relay)
+  - CHIEF closes the ticket after full exit
+  owned_paths:
+  - src/pumpgrok/engine/exits.py
+  - skills/desk-strategy-lab/**
+  - prompts/bot-06-exit.xml
+  - tests/engine/test_exits*.py
+  - .receipts/bot-06-exit/**
+  receipts_dir: .receipts/bot-06-exit/
+  prompt_source: prompts/bot-06-exit.xml
+  writes_to_exchange: true

@@ -1,7 +1,7 @@
 # WHALE roster: 6 own tools + desk.* core eight (_core.yaml) = 14 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-03-whale.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-03-whale
 short: whale
 endpoint: /mcp/whale
@@ -188,3 +188,58 @@ tools:
       then:
         required:
         - note_kind
+manifest:
+  id: bot-03-whale
+  display: WHALE - Smart-Money Analyst
+  channel: Trading Floor
+  purpose: Holder quality and capital-flow analysis after RISK CLEAR/CONDITIONAL.
+  inputs:
+  - verdict event (must be CLEAR or CONDITIONAL)
+  - onchain.top_holders
+  - onchain.large_transfers
+  - onchain.deployer_history
+  - market.holders_snapshot
+  - vendor priors (top5 share, creator share, wallet diversity)
+  outputs:
+  - Smart-Money signal event (JournalNote, note_kind whale)
+  skills:
+  - holder-and-flow-analysis
+  - solana-market-data
+  - discovery-tools
+  - grokbot-pipeline
+  - verification-receipts
+  - rpc-hygiene
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - authorise a buy
+  - override or upgrade a RISK KILL
+  - treat social mentions as smart-money evidence
+  - D7 manipulation actions
+  fail_safe: 'onchain.top_holders unavailable: signal None with blind true; never
+    skips live holder analysis because pipeline priors exist.'
+  schedule:
+  - kind: event
+    expr: on verdict CLEAR or CONDITIONAL
+  escalation:
+  - To CHIEF plus RISK only
+  owned_paths:
+  - src/pumpgrok/tools/onchain/holders.py
+  - src/pumpgrok/tools/onchain/transfers.py
+  - skills/holder-and-flow-analysis/**
+  - prompts/bot-03-whale.xml
+  - tests/tools/onchain/test_holders*.py
+  - tests/tools/onchain/test_transfers*.py
+  - .receipts/bot-03-whale/**
+  receipts_dir: .receipts/bot-03-whale/
+  prompt_source: prompts/bot-03-whale.xml
+  writes_to_exchange: false

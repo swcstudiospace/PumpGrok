@@ -1,7 +1,7 @@
 # CHIEF roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-00-chief.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-00-chief
 short: chief
 endpoint: /mcp/chief
@@ -226,3 +226,96 @@ tools:
       then:
         required:
         - note_kind
+manifest:
+  id: bot-00-chief
+  display: CHIEF - Desk Orchestrator
+  channel: Trading Floor
+  purpose: 'Supervisor and process guardian: runs the scheduler, routes SCOUT
+    to RUG to RISK to WHALE/SIGNAL/SHILL to ticket to human approval to SNIPER
+    to RUG and EXIT to JOURNAL; assigns ticket ids; posts FLOOR HALTED
+    notices; restarts failed seats; escalates.'
+  inputs:
+  - every ledger event relayed in-process by the supervisor
+  - risk.halt_status
+  - seat heartbeats
+  outputs:
+  - tickets (OrderPlaced payload, PENDING_RISK/PENDING_HUMAN/APPROVED/CLOSED)
+  - desk status block
+  - halt notices
+  - Process compliance PASS/FAIL footer
+  skills:
+  - desk-operating-model
+  - desk-trade-lifecycle
+  - desk-risk-limits
+  - desk-monitoring
+  - desk-incident-response
+  - pumpgrok-setup
+  - tool-connections
+  - grokbot-pipeline
+  - hermes-cron-desk
+  - desk-folders-and-journal
+  - verification-receipts
+  - desk-doctor
+  - kill-switch
+  - live-gate-procedure
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - trade, size, or approve spends
+  - override RISK
+  - handle keys
+  - create tickets from pipeline output alone
+  - clear a halt or the kill switch (human CLI only)
+  - D7 manipulation actions
+  fail_safe: 'On any seat heartbeat miss, breaker trip, or halt: stop dispatching
+    new leads, keep EXIT/RUG monitoring running, post observe-only status; never
+    guesses.'
+  schedule:
+  - kind: interval
+    expr: supervisor loop with health check every cycle
+  - kind: cron
+    expr: '*/15 * * * *'
+  escalation:
+  - Human via notify.alert on RISK KILL of an open ticket
+  - daily-loss halt
+  - breaker trip
+  - repeated seat restarts
+  - stale data beyond threshold
+  - any live-write attempt in the audit log
+  owned_paths:
+  - docs/desk-operating-model.md
+  - docs/cross-bot-protocol.md
+  - docs/runbooks/**
+  - prompts/bot-00-chief.xml
+  - skills/desk-operating-model/**
+  - skills/desk-trade-lifecycle/**
+  - skills/desk-monitoring/**
+  - skills/desk-incident-response/**
+  - skills/pumpgrok-setup/**
+  - skills/tool-connections/**
+  - skills/hermes-cron-desk/**
+  - skills/desk-folders-and-journal/**
+  - skills/desk-doctor/**
+  - scripts/generate-templates.py
+  - scripts/assemble-prompts.sh
+  - scripts/hermes-*.sh
+  - hermes/**
+  - src/pumpgrok/supervisor/**
+  - src/pumpgrok/cli.py
+  - src/pumpgrok/tools/notify/**
+  - services/desk-gateway/**
+  - desk_cli.py
+  - README.md
+  - SETUP.md
+  - .receipts/bot-00-chief/**
+  receipts_dir: .receipts/bot-00-chief/
+  prompt_source: prompts/bot-00-chief.xml
+  writes_to_exchange: false

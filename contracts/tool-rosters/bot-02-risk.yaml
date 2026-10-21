@@ -1,7 +1,7 @@
 # RISK roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-02-risk.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-02-risk
 short: risk
 endpoint: /mcp/risk
@@ -177,3 +177,93 @@ tools:
     required:
     - action
     - reason
+manifest:
+  id: bot-02-risk
+  display: RISK - Absolute Safety Gate
+  channel: Trading Floor
+  purpose: 'Portfolio risk limits, drawdown, breakers, kill switch; issues
+    CLEAR/CONDITIONAL/KILL on every ticket; veto absolute; independent
+    reviewer: owns gates, contracts, ownership.yaml, SECURITY.md; stamps
+    approved_by on other seats receipts.'
+  inputs:
+  - safety reports from RUG
+  - LEADs
+  - WHALE/SIGNAL/SHILL signals and verdict history via portfolio.ledger_read
+  - portfolio.exposure
+  - portfolio.pnl
+  - risk.drawdown
+  - breaker states
+  outputs:
+  - verdict events (JournalNote, note_kind verdict, via desk.event_emit)
+  - limit decisions (risk.check_limits result)
+  - kill switch state (risk.kill_switch)
+  - escalations (Escalation via desk.event_emit, relayed to notify.alert)
+  - receipt approvals
+  skills:
+  - risk-audit
+  - desk-risk-limits
+  - grokbot-pipeline
+  - solana-market-data
+  - solana-rpc-and-wallet
+  - holder-and-flow-analysis
+  - desk-incident-response
+  - hermes-cron-desk
+  - verification-receipts
+  - kill-switch
+  - live-gate-procedure
+  - key-custody
+  - safety-scoring
+  - portfolio-ledger
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - soften a KILL
+  - allow any seat past a KILL
+  - skip or approximate a check
+  - place or cancel orders
+  - raise its own limits without a human-signed config change
+  - clear the kill switch or a halt (CLI-only human actions)
+  - self-approve its own receipts
+  - D7 manipulation actions
+  fail_safe: 'Missing or stale data for any required check: KILL / BLIND cannot
+    proceed; kill switch set: every in-flight and new order rejected with reason
+    kill_switch; unwritable ledger: refuse new orders.'
+  schedule:
+  - kind: cron
+    expr: '*/15 * * * *'
+  - kind: event
+    expr: RiskEngine.check on every order and at CONFIRMING
+  escalation:
+  - Human on KILL of an approved ticket
+  - daily-loss halt
+  - drawdown halt
+  - breaker trip
+  - any live-write attempt (all as Escalation events relayed to notify.alert)
+  owned_paths:
+  - ci/**
+  - contracts/**
+  - ownership.yaml
+  - SECURITY.md
+  - pyproject.toml
+  - uv.lock
+  - prompts/bot-02-risk.xml
+  - skills/risk-audit/**
+  - skills/desk-risk-limits/**
+  - skills/verification-receipts/**
+  - skills/kill-switch/**
+  - skills/live-gate-procedure/**
+  - skills/key-custody/**
+  - skills/rpc-hygiene/**
+  - .receipts/bot-02-risk/**
+  receipts_dir: .receipts/bot-02-risk/
+  prompt_source: prompts/bot-02-risk.xml
+  writes_to_exchange: false

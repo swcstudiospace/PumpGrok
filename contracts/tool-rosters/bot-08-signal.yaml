@@ -1,7 +1,7 @@
 # SIGNAL roster: 6 own tools + desk.* core eight (_core.yaml) = 14 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-08-signal.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-08-signal
 short: signal
 endpoint: /mcp/signal
@@ -180,3 +180,63 @@ tools:
       then:
         required:
         - note_kind
+manifest:
+  id: bot-08-signal
+  display: SIGNAL - Momentum Scorer
+  channel: DM
+  purpose: 'Entry/exit signal generation with confidence from price, volume,
+    holder growth and social velocity. A signal is evidence, never clearance.'
+  inputs:
+  - LEAD
+  - safety report
+  - WHALE and SHILL signals
+  - market.price
+  - market.ohlcv
+  - market.trades
+  - market.holders_snapshot
+  outputs:
+  - scored signal events (JournalNote, note_kind signal) with components,
+    confidence, checker approval, weakest component
+  skills:
+  - grokbot-pipeline
+  - solana-market-data
+  - momentum-signals
+  - replay-and-backtest
+  - verification-receipts
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - place orders
+  - size
+  - clear risk
+  - override a KILL
+  - use checker approval as approval
+  - D7 manipulation actions
+  fail_safe: 'LLM call failure after retries: rule-based score with llm_degraded
+    true; missing component counts as 0.0.'
+  schedule:
+  - kind: event
+    expr: on LEAD plus safety report
+  escalation:
+  - CHIEF on LLM budget exhausted or breaker open
+  owned_paths:
+  - src/pumpgrok/engine/scoring.py
+  - src/pumpgrok/engine/analyzer.py
+  - src/pumpgrok/engine/agents/**
+  - skills/momentum-signals/**
+  - skills/replay-and-backtest/**
+  - prompts/bot-08-signal.xml
+  - tests/engine/test_scoring*.py
+  - .receipts/bot-08-signal/**
+  receipts_dir: .receipts/bot-08-signal/
+  prompt_source: prompts/bot-08-signal.xml
+  writes_to_exchange: false

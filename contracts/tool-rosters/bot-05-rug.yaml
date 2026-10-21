@@ -1,7 +1,7 @@
 # RUG roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-05-rug.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-05-rug
 short: rug
 endpoint: /mcp/rug
@@ -175,3 +175,72 @@ tools:
         uniqueItems: true
     required:
     - mint
+manifest:
+  id: bot-05-rug
+  display: RUG - Safety Monitor
+  channel: Trading Floor
+  purpose: 'Pre-trade due diligence: runs safety.score_report and hands the
+    scored report to RISK. Post-fill: watches every open position for LP
+    removal, mint events, insider sells, freeze/tax changes and raises
+    structured alerts.'
+  inputs:
+  - LEAD events
+  - fill events
+  - onchain.token_metadata
+  - onchain.authorities
+  - onchain.lp_status
+  - onchain.top_holders
+  - market.price
+  - market.liquidity
+  outputs:
+  - safety report events (JournalNote, note_kind safety_report via desk.event_emit)
+  - alert events (Escalation, kind rug_flag, via desk.event_emit)
+  skills:
+  - position-monitoring
+  - desk-monitoring
+  - grokbot-pipeline
+  - solana-market-data
+  - risk-audit
+  - hermes-cron-desk
+  - safety-scoring
+  - verification-receipts
+  - rpc-hygiene
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: 0
+    max_token_fraction: 0
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 0
+    max_trades_per_day: 0
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - close a position
+  - delay an alert because the position is in profit
+  - issue a CLEAR (only RISK issues verdicts)
+  - D7 manipulation actions
+  fail_safe: 'Any check without live data: that check blind, report verdict KILL
+    recommended; monitor poll failure 3x: data_stale escalation to CHIEF plus
+    EXIT; the open position stays protected by EXIT blind policy.'
+  schedule:
+  - kind: cron
+    expr: '*/30 * * * *'
+  - kind: event
+    expr: position watcher poll in pumpgrok run
+  escalation:
+  - Alert to CHIEF plus EXIT plus human on any red flag
+  owned_paths:
+  - src/pumpgrok/tools/safety/**
+  - src/pumpgrok/tools/onchain/**
+  - src/pumpgrok/engine/watcher.py
+  - skills/position-monitoring/**
+  - skills/safety-scoring/**
+  - prompts/bot-05-rug.xml
+  - tests/tools/safety/**
+  - tests/tools/onchain/**
+  - .receipts/bot-05-rug/**
+  receipts_dir: .receipts/bot-05-rug/
+  prompt_source: prompts/bot-05-rug.xml
+  writes_to_exchange: false

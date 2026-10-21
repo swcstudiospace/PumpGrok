@@ -1,7 +1,7 @@
 # SNIPER roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
 # Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-04-sniper.
 # Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
-version: 1.0.0
+version: 1.1.0
 seat: bot-04-sniper
 short: sniper
 endpoint: /mcp/sniper
@@ -248,3 +248,81 @@ tools:
           maxLength: 44
         maxItems: 20
         default: []
+manifest:
+  id: bot-04-sniper
+  display: SNIPER - Single-Write Execution
+  channel: Trading Floor
+  purpose: 'The only seat that places a buy. Executes exactly once per approved
+    ticket with the approved parameters through exec.quote to exec.simulate to
+    exec.place on the PaperAdapter.'
+  inputs:
+  - approved ticket (OrderPlaced with ApprovalRecorded kind human_buy)
+  - verdict CLEAR or satisfied CONDITIONAL
+  - risk.check_limits pass
+  - market.price (precondition tolerance)
+  - onchain.priority_fee
+  - fresh decision_id (ULID) per decision
+  outputs:
+  - fill event (FillRecorded, side buy) with paper signature, fill amounts,
+    realised slippage, fee, route
+  - UNKNOWN RESULT report on timeout (reconcile by signature, no retry)
+  skills:
+  - jupiter-routing
+  - desk-execution-protocol
+  - solana-rpc-and-wallet
+  - solana-api-reference
+  - solana-market-data
+  - grokbot-pipeline
+  - verification-receipts
+  - paper-broker
+  - rpc-hygiene
+  - key-custody
+  - desk-doctor
+  risk_budget:
+    max_trade_fraction: "0.02"
+    max_token_fraction: "0.05"
+    daily_loss_halt_fraction: "0.05"
+    drawdown_halt_fraction: "0.15"
+    max_open_positions: 3
+    max_trades_per_day: 20
+    liquidity_floor_multiple: 10
+    partial_fill_fraction: "0.02"
+    paper_equity_sol: 10
+  forbidden:
+  - retry without a new approval and a new decision_id
+  - change size or mint
+  - execute a different token
+  - hold the position after the fill
+  - sell (exit only)
+  - resolve risk.kill_switch
+  - call vendor LiveExecutor
+  - any live-write
+  - D7 manipulation actions
+  fail_safe: 'Any precondition unmet: no call to exec.place; error or timeout:
+    single UNKNOWN RESULT report, no retry, ticket parked for human; kill
+    switch, halt, open breaker or limit breach: order rejected.'
+  schedule:
+  - kind: event
+    expr: ApprovalRecorded human_buy for a ticket in PENDING_HUMAN
+  escalation:
+  - To CHIEF plus human on UNKNOWN RESULT
+  - To RISK on price outside tolerance
+  owned_paths:
+  - src/pumpgrok/execution/paper_adapter.py
+  - src/pumpgrok/execution/curve_math.py
+  - src/pumpgrok/execution/fees.py
+  - src/pumpgrok/execution/latency.py
+  - src/pumpgrok/execution/__init__.py
+  - src/pumpgrok/tools/exec/**
+  - docs/design/paper-engine.md
+  - skills/jupiter-routing/**
+  - skills/desk-execution-protocol/**
+  - skills/solana-api-reference/**
+  - skills/paper-broker/**
+  - prompts/bot-04-sniper.xml
+  - tests/execution/**
+  - tests/tools/exec/**
+  - .receipts/bot-04-sniper/**
+  receipts_dir: .receipts/bot-04-sniper/
+  prompt_source: prompts/bot-04-sniper.xml
+  writes_to_exchange: true

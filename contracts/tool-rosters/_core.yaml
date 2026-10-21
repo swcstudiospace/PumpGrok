@@ -1,7 +1,7 @@
 # desk.* core eight (docs/TOOL_CATALOG.md section 9). Granted to every seat that sets
 # core: true. Every tool here is checked by ci/gates/check_desk_integrity.py (G-7).
 # Conventions: see contracts/README.md (tool-rosters).
-version: 1.0.0
+version: 1.1.0
 surface: desk
 tools:
 - name: desk.brief
