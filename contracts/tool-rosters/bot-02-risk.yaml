@@ -1,0 +1,182 @@
+# RISK roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
+# Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-02-risk.
+# Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
+version: 1.0.0
+seat: bot-02-risk
+short: risk
+endpoint: /mcp/risk
+scope: seat:risk
+core: true
+packs_allowed: false
+consumers:
+- bot-02-risk
+tools:
+- name: portfolio.ledger_read
+  kind: read
+  side_effect: read
+  gates: []
+  description: Read ledger events in sequence order. Read only; the ledger is written by the execution
+    path and the supervisor.
+  backend: portfolio.ledger_read
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      since_seq:
+        type: integer
+        minimum: 0
+        default: 0
+      types:
+        type: array
+        items:
+          type: string
+          pattern: ^[A-Z][A-Za-z]+$
+        maxItems: 18
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      source:
+        type: string
+        enum:
+        - paper
+        - replay
+        - manual
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 200
+- name: portfolio.exposure
+  kind: read
+  side_effect: read
+  gates: []
+  description: Current equity, cash, gross exposure and per-token exposure. Read only.
+  backend: portfolio.exposure
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+- name: portfolio.pnl
+  kind: read
+  side_effect: read
+  gates: []
+  description: Realised, unrealised and fee P&L, daily loss fraction and drawdown for a window. Read only.
+  backend: portfolio.pnl
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      window:
+        type: string
+        enum:
+        - day
+        - week
+        - all
+        default: day
+      as_of:
+        type: string
+        format: date-time
+- name: risk.check_limits
+  kind: read
+  side_effect: read
+  gates: []
+  description: Pure evaluation of the RiskEngine rules for a prospective order. Returns the first failing
+    rule. Enforcement runs inside the paper adapter.
+  backend: risk.check_limits
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      side:
+        type: string
+        enum:
+        - buy
+        - sell
+      size_lamports:
+        type: integer
+        minimum: 0
+      decision_id:
+        type: string
+        pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+      approval_id:
+        type: string
+        maxLength: 128
+    required:
+    - ticket_id
+    - mint
+    - side
+    - size_lamports
+- name: risk.drawdown
+  kind: read
+  side_effect: read
+  gates: []
+  description: Drawdown from peak equity and loss velocity per hour, for the loss-velocity breaker. Read
+    only.
+  backend: risk.drawdown
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      window_hours:
+        type: integer
+        minimum: 1
+        maximum: 168
+        default: 24
+- name: risk.halt_status
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Combined halt view: daily-loss floor halt, drawdown halt, kill switch, breaker states,
+    engagement and effective execution mode. Read only.'
+  backend: risk.halt_status
+  input:
+    type: object
+    additionalProperties: false
+    properties: {}
+- name: risk.kill_switch
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: 'Set the global kill switch or request a flatten of every open paper position. Actions
+    set and flatten_request only: clear is the human CLI, not a tool action.'
+  backend: risk.kill_switch
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      action:
+        type: string
+        enum:
+        - set
+        - flatten_request
+      reason:
+        type: string
+        minLength: 1
+        maxLength: 500
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - action
+    - reason
+    - approval_id
+    - rollback_plan

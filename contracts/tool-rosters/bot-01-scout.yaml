@@ -1,0 +1,190 @@
+# SCOUT roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
+# Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-01-scout.
+# Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
+version: 1.0.0
+seat: bot-01-scout
+short: scout
+endpoint: /mcp/scout
+scope: seat:scout
+core: true
+packs_allowed: false
+consumers:
+- bot-01-scout
+tools:
+- name: market.price
+  kind: read
+  side_effect: read
+  gates: []
+  description: Spot price of a token in SOL. Pre-graduation it comes from bonding-curve reserves; the
+    Jupiter route price is informational only. quote_mint defaults to WSOL.
+  backend: market.price
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      quote_mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      probe_amount_lamports:
+        type: integer
+        minimum: 1
+        default: 1000000
+    required:
+    - mint
+- name: market.liquidity
+  kind: read
+  side_effect: read
+  gates: []
+  description: Pool depth, curve progress and price impact for a given order size. Read only.
+  backend: market.liquidity
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      order_size_lamports:
+        type: integer
+        minimum: 0
+        default: 0
+    required:
+    - mint
+- name: market.trades
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Recent trades for a mint: side, size, wallet and timestamp, with buy/sell ratio and unique
+    wallet count. Read only.'
+  backend: market.trades
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 200
+      since_ts:
+        type: integer
+        minimum: 0
+    required:
+    - mint
+- name: market.holders_snapshot
+  kind: read
+  side_effect: read
+  gates: []
+  description: Holder count, top holders and concentration for a mint. Read only.
+  backend: market.holders_snapshot
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 50
+    required:
+    - mint
+- name: onchain.token_metadata
+  kind: read
+  side_effect: read
+  gates: []
+  description: Decimals, supply, token program, extensions and off-chain metadata fields for a mint. Read
+    only.
+  backend: onchain.token_metadata
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+    required:
+    - mint
+- name: onchain.authorities
+  kind: read
+  side_effect: read
+  gates: []
+  description: Mint and freeze authorities of a mint. Read only.
+  backend: onchain.authorities
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+    required:
+    - mint
+- name: journal.append
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Append a LEAD to the ledger as a journal_note with note_kind lead. The body is validated
+    against contracts/events/journal_note.schema.json.
+  backend: journal.append
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      kind:
+        type: string
+        enum:
+        - journal_note
+        description: 'Ledger kind: snake_case of an R32 type this seat may write.'
+      note_kind:
+        type: string
+        enum:
+        - lead
+        description: Required when kind is journal_note.
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      body:
+        type: object
+        description: Payload for the kind; validated against its schema.
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - kind
+    - body
+    - approval_id
+    - rollback_plan
+    allOf:
+    - if:
+        properties:
+          kind:
+            const: journal_note
+        required:
+        - kind
+      then:
+        required:
+        - note_kind

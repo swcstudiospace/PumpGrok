@@ -1,0 +1,177 @@
+# RUG roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
+# Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-05-rug.
+# Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
+version: 1.0.0
+seat: bot-05-rug
+short: rug
+endpoint: /mcp/rug
+scope: seat:rug
+core: true
+packs_allowed: false
+consumers:
+- bot-05-rug
+tools:
+- name: market.price
+  kind: read
+  side_effect: read
+  gates: []
+  description: Spot price of a token in SOL. Pre-graduation it comes from bonding-curve reserves; the
+    Jupiter route price is informational only. quote_mint defaults to WSOL.
+  backend: market.price
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      quote_mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      probe_amount_lamports:
+        type: integer
+        minimum: 1
+        default: 1000000
+    required:
+    - mint
+- name: market.liquidity
+  kind: read
+  side_effect: read
+  gates: []
+  description: Pool depth, curve progress and price impact for a given order size. Read only.
+  backend: market.liquidity
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      order_size_lamports:
+        type: integer
+        minimum: 0
+        default: 0
+    required:
+    - mint
+- name: onchain.token_metadata
+  kind: read
+  side_effect: read
+  gates: []
+  description: Decimals, supply, token program, extensions and off-chain metadata fields for a mint. Read
+    only.
+  backend: onchain.token_metadata
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+    required:
+    - mint
+- name: onchain.authorities
+  kind: read
+  side_effect: read
+  gates: []
+  description: Mint and freeze authorities of a mint. Read only.
+  backend: onchain.authorities
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+    required:
+    - mint
+- name: onchain.lp_status
+  kind: read
+  side_effect: read
+  gates: []
+  description: Bonding-curve or graduated stage, LP burn and lock status for a mint. Read only.
+  backend: onchain.lp_status
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+    required:
+    - mint
+- name: onchain.top_holders
+  kind: read
+  side_effect: read
+  gates: []
+  description: Top token accounts by amount with top-1, top-5 and top-10 shares. Curve and LP accounts
+    are excluded by default. Read only.
+  backend: onchain.top_holders
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 20
+        default: 20
+      exclude:
+        type: array
+        items:
+          type: string
+          minLength: 32
+          maxLength: 44
+        maxItems: 32
+    required:
+    - mint
+- name: safety.score_report
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Scored pre-trade safety report over the ten checks: mint and freeze authority, LP status,
+    transfer tax, honeypot, concentration, bundler cluster, deployer history, Token-2022 extensions and
+    liquidity depth. Blind checks are reported, never guessed.'
+  backend: safety.score_report
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      intended_size_lamports:
+        type: integer
+        minimum: 0
+        default: 0
+      thresholds:
+        type: object
+      checks:
+        type: array
+        items:
+          type: string
+          enum:
+          - mint_authority
+          - freeze_authority
+          - lp_status
+          - transfer_tax
+          - honeypot
+          - top10_concentration
+          - bundler_cluster
+          - deployer_history
+          - token2022_extensions
+          - liquidity_depth
+        minItems: 1
+        uniqueItems: true
+    required:
+    - mint

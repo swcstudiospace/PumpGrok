@@ -1,0 +1,268 @@
+# desk.* core eight (docs/TOOL_CATALOG.md section 9). Granted to every seat that sets
+# core: true. Every tool here is checked by ci/gates/check_desk_integrity.py (G-7).
+# Conventions: see contracts/README.md (tool-rosters).
+version: 1.0.0
+surface: desk
+tools:
+- name: desk.brief
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Start-of-turn brief: the seat''s open tickets, halt status, last receipts and memory recall.
+    Read only.'
+  backend: core.brief
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      task_id:
+        type: string
+        maxLength: 64
+      refresh:
+        type: boolean
+        default: false
+- name: desk.docs_search
+  kind: read
+  side_effect: read
+  gates: []
+  description: Search docs/**, skills/** and contracts/** at origin/main. Returns path, line and text
+    chunks.
+  backend: core.docs_search
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      query:
+        type: string
+        minLength: 1
+        maxLength: 500
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 20
+    required:
+    - query
+- name: desk.memory_retain
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Retain a decision or verified command in the seat memory bank. Refused without receipt_path
+    or source.
+  backend: core.memory_retain
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      content:
+        type: string
+        minLength: 1
+        maxLength: 8000
+      receipt_path:
+        type: string
+        maxLength: 256
+      source:
+        type: string
+        maxLength: 256
+      task_id:
+        type: string
+        maxLength: 64
+      tags:
+        type: array
+        items:
+          type: string
+          maxLength: 64
+        maxItems: 16
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - content
+    - approval_id
+    - rollback_plan
+- name: desk.memory_recall
+  kind: read
+  side_effect: read
+  gates: []
+  description: Recall from the seat's own memory bank and, when include_shared is true, the shared desk
+    bank.
+  backend: core.memory_recall
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      query:
+        type: string
+        minLength: 1
+        maxLength: 500
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 20
+      include_shared:
+        type: boolean
+        default: false
+    required:
+    - query
+- name: desk.ownership_resolve
+  kind: read
+  side_effect: read
+  gates: []
+  description: Resolve repo paths to owning seats under ownership.yaml (last match wins). Unowned paths
+    are reported.
+  backend: core.ownership_resolve
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      paths:
+        type: array
+        items:
+          type: string
+          minLength: 1
+          maxLength: 512
+        minItems: 1
+        maxItems: 100
+    required:
+    - paths
+- name: desk.receipt_check
+  kind: read
+  side_effect: read
+  gates: []
+  description: Run G-2, G-3, G-5 and G-6 against a receipt without writing to git.
+  backend: core.receipt_check
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      bot:
+        type: string
+        pattern: ^bot-0[0-9]-[a-z-]+$
+      receipt:
+        type: object
+      receipt_path:
+        type: string
+        maxLength: 256
+      strict:
+        type: boolean
+        default: false
+    required:
+    - bot
+- name: desk.event_emit
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Emit a seat-attributed event to the ledger. Seats may emit journal_note and escalation
+    only. The payload is redacted and capped at 4 KB.
+  backend: core.event_emit
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      kind:
+        type: string
+        enum:
+        - journal_note
+        - escalation
+      note_kind:
+        type: string
+        enum:
+        - lead
+        - whale
+        - social
+        - signal
+        - verdict
+        - safety_report
+        - ticket
+        - halt
+        - review
+        - note
+        description: Required when kind is journal_note.
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      task_id:
+        type: string
+        maxLength: 64
+      payload:
+        type: object
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - kind
+    - approval_id
+    - rollback_plan
+    allOf:
+    - if:
+        properties:
+          kind:
+            const: journal_note
+        required:
+        - kind
+      then:
+        required:
+        - note_kind
+- name: desk.doctor
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: 'Desk health for this seat: check prompt SHA, skills, roster, registry grants and paper
+    execution mode; register the bot''s agent id; return the assembled prompt; repair.'
+  backend: core.doctor
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      action:
+        type: string
+        enum:
+        - check
+        - register
+        - install_prompt
+        - repair
+      agent_uuid:
+        type: string
+        maxLength: 64
+      channel_id:
+        type: string
+        maxLength: 64
+      prompt_sha256:
+        type: string
+        pattern: ^[0-9a-f]{64}$
+      installed_skills:
+        type: array
+        items:
+          type: string
+          maxLength: 128
+        maxItems: 64
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - action
+    - approval_id
+    - rollback_plan

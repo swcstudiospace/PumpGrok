@@ -1,0 +1,265 @@
+# JOURNAL roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
+# Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-09-journal.
+# Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
+version: 1.0.0
+seat: bot-09-journal
+short: journal
+endpoint: /mcp/journal
+scope: seat:journal
+core: true
+packs_allowed: false
+consumers:
+- bot-09-journal
+tools:
+- name: exec.positions
+  kind: read
+  side_effect: read
+  gates: []
+  description: Open and recently closed paper positions with marks, unrealised P&L and closed reason,
+    plus equity and cash. Read only.
+  backend: exec.positions
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      include_closed_since_ts:
+        type: integer
+        minimum: 0
+- name: portfolio.ledger_read
+  kind: read
+  side_effect: read
+  gates: []
+  description: Read ledger events in sequence order. Read only; the ledger is written by the execution
+    path and the supervisor.
+  backend: portfolio.ledger_read
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      since_seq:
+        type: integer
+        minimum: 0
+        default: 0
+      types:
+        type: array
+        items:
+          type: string
+          pattern: ^[A-Z][A-Za-z]+$
+        maxItems: 18
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      source:
+        type: string
+        enum:
+        - paper
+        - replay
+        - manual
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 200
+- name: portfolio.exposure
+  kind: read
+  side_effect: read
+  gates: []
+  description: Current equity, cash, gross exposure and per-token exposure. Read only.
+  backend: portfolio.exposure
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+- name: portfolio.pnl
+  kind: read
+  side_effect: read
+  gates: []
+  description: Realised, unrealised and fee P&L, daily loss fraction and drawdown for a window. Read only.
+  backend: portfolio.pnl
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      window:
+        type: string
+        enum:
+        - day
+        - week
+        - all
+        default: day
+      as_of:
+        type: string
+        format: date-time
+- name: notify.alert
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Send a human alert through the Notifier. Destinations are restricted to the notify.allowlist;
+    anything outside it is refused.
+  backend: notify.alert
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      severity:
+        type: string
+        enum:
+        - info
+        - warning
+        - critical
+      kind:
+        type: string
+        enum:
+        - rug_flag
+        - halt
+        - breaker
+        - killswitch
+        - escalation
+        - report
+        - unknown_result
+        - bot_restart_exhausted
+        - heartbeat_stale
+        - persistence_down
+        - clock_skew
+        - ledger_inconsistent
+        description: Same enum as contracts/events/escalation.schema.json kind.
+      text:
+        type: string
+        maxLength: 4000
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      fields:
+        type: object
+      destinations:
+        type: array
+        items:
+          type: string
+        minItems: 1
+      idempotency_key:
+        type: string
+        maxLength: 128
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - severity
+    - kind
+    - text
+    - approval_id
+    - rollback_plan
+- name: journal.append
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Append a seat journal entry to the ledger. The body is validated against contracts/events/<kind>.schema.json.
+  backend: journal.append
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      kind:
+        type: string
+        enum:
+        - journal_note
+        - escalation
+        description: 'Ledger kind: snake_case of an R32 type this seat may write.'
+      note_kind:
+        type: string
+        enum:
+        - lead
+        - whale
+        - social
+        - signal
+        - verdict
+        - safety_report
+        - ticket
+        - halt
+        - review
+        - note
+        description: Required when kind is journal_note.
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      body:
+        type: object
+        description: Payload for the kind; validated against its schema.
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - kind
+    - body
+    - approval_id
+    - rollback_plan
+    allOf:
+    - if:
+        properties:
+          kind:
+            const: journal_note
+        required:
+        - kind
+      then:
+        required:
+        - note_kind
+- name: journal.render_report
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Render the daily or weekly report to markdown under var/reports/ and optionally deliver
+    it through notify.alert.
+  backend: journal.render_report
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      period:
+        type: string
+        enum:
+        - daily
+        - weekly
+      as_of:
+        type: string
+        format: date-time
+      deliver:
+        type: boolean
+        default: true
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - period
+    - approval_id
+    - rollback_plan

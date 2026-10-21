@@ -1,0 +1,250 @@
+# SNIPER roster: 7 own tools + desk.* core eight (_core.yaml) = 15 effective.
+# Contract surface: contracts/tool-rosters/** (bot-02-risk, ownership.yaml). Consumer: bot-04-sniper.
+# Least privilege: docs/ROSTER.md section 5 and 6; tool names from docs/TOOL_CATALOG.md.
+version: 1.0.0
+seat: bot-04-sniper
+short: sniper
+endpoint: /mcp/sniper
+scope: seat:sniper
+core: true
+packs_allowed: false
+consumers:
+- bot-04-sniper
+tools:
+- name: market.price
+  kind: read
+  side_effect: read
+  gates: []
+  description: Spot price of a token in SOL. Pre-graduation it comes from bonding-curve reserves; the
+    Jupiter route price is informational only. quote_mint defaults to WSOL.
+  backend: market.price
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      quote_mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      probe_amount_lamports:
+        type: integer
+        minimum: 1
+        default: 1000000
+    required:
+    - mint
+- name: exec.quote
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Route quote for a swap through the paper ExecutionAdapter. Informational only: the fill
+    is computed from the bonding curve. Never submits anything.'
+  backend: exec.quote
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      input_mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      output_mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      amount:
+        type: integer
+        minimum: 1
+        description: Lamports when input_mint is WSOL, otherwise token units.
+      slippage_bps:
+        type: integer
+        minimum: 0
+        maximum: 10000
+        default: 100
+    required:
+    - input_mint
+    - output_mint
+    - amount
+- name: exec.simulate
+  kind: read
+  side_effect: read
+  gates: []
+  description: 'Simulate a buy fill against observed liquidity: expected price, impact, fee, partial-fill
+    or liquidity-floor rejection. Precondition for exec.place.'
+  backend: exec.simulate
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      side:
+        type: string
+        enum:
+        - buy
+      size_lamports:
+        type: integer
+        minimum: 1
+        description: Lamports to spend on a buy.
+      slippage_bps:
+        type: integer
+        minimum: 0
+        maximum: 10000
+        default: 100
+      quote_id:
+        type: string
+        maxLength: 64
+    required:
+    - ticket_id
+    - mint
+    - side
+    - size_lamports
+- name: exec.place
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: 'Place exactly one paper BUY for an approved ticket. Fails closed. approval_id must resolve
+    to an ApprovalRecorded event of kind human_buy for this ticket, mint, size and slippage. RiskEngine.check
+    runs inside the adapter and again at CONFIRMING. Idempotent on (ticket_id, side, decision_id). No
+    retry: a timeout is reported as UNKNOWN RESULT - reconcile by signature.'
+  backend: exec.place
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      side:
+        type: string
+        enum:
+        - buy
+      decision_id:
+        type: string
+        pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+        description: Minted per decision (R23). Idempotency is (ticket_id, side, decision_id).
+      size_lamports:
+        type: integer
+        minimum: 1
+        description: Lamports to spend on the buy.
+      max_slippage_bps:
+        type: integer
+        minimum: 0
+        maximum: 10000
+      quote_id:
+        type: string
+        maxLength: 64
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - ticket_id
+    - mint
+    - side
+    - decision_id
+    - size_lamports
+    - max_slippage_bps
+    - approval_id
+    - rollback_plan
+- name: exec.cancel
+  kind: write
+  side_effect: paper-write
+  gates:
+  - g6
+  description: Cancel one of this seat's own pending paper orders. Fails closed.
+  backend: exec.cancel
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      order_id:
+        type: string
+        pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+      ticket_id:
+        type: string
+        pattern: ^SOL-[0-9]{8}-[0-9]{3}$
+      approval_id:
+        type: string
+        minLength: 1
+        maxLength: 128
+        description: Human approval reference resolved to an ApprovalRecorded event (G-6).
+      rollback_plan:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: How this write is undone or compensated if it is wrong.
+    required:
+    - order_id
+    - ticket_id
+    - approval_id
+    - rollback_plan
+- name: exec.positions
+  kind: read
+  side_effect: read
+  gates: []
+  description: Open and recently closed paper positions with marks, unrealised P&L and closed reason,
+    plus equity and cash. Read only.
+  backend: exec.positions
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      mint:
+        type: string
+        minLength: 32
+        maxLength: 44
+      include_closed_since_ts:
+        type: integer
+        minimum: 0
+- name: onchain.priority_fee
+  kind: read
+  side_effect: read
+  gates: []
+  description: Recommended priority fee (micro-lamports per compute unit) from recent samples, capped
+    at max_micro_lamports. Read only.
+  backend: onchain.priority_fee
+  input:
+    type: object
+    additionalProperties: false
+    properties:
+      percentile:
+        type: integer
+        minimum: 0
+        maximum: 100
+        default: 50
+      multiplier:
+        type: string
+        pattern: ^[0-9]+(\.[0-9]+)?$
+        default: '1.2'
+      max_micro_lamports:
+        type: integer
+        minimum: 0
+        default: 50000
+      accounts:
+        type: array
+        items:
+          type: string
+          minLength: 32
+          maxLength: 44
+        maxItems: 20
+        default: []
