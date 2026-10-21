@@ -1,6 +1,22 @@
 """pumpgrok.core: re-export facade. Defines nothing; code imports `pumpgrok.core`."""
 
+from pumpgrok.core.adapter import (
+    ExecutionAdapter,
+    ExecutionMode,
+    Fill,
+    FillStatus,
+    LiveAdapterStub,
+    LiveGate,
+    OrderRequest,
+    Position,
+    Quote,
+    Side,
+    SimulationResult,
+)
+from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.bot import Bot, BotManifest, RiskBudget, Schedule, ToolGrant
+from pumpgrok.core.correlation import child_span, is_child_span, root_of
+from pumpgrok.core.datasource import DataSource, Freshness, Health, HealthStatus
 from pumpgrok.core.errors import (
     DataBlind,
     DataStale,
@@ -11,6 +27,7 @@ from pumpgrok.core.errors import (
     ToolRateLimited,
     ToolTimeout,
 )
+from pumpgrok.core.idempotency import canonical_json, derive_idempotency_key
 from pumpgrok.core.ids import (
     Clock,
     CorrelationId,
@@ -22,6 +39,7 @@ from pumpgrok.core.ids import (
 )
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.side_effect import MAX_GRANTABLE_SIDE_EFFECT, SideEffect
+from pumpgrok.core.skill import Skill, SkillManifest, SkillPermissions
 from pumpgrok.core.tool import (
     RetryPolicy,
     Tool,
@@ -33,23 +51,42 @@ from pumpgrok.core.tool import (
 )
 
 __all__ = [
+    "ApprovalRecord",
     "Bot",
     "BotManifest",
     "Clock",
     "CorrelationId",
     "DataBlind",
+    "DataSource",
     "DataStale",
+    "ExecutionAdapter",
+    "ExecutionMode",
+    "Fill",
+    "FillStatus",
+    "Freshness",
     "GrantAudit",
+    "Health",
+    "HealthStatus",
     "IdFactory",
+    "LiveAdapterStub",
+    "LiveGate",
     "LiveGateError",
     "LedgerUnavailable",
     "MAX_GRANTABLE_SIDE_EFFECT",
+    "OrderRequest",
     "PermissionDenied",
+    "Position",
     "PumpgrokError",
+    "Quote",
     "RetryPolicy",
     "RiskBudget",
     "Schedule",
+    "Side",
     "SideEffect",
+    "SimulationResult",
+    "Skill",
+    "SkillManifest",
+    "SkillPermissions",
     "Tool",
     "ToolGrant",
     "ToolInput",
@@ -61,7 +98,12 @@ __all__ = [
     "ToolTimeout",
     "ULID_RE",
     "bind_correlation",
+    "canonical_json",
+    "child_span",
     "current_correlation",
+    "derive_idempotency_key",
+    "is_child_span",
     "next_span",
+    "root_of",
     "tool",
 ]
