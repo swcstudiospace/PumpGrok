@@ -9,11 +9,13 @@ work, so delivery is recorded on disk only in Phase 3.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -54,7 +56,7 @@ class RenderReportOut(ToolOutput):
     """Report path and the folded summary."""
 
     report_path: str
-    summary: dict = Field(default_factory=dict)
+    summary: dict[str, object] = Field(default_factory=dict)
 
 
 RENDER_REPORT_SPEC = ToolSpec(
@@ -78,9 +80,23 @@ def report_path_for(reports_dir: Path, period: str, day: str) -> Path:
     return reports_dir / f"report-{period}-{day}.md"
 
 
+def _write_report(reports_dir: Path, target: Path, body: str) -> None:
+    """Write ``body`` to ``target`` via a temp file and ``os.replace`` (blocking I/O)."""
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(reports_dir), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(body)
+        os.replace(tmp_name, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
 async def run_render_report(
     inp: RenderReportIn, store: LedgerStore, clock: Clock, reports_dir: Path
-) -> dict:
+) -> dict[str, Any]:
     """Fold the ledger, render markdown, write atomically."""
     as_of = inp.as_of or datetime.fromtimestamp(clock.now(), UTC)
     day = as_of.strftime("%Y-%m-%d")
@@ -121,21 +137,10 @@ async def run_render_report(
         drawdown="0",
         delivery=delivery,
     )
-    reports_dir.mkdir(parents=True, exist_ok=True)
     target = report_path_for(reports_dir, inp.period, day)
-    fd, tmp_name = tempfile.mkstemp(dir=str(reports_dir), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(body)
-        os.replace(tmp_name, target)
-    except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    await asyncio.to_thread(_write_report, reports_dir, target, body)
     ambient = ambient_correlation()
-    summary = {
+    summary: dict[str, object] = {
         "trades": trades,
         "closed_trades": closed,
         "win_rate": None,
@@ -160,7 +165,7 @@ def build_render_report_tool(store: LedgerStore, clock: Clock, reports_dir: Path
     """Bind ``journal.render_report`` to one store, clock and directory."""
 
     @tool(RENDER_REPORT_SPEC)
-    async def _render_report(payload: RenderReportIn) -> dict:
+    async def _render_report(payload: RenderReportIn) -> dict[str, Any]:
         return await run_render_report(payload, store, clock, reports_dir)
 
     return _render_report

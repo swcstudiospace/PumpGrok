@@ -10,12 +10,13 @@ locked Q4 divergence). Appends are idempotent over
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -46,7 +47,7 @@ class JournalAppendIn(ToolInput):
     kind: Literal["journal_note", "escalation"]
     note_kind: str | None = None
     ticket_id: str | None = Field(default=None, pattern=r"^SOL-\d{8}-\d{3}$")
-    body: dict = Field(default_factory=dict)
+    body: dict[str, Any] = Field(default_factory=dict)
     bot: str = Field(min_length=1, max_length=64)
 
     @model_validator(mode="after")
@@ -84,15 +85,15 @@ APPEND_SPEC = ToolSpec(
 )
 
 
-def journal_append_key(kind: str, ticket_id: str | None, body: dict) -> str:
+def journal_append_key(kind: str, ticket_id: str | None, body: dict[str, Any]) -> str:
     """Derived key: d(kind, ticket_id, sha256(body))."""
     digest = hashlib.sha256(
-        f"{kind}\n{ticket_id or ''}\n{json.dumps(body, sort_keys=True)}".encode("utf-8")
+        f"{kind}\n{ticket_id or ''}\n{json.dumps(body, sort_keys=True)}".encode()
     ).hexdigest()
     return digest[:32]
 
 
-def _payload_of(inp: JournalAppendIn) -> tuple[str, dict]:
+def _payload_of(inp: JournalAppendIn) -> tuple[str, dict[str, Any]]:
     if inp.kind == "journal_note":
         return "JournalNote", {
             "source": "paper",
@@ -104,9 +105,18 @@ def _payload_of(inp: JournalAppendIn) -> tuple[str, dict]:
     return "Escalation", {"source": "paper", "seat": inp.bot, **inp.body}
 
 
+def _export_line(journal_dir: Path, now: datetime, line: str) -> Path:
+    """Append one JSONL line to the day's journal file (blocking file I/O)."""
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    journal_path = journal_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
+    with open(journal_path, "a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+    return journal_path
+
+
 async def run_journal_append(
     inp: JournalAppendIn, store: LedgerStore, clock: Clock, journal_dir: Path
-) -> dict:
+) -> dict[str, Any]:
     """Append the event (idempotent) and export the JSONL line."""
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
@@ -128,11 +138,8 @@ async def run_journal_append(
         if existing is None:  # pragma: no cover - defensive
             raise
         seq = int(existing["seq"])
-    journal_dir.mkdir(parents=True, exist_ok=True)
-    journal_path = journal_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
     line = json.dumps({"seq": seq, "kind": inp.kind, "payload": payload})
-    with open(journal_path, "a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    journal_path = await asyncio.to_thread(_export_line, journal_dir, now, line)
     return JournalAppendOut.model_validate(
         {
             "seq": seq,
@@ -146,7 +153,7 @@ def build_journal_append_tool(store: LedgerStore, clock: Clock, journal_dir: Pat
     """Bind ``journal.append`` to one store, clock and directory."""
 
     @tool(APPEND_SPEC)
-    async def _append(payload: JournalAppendIn) -> dict:
+    async def _append(payload: JournalAppendIn) -> dict[str, Any]:
         return await run_journal_append(payload, store, clock, journal_dir)
 
     return _append

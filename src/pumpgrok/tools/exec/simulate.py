@@ -9,7 +9,7 @@ path: it takes no store and appends nothing.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -84,7 +84,7 @@ SIMULATE_SPEC = ToolSpec(
 )
 
 
-async def run_simulate(inp: SimulateIn) -> dict:
+async def run_simulate(inp: SimulateIn) -> dict[str, Any]:
     """Validate the input, then refuse: the fill model is Phase 4 work.
 
     Takes no store and appends nothing, so zero ledger events on every path.
@@ -102,7 +102,7 @@ def build_simulate_tool() -> Tool:
     """Bind ``exec.simulate`` (no backend in Phase 3, no globals)."""
 
     @tool(SIMULATE_SPEC)
-    async def _simulate(payload: SimulateIn) -> dict:
+    async def _simulate(payload: SimulateIn) -> dict[str, Any]:
         return await run_simulate(payload)
 
     return _simulate

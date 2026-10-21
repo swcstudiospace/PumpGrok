@@ -9,7 +9,7 @@ repeat-returns-first-fill are Phase 4 work and must NOT be implemented here.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -100,7 +100,7 @@ async def run_place(
     inp: PlaceIn,
     adapter: ExecutionAdapter,
     get_budget: Callable[[], RiskBudget],
-) -> dict:
+) -> dict[str, Any]:
     """Validate the B7 contract, then hand the order to the adapter.
 
     Refusals (exit cannot BUY via ``seat_may_trade``) return a ``rejected``
@@ -142,7 +142,7 @@ def build_place_tool(adapter: ExecutionAdapter, get_budget: Callable[[], RiskBud
     """Bind ``exec.place`` to one adapter and one budget provider (no globals)."""
 
     @tool(PLACE_SPEC)
-    async def _place(payload: PlaceIn) -> dict:
+    async def _place(payload: PlaceIn) -> dict[str, Any]:
         return await run_place(payload, adapter, get_budget)
 
     return _place

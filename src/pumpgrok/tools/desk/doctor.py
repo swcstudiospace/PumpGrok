@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -47,7 +47,7 @@ class DoctorOut(ToolOutput):
     """One row per check; ``ok`` is False when any row fails."""
 
     ok: bool
-    rows: list[dict] = Field(default_factory=list)
+    rows: list[dict[str, str]] = Field(default_factory=list)
 
 
 DOCTOR_SPEC = ToolSpec(
@@ -67,7 +67,7 @@ DOCTOR_SPEC = ToolSpec(
 )
 
 
-def _check_rows(settings: Settings) -> tuple[bool, list[dict]]:
+def _check_rows(settings: Settings) -> tuple[bool, list[dict[str, str]]]:
     statuses = subsystem_statuses()
     rows = [
         {
@@ -99,7 +99,7 @@ def _check_rows(settings: Settings) -> tuple[bool, list[dict]]:
 
 def _register_rows(
     inp: DoctorIn, bindings_dir: Path, binding_key: bytes
-) -> tuple[bool, list[dict]]:
+) -> tuple[bool, list[dict[str, str]]]:
     if not inp.agent_uuid or not inp.channel_id:
         return False, [
             {
@@ -132,7 +132,7 @@ def _register_rows(
 
 async def run_doctor(
     inp: DoctorIn, settings: Settings, bindings_dir: Path, binding_key: bytes
-) -> dict:
+) -> dict[str, Any]:
     """Dispatch check/register; prompt assembly fails closed (Phase 4)."""
     if inp.action == "check":
         ok, rows = _check_rows(settings)
@@ -163,7 +163,7 @@ def build_doctor_tool(settings: Settings, bindings_dir: Path, binding_key: bytes
     """Bind ``desk.doctor`` to settings, a bindings dir and an HMAC key."""
 
     @tool(DOCTOR_SPEC)
-    async def _doctor(payload: DoctorIn) -> dict:
+    async def _doctor(payload: DoctorIn) -> dict[str, Any]:
         return await run_doctor(payload, settings, bindings_dir, binding_key)
 
     return _doctor

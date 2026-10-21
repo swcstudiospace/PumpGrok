@@ -7,6 +7,8 @@ with the Phase 4 PaperAdapter.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import Field
 
 from pumpgrok.core.adapter import ExecutionAdapter
@@ -34,7 +36,7 @@ class PositionsIn(ToolInput):
 class PositionsOut(ToolOutput):
     """Open positions; unreachable in Phase 3 (kept for the Phase 4 backend)."""
 
-    positions: list[dict] = Field(default_factory=list)
+    positions: list[dict[str, str | int | bool]] = Field(default_factory=list)
     equity_lamports: int = Field(default=0, ge=0)
     cash_lamports: int = Field(default=0, ge=0)
 
@@ -54,7 +56,7 @@ POSITIONS_SPEC = ToolSpec(
 )
 
 
-async def run_positions(inp: PositionsIn, adapter: ExecutionAdapter) -> dict:
+async def run_positions(inp: PositionsIn, adapter: ExecutionAdapter) -> dict[str, Any]:
     """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
     positions = await adapter.positions(inp.mint)
     ambient = ambient_correlation()
@@ -79,7 +81,7 @@ def build_positions_tool(adapter: ExecutionAdapter) -> Tool:
     """Bind ``exec.positions`` to one adapter (no globals)."""
 
     @tool(POSITIONS_SPEC)
-    async def _positions(payload: PositionsIn) -> dict:
+    async def _positions(payload: PositionsIn) -> dict[str, Any]:
         return await run_positions(payload, adapter)
 
     return _positions

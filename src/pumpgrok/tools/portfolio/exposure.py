@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import Field
 
@@ -43,7 +44,7 @@ class ExposureOut(ToolOutput):
     gross_exposure_fraction: Decimal = Field(ge=0, le=1)
     open_positions: int = Field(ge=0)
     trades_today: int = Field(ge=0)
-    per_token: list[dict] = Field(default_factory=list)
+    per_token: list[dict[str, str | int]] = Field(default_factory=list)
 
 
 EXPOSURE_SPEC = ToolSpec(
@@ -65,7 +66,7 @@ def _today_utc(clock: Clock) -> str:
     return datetime.fromtimestamp(clock.now(), UTC).strftime("%Y-%m-%d")
 
 
-async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dict:
+async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
     """Fold snapshots and position events into the exposure view."""
     snapshot = store.latest_snapshot()
     state = snapshot["state"] if snapshot else {}
@@ -110,7 +111,7 @@ def build_exposure_tool(store: LedgerStore, clock: Clock) -> Tool:
     """Bind ``portfolio.exposure`` to one store and clock (no globals)."""
 
     @tool(EXPOSURE_SPEC)
-    async def _exposure(payload: ExposureIn) -> dict:
+    async def _exposure(payload: ExposureIn) -> dict[str, Any]:
         return await run_exposure(payload, store, clock)
 
     return _exposure

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -68,7 +68,7 @@ PNL_SPEC = ToolSpec(
 )
 
 
-async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict:
+async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
     """Fold fills and closes into the window summary."""
     as_of = inp.as_of or datetime.fromtimestamp(clock.now(), UTC)
     realised = 0
@@ -121,7 +121,7 @@ def build_pnl_tool(store: LedgerStore, clock: Clock) -> Tool:
     """Bind ``portfolio.pnl`` to one store and clock (no globals)."""
 
     @tool(PNL_SPEC)
-    async def _pnl(payload: PnlIn) -> dict:
+    async def _pnl(payload: PnlIn) -> dict[str, Any]:
         return await run_pnl(payload, store, clock)
 
     return _pnl

@@ -7,9 +7,12 @@ effective execution mode into one read-only view. Breaker state is Phase 4
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic import Field
 
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
@@ -34,7 +37,7 @@ class HaltStatusOut(ToolOutput):
     """Halted iff any cause is active; ``reasons`` names the active causes."""
 
     halted: bool
-    reasons: list[str] = []
+    reasons: list[str] = Field(default_factory=list)
     kill_switch_active: bool = False
     drawdown_halt: bool = False
     daily_loss_halt: bool = False
@@ -57,15 +60,19 @@ HALT_STATUS_SPEC = ToolSpec(
 )
 
 
+def _killswitch_file_set(killswitch_path: Path | None) -> bool:
+    return killswitch_path is not None and killswitch_path.is_file()
+
+
 async def run_halt_status(
     inp: HaltStatusIn,
     store: LedgerStore,
     killswitch_path: Path | None,
     mode: Literal["paper", "live"] = "paper",
-) -> dict:
+) -> dict[str, Any]:
     """Fold halt events and kill-switch causes into one view."""
     env_set = os.environ.get("PUMPGROK_KILLSWITCH", "").strip() == "1"
-    file_set = killswitch_path is not None and killswitch_path.is_file()
+    file_set = await asyncio.to_thread(_killswitch_file_set, killswitch_path)
     halt_active = False
     halt_reason: str | None = None
     kill_active = env_set or file_set
@@ -108,7 +115,7 @@ def build_halt_status_tool(
     """Bind ``risk.halt_status`` to one store, file path and mode."""
 
     @tool(HALT_STATUS_SPEC)
-    async def _halt_status(payload: HaltStatusIn) -> dict:
+    async def _halt_status(payload: HaltStatusIn) -> dict[str, Any]:
         return await run_halt_status(payload, store, killswitch_path, mode)
 
     return _halt_status

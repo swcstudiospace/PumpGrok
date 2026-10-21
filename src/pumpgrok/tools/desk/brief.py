@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -42,9 +42,9 @@ class BriefIn(ToolInput):
 class BriefOut(ToolOutput):
     """Tickets (empty until Phase 4), halt, recall and an etag."""
 
-    tickets: list[dict] = Field(default_factory=list)
-    halt: dict = Field(default_factory=dict)
-    recall: list[dict] = Field(default_factory=list)
+    tickets: list[dict[str, Any]] = Field(default_factory=list)
+    halt: dict[str, Any] = Field(default_factory=dict)
+    recall: list[dict[str, Any]] = Field(default_factory=list)
     etag: str = ""
 
 
@@ -68,9 +68,10 @@ async def run_brief(
     store: LedgerStore,
     bank: MemoryBank,
     clock: Clock,
+    *,
     killswitch_path: Path | None,
     mode: Literal["paper", "live"] = "paper",
-) -> dict:
+) -> dict[str, Any]:
     """Fold halt + recall; etag covers (task_id, refresh, UTC minute)."""
     halt = await run_halt_status(HaltStatusIn(), store, killswitch_path, mode)
     halt.pop("meta", None)
@@ -99,7 +100,9 @@ def build_brief_tool(
     """Bind ``desk.brief`` to one store, bank, clock, file path and mode."""
 
     @tool(BRIEF_SPEC)
-    async def _brief(payload: BriefIn) -> dict:
-        return await run_brief(payload, store, bank, clock, killswitch_path, mode)
+    async def _brief(payload: BriefIn) -> dict[str, Any]:
+        return await run_brief(
+            payload, store, bank, clock, killswitch_path=killswitch_path, mode=mode
+        )
 
     return _brief

@@ -8,6 +8,7 @@ substring per line; binary files are skipped. No network, no index to drift.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -37,7 +38,7 @@ class DocsSearchIn(ToolInput):
 class DocsSearchOut(ToolOutput):
     """Matching chunks with repo-relative path, line and text."""
 
-    chunks: list[dict] = Field(default_factory=list)
+    chunks: list[dict[str, str | int]] = Field(default_factory=list)
 
 
 DOCS_SEARCH_SPEC = ToolSpec(
@@ -70,10 +71,10 @@ def _iter_text_files(repo_root: Path) -> list[Path]:
     return files
 
 
-async def run_docs_search(inp: DocsSearchIn, repo_root: Path) -> dict:
+async def run_docs_search(inp: DocsSearchIn, repo_root: Path) -> dict[str, Any]:
     """Scan text lines for the query; stop at ``limit`` chunks."""
     needle = inp.query.lower()
-    chunks: list[dict] = []
+    chunks: list[dict[str, str | int]] = []
     for path in _iter_text_files(repo_root):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -107,7 +108,7 @@ def build_docs_search_tool(repo_root: Path) -> Tool:
     """Bind ``desk.docs_search`` to one repo root (no globals)."""
 
     @tool(DOCS_SEARCH_SPEC)
-    async def _docs_search(payload: DocsSearchIn) -> dict:
+    async def _docs_search(payload: DocsSearchIn) -> dict[str, Any]:
         return await run_docs_search(payload, repo_root)
 
     return _docs_search

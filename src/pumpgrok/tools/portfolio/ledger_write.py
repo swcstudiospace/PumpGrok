@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -36,7 +36,7 @@ class LedgerWriteIn(ToolInput):
 
     type: EventType
     source: Literal["paper", "replay", "manual"]
-    payload: dict = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     ticket_id: str | None = Field(default=None, pattern=r"^SOL-\d{8}-\d{3}$")
     idempotency_key: str = Field(min_length=1, max_length=128)
 
@@ -65,7 +65,7 @@ LEDGER_WRITE_SPEC = ToolSpec(
 )
 
 
-async def run_ledger_write(inp: LedgerWriteIn, store: LedgerStore, clock: Clock) -> dict:
+async def run_ledger_write(inp: LedgerWriteIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
     """Append the validated event; a duplicate key replays the stored row."""
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
@@ -105,7 +105,7 @@ def build_ledger_write_tool(store: LedgerStore, clock: Clock) -> Tool:
     """Bind ``portfolio.ledger_write`` to one store and clock (no globals)."""
 
     @tool(LEDGER_WRITE_SPEC)
-    async def _ledger_write(payload: LedgerWriteIn) -> dict:
+    async def _ledger_write(payload: LedgerWriteIn) -> dict[str, Any]:
         return await run_ledger_write(payload, store, clock)
 
     return _ledger_write

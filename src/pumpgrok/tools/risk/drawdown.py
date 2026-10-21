@@ -8,6 +8,7 @@ against the injected budget fraction.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import Field
 
@@ -58,7 +59,7 @@ DRAWDOWN_SPEC = ToolSpec(
 )
 
 
-async def run_drawdown(inp: DrawdownIn, store: LedgerStore, budget: RiskBudget) -> dict:
+async def run_drawdown(inp: DrawdownIn, store: LedgerStore, budget: RiskBudget) -> dict[str, Any]:
     """Scan snapshots in the window; empty history yields zeros."""
     snapshots = store.read_snapshots()
     equities = [int(s["state"].get("equity_lamports", 0)) for s in snapshots]
@@ -83,7 +84,7 @@ def build_drawdown_tool(store: LedgerStore, budget: RiskBudget) -> Tool:
     """Bind ``risk.drawdown`` to one store and budget (no globals)."""
 
     @tool(DRAWDOWN_SPEC)
-    async def _drawdown(payload: DrawdownIn) -> dict:
+    async def _drawdown(payload: DrawdownIn) -> dict[str, Any]:
         return await run_drawdown(payload, store, budget)
 
     return _drawdown

@@ -8,6 +8,7 @@ Jupiter quote path lives in the adapter, never in this tool (R44).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import Field
 
@@ -43,7 +44,7 @@ class QuoteOut(ToolOutput):
     out_amount: int = Field(ge=0)
     other_amount_threshold: int = Field(ge=0)
     price_impact: str
-    route_plan: list[dict] = Field(default_factory=list)
+    route_plan: list[dict[str, Any]] = Field(default_factory=list)
     context_slot: int | None = None
     source: str = "jupiter"
     expires_at: datetime | None = None
@@ -65,7 +66,7 @@ QUOTE_SPEC = ToolSpec(
 )
 
 
-async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter) -> dict:
+async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter) -> dict[str, Any]:
     """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
     quote = await adapter.quote(inp.input_mint, inp.output_mint, inp.amount, inp.slippage_bps)
     ambient = ambient_correlation()
@@ -81,7 +82,7 @@ def build_quote_tool(adapter: ExecutionAdapter) -> Tool:
     """Bind ``exec.quote`` to one adapter (no globals)."""
 
     @tool(QUOTE_SPEC)
-    async def _quote(payload: QuoteIn) -> dict:
+    async def _quote(payload: QuoteIn) -> dict[str, Any]:
         return await run_quote(payload, adapter)
 
     return _quote

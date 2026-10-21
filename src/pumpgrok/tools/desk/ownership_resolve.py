@@ -37,7 +37,7 @@ class OwnershipResolveIn(ToolInput):
 class OwnershipResolveOut(ToolOutput):
     """Per-path owner (last match wins) plus the unowned remainder."""
 
-    resolved: list[dict] = Field(default_factory=list)
+    resolved: list[dict[str, str | bool]] = Field(default_factory=list)
     unowned: list[str] = Field(default_factory=list)
 
 
@@ -62,10 +62,10 @@ def _load_rules(manifest_path: Path) -> list[dict[str, Any]]:
     return [r for r in rules if isinstance(r, dict) and "pattern" in r and "owner" in r]
 
 
-async def run_ownership_resolve(inp: OwnershipResolveIn, manifest_path: Path) -> dict:
+async def run_ownership_resolve(inp: OwnershipResolveIn, manifest_path: Path) -> dict[str, Any]:
     """Resolve each path; last matching rule wins."""
     rules = _load_rules(manifest_path)
-    resolved: list[dict] = []
+    resolved: list[dict[str, str | bool]] = []
     unowned: list[str] = []
     for path in inp.paths:
         match: dict[str, Any] | None = None
@@ -96,7 +96,7 @@ def build_ownership_resolve_tool(manifest_path: Path) -> Tool:
     """Bind ``desk.ownership_resolve`` to one manifest path (no globals)."""
 
     @tool(OWNERSHIP_RESOLVE_SPEC)
-    async def _ownership_resolve(payload: OwnershipResolveIn) -> dict:
+    async def _ownership_resolve(payload: OwnershipResolveIn) -> dict[str, Any]:
         return await run_ownership_resolve(payload, manifest_path)
 
     return _ownership_resolve

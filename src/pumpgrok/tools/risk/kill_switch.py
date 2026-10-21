@@ -8,12 +8,13 @@ key, so repeats within the minute replay instead of duplicating.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -69,7 +70,7 @@ KILL_SWITCH_SPEC = ToolSpec(
 def kill_switch_key(action: str, reason: str, clock: Clock) -> str:
     """Minute-derived idempotency key: d(tool, action, reason, UTC minute)."""
     minute = datetime.fromtimestamp(clock.now(), UTC).strftime("%Y-%m-%dT%H:%M")
-    digest = hashlib.sha256(f"{action}\n{reason}\n{minute}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{action}\n{reason}\n{minute}".encode()).hexdigest()
     return digest[:32]
 
 
@@ -78,13 +79,14 @@ async def run_kill_switch(
     store: LedgerStore,
     clock: Clock,
     killswitch_path: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Append the set event (idempotent per minute), then report the view."""
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
     ts_utc = datetime.fromtimestamp(clock.now(), UTC).isoformat()
     key = kill_switch_key(inp.action, inp.reason, clock)
-    try:
+    # Same minute repeat: the stored row already carries this intent.
+    with contextlib.suppress(sqlite3.IntegrityError):
         store.append(
             ts_utc=ts_utc,
             source="paper",
@@ -99,16 +101,14 @@ async def run_kill_switch(
                 "set_by": "risk.kill_switch",
             },
         )
-    except sqlite3.IntegrityError:
-        pass  # Same minute repeat: the stored row already carries this intent.
     return _status(store, killswitch_path, correlation)
 
 
-def _status(store: LedgerStore, killswitch_path: Path | None, correlation: str) -> dict:
+def _status(store: LedgerStore, killswitch_path: Path | None, correlation: str) -> dict[str, Any]:
     """Fold env, file and ledger causes into one view."""
     env_set = os.environ.get("PUMPGROK_KILLSWITCH", "").strip() == "1"
     file_set = killswitch_path is not None and killswitch_path.is_file()
-    latest_set: dict | None = None
+    latest_set: dict[str, Any] | None = None
     cleared_after = False
     for event in store.read(limit=1000):
         if event["type"] == "KillSwitchSet":
@@ -149,7 +149,7 @@ def build_kill_switch_tool(
     """Bind ``risk.kill_switch`` to one store, clock and file path."""
 
     @tool(KILL_SWITCH_SPEC)
-    async def _kill_switch(payload: KillSwitchIn) -> dict:
+    async def _kill_switch(payload: KillSwitchIn) -> dict[str, Any]:
         return await run_kill_switch(payload, store, clock, killswitch_path)
 
     return _kill_switch

@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -45,7 +45,7 @@ class EventEmitIn(ToolInput):
     kind: Literal["journal_note", "escalation"]
     note_kind: str | None = None
     task_id: str | None = None
-    payload: dict = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class EventEmitOut(ToolOutput):
@@ -70,7 +70,7 @@ EVENT_EMIT_SPEC = ToolSpec(
 )
 
 
-def scrub_payload(payload: dict) -> dict:
+def scrub_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Mask secret-looking values and cap the JSON form at 4 KB.
 
     Long strings are shortened in place so the event schema still validates;
@@ -94,7 +94,7 @@ def scrub_payload(payload: dict) -> dict:
     return scrubbed
 
 
-def event_emit_key(bot: str, kind: str, task_id: str | None, payload: dict) -> str:
+def event_emit_key(bot: str, kind: str, task_id: str | None, payload: dict[str, Any]) -> str:
     """Derived key: d(tool, bot, sha256(input))."""
     body = json.dumps({"kind": kind, "task_id": task_id, "payload": payload}, sort_keys=True)
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -103,7 +103,7 @@ def event_emit_key(bot: str, kind: str, task_id: str | None, payload: dict) -> s
 
 async def run_event_emit(
     inp: EventEmitIn, store: LedgerStore, clock: Clock, journal_dir: Path, bot: str
-) -> dict:
+) -> dict[str, Any]:
     """Scrub, cap, then append through the journal path with seat attribution."""
     scrubbed = scrub_payload(inp.payload)
     # Dedup rides on the journal key, whose body carries the seat: the same
@@ -138,7 +138,7 @@ def build_event_emit_tool(store: LedgerStore, clock: Clock, journal_dir: Path, b
     """Bind ``desk.event_emit`` to one store, clock, directory and seat."""
 
     @tool(EVENT_EMIT_SPEC)
-    async def _event_emit(payload: EventEmitIn) -> dict:
+    async def _event_emit(payload: EventEmitIn) -> dict[str, Any]:
         return await run_event_emit(payload, store, clock, journal_dir, bot)
 
     return _event_emit

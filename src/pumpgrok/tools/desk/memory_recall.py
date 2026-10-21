@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import Field
 
 from pumpgrok.core.ids import ambient_correlation
@@ -30,7 +32,7 @@ class MemoryRecallIn(ToolInput):
 class MemoryRecallOut(ToolOutput):
     """Newest-first matching records (bank holds one shared file)."""
 
-    items: list[dict] = Field(default_factory=list)
+    items: list[dict[str, Any]] = Field(default_factory=list)
 
 
 MEMORY_RECALL_SPEC = ToolSpec(
@@ -45,7 +47,7 @@ MEMORY_RECALL_SPEC = ToolSpec(
 )
 
 
-async def run_memory_recall(inp: MemoryRecallIn, bank: MemoryBank) -> dict:
+async def run_memory_recall(inp: MemoryRecallIn, bank: MemoryBank) -> dict[str, Any]:
     """Search the bank; the shared file is the only bank in Phase 3."""
     _ = inp.include_shared  # Own/shared split is gateway routing (Phase 4).
     items = bank.recall(inp.query, inp.limit)
@@ -62,7 +64,7 @@ def build_memory_recall_tool(bank: MemoryBank) -> Tool:
     """Bind ``desk.memory_recall`` to one bank (no globals)."""
 
     @tool(MEMORY_RECALL_SPEC)
-    async def _memory_recall(payload: MemoryRecallIn) -> dict:
+    async def _memory_recall(payload: MemoryRecallIn) -> dict[str, Any]:
         return await run_memory_recall(payload, bank)
 
     return _memory_recall

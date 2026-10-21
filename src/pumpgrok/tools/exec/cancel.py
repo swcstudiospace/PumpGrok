@@ -8,15 +8,15 @@ valid shape raises ``not_yet_implemented``.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
 from pumpgrok.core.errors import NotYetImplemented
+from pumpgrok.core.idempotency import exec_cancel_key
 from pumpgrok.core.ids import ULID_RE, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
-from pumpgrok.core.idempotency import exec_cancel_key
 
 __all__ = [
     "CANCEL_SPEC",
@@ -60,7 +60,7 @@ CANCEL_SPEC = ToolSpec(
 )
 
 
-async def run_cancel(inp: CancelIn) -> dict:
+async def run_cancel(inp: CancelIn) -> dict[str, Any]:
     """Validate the input, then refuse: no order book exists in Phase 3."""
     ambient = ambient_correlation()
     raise NotYetImplemented(
@@ -77,7 +77,7 @@ def build_cancel_tool() -> Tool:
     """Bind ``exec.cancel`` (no backend in Phase 3, no globals)."""
 
     @tool(CANCEL_SPEC)
-    async def _cancel(payload: CancelIn) -> dict:
+    async def _cancel(payload: CancelIn) -> dict[str, Any]:
         return await run_cancel(payload)
 
     return _cancel

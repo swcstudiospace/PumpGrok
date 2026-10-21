@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -34,8 +34,8 @@ class LedgerReadIn(ToolInput):
 class LedgerReadOut(ToolOutput):
     """Matching events and the newest snapshot (None when never snapshotted)."""
 
-    events: list[dict] = Field(default_factory=list)
-    latest_snapshot: dict | None = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    latest_snapshot: dict[str, Any] | None = None
 
 
 LEDGER_READ_SPEC = ToolSpec(
@@ -53,7 +53,7 @@ LEDGER_READ_SPEC = ToolSpec(
 )
 
 
-async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore) -> dict:
+async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore) -> dict[str, Any]:
     """Filter events and fetch the latest snapshot (read-only, no locks)."""
     ambient = ambient_correlation()
     events = store.read(
@@ -76,7 +76,7 @@ def build_ledger_read_tool(store: LedgerStore) -> Tool:
     """Bind ``portfolio.ledger_read`` to one store (no globals)."""
 
     @tool(LEDGER_READ_SPEC)
-    async def _ledger_read(payload: LedgerReadIn) -> dict:
+    async def _ledger_read(payload: LedgerReadIn) -> dict[str, Any]:
         return await run_ledger_read(payload, store)
 
     return _ledger_read

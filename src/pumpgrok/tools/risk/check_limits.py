@@ -9,7 +9,7 @@ authorises nothing.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -22,9 +22,9 @@ from pumpgrok.tools._common import MintStr, meta_now
 
 __all__ = [
     "CHECK_LIMITS_SPEC",
+    "R34_RULE_IDS",
     "CheckLimitsIn",
     "CheckLimitsOut",
-    "R34_RULE_IDS",
     "build_check_limits_tool",
     "run_check_limits",
 ]
@@ -69,8 +69,8 @@ class CheckLimitsOut(ToolOutput):
 
     approved: bool
     reason: str | None = None
-    rules: list[dict] = Field(default_factory=list)
-    limits: dict = Field(default_factory=dict)
+    rules: list[dict[str, object]] = Field(default_factory=list)
+    limits: dict[str, str | int] = Field(default_factory=dict)
 
 
 CHECK_LIMITS_SPEC = ToolSpec(
@@ -88,11 +88,15 @@ CHECK_LIMITS_SPEC = ToolSpec(
 )
 
 
-def _row(rule_id: str, status: str, value: object = None, limit: object = None) -> dict:
+def _row(
+    rule_id: str, status: str, value: object = None, limit: object = None
+) -> dict[str, object]:
     return {"id": rule_id, "status": status, "value": value, "limit": limit}
 
 
-async def run_check_limits(inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget) -> dict:
+async def run_check_limits(
+    inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget
+) -> dict[str, Any]:
     """Evaluate structural checks; engine rules skip until Phase 4."""
     try:
         store.verify()
@@ -137,7 +141,7 @@ def build_check_limits_tool(store: LedgerStore, budget: RiskBudget) -> Tool:
     """Bind ``risk.check_limits`` to one store and budget (no globals)."""
 
     @tool(CHECK_LIMITS_SPEC)
-    async def _check_limits(payload: CheckLimitsIn) -> dict:
+    async def _check_limits(payload: CheckLimitsIn) -> dict[str, Any]:
         return await run_check_limits(payload, store, budget)
 
     return _check_limits

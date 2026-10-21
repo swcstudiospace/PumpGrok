@@ -23,8 +23,8 @@ class MemoryBank:
         self._records: list[dict[str, Any]] = []
         self._by_key: dict[str, str] = {}
         if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
+            for raw_line in path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
                 if not line:
                     continue
                 record = json.loads(line)
