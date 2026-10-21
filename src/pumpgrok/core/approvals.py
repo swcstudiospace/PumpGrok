@@ -10,9 +10,9 @@ A human trade approval is the exact phrase
 five whitespace-separated tokens, matched token for token against the ticket.
 `size-sol` is decimal SOL at the phrase boundary, converted once to lamports
 here (R28). The phrase carries no side: the caller names `human_buy` (buys)
-or `human_sell` (CLI/exit sells sized in SOL notional; units derive at the
-decision curve inside the adapter). `exit_rule` approvals always carry
-`token_units` from the rule engine and never come from a phrase.
+or `human_sell` (sells sized in SOL notional, with units derived at the
+decision curve inside the adapter, or directly in token units). `exit_rule`
+approvals always carry `token_units` from the rule engine and never come from a phrase.
 """
 
 from __future__ import annotations
@@ -92,8 +92,10 @@ class ApprovalRecord(BaseModel):
                 raise ValueError("human trade approval must carry ticket, mint and slippage")
             if self.kind == "human_buy" and self.size_lamports is None:
                 raise ValueError("human_buy approval must carry size_lamports")
-            if self.kind == "human_sell" and self.size_lamports is None:
-                raise ValueError("human_sell approval must carry size_lamports (SOL notional)")
+            if self.kind == "human_sell" and (
+                self.size_lamports is None and self.token_units is None
+            ):
+                raise ValueError("human_sell approval must carry size_lamports or token_units")
             if self.kind == "exit_rule" and self.token_units is None:
                 raise ValueError("exit_rule approval must carry token_units")
             if self.kind == "exit_rule" and (self.ticket_id is None or self.exit_rule_id is None):
@@ -113,9 +115,15 @@ class ApprovalRecord(BaseModel):
         return self._size_matches(request)
 
     def _size_matches(self, request: OrderRequest) -> bool:
-        """Size leg of matches: SOL notional, except EXIT-rule unit approvals."""
+        """Every size leg the approval states must agree with the request.
+
+        Unstated legs derive downstream, so a SOL-notional human_sell still
+        covers a unit-sized sell carrying the same notional.
+        """
         if request.side.value == "buy" or self.kind == "human_sell":
-            return self.size_lamports == request.size_lamports
+            if self.size_lamports is not None and self.size_lamports != request.size_lamports:
+                return False
+            return self.token_units is None or self.token_units == request.token_units
         if self.kind == "exit_rule":
             return self.token_units == request.token_units
         if self.kind == "autonomous_paper":

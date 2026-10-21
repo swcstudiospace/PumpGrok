@@ -54,7 +54,7 @@ class _ProbeOut(ToolOutput):
 
 
 class _PlaceIn(ToolInput):
-    """Approval-gated write input mirroring OrderRequest fields (fail-closed probe)."""
+    """Approval-gated write input mirroring OrderRequest fields (permitting probe)."""
 
     ticket_id: str = "SOL-20260101-001"
     mint: str = "M" * 32
@@ -90,7 +90,7 @@ def _probe_spec() -> ToolSpec:
 def _place_spec() -> ToolSpec:
     return ToolSpec(
         name="exec.probe",
-        description="Tracer probe: an approval-gated write proving fail-closed limits.",
+        description="Tracer probe: an approval-gated write proving the permitting limits gate.",
         input_model=_PlaceIn,
         output_model=_ProbeOut,
         side_effect=SideEffect.PAPER_WRITE,
@@ -143,12 +143,12 @@ async def test_tracer_read_probe_resolves_and_runs() -> None:
     assert ok_rows[0].reason == "ok"
 
 
-async def test_tracer_limits_checker_refuses_by_default() -> None:
+async def test_tracer_limits_checker_permits_by_default() -> None:
     clock = FixtureClock(start=START)
     reg, audits = build_registry(clock=clock, rng=random.Random(13))
 
-    async def _place(payload: _PlaceIn) -> _ProbeOut:  # pragma: no cover - never reached
-        raise AssertionError("fail-closed checker must refuse before the tool runs")
+    async def _place(payload: _PlaceIn) -> _ProbeOut:
+        return _ProbeOut(meta=_meta(), answer="pong")
 
     reg.register(tool(_place_spec())(_place))
     bot = _bot(
@@ -159,9 +159,14 @@ async def test_tracer_limits_checker_refuses_by_default() -> None:
     factory = IdFactory(clock, random.Random(14))
     with bind_correlation(CorrelationId.new(factory)):
         resolved = reg.find("exec.probe", max_side_effect=SideEffect.PAPER_WRITE, bot=bot)
-        with pytest.raises(PermissionDenied, match=r"RiskEngine\.check refused"):
-            await resolved(_PlaceIn())
+        out = await resolved(_PlaceIn())
+    assert out.answer == "pong"
     assert any(a.tool == "exec.probe" and a.allowed for a in audits)
+    # Unknown verbs are still refused: the permitting checker only waives the
+    # limits gate for granted tools; resolution itself stays fail-closed.
+    with bind_correlation(CorrelationId.new(factory)), pytest.raises(PermissionDenied):
+        reg.find("exec.unknown", max_side_effect=SideEffect.PAPER_WRITE, bot=bot)
+    assert any(a.tool == "exec.unknown" and not a.allowed for a in audits)
 
 
 async def test_tracer_wrap_applies_clock_timeout() -> None:

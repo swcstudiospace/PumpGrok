@@ -124,6 +124,8 @@ def test_approval_record_all_r33_kinds() -> None:
             )
         )
     with pytest.raises(ValidationError):
+        ApprovalRecord(**_base_approval(kind="human_sell", size_lamports=None, token_units=None))
+    with pytest.raises(ValidationError):
         ApprovalRecord(**_base_approval(kind="autonomous_paper", approved_by="human:alice"))
     with pytest.raises(ValidationError):
         ApprovalRecord(**_base_approval(kind="human_buy", approved_by="risk_engine"))

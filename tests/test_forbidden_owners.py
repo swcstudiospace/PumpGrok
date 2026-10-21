@@ -81,7 +81,12 @@ def test_forbidden_seats_refused_on_state(
     seat: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    assert main([*verb, "--seat", seat]) == EXIT_CONFIG
+    # The autonomy verb requires --by at parse time; supply it so parsing
+    # succeeds and the forbidden-seat refusal (not argparse) is exercised.
+    argv = [*verb, "--seat", seat]
+    if verb[:2] == ["state", "autonomy"]:
+        argv += ["--by", "human:alice"]
+    assert main(argv) == EXIT_CONFIG
     assert "refused" in capsys.readouterr().err
 
 

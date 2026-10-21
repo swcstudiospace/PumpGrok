@@ -25,7 +25,6 @@ from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.latency import P_DROP
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
@@ -239,7 +238,7 @@ def build_operator_registry(
     clock: Clock | None = None,
     ledger_path: Path | None = None,
     price_source: PriceSource | None = None,
-    p_drop: float | None = None,
+    p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
@@ -251,9 +250,9 @@ def build_operator_registry(
     ``price_source`` injects curve reads (tests pass scripted curves;
     production paper trading binds the RPC curve reader in Phase 4).
     ``p_drop`` fixes the confirmation-drop rate with a seeded stream
-    (tests pass ``0.0`` for deterministic fills); ``None`` keeps the
-    production 2% drop on a system-entropy stream, because a fresh
-    default-seeded stream would drop the first order of every invocation.
+    (the CLI default ``0.0`` gives deterministic confirms; replay passes
+    seeded curves with an explicit rate). The seeded ``make_rng`` stream
+    keeps replay deterministic (paper-engine 4.2).
     Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
     """
@@ -285,9 +284,9 @@ def build_operator_registry(
         risk=engine,
         ids=IdFactory(active_clock, make_rng()),
         clock=active_clock,
-        rng=random.SystemRandom() if p_drop is None else make_rng(),
+        rng=make_rng(),
         price_source=curves,
-        p_drop=P_DROP if p_drop is None else p_drop,
+        p_drop=p_drop,
     )
     bank = MemoryBank(data_dir / "memory.jsonl")
 
