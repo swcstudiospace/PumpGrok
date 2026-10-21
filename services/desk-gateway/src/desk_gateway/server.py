@@ -210,6 +210,7 @@ HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
 
 _MAX_BODY_BYTES = 1 << 20  # 1 MiB; tool arguments are small JSON
+_MAX_CONTENT_LENGTH_DIGITS = 7  # len(str(_MAX_BODY_BYTES)); longer can only be 400
 _CONTENT_LENGTH_RE = re.compile(r"[0-9]+")
 
 
@@ -290,9 +291,14 @@ class _Handler(BaseHTTPRequestHandler):
         if not values:
             return 0
         value = values[0].strip()
-        if len(values) != 1 or _CONTENT_LENGTH_RE.fullmatch(value) is None:
+        if len(values) != 1 or len(value) > _MAX_CONTENT_LENGTH_DIGITS:
             return None
-        return int(value)
+        if _CONTENT_LENGTH_RE.fullmatch(value) is None:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
 
     def do_POST(self) -> None:
         state = self.server.gateway_state  # type: ignore[attr-defined]

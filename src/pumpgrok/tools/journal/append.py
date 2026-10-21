@@ -86,10 +86,10 @@ APPEND_SPEC = ToolSpec(
 )
 
 
-def journal_append_key(kind: str, ticket_id: str | None, body: dict[str, Any]) -> str:
-    """Derived key: d(kind, ticket_id, sha256(body))."""
+def journal_append_key(kind: str, ticket_id: str | None, seat: str, body: dict[str, Any]) -> str:
+    """Derived key: d(kind, seat, ticket_id, sha256(body))."""
     digest = hashlib.sha256(
-        f"{kind}\n{ticket_id or ''}\n{json.dumps(body, sort_keys=True)}".encode()
+        f"{kind}\n{seat}\n{ticket_id or ''}\n{json.dumps(body, sort_keys=True)}".encode()
     ).hexdigest()
     return digest[:32]
 
@@ -135,7 +135,7 @@ async def run_journal_append(
         )
     seat = bound if bound is not None else inp.bot
     now = datetime.fromtimestamp(clock.now(), UTC)
-    key = journal_append_key(inp.kind, inp.ticket_id, inp.body)
+    key = journal_append_key(inp.kind, inp.ticket_id, seat, inp.body)
     event_type, payload = _payload_of(inp, seat)
     try:
         row = store.append(
