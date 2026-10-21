@@ -89,7 +89,8 @@ class PositionWatcher:
     async def check_once(self, now: float) -> list[str]:
         """One pass over open positions. Returns closed mints."""
         triggered: list[str] = []
-        persist_needed = False
+        peak_grew = False
+        sold = False
 
         for position in list(self.book.positions.values()):
             try:
@@ -103,7 +104,7 @@ class PositionWatcher:
             self.price_failures.pop(position.mint, None)
 
             if price > position.peak_price:
-                persist_needed = persist_needed or (
+                peak_grew = peak_grew or (
                     price >= position.peak_price * self.PEAK_PERSIST_STEP
                 )
                 position.peak_price = price
@@ -122,9 +123,9 @@ class PositionWatcher:
             )
             await self.sell_fn(position, price, signal.reason)
             triggered.append(position.mint)
-            persist_needed = False  # the sale persists the state itself
+            sold = True
 
-        if persist_needed:
+        if peak_grew or sold:
             self.book.persist()
         return triggered
 
