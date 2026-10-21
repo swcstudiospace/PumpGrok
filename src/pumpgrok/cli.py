@@ -23,10 +23,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import re
 import sys
 from collections.abc import Sequence
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, NoReturn, TextIO
 
@@ -94,7 +96,7 @@ def _size_sol(value: str) -> float:
         size = float(value)
     except ValueError:
         raise UsageError(f"bad --size-sol {value!r}: want a positive number") from None
-    if not size > 0:
+    if not size > 0 or not math.isfinite(size):
         raise UsageError(f"bad --size-sol {value!r}: want a positive number")
     return size
 
@@ -117,7 +119,9 @@ def _approval_id(value: str) -> str:
 
 def size_sol_to_lamports(size_sol: float) -> int:
     """Convert a SOL size to lamports once, here, so every path shares one rounding."""
-    return int(size_sol * LAMPORTS_PER_SOL)
+    return int(
+        (Decimal(str(size_sol)) * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP)
+    )
 
 
 def _not_implemented(verb: str) -> int:
@@ -381,12 +385,15 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _paper(args: argparse.Namespace) -> int:
+def _paper(args: argparse.Namespace, settings: Settings) -> int:
     verb = f"paper {args.cmd}"
     refused = _refuse_forbidden_seat(args.seat, verb)
     if refused is not None:
         return refused
     lamports = size_sol_to_lamports(args.size_sol)
+    if lamports > settings.risk.paper_equity_lamports:
+        _say(sys.stderr, f"usage error: --size-sol exceeds paper equity")
+        return EXIT_CONFIG
     log.info(
         "absent paper verb",
         extra={"event": "absent_verb", "verb": verb, "size_lamports": lamports},
@@ -413,7 +420,7 @@ def _dispatch(argv: Sequence[str]) -> int:
     if args.verb == "run":
         return _run(args, settings)
     if args.verb == "paper":
-        return _paper(args)
+        return _paper(args, settings)
     if args.verb == "state":
         return _state(args)
     if args.verb in (
