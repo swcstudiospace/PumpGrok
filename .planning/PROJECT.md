@@ -127,6 +127,12 @@ The desk runs autonomously in paper mode for 2-4 weeks and produces honest, repl
 | R31: Single-truth module placement under src/pumpgrok/{execution,risk,engine,tools,ledger,supervisor,...}; live stub owned by bot-02-risk | Ends module-name drift between design docs | - Pending |
 | R32: Ledger schema and the eighteen CamelCase event types defined once in ledger/events.py; snake_case kinds generated from the registry | One event vocabulary for ledger, schemas, tools and reports | - Pending |
 | R37: Five phases re-cut so every checkpoint is buildable from Phase 1 and the checkpoint rule holds with no waiver; vendor suite is the oracle through Phase 4 | Partial ports never leave two engines alive or a red checkpoint | - Pending |
+| R44: Jupiter quote via api.jup.ag/swap/v2/order, quote-only (no taker), optional JUPITER_API_KEY | lite-api v1 is no longer maintained; Swap V2 is the maintained quote path (STACK V-8) | - Pending |
+| R45: PumpPortal free methods only (subscribeNewToken, subscribeMigration); no trade-stream key | Trade streams need a key funded with >=0.02 SOL that embeds a wallet private key (D4 forbids key material) | - Pending |
+| R46: trade events from Solana JSON-RPC (logsSubscribe on bonding-curve PDAs, bounded getTransaction) | Replaces the PumpPortal trade stream without key material; bounded by signal.max_watched_mints | - Pending |
+| R47: pump.fun frontend REST treated as degradable (530/1016 observed) | Observed unavailable on all v1 paths; no entry may depend on it alone | - Pending |
+| R48: x.ai models in config: grok-4.3 (strong, low effort) and grok-4.20-0309-non-reasoning (fast) | grok-4 and grok-4-fast retired 2026-05-15 | - Pending |
+| R49: accepted STACK corrections V-1..V-7, V-9; open decision on enabling a PumpPortal trade key (default no) | Keeps dependency pins current and makes the one open financial-dependency decision explicit | - Pending |
 
 ## Evolution
 
