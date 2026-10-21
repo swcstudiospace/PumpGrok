@@ -49,6 +49,9 @@ coverage:
 duration: partial run (budget stop after task 1)
 completed: 2026-10-21
 status: partial
+task2-commit: 9a8dabf
+task2-verify: tests/tools/test_approvals_tickets.py + test_money_types.py + exec family + paper_adapter exit 0; ruff check exit 0; ruff format exit 0; mypy src/ exit 0
+task3-status: NOT STARTED (registry swap, paper/state/ticket CLI flows, test_verb_coverage.py, exit-5 table updates, plan closing gate)
 ---
 
 # Phase 04 Plan 07: Tickets, Approvals, Atomic Orders (PARTIAL) Summary
