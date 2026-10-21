@@ -112,7 +112,7 @@ def _status(
     file_set = killswitch_path is not None and killswitch_path.is_file()
     latest_set: dict[str, Any] | None = None
     cleared_after = False
-    for event in store.read(limit=1000):
+    for event in store.read(limit=None):
         if event["type"] == "KillSwitchSet":
             latest_set = event
             cleared_after = False

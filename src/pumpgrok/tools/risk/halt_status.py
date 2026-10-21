@@ -77,7 +77,7 @@ async def run_halt_status(
     halt_active = False
     halt_reason: str | None = None
     kill_active = env_set or file_set
-    for event in store.read(limit=1000):
+    for event in store.read(limit=None):
         if event["type"] == "HaltSet":
             halt_active = True
             halt_reason = str(event["payload"].get("reason", "halted"))

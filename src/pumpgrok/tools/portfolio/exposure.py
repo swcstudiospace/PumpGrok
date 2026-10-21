@@ -75,7 +75,7 @@ async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dic
     per_token: dict[str, int] = {}
     trades_today = 0
     today = _today_utc(clock)
-    for event in store.read(limit=1000):
+    for event in store.read(limit=None):
         payload = event["payload"]
         if event["type"] == "PositionOpened":
             mint = str(payload.get("mint", ""))

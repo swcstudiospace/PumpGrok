@@ -78,7 +78,7 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
     wins = 0
     gross_profit = 0
     gross_loss = 0
-    for event in store.read(limit=1000):
+    for event in store.read(limit=None):
         payload = event["payload"]
         if event["type"] == "FillRecorded":
             trades += 1

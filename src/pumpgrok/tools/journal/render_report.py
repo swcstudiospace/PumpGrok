@@ -107,7 +107,7 @@ async def run_render_report(
     rejected = 0
     halts = 0
     opened = 0
-    for event in store.read(limit=1000):
+    for event in store.read(limit=None):
         payload = event["payload"]
         if event["type"] == "FillRecorded":
             trades += 1

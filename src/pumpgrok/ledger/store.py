@@ -232,12 +232,13 @@ class LedgerStore:
         types: Sequence[str] | None = None,
         ticket_id: str | None = None,
         source: str | None = None,
-        limit: int = 200,
+        limit: int | None = 200,
     ) -> list[dict[str, Any]]:
         """Read events in seq order (TOOL-005 portfolio.ledger_read backend).
 
         Read-only: no locks, no chain mutation. ``ticket_id`` filters on the
         parsed payload in Python (there is no ticket column by design).
+        ``limit=None`` returns every matching row in seq order (full fold).
         """
         query = (
             "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
@@ -252,8 +253,10 @@ class LedgerStore:
             placeholders = ",".join("?" for _ in types)
             query += f" AND type IN ({placeholders})"
             args.extend(types)
-        query += " ORDER BY seq ASC LIMIT ?"
-        args.append(limit)
+        query += " ORDER BY seq ASC"
+        if limit is not None:
+            query += " LIMIT ?"
+            args.append(limit)
         rows = self._db.execute(query, args).fetchall()
         events: list[dict[str, Any]] = []
         for (
