@@ -1,4 +1,4 @@
-"""Screening engine: monitor, analyzer, scoring, reputation, exits, watcher.
+"""Screening engine: monitor, analyzer, scoring, reputation, exits, watcher, agents, pipeline, tune.
 
 Ported from ``vendor/grokbot-pumpfun/src/`` (oracle, kept byte-identical per
 R53). Every module runs on the injected clock with seeded randomness only,

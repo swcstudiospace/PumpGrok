@@ -417,6 +417,26 @@ ownership:
     owner: bot-06-exit
   - pattern: "tests/characterization/test_watcher.py"
     owner: bot-05-rug
+  - pattern: "tests/characterization/test_agents.py"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/test_pipeline.py"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/test_tune.py"
+    owner: bot-08-signal
+  - pattern: "tests/fixtures/http/xai_chat.json"
+    owner: bot-08-signal
+  - pattern: "src/pumpgrok/engine/agents/**"
+    owner: bot-08-signal
+  - pattern: "src/pumpgrok/engine/pipeline.py"
+    owner: bot-08-signal
+  - pattern: "src/pumpgrok/engine/tune.py"
+    owner: bot-08-signal
+  - pattern: "src/pumpgrok/core/ratelimit.py"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/core/budget.py"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/core/llm.py"
+    owner: bot-02-risk
 
 
   # --- Receipts: one rule per seat ----------------------------------------
