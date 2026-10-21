@@ -318,15 +318,20 @@ def load_settings(**kwargs: Any) -> Settings:
     """Build Settings after running every startup guard.
 
     Raises ConfigError (names/locations only, never values) when any guard
-    or validation fails.
+    or validation fails, or when the effective mode is live: the live gate
+    (design section 7.2) is not in this tree, so live must not start. Remove
+    the live refusal when the gate is wired.
     """
     problems = collect_startup_problems(os.environ)
     if problems:
         raise ConfigError(problems)
     try:
-        return Settings(**kwargs)
+        settings = Settings(**kwargs)
     except ValidationError as exc:
         raise ConfigError(_format_validation_error(exc)) from exc
+    if settings.effective_mode == "live":
+        raise ConfigError(["effective mode live is refused: the live gate is not built yet"])
+    return settings
 
 
 def refuse_cli_secrets(argv: Sequence[str]) -> None:

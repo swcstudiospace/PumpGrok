@@ -10,6 +10,7 @@ import pytest
 
 from pumpgrok.config.settings import (
     ConfigError,
+    Settings,
     allowed_env_names,
     find_unknown_env,
     load_settings,
@@ -48,7 +49,7 @@ def test_cli_init_beats_env_and_toml(
     config = _write_toml(tmp_path / "op.toml", '[execution]\nmode = "live"\n')
     monkeypatch.setenv("PUMPGROK_CONFIG", config)
     monkeypatch.setenv("PUMPGROK_MODE", "paper")
-    assert load_settings(mode="live").effective_mode == "live"
+    assert Settings(mode="live").effective_mode == "live"
 
 
 def test_nested_env_overrides_default(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,7 +82,7 @@ def test_config_file_applies_after_overlay(
         '[execution]\nmode = "live"\n[risk]\nmax_trades_per_day = 7\n',
     )
     monkeypatch.setenv("PUMPGROK_CONFIG", config)
-    settings = load_settings()
+    settings = Settings()
     assert settings.effective_mode == "live"
     assert settings.risk.max_trades_per_day == 7
 
@@ -104,3 +105,22 @@ def test_env_example_keys_are_declared() -> None:
     ]
     assert keys
     assert find_unknown_env({key: "x" for key in keys}, allowed_env_names()) == []
+
+
+def test_load_settings_refuses_live_mode_until_gate_exists(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config = _write_toml(tmp_path / "op.toml", '[execution]\nmode = "live"\n')
+    monkeypatch.setenv("PUMPGROK_CONFIG", config)
+    with pytest.raises(ConfigError, match="live gate"):
+        load_settings()
+    with pytest.raises(ConfigError, match="live gate"):
+        load_settings(mode="live")
+
+
+def test_live_profile_refused_until_gate_exists(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PUMPGROK_PROFILE", "live")
+    with pytest.raises(ConfigError, match="live gate"):
+        load_settings()
