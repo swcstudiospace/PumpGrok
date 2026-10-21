@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-10-20)
 
 ## Current Position
 
-Phase: 3 (tools-and-skills) — EXECUTING (wave 3)
-Plan: 03-03 complete (write-side tools, notify, desk eight; 4 commits, plan pytest exit 0, full suite exit 0)
-Status: 03-01 + 03-02 + 03-03 committed; 03-04+ pending orchestrator dispatch
-Last activity: 2026-10-21 — Phase 3 plan 03-03 executed (4 task commits, full suite 641 green)
+Phase: 3 (tools-and-skills) — EXECUTING (wave 4)
+Plan: 03-04 complete (seat manifests, least-privilege + cron-guard + projection suites; 6 commits, plan pytest exit 0, full suite exit 0, G-4 + G-7 PASS)
+Status: 03-01 + 03-02 + 03-03 + 03-04 committed; 03-05+ pending orchestrator dispatch
+Last activity: 2026-10-21 — Phase 3 plan 03-04 executed (6 task commits, full suite 681 green)
 
 Progress: [████░░░░░░] 40%
 
