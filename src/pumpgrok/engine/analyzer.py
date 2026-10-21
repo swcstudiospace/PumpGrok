@@ -101,7 +101,7 @@ class Analyzer:
             self.health[path] = True
             return resp.json()
         except Exception as exc:
-            log.warning("request %s failed: %s", path, exc)
+            log.warning("request %s failed: %s", path, type(exc).__name__)
             self.health[path] = False
             return None
 
