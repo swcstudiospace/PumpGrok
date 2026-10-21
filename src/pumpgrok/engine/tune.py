@@ -22,7 +22,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from pumpgrok.config.settings import ScoringWeights
+from pumpgrok.config.settings import ConfigError, ScoringWeights, load_settings
 
 COMPONENTS = ("audit", "narrative", "timing", "metrics")
 THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85)
@@ -286,10 +286,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _current_weights() -> ScoringWeights:
+    """Operator-configured weights, or factory defaults when unset/unreadable."""
+    try:
+        return load_settings().scoring.weights
+    except ConfigError:
+        return ScoringWeights()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point. Writes the report to stdout, returns the exit code."""
     args = build_parser().parse_args(argv)
-    lines, code = run_report(args.log, 0.05 if args.fine else 0.10, args.top, ScoringWeights())
+    lines, code = run_report(args.log, 0.05 if args.fine else 0.10, args.top, _current_weights())
     for line in lines:
         sys.stdout.write(line + "\n")
     return code
