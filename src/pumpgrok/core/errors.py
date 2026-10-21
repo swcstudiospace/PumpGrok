@@ -58,3 +58,9 @@ class DataBlind(PumpgrokError):
     """No price for longer than the blind window; the position uses last_good marks."""
 
     code = "data_blind"
+
+
+class ReplayMissingRecord(PumpgrokError):
+    """Replay asked for an LLM outcome the fixture does not record. Fail, never invent."""
+
+    code = "replay_missing_record"

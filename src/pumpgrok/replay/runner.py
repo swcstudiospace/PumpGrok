@@ -14,9 +14,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.errors import DataStale
@@ -27,6 +29,7 @@ from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore, recreate_ledg
 from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import EVENTS_NAME, CorruptFixture, load_dataset
+from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import DEFAULT_SEED, make_rng
 from pumpgrok.replay.sources import FixtureEventSource
 
@@ -35,6 +38,7 @@ __all__ = [
     "STALE_GAP_S",
     "ReplayResult",
     "ledger_events_hash",
+    "llm_request_for",
     "run_replay",
 ]
 
@@ -56,6 +60,23 @@ class ReplayResult:
     events_hash: str
     ledger_path: Path
     seq: int
+
+
+def llm_request_for(dataset_name: str, events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Build the model-resolution request a replay answers from the fixture.
+
+    Only fixture-stable inputs: the dataset name, the event count and the
+    first and last stamps. The generator authors the same dict, so the
+    recorded ``canonical_request_hash`` matches without running the engine.
+    """
+    first = events[0]
+    last = events[-1]
+    return {
+        "dataset": dataset_name,
+        "events": len(events),
+        "first_ts_utc": first["ts_utc"],
+        "last_ts_utc": last["ts_utc"],
+    }
 
 
 def ledger_events_hash(ledger_path: str | Path) -> str:
@@ -109,8 +130,15 @@ def run_replay(
             clock.advance_to(stamp)
         # Pure engine stage only: fixture ticks become evidence-less
         # candidates, so the fail-closed filter decides. No monitor stream,
-        # no analyzer fetch, no model lookup of any kind.
+        # no analyzer fetch. Model resolution answers from the fixture: a
+        # recorded outcome sleeps its virtual latency on the clock, and a
+        # request with no record fails the run (ReplayMissingRecord).
         decision = decide_replay(list(source), filter_cfg, clock.now())
+        replay_llm = load_llm_records(source_dir)
+        llm_clause = ""
+        if replay_llm is not None:
+            llm_outcome = replay_llm.complete(llm_request_for(source.name, list(source)), clock)
+            llm_clause = f"; llm outcome={llm_outcome.outcome} latency_s={llm_outcome.latency_s}"
         store = LedgerStore(target)
         try:
             stored = store.append_batch(
@@ -136,6 +164,7 @@ def run_replay(
                                 f"read {len(source)} fixture events from {source.name}; "
                                 "metadata and age gates satisfied by construction, "
                                 "buyer evidence absent by construction"
+                                f"{llm_clause}"
                             ),
                             "refs": [],
                         },

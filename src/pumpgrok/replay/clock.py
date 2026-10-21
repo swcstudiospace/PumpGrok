@@ -118,6 +118,15 @@ class FixtureClock:
         heapq.heappush(self._timers, timer)
         return timer
 
+    async def yield_to_loop(self) -> None:
+        """Yield once so peer seat tasks run between fixture events.
+
+        The single sanctioned suspension outside a timed wait: the runner is
+        synchronous, so virtual time does not advance here; the next
+        ``advance_to`` still fires every due timer in heap order.
+        """
+        await asyncio.sleep(0)
+
     async def sleep(self, seconds: float) -> None:
         """Suspend until virtual time reaches now + seconds (via `advance_to`)."""
         waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()

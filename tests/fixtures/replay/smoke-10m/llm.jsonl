@@ -1,0 +1,1 @@
+{"request_hash": "7b80ee6b022bf4c0c032614d9e033088754c9358591bb655649fb251791bb0e7", "outcome": "ok", "latency_s": 1.9, "response": {"model": "grok-replay", "verdict": "skip", "note": "hand-authored smoke-10m outcome"}}

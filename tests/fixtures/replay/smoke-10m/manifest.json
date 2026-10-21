@@ -1,0 +1,15 @@
+{
+  "dataset": "smoke-10m",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-01T00:10:00.000Z",
+  "seed_hint": 20260101,
+  "sources": {
+    "rest": "hand-authored",
+    "pumpportal": "hand-authored"
+  },
+  "sha256": {
+    "events.jsonl": "df6c18c4cc68be67c0e5c74d7e23030419a3e5ff58697669fb5a146fd8c5f156",
+    "llm.jsonl": "6ea1b215ee18d2a44298d9ae66bb51fcebbb4926ff814e544618b456adacdcc9"
+  },
+  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two mints, 41 ticks over ten minutes, one complete=true tick, one recorded LLM ok outcome."
+}

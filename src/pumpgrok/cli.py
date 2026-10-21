@@ -47,7 +47,7 @@ from pumpgrok.config.settings import (
     refuse_cli_secrets,
 )
 from pumpgrok.contracts.projection import short_to_seat
-from pumpgrok.core.errors import PumpgrokError
+from pumpgrok.core.errors import DataStale, PumpgrokError, ReplayMissingRecord
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
@@ -687,6 +687,33 @@ def _live_verb(_args: argparse.Namespace, _settings: Settings) -> int:
     return _not_implemented("live confirm")
 
 
+def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
+    """Replay a fixture dataset into its canonical replay ledger and verify it.
+
+    ``--fixture`` names a directory or a dataset bundled under
+    ``tests/fixtures/replay/<name>``. The run recreates
+    ``var/replay/<dataset>/ledger.sqlite``, prints the ``events.hash`` of the
+    chain, and exits 0 only when the chain verifies CONSISTENT.
+    """
+    raw = str(args.fixture)
+    candidate = Path(raw)
+    if candidate.is_dir():
+        dataset_dir = candidate
+    else:
+        bundled = _repo_root() / "tests" / "fixtures" / "replay" / raw
+        if not bundled.is_dir():
+            raise ConfigError([f"unknown fixture dataset: {raw!r}"])
+        dataset_dir = bundled
+    try:
+        result = run_replay(dataset_dir, settings.filter, seed=settings.replay.seed)
+    except (DataStale, ReplayMissingRecord) as exc:
+        _say(sys.stderr, f"replay failed: {exc.code}: {exc.message}")
+        return EXIT_CONFIG
+    _say(sys.stdout, f"events.hash={result.events_hash}")
+    _say(sys.stdout, f"verify=CONSISTENT seq={result.seq} events={result.events_read}")
+    return EXIT_OK
+
+
 def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
     return _not_implemented(f"replay {args.cmd}")
 
@@ -701,7 +728,6 @@ _FIND_ONLY_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
     "ticket": ("journal", ("journal.append", "portfolio.ledger_read")),
     "report": ("journal", ("journal.render_report",)),
     "audit": ("desk", ("desk.doctor",)),
-    "verify": ("desk", ("desk.receipt_check", "desk.ownership_resolve")),
 }
 
 _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
@@ -712,6 +738,7 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "killswitch": _killswitch,
     "live": _live_verb,
     "replay": _replay_verb,
+    "verify": _verify_verb,
 }
 
 
