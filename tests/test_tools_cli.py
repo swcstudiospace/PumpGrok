@@ -485,5 +485,108 @@ class TestOperatorVerbs:
         assert json.loads(out)["status"] == "not-yet-implemented"
 
 
+def _run_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> tuple[int, str, str]:
+    """Run main() under an isolated cwd and capture both streams."""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    from pumpgrok.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = main(argv)
+    return code, out.getvalue(), err.getvalue()
+
+
+class TestCliRegressionSweep:
+    """Task 3: TOOL-011 regression-proof; SC4 CLI half locked (STRUCT-005 pins)."""
+
+    def test_top_help_exit_0_and_hides_tools_verb(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--help"])
+        assert excinfo.value.code == 0
+
+    def test_hidden_verb_absent_from_top_help(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit):
+            main(["--help"])
+        assert "  tools " not in capsys.readouterr().out
+
+    def test_paper_help_lists_five_flags(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as excinfo:
+            main(["paper", "buy", "--help"])
+        assert excinfo.value.code == 0
+        out = capsys.readouterr().out
+        for flag in ("--ticket", "--mint", "--size-sol", "--slippage-bps", "--approval-id"):
+            assert flag in out
+
+    def test_no_direct_tool_imports_in_cli(self) -> None:
+        import re
+
+        text = (ROOT / "src" / "pumpgrok" / "cli.py").read_text(encoding="utf-8")
+        assert "build_operator_registry" in text
+        assert not re.search(r"pumpgrok\.tools\.\w", text)
+
+    @pytest.mark.parametrize(
+        "argv,expected",
+        [
+            (_trade_flags("desk"), 1),
+            (_trade_flags("bot-04-sniper", side="sell"), 1),
+            (["state", "status", "--seat", "desk"], 0),
+            (["state", "halt", "--seat", "desk"], 0),
+            (["state", "halt", "--clear", "--by", "op", "--reason", "r", "--seat", "desk"], 5),
+            (["state", "autonomy", "manual-ticket", "--seat", "desk"], 5),
+            (["killswitch", "set", "--reason", "sweep"], 0),
+            (["killswitch", "flatten", "--reason", "sweep"], 0),
+            (["killswitch", "status"], 0),
+            (["killswitch", "clear", "--by", "op", "--reason", "sweep"], 5),
+            (["scout", "discover"], 5),
+            (["scout", "pipeline", "--candidates"], 5),
+            (["risk", "audit"], 5),
+            (["chief", "pickup"], 5),
+            (["rug", "watch"], 5),
+            (["journal", "rollup", "--daily"], 5),
+            (["ticket", "next"], 5),
+            (["ticket", "create", "--mint", _TRADE_MINT], 5),
+            (["ticket", "list"], 5),
+            (["report", "--daily"], 5),
+            (["audit"], 5),
+            (["verify", "--fixture", "smoke"], 5),
+            (["live", "confirm"], 5),
+            (["replay", "trim"], 5),
+        ],
+    )
+    def test_every_wrapper_prints_json(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        argv: list[str],
+        expected: int,
+    ) -> None:
+        code, out, err = _run_cli(tmp_path, monkeypatch, argv)
+        assert code == expected
+        payload = json.loads(out)
+        if expected != 0:
+            assert payload["ok"] is False
+        assert "Traceback" not in err
+
+
 if __name__ == "__main__":
     unittest.main()
