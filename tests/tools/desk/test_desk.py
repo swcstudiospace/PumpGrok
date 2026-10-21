@@ -228,6 +228,15 @@ async def test_doctor_register_and_fail_closed_prompt(tmp_path: Path) -> None:
     prompt = await tool(DoctorIn(action="install_prompt"))
     assert prompt.ok is False and "Phase 4" in prompt.rows[0]["detail"]
 
+async def test_doctor_register_rejects_traversal(tmp_path: Path) -> None:
+    settings = Settings(mode="paper")
+    tool = build_doctor_tool(settings, tmp_path / "bindings", b"test-key")
+    for bad in ("../evil", "a/b", "x" * 65, ""):
+        out = await tool(DoctorIn(action="register", agent_uuid=bad, channel_id="c-1"))
+        assert out.ok is False
+        assert "agent_uuid" in out.rows[0]["detail"]
+    assert list((tmp_path / "bindings").glob("*.json")) == []
+
 
 async def test_brief_folds_halt_and_recall(tmp_path: Path) -> None:
     store = _store(tmp_path)

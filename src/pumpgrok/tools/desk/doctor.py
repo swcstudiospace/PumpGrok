@@ -11,6 +11,7 @@ row explaining why, instead of returning a faked prompt.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,6 +32,8 @@ __all__ = [
     "build_doctor_tool",
     "run_doctor",
 ]
+
+_AGENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class DoctorIn(ToolInput):
@@ -108,9 +111,26 @@ def _register_rows(
                 "detail": "register needs agent_uuid and channel_id",
             }
         ]
-    binding = digest_token(inp.agent_uuid, inp.channel_id, key=binding_key)
+    agent = inp.agent_uuid or ""
+    if not _AGENT_RE.fullmatch(agent):
+        return False, [
+            {
+                "check": "register",
+                "status": "fail",
+                "detail": "agent_uuid must be [A-Za-z0-9_-], max 64",
+            }
+        ]
+    binding = digest_token(agent, inp.channel_id, key=binding_key)
     bindings_dir.mkdir(parents=True, exist_ok=True)
-    record = bindings_dir / f"{inp.agent_uuid}.json"
+    record = (bindings_dir / f"{agent}.json").resolve()
+    if record.parent != bindings_dir.resolve() or record.is_symlink():
+        return False, [
+            {
+                "check": "register",
+                "status": "fail",
+                "detail": "agent_uuid resolves outside the bindings dir",
+            }
+        ]
     if record.is_file():
         stored = json.loads(record.read_text(encoding="utf-8"))
         ok = digest_compare(binding, str(stored.get("binding", "")))
