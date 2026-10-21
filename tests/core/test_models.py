@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
@@ -35,9 +36,9 @@ def test_risk_budget_nine_keys_and_daily_loss_cap() -> None:
     budget = RiskBudget(**NINE_KEYS)
     assert budget.paper_equity_lamports == 10_000_000_000
     assert budget.may_open_exposure is True
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RiskBudget(**{**NINE_KEYS, "daily_loss_halt_fraction": Decimal("0.051")})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RiskBudget(**{**NINE_KEYS, "paper_equity_sol": Decimal("1.5")}, extra="x")  # type: ignore[call-arg]
 
 
@@ -122,9 +123,9 @@ def test_approval_record_all_r33_kinds() -> None:
                 max_slippage_bps=None,
             )
         )
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ApprovalRecord(**_base_approval(kind="autonomous_paper", approved_by="human:alice"))
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ApprovalRecord(**_base_approval(kind="human_buy", approved_by="risk_engine"))
 
 

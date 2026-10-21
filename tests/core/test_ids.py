@@ -106,15 +106,19 @@ def test_uuid_is_banned_from_src_pumpgrok() -> None:
     for path in sorted((REPO_ROOT / "src" / "pumpgrok").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                if any(a.name == "uuid" or a.name.startswith("uuid.") for a in node.names):
-                    offenders.append(f"{path}:{node.lineno}: import uuid")
+            if isinstance(node, ast.Import) and any(
+                a.name == "uuid" or a.name.startswith("uuid.") for a in node.names
+            ):
+                offenders.append(f"{path}:{node.lineno}: import uuid")
             elif isinstance(node, ast.ImportFrom):
                 if node.module == "uuid" or (node.module or "").startswith("uuid."):
                     offenders.append(f"{path}:{node.lineno}: from uuid import")
-            elif isinstance(node, ast.Attribute):
-                if isinstance(node.value, ast.Name) and node.value.id == "uuid":
-                    offenders.append(f"{path}:{node.lineno}: uuid.{node.attr}")
+            elif (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "uuid"
+            ):
+                offenders.append(f"{path}:{node.lineno}: uuid.{node.attr}")
     assert offenders == [], f"uuid usage banned by R29: {offenders}"
 
 

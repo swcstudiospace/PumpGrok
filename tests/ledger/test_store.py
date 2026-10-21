@@ -48,16 +48,16 @@ def test_second_append_chains_prev_hash(tmp_path) -> None:
 def test_update_and_delete_raise(tmp_path) -> None:
     store = LedgerStore(tmp_path / "ledger.sqlite")
     store.append(**_event())
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         store._db.execute("UPDATE events SET type='X' WHERE seq=1")
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         store._db.execute("DELETE FROM events WHERE seq=1")
 
 
 def test_duplicate_idempotency_key_refused(tmp_path) -> None:
     store = LedgerStore(tmp_path / "ledger.sqlite")
     store.append(**_event())
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         store.append(**_event(ts_utc="2026-01-01T00:00:02.000001Z"))
     assert store.count() == 1
 

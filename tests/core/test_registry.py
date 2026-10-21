@@ -14,13 +14,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 import pytest
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.core.tool import RetryPolicy, ToolInput, ToolMeta, ToolOutput, ToolSpec
+from pumpgrok.core.tool import RetryPolicy, ToolInput, ToolMeta, ToolOutput, ToolSpec, tool
 
 ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
 
@@ -121,8 +122,6 @@ def _registry(audits: list[GrantAudit], clock: _Clock) -> ToolRegistry:
     async def _read_call(payload: _In) -> _Out:
         return _Out(meta=_meta())
 
-    from pumpgrok.core.tool import tool
-
     reg = ToolRegistry(clock=clock, audit_sink=audits.append, limits_checker=_allow)
     reg.register(tool(_read_spec())(_read_call))
     reg.register(tool(_live_spec())(_live_call))
@@ -175,9 +174,8 @@ def test_find_live_write_raises_for_every_caller_and_audits() -> None:
         ),
     ]
     for bot in readers:
-        with bind_correlation(CorrelationId.new(factory)):
-            with pytest.raises(LiveGateError):
-                reg.find("exec.live_place", max_side_effect=SideEffect.PAPER_WRITE, bot=bot)
+        with bind_correlation(CorrelationId.new(factory)), pytest.raises(LiveGateError):
+            reg.find("exec.live_place", max_side_effect=SideEffect.PAPER_WRITE, bot=bot)
     refusals = [a for a in audits if a.tool == "exec.live_place"]
     assert len(refusals) == 2
     assert all(a.allowed is False for a in refusals)
@@ -201,18 +199,17 @@ def test_find_ungranted_tool_refuses_and_audits() -> None:
     audits: list[GrantAudit] = []
     reg = _registry(audits, _Clock(1469918176.385))
     factory = IdFactory(_Clock(1469918176.385), random.Random(3))
-    with bind_correlation(CorrelationId.new(factory)):
-        with pytest.raises(PermissionDenied):
-            reg.find(
-                "market.price",
-                max_side_effect=SideEffect.READ,
-                bot=_bot("bot-03-x", []),
-            )
+    with bind_correlation(CorrelationId.new(factory)), pytest.raises(PermissionDenied):
+        reg.find(
+            "market.price",
+            max_side_effect=SideEffect.READ,
+            bot=_bot("bot-03-x", []),
+        )
     assert audits[-1].allowed is False
 
 
 def test_tool_name_requires_multi_dot_namespace() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ToolSpec(
             name="price",
             description="Missing namespace dot.",

@@ -1,4 +1,6 @@
-"""Static guards for virtual time, seeded randomness and identity (ROADMAP SC5, paper-engine 4.1-4.2).
+"""Static guards for virtual time, seeded randomness and identity.
+
+ROADMAP SC5, paper-engine 4.1-4.2.
 
 AST walk over src/pumpgrok. Comments and docstrings are not call sites in the AST, so
 prose never counts as a violation. Import aliases are resolved first, so

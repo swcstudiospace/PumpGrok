@@ -75,14 +75,13 @@ class JupiterQuoteContract(unittest.TestCase):
         mod = load_tool("jupiter_quote")
         mod.get_quote = lambda *a, **k: {"ok": False, "error": "dns"}
         buf = io.StringIO()
-        with mock.patch.object(
-            sys,
-            "argv",
-            ["jupiter_quote.py", "--input-mint", "A", "--output-mint", "B", "--amount", "1"],
+        argv = ["jupiter_quote.py", "--input-mint", "A", "--output-mint", "B", "--amount", "1"]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            redirect_stdout(buf),
+            self.assertRaises(SystemExit) as caught,
         ):
-            with redirect_stdout(buf):
-                with self.assertRaises(SystemExit) as caught:
-                    mod.main()
+            mod.main()
         self.assertEqual(caught.exception.code, 1)
         payload = json.loads(buf.getvalue())
         self.assertFalse(payload["ok"])
@@ -110,30 +109,36 @@ class FailClosedExitCodes(unittest.TestCase):
         mod = load_tool("authority_check")
         mod.check_mint = lambda *a, **k: {"ok": False, "error": "boom", "mint": "x"}
         buf = io.StringIO()
-        with mock.patch.object(sys, "argv", ["authority_check.py", "--mint", "x"]):
-            with redirect_stdout(buf):
-                with self.assertRaises(SystemExit) as caught:
-                    mod.main()
+        with (
+            mock.patch.object(sys, "argv", ["authority_check.py", "--mint", "x"]),
+            redirect_stdout(buf),
+            self.assertRaises(SystemExit) as caught,
+        ):
+            mod.main()
         self.assertEqual(caught.exception.code, 1)
 
     def test_holder_main_exits_nonzero_on_error(self):
         mod = load_tool("holder_check")
         mod.holder_snapshot = lambda *a, **k: {"ok": False, "error": "429"}
         buf = io.StringIO()
-        with mock.patch.object(sys, "argv", ["holder_check.py", "--mint", "x"]):
-            with redirect_stdout(buf):
-                with self.assertRaises(SystemExit) as caught:
-                    mod.main()
+        with (
+            mock.patch.object(sys, "argv", ["holder_check.py", "--mint", "x"]),
+            redirect_stdout(buf),
+            self.assertRaises(SystemExit) as caught,
+        ):
+            mod.main()
         self.assertEqual(caught.exception.code, 1)
 
     def test_priority_fee_main_exits_nonzero_on_error(self):
         mod = load_tool("priority_fee")
         mod.estimate_priority_fee = lambda *a, **k: {"ok": False, "error": "rpc"}
         buf = io.StringIO()
-        with mock.patch.object(sys, "argv", ["priority_fee.py"]):
-            with redirect_stdout(buf):
-                with self.assertRaises(SystemExit) as caught:
-                    mod.main()
+        with (
+            mock.patch.object(sys, "argv", ["priority_fee.py"]),
+            redirect_stdout(buf),
+            self.assertRaises(SystemExit) as caught,
+        ):
+            mod.main()
         self.assertEqual(caught.exception.code, 1)
 
     def test_paper_sim_main_exits_nonzero_on_error(self):
@@ -160,10 +165,12 @@ class FailClosedExitCodes(unittest.TestCase):
                 "--price",
                 "1",
             ]
-            with mock.patch.object(sys, "argv", argv):
-                with redirect_stdout(buf):
-                    with self.assertRaises(SystemExit) as caught:
-                        mod.main()
+            with (
+                mock.patch.object(sys, "argv", argv),
+                redirect_stdout(buf),
+                self.assertRaises(SystemExit) as caught,
+            ):
+                mod.main()
         self.assertEqual(caught.exception.code, 1)
         payload = json.loads(buf.getvalue())
         self.assertFalse(payload["ok"])

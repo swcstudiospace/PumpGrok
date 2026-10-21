@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from pumpgrok.ledger.events import (
     EVENT_MODELS,
     EventType,
+    FillRecorded,
     JournalNote,
     event_json_schemas,
 )
@@ -58,8 +59,6 @@ def test_journal_note_kind_note_ok_halt_rejected() -> None:
 
 
 def test_money_int_and_decimal_string_price() -> None:
-    from pumpgrok.ledger.events import FillRecorded
-
     fill = FillRecorded(
         source="paper",
         order_id="x",
@@ -101,7 +100,7 @@ def test_money_int_and_decimal_string_price() -> None:
 def test_schema_export_produces_18_valid_schemas() -> None:
     schemas = event_json_schemas()
     assert len(schemas) == 18
-    for name, schema in schemas.items():
+    for _name, schema in schemas.items():
         assert isinstance(schema, dict)
         assert schema.get("type") == "object"
         assert isinstance(schema.get("properties"), dict)
