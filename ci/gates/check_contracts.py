@@ -44,18 +44,26 @@ def contract_surfaces(manifest: dict) -> list[str]:
     return out
 
 
+def _segments_match(pattern: str, path: str) -> bool:
+    """Match one '/'-separated segment at a time: '*' and '?' never cross a '/'."""
+    pat_parts = pattern.split("/")
+    path_parts = path.split("/")
+    return len(pat_parts) == len(path_parts) and all(
+        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts)
+    )
+
+
 def _match(pattern: str, path: str) -> bool:
     if pattern.endswith("/**"):
         prefix = pattern[:-3]
         return path == prefix or path.startswith(prefix + "/")
     if "**/" in pattern:
         tail = pattern.split("**/", 1)[1]
-        return fnmatch.fnmatch(path, tail) or any(
-            fnmatch.fnmatch(path, f"{'*/' * n}{tail}") for n in range(1, 8)
-        )
+        parts = path.split("/")
+        return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
     if "/" not in pattern:
         return fnmatch.fnmatch(Path(path).name, pattern)
-    return fnmatch.fnmatch(path, pattern)
+    return _segments_match(pattern, path)
 
 
 def required_consumers(surface_path: str, manifest: dict) -> list[str]:

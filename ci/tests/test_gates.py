@@ -152,6 +152,19 @@ class TestG1Ownership:
         assert r.returncode == 1
         assert "UNOWNED" in r.stderr
 
+    @pytest.mark.parametrize(
+        "pattern,path,expected",
+        [
+            ("web/*", "web/a.ts", True),
+            ("web/*", "web/a/b.ts", False),
+            ("src/*.py", "src/a/b.py", False),
+            ("**/*.py", "a/b/c.py", True),
+            ("**/*.py", "c.py", True),
+        ],
+    )
+    def test_single_star_does_not_cross_a_directory(self, ownership, pattern, path, expected):
+        assert ownership._match(pattern, path) is expected
+
     def test_unknown_bot_is_rejected(self):
         r = run_gate(
             "check_ownership.py",
@@ -360,6 +373,20 @@ class TestG3Secrets:
 # ---------------------------------------------------------------------------
 # G-4 contract-first changes
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pattern,path,expected",
+    [
+        ("contracts/events/*.json", "contracts/events/a.json", True),
+        ("contracts/events/*.json", "contracts/events/x/a.json", False),
+        ("**/*.yaml", "contracts/changes/a.yaml", True),
+    ],
+)
+def test_contract_single_star_does_not_cross_a_directory(
+    contracts_gate, pattern, path, expected
+):
+    assert contracts_gate._match(pattern, path) is expected
 
 
 def _change_doc(manifest: dict, **overrides) -> dict:

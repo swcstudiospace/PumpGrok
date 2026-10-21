@@ -33,6 +33,15 @@ def load_manifest(path: Path) -> dict:
         return yaml.safe_load(fh)
 
 
+def _segments_match(pattern: str, path: str) -> bool:
+    """Match one '/'-separated segment at a time: '*' and '?' never cross a '/'."""
+    pat_parts = pattern.split("/")
+    path_parts = path.split("/")
+    return len(pat_parts) == len(path_parts) and all(
+        fnmatch.fnmatch(seg, pat) for pat, seg in zip(pat_parts, path_parts)
+    )
+
+
 def _match(pattern: str, path: str) -> bool:
     """gitignore-ish glob matching.
 
@@ -44,19 +53,16 @@ def _match(pattern: str, path: str) -> bool:
         return path == prefix or path.startswith(prefix + "/")
 
     if "**/" in pattern:
-        # '**/*.rs' should match 'a/b/c.rs' and 'c.rs'
+        # '**/*.rs' matches 'a/b/c.rs' and 'c.rs': the tail must match some path suffix.
         tail = pattern.split("**/", 1)[1]
-        if fnmatch.fnmatch(path, tail):
-            return True
-        return fnmatch.fnmatch(path, f"*/{tail}") or any(
-            fnmatch.fnmatch(path, f"{'*/' * n}{tail}") for n in range(1, 8)
-        )
+        parts = path.split("/")
+        return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
 
     if "/" not in pattern:
         # A bare pattern like 'Cargo.toml' or 'Dockerfile*' matches at any depth.
         return fnmatch.fnmatch(Path(path).name, pattern)
 
-    return fnmatch.fnmatch(path, pattern)
+    return _segments_match(pattern, path)
 
 
 def resolve_owner(path: str, manifest: dict) -> tuple[str | None, bool]:
