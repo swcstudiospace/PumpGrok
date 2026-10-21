@@ -104,7 +104,7 @@ def test_env_example_keys_are_declared() -> None:
         if line.strip() and not line.lstrip().startswith("#") and "=" in line
     ]
     assert keys
-    assert find_unknown_env({key: "x" for key in keys}, allowed_env_names()) == []
+    assert find_unknown_env(dict.fromkeys(keys, "x"), allowed_env_names()) == []
 
 
 def test_load_settings_reports_live_mode_and_leaves_refusal_to_the_gate(
