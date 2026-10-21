@@ -9,30 +9,30 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 
 ### Foundation (FOUND)
 
-- [ ] **FOUND-001**: The desk is a `uv_build` src-layout package with `pyproject.toml` (`requires-python = ">=3.12,<3.13"`, R40) and a committed `uv.lock`; `uv sync --frozen` succeeds on a clean checkout with the pins of `docs/FOUNDATION_STACK.md` section 2.
-- [ ] **FOUND-002**: Operator can run `make lint typecheck test audit` and each target executes the canonical command of `docs/FOUNDATION_STACK.md` section 6 (ruff check, ruff format --check, mypy --strict src/, pytest -q, pip-audit over the `uv export` bridge of R2) with exit 0.
-- [ ] **FOUND-003**: `docker compose up pumpgrok` builds the multi-stage non-root image and starts the desk with effective mode `paper`; the compose healthcheck passes (`pumpgrok doctor` until `/healthz` lands in AUTO-004).
-- [ ] **FOUND-004**: The desk loads settings through pydantic-settings with the R30 precedence (CLI `--mode` > env `PUMPGROK_MODE` > TOML `execution.mode`), overlays `src/pumpgrok/config/overlays/{dev,paper,live}.toml` selected by `PUMPGROK_PROFILE` (default `paper`), `PUMPGROK_CONFIG=<file>` applied last, `PUMPGROK_*` env with `__` nesting; with no overrides the effective mode is `paper`, there is no root `config/` directory, and startup refuses any forbidden key name (`PRIVATE_KEY`, `SECRET_KEY`, `SEED`, `MNEMONIC`, `WALLET_PRIVATE_KEY`; `hermes/profiles.yaml:18-22` carried into the loader).
-- [ ] **FOUND-005**: `src/pumpgrok/core/{interfaces,registry,ids,approvals}.py` (R31) define `SideEffect`, the error classes, `Tool`/`ToolSpec`, `DataSource`, `ExecutionAdapter`, `SkillManifest`, `BotManifest`/`RiskBudget` (keys of R20), `ApprovalRecord` (kinds of R33), `ToolRegistry`/`GrantAudit` with invariants labelled I1-I5 (R40); `ToolRegistry.find` raises `LiveGateError` for any `LIVE_WRITE` spec regardless of caller; ULIDs come only from `core/ids.py` and `uuid` is banned in `src/pumpgrok` by a static test (R29).
-- [ ] **FOUND-006**: `ownership.yaml` declares the ten seats of D3 and owns every tracked path per R36 (`core/ replay/ ledger/ config/ logging/` -> bot-02-risk; generated `agents/*.md` and `prompts-assembled/*` -> bot-00-chief; `src/pumpgrok/execution/live/**` rule after `src/pumpgrok/execution/**`); `python3 ci/gates/check_ownership.py --validate-manifest` exits 0 and a G-1 self-test walking `git ls-files` finds no UNOWNED path.
-- [ ] **FOUND-007**: `ci/gates/{check_ownership,check_receipt,check_secrets,check_contracts,check_rollback,check_desk_integrity,run_all}.py` are ported with the retargeted constants of `docs/FOUNDATION_STACK.md` section 4 and R19 (`TOOL_NAME_RE = ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`, `SEAT_RE = ^bot-0[0-9]-[a-z-]+$`, `ROSTER_MIN_TOOLS = 8`, max 15, Solana/RPC/Telegram secret shapes, trading DEPLOY/DESTRUCTIVE patterns); `python3 -m pytest ci/tests/ -q` passes; `.receipts/<seat>/.gitkeep` exists for all ten seats with JSON gitignored; `.gitignore` ignores `var/`, `.venv/`, `*.pyc`; `.pre-commit-config.yaml` runs G-3 `--staged`, the manifest check and the gate self-test as local hooks.
-- [ ] **FOUND-008**: `contracts/` holds `README.md`, `tool-rosters/_core.yaml` (desk core eight) plus ten seat rosters whose tool names are exactly those of `docs/TOOL_CATALOG.md` with the R35 sizes, one JSON Schema per ledger event type `contracts/events/<snake>.schema.json` for the eighteen R32 types (`order_placed` .. `approval_recorded`, generated from `ledger/events.py`, no third vocabulary; seat messages LEAD/whale/social/signal/verdict/safety_report are `JournalNote` payloads discriminated by `note_kind`, RUG alerts are `Escalation` payloads), and `changes/`; `python3 ci/gates/check_desk_integrity.py --repo .` exits 0.
-- [ ] **FOUND-009**: `prompts/_shared/core-directives.xml` (audiences `trading-seats | chief | risk`) and ten `prompts/bot-0N-<seat>.xml` sources assemble via `bash scripts/assemble-prompts.sh --check` into `prompts-assembled/<SEAT>.xml` with no `{{...}}` left, and `python3 scripts/generate-templates.py --check` regenerates `agents/<seat>.md` preserving the frontmatter keys `name,title,description,seat,skills,writes_to_exchange` (`agents/chief.md:1-17`) so `./scripts/check.sh` keeps passing.
-- [ ] **FOUND-010**: `.github/workflows/{gates.yml,security-pr.yml,ci.yml}` exist; `gates.yml` derives the acting bot from the branch prefix with the ten-seat regex, overlays `ci/gates/` from the base ref, selects the receipt added under `.receipts/$BOT/`, and runs G-1..G-7 plus the `gate-self-test` job; `ci.yml` runs the canonical commands; `security-pr.yml` triggers on `pyproject.toml`/`uv.lock` changes (R2).
-- [ ] **FOUND-011**: `AGENTS.md`, `SECURITY.md` (key-custody wording "no key material exists in paper mode; nothing to custody", R40), `CHANGELOG.md`, `docs/quality-gates.md`, `docs/desk-operating-model.md` and `docs/cross-bot-protocol.md` exist in programming-desk shape, name the ten seats, engagement levels `research | paper` (R16) and G-1..G-7, and pass `./scripts/check.sh` (no emoji).
-- [ ] **FOUND-012**: `tests/conftest.py` blocks all network (an `httpx` transport that raises on un-mocked requests plus a `websockets` connect monkeypatch, `docs/design/paper-engine.md` section 9); `src/pumpgrok/replay/{clock,rng,fixtures}.py` provide the `Clock` protocol with `WallClock`/`FixtureClock`, the single seeded RNG constructor and the fixture loader; `tests/harness/faults.py` provides `FaultInjector` (modes stale, timeout, rate_limit, raise, unwritable); a static test fails on any direct `asyncio.sleep`, `asyncio.timeout` or `time.time` in `src/pumpgrok` (R27).
-- [ ] **FOUND-013**: `src/pumpgrok/ledger/{store,events}.py` implement the R32 schema (`events(seq, ts_utc, source, correlation_id, idempotency_key, type, payload_json, prev_hash, hash)`, `snapshots`), `BEGIN IMMEDIATE` single-writer appends with the hash chain computed inside the transaction over canonical JSON (R26, R28) and the eighteen CamelCase event models; `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` executes a skip-only cycle (fixture events read, no engine, one `JournalNote` appended, `source=replay`, ledger at `var/replay/smoke/ledger.sqlite`) and exits 0; `uv run pumpgrok doctor` reports present subsystems and marks absent ones `not-yet-implemented` as warnings until their owning phase lands, then as failures (R37).
+- [x] **FOUND-001**: The desk is a `uv_build` src-layout package with `pyproject.toml` (`requires-python = ">=3.12,<3.13"`, R40) and a committed `uv.lock`; `uv sync --frozen` succeeds on a clean checkout with the pins of `docs/FOUNDATION_STACK.md` section 2.
+- [x] **FOUND-002**: Operator can run `make lint typecheck test audit` and each target executes the canonical command of `docs/FOUNDATION_STACK.md` section 6 (ruff check, ruff format --check, mypy --strict src/, pytest -q, pip-audit over the `uv export` bridge of R2) with exit 0.
+- [x] **FOUND-003**: `docker compose up pumpgrok` builds the multi-stage non-root image and starts the desk with effective mode `paper`; the compose healthcheck passes (`pumpgrok doctor` until `/healthz` lands in AUTO-004).
+- [x] **FOUND-004**: The desk loads settings through pydantic-settings with the R30 precedence (CLI `--mode` > env `PUMPGROK_MODE` > TOML `execution.mode`), overlays `src/pumpgrok/config/overlays/{dev,paper,live}.toml` selected by `PUMPGROK_PROFILE` (default `paper`), `PUMPGROK_CONFIG=<file>` applied last, `PUMPGROK_*` env with `__` nesting; with no overrides the effective mode is `paper`, there is no root `config/` directory, and startup refuses any forbidden key name (`PRIVATE_KEY`, `SECRET_KEY`, `SEED`, `MNEMONIC`, `WALLET_PRIVATE_KEY`; `hermes/profiles.yaml:18-22` carried into the loader).
+- [x] **FOUND-005**: `src/pumpgrok/core/{interfaces,registry,ids,approvals}.py` (R31) define `SideEffect`, the error classes, `Tool`/`ToolSpec`, `DataSource`, `ExecutionAdapter`, `SkillManifest`, `BotManifest`/`RiskBudget` (keys of R20), `ApprovalRecord` (kinds of R33), `ToolRegistry`/`GrantAudit` with invariants labelled I1-I5 (R40); `ToolRegistry.find` raises `LiveGateError` for any `LIVE_WRITE` spec regardless of caller; ULIDs come only from `core/ids.py` and `uuid` is banned in `src/pumpgrok` by a static test (R29).
+- [x] **FOUND-006**: `ownership.yaml` declares the ten seats of D3 and owns every tracked path per R36 (`core/ replay/ ledger/ config/ logging/` -> bot-02-risk; generated `agents/*.md` and `prompts-assembled/*` -> bot-00-chief; `src/pumpgrok/execution/live/**` rule after `src/pumpgrok/execution/**`); `python3 ci/gates/check_ownership.py --validate-manifest` exits 0 and a G-1 self-test walking `git ls-files` finds no UNOWNED path.
+- [x] **FOUND-007**: `ci/gates/{check_ownership,check_receipt,check_secrets,check_contracts,check_rollback,check_desk_integrity,run_all}.py` are ported with the retargeted constants of `docs/FOUNDATION_STACK.md` section 4 and R19 (`TOOL_NAME_RE = ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`, `SEAT_RE = ^bot-0[0-9]-[a-z-]+$`, `ROSTER_MIN_TOOLS = 8`, max 15, Solana/RPC/Telegram secret shapes, trading DEPLOY/DESTRUCTIVE patterns); `python3 -m pytest ci/tests/ -q` passes; `.receipts/<seat>/.gitkeep` exists for all ten seats with JSON gitignored; `.gitignore` ignores `var/`, `.venv/`, `*.pyc`; `.pre-commit-config.yaml` runs G-3 `--staged`, the manifest check and the gate self-test as local hooks.
+- [x] **FOUND-008**: `contracts/` holds `README.md`, `tool-rosters/_core.yaml` (desk core eight) plus ten seat rosters whose tool names are exactly those of `docs/TOOL_CATALOG.md` with the R35 sizes, one JSON Schema per ledger event type `contracts/events/<snake>.schema.json` for the eighteen R32 types (`order_placed` .. `approval_recorded`, generated from `ledger/events.py`, no third vocabulary; seat messages LEAD/whale/social/signal/verdict/safety_report are `JournalNote` payloads discriminated by `note_kind`, RUG alerts are `Escalation` payloads), and `changes/`; `python3 ci/gates/check_desk_integrity.py --repo .` exits 0.
+- [x] **FOUND-009**: `prompts/_shared/core-directives.xml` (audiences `trading-seats | chief | risk`) and ten `prompts/bot-0N-<seat>.xml` sources assemble via `bash scripts/assemble-prompts.sh --check` into `prompts-assembled/<SEAT>.xml` with no `{{...}}` left, and `python3 scripts/generate-templates.py --check` regenerates `agents/<seat>.md` preserving the frontmatter keys `name,title,description,seat,skills,writes_to_exchange` (`agents/chief.md:1-17`) so `./scripts/check.sh` keeps passing.
+- [x] **FOUND-010**: `.github/workflows/{gates.yml,security-pr.yml,ci.yml}` exist; `gates.yml` derives the acting bot from the branch prefix with the ten-seat regex, overlays `ci/gates/` from the base ref, selects the receipt added under `.receipts/$BOT/`, and runs G-1..G-7 plus the `gate-self-test` job; `ci.yml` runs the canonical commands; `security-pr.yml` triggers on `pyproject.toml`/`uv.lock` changes (R2).
+- [x] **FOUND-011**: `AGENTS.md`, `SECURITY.md` (key-custody wording "no key material exists in paper mode; nothing to custody", R40), `CHANGELOG.md`, `docs/quality-gates.md`, `docs/desk-operating-model.md` and `docs/cross-bot-protocol.md` exist in programming-desk shape, name the ten seats, engagement levels `research | paper` (R16) and G-1..G-7, and pass `./scripts/check.sh` (no emoji).
+- [x] **FOUND-012**: `tests/conftest.py` blocks all network (an `httpx` transport that raises on un-mocked requests plus a `websockets` connect monkeypatch, `docs/design/paper-engine.md` section 9); `src/pumpgrok/replay/{clock,rng,fixtures}.py` provide the `Clock` protocol with `WallClock`/`FixtureClock`, the single seeded RNG constructor and the fixture loader; `tests/harness/faults.py` provides `FaultInjector` (modes stale, timeout, rate_limit, raise, unwritable); a static test fails on any direct `asyncio.sleep`, `asyncio.timeout` or `time.time` in `src/pumpgrok` (R27).
+- [x] **FOUND-013**: `src/pumpgrok/ledger/{store,events}.py` implement the R32 schema (`events(seq, ts_utc, source, correlation_id, idempotency_key, type, payload_json, prev_hash, hash)`, `snapshots`), `BEGIN IMMEDIATE` single-writer appends with the hash chain computed inside the transaction over canonical JSON (R26, R28) and the eighteen CamelCase event models; `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` executes a skip-only cycle (fixture events read, no engine, one `JournalNote` appended, `source=replay`, ledger at `var/replay/smoke/ledger.sqlite`) and exits 0; `uv run pumpgrok doctor` reports present subsystems and marks absent ones `not-yet-implemented` as warnings until their owning phase lands, then as failures (R37).
 
 ### Restructure (STRUCT)
 
-- [ ] **STRUCT-001**: Tracked `*.pyc` (`docs/DISCOVERY.md:287-289`) and `issues/tissue.json` are removed, `scripts/check.sh` is rewritten without vendor paths and with the `your-org` placeholder check, and `docs/VENDOR_PIN.md` records the vendor commit `409e74c` (`docs/MIGRATION_MAP.md` section 7 batch 1).
+- [x] **STRUCT-001**: Tracked `*.pyc` (`docs/DISCOVERY.md:287-289`) and `issues/tissue.json` are removed, `scripts/check.sh` is rewritten without vendor paths and with the `your-org` placeholder check, and `docs/VENDOR_PIN.md` records the vendor commit `409e74c` (`docs/MIGRATION_MAP.md` section 7 batch 1).
 - [ ] **STRUCT-002**: `tools/{jupiter_quote,authority_check,holder_check,priority_fee}.py` are re-implemented as `src/pumpgrok/tools/{market/jupiter.py,onchain/authorities.py,onchain/holders.py,onchain/priority_fee.py}` (R31) over the single RPC client `src/pumpgrok/tools/onchain/rpc.py` (httpx + tenacity with `sleep=clock.sleep` + ordered failover, D8, R27), with `tests/characterization/test_{authority_check,holder_check,jupiter_quote,priority_fee}.py` reproducing the 11 root unittest cases against recorded fixtures in `tests/fixtures/replay/smoke/` and `tests/fixtures/http/`.
 - [ ] **STRUCT-003**: Vendor `monitor, analyzer, scoring, reputation, agents/*, tune` are ported to `src/pumpgrok/engine/` and vendor `risk.py` exit rules and `PositionWatcher` to `src/pumpgrok/engine/{exits,watcher}.py` (R31) with every Russian string translated and reason codes unchanged; the 1:1 characterization tests for these modules are green while `cd vendor/grokbot-pumpfun && python3 -m pytest -q` still passes as the oracle; `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` prints one `skip` or `buy` decision from the engine.
 - [ ] **STRUCT-004**: Vendor `executor, risk (RiskManager -> RiskEngine), ops, state, log` are ported into `src/pumpgrok/{execution,risk,supervisor,ledger}/` using the R31 module names with adapted characterization tests, bringing `tests/characterization/` to all 13 vendor modules with at least 164 1:1 tests (`docs/MIGRATION_MAP.md` section 3.1); the vendor daily-loss auto-clear (`risk.py:106-117`) is intentionally not ported (R5) and its test is marked as such; ported tests assert reason codes, never free text.
 - [ ] **STRUCT-005**: `cli.py` exposes every verb of `docs/DISCOVERY.md:11-16` plus R12 and R40 (`live confirm`, `replay trim | rebuild-ticks`, `run --record <dataset> --duration <s>`, `verify --fixture <dataset>`, `state halt --clear --by --reason`, `state autonomy <manual-ticket | autonomous-paper>`, `paper buy | sell --ticket --mint --size-sol --slippage-bps --approval-id`), verbs whose subsystem is absent return `not-yet-implemented`; the six Hermes cron prompts wrap `pumpgrok` subcommands only (`docs/MIGRATION_MAP.md` section 4.3), `jobs.yaml` `forbidden_owners: [sniper, exit]` is also enforced by the CLI; `scripts/hermes-*.sh` are rewritten for `PUMPGROK_*` env and `micro-live` is retired from `ARCHITECTURE.md`, `README.md`, `SETUP.md`, `skills/desk-operating-model`, `skills/pumpgrok-setup` and `scripts/hermes-verify-isolation.sh` (R16); `docs/MIGRATION_MAP.md` gains the engagement-level row and the markdown-prose quarantine table (R16).
 - [ ] **STRUCT-006**: `vendor/grokbot-pumpfun/` is deleted only when all six retirement checks of `docs/MIGRATION_MAP.md` section 3.4 hold (`rg -l -F "vendor/grokbot-pumpfun" . --glob '!vendor/**'` empty, `409e74c` cited only by `docs/VENDOR_PIN.md`, `src/pumpgrok/engine/LICENSE-grokbot-pumpfun` present, all 13 characterization modules green, `check.sh` no longer excludes `vendor/`).
 - [ ] **STRUCT-007**: All 23 existing skills gain `bots: [...]` and `gates: [...]` frontmatter and the `L1 - Summary / L2 - Method / Failure modes / References` body (`docs/design/interfaces.md` section 3); `skills/jupiter-routing` becomes quote/route preparation feeding `exec.quote` and `exec.place` (R18); `skills/browser-ops` is detection/research only (R39); every Jupiter v6 reference becomes the quote-only `api.jup.ag/swap/v2/order` path (R44) and `--max-micro` phrasing is removed (R14, R40); `tools/README.md` lists `desk_state.py` until `tools/` is deleted; the four plugin manifests say `"license": "AGPL-3.0"` and no `your-org` placeholder remains; `README.md`, `ARCHITECTURE.md` and `docs/runbooks/setup.md` describe `src/pumpgrok/`.
-- [ ] **STRUCT-008**: `JitoConfig` and `solana.wallet_private_key` do not exist in the settings model (R3), recorded as `docs/FOUNDATION_STACK.md` MIGRATION_NOTES M-10; `solders` and `solana` are not declared in `pyproject.toml`.
+- [x] **STRUCT-008**: `JitoConfig` and `solana.wallet_private_key` do not exist in the settings model (R3), recorded as `docs/FOUNDATION_STACK.md` MIGRATION_NOTES M-10; `solders` and `solana` are not declared in `pyproject.toml`.
 
 ### Tools (TOOL)
 
@@ -88,16 +88,16 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 
 ### Observability (OBS)
 
-- [ ] **OBS-001**: Every log record is one JSON line with the fields of `docs/FOUNDATION_STACK.md` section 5.1, secrets and key-shaped values are redacted before emission (`tests/test_logging.py::test_log_redaction`), and `PUMPGROK_LOG_JSON=false` restores text only in the `dev` overlay.
-- [ ] **OBS-002**: A cycle bound to a ULID correlation id yields child spans `<ulid>.<n>` on every tool call, log record and ledger event (R29; `tests/test_correlation.py::test_correlation_id_chain`).
+- [x] **OBS-001**: Every log record is one JSON line with the fields of `docs/FOUNDATION_STACK.md` section 5.1, secrets and key-shaped values are redacted before emission (`tests/test_logging.py::test_log_redaction`), and `PUMPGROK_LOG_JSON=false` restores text only in the `dev` overlay.
+- [x] **OBS-002**: A cycle bound to a ULID correlation id yields child spans `<ulid>.<n>` on every tool call, log record and ledger event (R29; `tests/test_correlation.py::test_correlation_id_chain`).
 - [ ] **OBS-003**: `GET /metrics` exposes `pumpgrok_cycle_seconds{seat}`, `pumpgrok_bot_crashes_total{seat}`, `pumpgrok_orders_total{side,outcome}`, `pumpgrok_equity_sol`, `pumpgrok_drawdown_pct`, `pumpgrok_data_age_seconds{source}`, `pumpgrok_breaker_state{breaker}`, `pumpgrok_kill_switch`, `pumpgrok_ledger_seq` (`docs/design/paper-engine.md` section 6.6) and span timings for every tool call are logged.
 - [ ] **OBS-004**: `docs/runbooks/{setup,engine,start_stop,kill_switch,breaker_reset,outage,rollback,reading_reports,go_live}.md` exist, each command in them is one of the canonical commands or a `pumpgrok` verb, and they pass `./scripts/check.sh`.
 - [ ] **OBS-005**: `CHANGELOG.md` records every phase, `AGENTS.md` indexes the rules a cloud agent must read, and the milestone report (phase reports appended to this file, section 6.6) lists the final test, gate and audit results.
 
 ### Security (SEC)
 
-- [ ] **SEC-001**: No secret is committed: `.env.example` contains placeholders only, `python3 ci/gates/check_secrets.py --base origin/main` exits 0 on every PR, and G-3 recognises Solana base58 64-byte keys, JSON byte arrays, Helius/QuickNode keyed URLs and Telegram tokens.
-- [ ] **SEC-002**: Secrets reach the desk only through env (or a secret manager injecting env); `--rpc https://...?api-key=` style CLI flags are refused and the operator confirmation secret is readable only by `pumpgrok live confirm` and `LiveGate.validate`, never by a seat or tool (R21).
+- [x] **SEC-001**: No secret is committed: `.env.example` contains placeholders only, `python3 ci/gates/check_secrets.py --base origin/main` exits 0 on every PR, and G-3 recognises Solana base58 64-byte keys, JSON byte arrays, Helius/QuickNode keyed URLs and Telegram tokens.
+- [x] **SEC-002**: Secrets reach the desk only through env (or a secret manager injecting env); `--rpc https://...?api-key=` style CLI flags are refused and the operator confirmation secret is readable only by `pumpgrok live confirm` and `LiveGate.validate`, never by a seat or tool (R21).
 - [ ] **SEC-003**: `tests/safety/test_no_signing_outside_live_stub.py` walks the AST and fails on any `sign`, `send_transaction`, `sendTransaction` or `Keypair` symbol outside `src/pumpgrok/execution/live/`, and the live stub itself builds no transaction.
 - [ ] **SEC-004**: `pumpgrok run --mode live` (or env `PUMPGROK_MODE=live`, R30) with any of the nine R21 preconditions unmet exits 3 listing every unmet line and sends nothing; precondition 8 (a registered live adapter implementation) is always unmet because none ships; `LiveAdapter.place`/`cancel` (`src/pumpgrok/execution/live/live_adapter.py`) always raise `LiveGateError` after appending `LiveWriteAttempted` and a critical alert; every registry grant decision is a `GrantAudit` row.
 - [ ] **SEC-005**: `security-pr.yml` (gitleaks, semgrep, bandit, pip-audit via the R2 bridge, trivy) is green on `main` or every exception is listed in `SECURITY.md` with an expiry.
@@ -134,27 +134,27 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-001 | Phase 1 Foundation | Pending |
-| FOUND-002 | Phase 1 Foundation | Pending |
-| FOUND-003 | Phase 1 Foundation | Pending |
-| FOUND-004 | Phase 1 Foundation | Pending |
-| FOUND-005 | Phase 1 Foundation | Pending |
-| FOUND-006 | Phase 1 Foundation | Pending |
-| FOUND-007 | Phase 1 Foundation | Pending |
-| FOUND-008 | Phase 1 Foundation | Pending |
-| FOUND-009 | Phase 1 Foundation | Pending |
-| FOUND-010 | Phase 1 Foundation | Pending |
-| FOUND-011 | Phase 1 Foundation | Pending |
-| FOUND-012 | Phase 1 Foundation | Pending |
-| FOUND-013 | Phase 1 Foundation | Pending |
-| STRUCT-001 | Phase 1 Foundation | Pending |
+| FOUND-001 | Phase 1 Foundation | Complete |
+| FOUND-002 | Phase 1 Foundation | Complete |
+| FOUND-003 | Phase 1 Foundation | Complete |
+| FOUND-004 | Phase 1 Foundation | Complete |
+| FOUND-005 | Phase 1 Foundation | Complete |
+| FOUND-006 | Phase 1 Foundation | Complete |
+| FOUND-007 | Phase 1 Foundation | Complete |
+| FOUND-008 | Phase 1 Foundation | Complete |
+| FOUND-009 | Phase 1 Foundation | Complete |
+| FOUND-010 | Phase 1 Foundation | Complete |
+| FOUND-011 | Phase 1 Foundation | Complete |
+| FOUND-012 | Phase 1 Foundation | Complete |
+| FOUND-013 | Phase 1 Foundation | Complete |
+| STRUCT-001 | Phase 1 Foundation | Complete |
 | STRUCT-002 | Phase 2 Restructure | Pending |
 | STRUCT-003 | Phase 2 Restructure | Pending |
 | STRUCT-004 | Phase 4 Paper Trading and Autonomy | Pending |
 | STRUCT-005 | Phase 2 Restructure | Pending |
 | STRUCT-006 | Phase 4 Paper Trading and Autonomy | Pending |
 | STRUCT-007 | Phase 2 Restructure | Pending |
-| STRUCT-008 | Phase 1 Foundation | Pending |
+| STRUCT-008 | Phase 1 Foundation | Complete |
 | TOOL-001 | Phase 3 Tools and Skills | Pending |
 | TOOL-002 | Phase 3 Tools and Skills | Pending |
 | TOOL-003 | Phase 3 Tools and Skills | Pending |
@@ -192,13 +192,13 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | AUTO-006 | Phase 4 Paper Trading and Autonomy | Pending |
 | AUTO-007 | Phase 5 Hardening | Pending |
 | AUTO-008 | Phase 5 Hardening | Pending |
-| OBS-001 | Phase 1 Foundation | Pending |
-| OBS-002 | Phase 1 Foundation | Pending |
+| OBS-001 | Phase 1 Foundation | Complete |
+| OBS-002 | Phase 1 Foundation | Complete |
 | OBS-003 | Phase 5 Hardening | Pending |
 | OBS-004 | Phase 5 Hardening | Pending |
 | OBS-005 | Phase 5 Hardening | Pending |
-| SEC-001 | Phase 1 Foundation | Pending |
-| SEC-002 | Phase 1 Foundation | Pending |
+| SEC-001 | Phase 1 Foundation | Complete |
+| SEC-002 | Phase 1 Foundation | Complete |
 | SEC-003 | Phase 2 Restructure | Pending |
 | SEC-004 | Phase 4 Paper Trading and Autonomy | Pending |
 | SEC-005 | Phase 5 Hardening | Pending |

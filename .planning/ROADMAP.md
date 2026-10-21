@@ -8,7 +8,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 
 ## Phases
 
-- [ ] **Phase 1: Foundation** - Package, layered config, ownership, ported gates, contracts, network-blocked harness and ledger with a skip-only replay cycle (19 requirements)
+- [x] **Phase 1: Foundation** - Package, layered config, ownership, ported gates, contracts, network-blocked harness and ledger with a skip-only replay cycle (19 requirements) (completed 2026-10-21)
 - [ ] **Phase 2: Restructure** - Read-only tools and vendor engine ported into `src/pumpgrok` with characterization tests, skills rewritten, CLI verbs exposed (5 requirements)
 - [ ] **Phase 3: Tools and Skills** - Dotted typed tool layer, least-privilege rosters, desk gateway and the 35-skill set (15 requirements)
 - [ ] **Phase 4: Paper Trading and Autonomy** - Curve-faithful paper fills, risk engine, deterministic replay, supervised ten-seat loop, reports, live refusal and vendor retirement (24 requirements)
@@ -42,15 +42,15 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Redacted JSON logging, ULID correlation spans, env-only secrets, tracked-file cleanup (OBS-001, OBS-002, SEC-002, STRUCT-001)
 
 **Plans**: TBD
-- [ ] 01-01-PLAN.md
+- [x] 01-01-PLAN.md
 - [x] 01-02-PLAN.md
 - [x] 01-03-PLAN.md
 - [x] 01-04-PLAN.md
-- [ ] 01-05-PLAN.md
-- [ ] 01-06-PLAN.md
-- [ ] 01-07-PLAN.md
-- [ ] 01-08-PLAN.md
-- [ ] 01-09-PLAN.md
+- [x] 01-05-PLAN.md
+- [x] 01-06-PLAN.md
+- [x] 01-07-PLAN.md
+- [x] 01-08-PLAN.md
+- [x] 01-09-PLAN.md
 
 ### Phase 2: Restructure
 
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/9 | In Progress | - |
+| 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 0/TBD | Not started | - |
 | 3. Tools and Skills | 0/TBD | Not started | - |
 | 4. Paper Trading and Autonomy | 0/TBD | Not started | - |

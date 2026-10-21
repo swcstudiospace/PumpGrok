@@ -21,12 +21,12 @@ The desk runs autonomously in paper mode for 2-4 weeks and produces honest, repl
 - [x] Hermes cron isolation: six cron prompts, per-seat profiles with Telegram inbound only for chief, forbidden env keys (`PRIVATE_KEY, SECRET_KEY, SEED, MNEMONIC`) and `forbidden_owners: [sniper, exit]` (`docs/DISCOVERY.md` sections 3.2, 3.3, `hermes/cron/jobs.yaml`) - existing
 - [x] Plugin manifests for Claude, Grok and Cursor (`plugin.json`, `.claude-plugin/`, `.grok-plugin/`, `.cursor-plugin/`) describing the pack (`docs/DISCOVERY.md` section 6 items 4-5, `docs/MIGRATION_MAP.md` section 4.4) - existing
 - [x] `scripts/check.sh` markdown-pack linter with the emoji sweep (`docs/DISCOVERY.md` sections 3.2, 6 item 20; `scripts/check.sh:138-146`) - existing
+- ✓ FOUND (13 requirements, FOUND-001..013): packaging, toolchain, config precedence, core interfaces and registry, ownership, ported gates, contracts, prompt assembly, workflows, network-blocked test harness, ledger skeleton and the skip-only `pumpgrok run --replay` cycle — Phase 1
 
 ### Active
 
 <!-- Current scope. One line per requirement family of docs/upgrade-plan-desk-v2.md section 5; the individual ids live in REQUIREMENTS.md. -->
 
-- [ ] FOUND (13 requirements, FOUND-001..013): packaging, toolchain, config precedence, core interfaces and registry, ownership, ported gates, contracts, prompt assembly, workflows, network-blocked test harness, ledger skeleton and the skip-only `pumpgrok run --replay` cycle
 - [ ] STRUCT (8 requirements, STRUCT-001..008): restructure, port the vendor engine and root tools into `src/pumpgrok/` with characterization tests, rewrite skills and docs, retire `micro-live`, remove Jito and wallet-key config, delete the vendor tree when the retirement census is zero
 - [ ] TOOL (11 requirements, TOOL-001..011): the dotted `<ns>.<verb>` tool layer (market, onchain, safety, exec, portfolio, risk, journal, notify, desk core eight), typed int-lamport schemas, least-privilege tests, per-seat MCP gateway, CLI verbs as thin wrappers
 - [ ] SKILL (4 requirements, SKILL-001..004): twelve new skills (35 total) with manifests, skill and bot manifest tests, seat prompt sources that enumerate the same skills and tool rosters
@@ -155,4 +155,4 @@ and implemented by workflows/transition.md and workflows/complete-milestone.md.
 5. Update Context with current state (users, feedback, metrics)
 
 ---
-*Last updated: 2026-10-20 after initialization*
+*Last updated: 2026-10-21 after Phase 1*
