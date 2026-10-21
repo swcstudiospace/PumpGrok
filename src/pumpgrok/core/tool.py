@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, Protocol, Self, TypeVar, runtime_checkable
+from typing import Any, Protocol, Self, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -60,9 +60,6 @@ class ToolOutput(BaseModel):
     meta: ToolMeta
 
 
-_M = TypeVar("_M", bound=BaseModel)
-
-
 class UpstreamModel(BaseModel):
     """Base for untrusted upstream payloads (pump.fun, Jupiter, RPC, x.ai).
 
@@ -75,7 +72,7 @@ class UpstreamModel(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
 
-def parse_upstream(model: type[_M], payload: object, *, blind: bool = False) -> _M:
+def parse_upstream[M: BaseModel](model: type[M], payload: object, *, blind: bool = False) -> M:
     """Validate an untrusted payload; malformed input becomes typed, never raw.
 
     `DataStale` when a last-good value may exist (the caller serves cache);

@@ -17,6 +17,7 @@ string replace, since names contain underscores).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -38,7 +39,7 @@ EXPECTED_SEAT_IDS: tuple[str, ...] = (
 _CORE_FILE = "_core.yaml"
 
 
-def _read_doc(path: Path) -> dict:
+def _read_doc(path: Path) -> dict[str, Any]:
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
@@ -48,7 +49,7 @@ def _read_doc(path: Path) -> dict:
     return doc
 
 
-def _tool_entries(doc: dict, path: Path) -> list[dict]:
+def _tool_entries(doc: dict[str, Any], path: Path) -> list[dict[str, Any]]:
     tools = doc.get("tools")
     if not isinstance(tools, list) or not tools:
         raise ValueError(f"{path.name}: roster must list a non-empty 'tools'")
@@ -58,13 +59,11 @@ def _tool_entries(doc: dict, path: Path) -> list[dict]:
     return tools
 
 
-def _grants(entries: list[dict], path: Path) -> list[ToolGrant]:
+def _grants(entries: list[dict[str, Any]], path: Path) -> list[ToolGrant]:
     grants = []
     for entry in entries:
         try:
-            grants.append(
-                ToolGrant(name=entry["name"], side_effect=entry["side_effect"])
-            )
+            grants.append(ToolGrant(name=entry["name"], side_effect=entry["side_effect"]))
         except Exception as exc:
             raise ValueError(
                 f"{path.name}: tool {entry.get('name')!r} needs a valid side_effect: {exc}"
@@ -85,7 +84,7 @@ def load_bot_manifests(contracts_dir: Path) -> dict[str, BotManifest]:
         block = doc.get("manifest")
         if not isinstance(block, dict):
             raise ValueError(f"{path.name}: roster needs an additive 'manifest' block (B6a)")
-        if seat != block.get("id"):
+        if not isinstance(seat, str) or seat != block.get("id"):
             raise ValueError(
                 f"{path.name}: roster seat {seat!r} != manifest id {block.get('id')!r}"
             )
@@ -105,7 +104,7 @@ def load_bot_manifests(contracts_dir: Path) -> dict[str, BotManifest]:
     return {sid: manifests[sid] for sid in EXPECTED_SEAT_IDS}
 
 
-def effective_roster(contracts_dir: Path, seat_id: str) -> list[dict]:
+def effective_roster(contracts_dir: Path, seat_id: str) -> list[dict[str, Any]]:
     """Raw tool entries for one seat: its own tools plus the core eight."""
     contracts_dir = Path(contracts_dir)
     doc = _read_doc(contracts_dir / f"{seat_id}.yaml")

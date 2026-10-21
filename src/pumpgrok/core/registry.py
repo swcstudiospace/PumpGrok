@@ -32,7 +32,7 @@ from pumpgrok.core.ids import (
 )
 from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.core.tool import Tool, ToolInput, ToolOutput
+from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec
 from pumpgrok.replay.rng import make_rng
 
 _DEFAULT_PER_MINUTE = 60.0  # skeleton budget until config tools.* lands (Phase 3)
@@ -125,7 +125,7 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._tools)
 
-    def spec(self, name: str) -> object:
+    def spec(self, name: str) -> ToolSpec:
         return self._tools[name].spec
 
     def _now(self) -> datetime:

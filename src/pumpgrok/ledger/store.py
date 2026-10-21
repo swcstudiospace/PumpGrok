@@ -249,7 +249,8 @@ class LedgerStore:
             query += " AND source = ?"
             args.append(source)
         if types:
-            query += " AND type IN (%s)" % ",".join("?" for _ in types)
+            placeholders = ",".join("?" for _ in types)
+            query += f" AND type IN ({placeholders})"
             args.extend(types)
         query += " ORDER BY seq ASC LIMIT ?"
         args.append(limit)
