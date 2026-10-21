@@ -134,6 +134,32 @@ class ExitsSettings(BaseModel):
     stop_loss_poll_seconds: float = Field(default=15.0, ge=0)
 
 
+class SafetyThresholds(BaseModel):
+    """Score-report check thresholds (TOOL-003; REVIEW defaults from agents/risk.md)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    transfer_tax_hard_fail_pct: float = Field(default=10.0, ge=0)
+    transfer_tax_warn_pct: float = Field(default=5.0, ge=0)
+    top10_concentration_warn_pct: float = Field(default=20.0, ge=0)
+    top10_concentration_fail_pct: float = Field(default=25.0, ge=0)
+    liquidity_multiple_min: float = Field(default=10.0, ge=0)
+    liquidity_multiple_recommended: float = Field(default=20.0, ge=0)
+    lp_lock_min_days: float = Field(default=180.0, ge=0)
+    creator_share_veto: float = Field(default=0.25, ge=0)
+    top5_share_veto: float = Field(default=0.80, ge=0)
+    kill_below_score: float = Field(default=40.0, ge=0)
+    conditional_below_score: float = Field(default=70.0, ge=0)
+
+
+class SafetySettings(BaseModel):
+    """Safety scoring knobs (TOOL-003). Secrets never live here (STRUCT-008)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    thresholds: SafetyThresholds = Field(default_factory=SafetyThresholds)
+
+
 class OpsSettings(BaseModel):
     """Process-lifetime state paths (vendor OpsConfig subset, Phase 2)."""
 
@@ -232,6 +258,7 @@ class Settings(BaseSettings):
     grok: GrokSettings = Field(default_factory=GrokSettings)
     jupiter: JupiterSettings = Field(default_factory=JupiterSettings)
     filter: FilterSettings = Field(default_factory=FilterSettings)
+    safety: SafetySettings = Field(default_factory=SafetySettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
     exits: ExitsSettings = Field(default_factory=ExitsSettings)
     ops: OpsSettings = Field(default_factory=OpsSettings)

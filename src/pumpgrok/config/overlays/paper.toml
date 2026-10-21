@@ -51,6 +51,19 @@ rug_loss_pct = 60.0
 one_position_per_creator = true
 forget_creators_after_days = 30.0
 
+[safety.thresholds]
+transfer_tax_hard_fail_pct = 10.0
+transfer_tax_warn_pct = 5.0
+top10_concentration_warn_pct = 20.0
+top10_concentration_fail_pct = 25.0
+liquidity_multiple_min = 10.0
+liquidity_multiple_recommended = 20.0
+lp_lock_min_days = 180.0
+creator_share_veto = 0.25
+top5_share_veto = 0.80
+kill_below_score = 40.0
+conditional_below_score = 70.0
+
 [scoring.weights]
 audit = 0.30
 narrative = 0.25
