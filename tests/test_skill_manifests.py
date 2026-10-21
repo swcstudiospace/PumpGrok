@@ -17,11 +17,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, load_bot_manifests
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.skill import SkillManifest
-
-from registry_harness import REPO_ROOT, ROSTERS_DIR, build_full_registry
+from registry_harness import REPO_ROOT, build_full_registry
 
 SKILLS_DIR = REPO_ROOT / "skills"
 

@@ -25,6 +25,7 @@ from pumpgrok.cli import UsageError, _size_sol, size_sol_to_lamports
 from pumpgrok.core.adapter import Side
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import DataBlind, DataStale, PermissionDenied
+from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import (
@@ -158,7 +159,7 @@ async def test_tracer_limits_checker_refuses_by_default() -> None:
     factory = IdFactory(clock, random.Random(14))
     with bind_correlation(CorrelationId.new(factory)):
         resolved = reg.find("exec.probe", max_side_effect=SideEffect.PAPER_WRITE, bot=bot)
-        with pytest.raises(PermissionDenied, match="RiskEngine.check refused"):
+        with pytest.raises(PermissionDenied, match=r"RiskEngine\.check refused"):
             await resolved(_PlaceIn())
     assert any(a.tool == "exec.probe" and a.allowed for a in audits)
 
@@ -189,8 +190,6 @@ class _UpstreamPrice(UpstreamModel):
 
 
 def test_canonical_json_rejects_float_leaves() -> None:
-    from pumpgrok.core.idempotency import canonical_json
-
     assert canonical_json({"price": Decimal("1.5")}) == '{"price":"1.5"}'
     with pytest.raises(TypeError, match="float leaves are forbidden"):
         canonical_json({"price": 1.5})

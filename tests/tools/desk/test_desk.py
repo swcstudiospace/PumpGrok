@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
@@ -12,6 +13,7 @@ from pydantic import ValidationError
 
 from pumpgrok.config.settings import NotifySettings, Settings
 from pumpgrok.core.side_effect import SideEffect
+from pumpgrok.doctor import doctor_report
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.desk._memory import MemoryBank
@@ -203,8 +205,6 @@ async def test_event_emit_scrubs_and_caps(tmp_path: Path) -> None:
 
 
 async def test_doctor_check_shares_cli_path(tmp_path: Path) -> None:
-    from pumpgrok.doctor import doctor_report
-
     settings = Settings(mode="paper")
     tool = build_doctor_tool(settings, tmp_path / "bindings", b"test-key")
     out = await tool(DoctorIn(action="check"))
@@ -244,7 +244,6 @@ async def test_brief_folds_halt_and_recall(tmp_path: Path) -> None:
 def test_notify_settings_section() -> None:
     assert NotifySettings().allowlist == []
     assert Settings.model_fields["notify"].is_required() is False
-    import tomllib
 
     overlay = tomllib.loads((REPO_ROOT / "src/pumpgrok/config/overlays/paper.toml").read_text())
     assert overlay["notify"]["allowlist"] == []

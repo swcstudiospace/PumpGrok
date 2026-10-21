@@ -72,6 +72,10 @@ async def test_append_journal_note_round_trip(tmp_path: Path) -> None:
     store.close()
 
 
+def _assert_is_file(path: str) -> None:
+    assert Path(path).is_file()
+
+
 async def test_render_report_writes_markdown(tmp_path: Path) -> None:
     store = _store(tmp_path)
     tool = build_render_report_tool(store, FixtureClock(start=START), tmp_path / "reports")
@@ -79,7 +83,7 @@ async def test_render_report_writes_markdown(tmp_path: Path) -> None:
     assert RENDER_REPORT_SPEC.rate_limit_key == "ledger"
     out = await tool(RenderReportIn(period="daily"))
     assert out.report_path.endswith(".md")
-    assert Path(out.report_path).is_file()
+    _assert_is_file(out.report_path)
     assert out.summary["trades"] == 0
     assert out.summary["open_positions"] == 0
     store.close()

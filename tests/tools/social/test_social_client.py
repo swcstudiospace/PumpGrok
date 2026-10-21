@@ -6,6 +6,7 @@ ignored, malformed rows typed. MockTransport only; no live network.
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -104,8 +105,6 @@ async def test_venue_errors_become_typed() -> None:
 
 
 def test_client_module_uses_get_only() -> None:
-    import ast
-
     path = (
         Path(__file__).resolve().parents[3] / "src" / "pumpgrok" / "tools" / "social" / "client.py"
     )

@@ -17,10 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
@@ -29,8 +31,6 @@ from pumpgrok.tools.exec.place import PlaceIn, build_place_tool
 from pumpgrok.tools.journal.append import JournalAppendIn
 from pumpgrok.tools.risk.kill_switch import KillSwitchIn
 from registry_harness import ROSTERS_DIR, build_full_registry, resolve
-
-import yaml
 
 MINT = "So11111111111111111111111111111111111111112"
 TICKET = "SOL-20260201-001"
@@ -121,8 +121,6 @@ def test_only_sniper_and_exit_resolve_exec_place(tmp_path: Path) -> None:
 
 
 async def test_exit_cannot_place_buy() -> None:
-    from pumpgrok.core.risk_budget import RiskBudget
-
     class _CountingAdapter(NotYetImplementedAdapter):
         def __init__(self) -> None:
             self.place_calls = 0

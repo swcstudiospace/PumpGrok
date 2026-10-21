@@ -20,6 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 import httpx
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import DataStale
@@ -30,7 +31,7 @@ from pumpgrok.tools import build_registry, register_read_tools
 from pumpgrok.tools.market.holders_snapshot import HoldersSnapshotIn
 from pumpgrok.tools.market.liquidity import LiquidityIn
 from pumpgrok.tools.market.ohlcv import OhlcvIn, build_ohlcv
-from pumpgrok.tools.market.trades import TradesIn
+from pumpgrok.tools.market.trades import Trade, TradesIn
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.rpc import RpcClient
 
@@ -203,8 +204,6 @@ async def test_ohlcv_buckets_trades() -> None:
 
 
 async def test_ohlcv_pure_bucketing_pins_math() -> None:
-    from pumpgrok.tools.market.trades import Trade
-
     trades = [
         Trade(ts=61, side="buy", wallet=W1, sol_lamports=10, token_units=1_000_000, signature="a"),
         Trade(ts=62, side="buy", wallet=W1, sol_lamports=20, token_units=1_000_000, signature="b"),
@@ -243,13 +242,13 @@ async def test_holders_snapshot_converts_to_ratios() -> None:
 
 
 def test_market_inputs_reject_unknown_fields() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         OhlcvIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         LiquidityIn(mint=MINT, curve_account=CURVE, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TradesIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         HoldersSnapshotIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
 
 

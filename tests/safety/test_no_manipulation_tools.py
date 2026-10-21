@@ -56,7 +56,7 @@ def test_social_has_no_manipulation_helpers() -> None:
             if isinstance(node, ast.Attribute) and node.attr in ("post", "put", "patch", "delete"):
                 raise AssertionError(f"{path.name} calls write-verb method {node.attr}")
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                assert node.name not in _STEMS + ("post", "put", "patch", "delete"), (
+                assert node.name not in (*_STEMS, "post", "put", "patch", "delete"), (
                     f"{path.name} defines manipulation helper {node.name}"
                 )
 

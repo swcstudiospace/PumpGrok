@@ -36,7 +36,7 @@ from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.core.tool import ToolInput, ToolMeta, ToolOutput, ToolSpec, tool
+from pumpgrok.core.tool import ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.replay.clock import FixtureClock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

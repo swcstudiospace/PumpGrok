@@ -22,6 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 import httpx
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import DataStale
@@ -300,19 +301,19 @@ async def test_priority_fee_caps_and_flags() -> None:
 
 
 def test_onchain_inputs_reject_unknown_fields() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TokenMetadataIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         AuthoritiesIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         LpStatusIn(mint=MINT, curve_account=CURVE, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TopHoldersIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         DeployerHistoryIn(creator=CREATOR, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         LargeTransfersIn(mint=MINT, venue_noise=1)  # type: ignore[call-arg]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         PriorityFeeIn(venue_noise=1)  # type: ignore[call-arg]
 
 

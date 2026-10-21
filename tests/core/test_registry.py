@@ -19,10 +19,12 @@ from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
+from pumpgrok.core.idempotency import canonical_json, exec_cancel_key, exec_place_key
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import RetryPolicy, ToolInput, ToolMeta, ToolOutput, ToolSpec, tool
+from pumpgrok.replay.clock import WallClock
 
 ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
 
@@ -300,8 +302,6 @@ def test_prefix_find_skips_tools_above_requested_max() -> None:
 
 
 def test_exec_place_key_excludes_tool_and_bot() -> None:
-    from pumpgrok.core.idempotency import canonical_json, exec_place_key
-
     ticket, side, decision = "SOL-20260101-001", "buy", "01ARYZ6S41TSV4RRFF7Q3V9J6Q"
     key = exec_place_key(ticket, side, decision)
     assert key == exec_place_key(ticket, side, decision)
@@ -313,8 +313,6 @@ def test_exec_place_key_excludes_tool_and_bot() -> None:
 
 
 def test_exec_cancel_key_derives_from_order_only() -> None:
-    from pumpgrok.core.idempotency import exec_cancel_key
-
     key = exec_cancel_key("order-1")
     assert key == exec_cancel_key("order-1")
     assert len(key) == 32 and all(c in "0123456789abcdef" for c in key)
@@ -352,8 +350,6 @@ def _retry_spec(attempts: int) -> ToolSpec:
 
 
 async def test_wrap_retries_read_timeouts_per_policy() -> None:
-    from pumpgrok.replay.clock import WallClock
-
     audits: list[GrantAudit] = []
     calls = 0
 
@@ -380,8 +376,6 @@ async def test_wrap_retries_read_timeouts_per_policy() -> None:
 
 
 async def test_wrap_gives_up_after_attempts() -> None:
-    from pumpgrok.replay.clock import WallClock
-
     audits: list[GrantAudit] = []
     calls = 0
 

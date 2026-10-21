@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import DataStale
@@ -151,7 +152,7 @@ async def test_price_missing_account_yields_typed_error() -> None:
 
 
 def test_price_input_rejects_unknown_fields() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         PriceIn(mint=MINT, curve_account=CURVE, venue_noise=1)  # type: ignore[call-arg]
 
 

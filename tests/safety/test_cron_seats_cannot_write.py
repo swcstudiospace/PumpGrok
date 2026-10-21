@@ -11,15 +11,19 @@ unknown approval_id exits 1 and writes no OrderPlaced row, regardless of
 
 from __future__ import annotations
 
+import contextlib
+import logging
+import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from pumpgrok.cli import main
 from pumpgrok.core.errors import PermissionDenied
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.ledger.store import LedgerStore
@@ -33,8 +37,6 @@ APPROVAL = "apr-01ARZ3NDEKTSV4RRFFQ69G5FAV"
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip PUMPGROK_* and secret-shaped names so each test sets exactly what it needs."""
-    import os
-
     for name in list(os.environ):
         if name.startswith("PUMPGROK_") or any(
             frag in name.lower()
@@ -46,17 +48,13 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def root_handlers() -> Iterator[None]:
     """main() installs a handler bound to the test's stderr; remove it afterwards."""
-    import logging
-
     root = logging.getLogger()
     level = root.level
     yield None
     for handler in list(root.handlers):
         root.removeHandler(handler)
-        try:
+        with contextlib.suppress(Exception):  # best effort cleanup
             handler.close()
-        except Exception:  # pragma: no cover - best effort cleanup
-            pass
     root.setLevel(level)
 
 
@@ -75,15 +73,13 @@ def _trade_flags(seat: str, approval: str | None = APPROVAL) -> list[str]:
     ]
     if approval is not None:
         flags += ["--approval-id", approval]
-    return flags + ["--seat", seat]
+    return [*flags, "--seat", seat]
 
 
 def test_cron_owned_seats_cannot_resolve_paper_write(tmp_path: Path) -> None:
     reg, _, manifests = build_full_registry(tmp_path)
     paper_write_names = [
-        name
-        for name in reg.names()
-        if reg.spec(name).side_effect is SideEffect.PAPER_WRITE
+        name for name in reg.names() if reg.spec(name).side_effect is SideEffect.PAPER_WRITE
     ]
     assert paper_write_names, "registry must hold paper-write tools or the guard is vacuous"
     for seat_id in ("bot-04-sniper", "bot-06-exit"):
@@ -127,7 +123,6 @@ def test_paper_write_resolves_with_paper_write_ceiling_non_vacuous(
 def test_cli_paper_buy_without_valid_approval_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, seat: str
 ) -> None:
-    from pumpgrok.cli import main
     monkeypatch.chdir(tmp_path)
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     assert store.count() == 0
@@ -140,8 +135,6 @@ def test_cli_paper_buy_without_valid_approval_rejected(
 def test_cli_paper_buy_missing_approval_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from pumpgrok.cli import main
-
     monkeypatch.chdir(tmp_path)
     assert main(_trade_flags("desk", approval=None)) == 1
     assert "approval" in capsys.readouterr().err.lower()

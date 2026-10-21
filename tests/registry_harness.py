@@ -116,9 +116,7 @@ def build_full_registry(
     reg.register(build_render_report_tool(store, clock, tmp_path / "reports"))
     reg.register(
         build_alert_tool(
-            _NullNotifier(
-                allowlist=(), clock=clock, alert_file=tmp_path / "alerts.jsonl"
-            ),
+            _NullNotifier(allowlist=(), clock=clock, alert_file=tmp_path / "alerts.jsonl"),
             clock,
         )
     )
@@ -128,14 +126,8 @@ def build_full_registry(
     reg.register(build_memory_recall_tool(bank))
     reg.register(build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml"))
     reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT))
-    reg.register(
-        build_event_emit_tool(store, clock, tmp_path / "journal", "bot-00-chief")
-    )
-    reg.register(
-        build_doctor_tool(
-            Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key"
-        )
-    )
+    reg.register(build_event_emit_tool(store, clock, tmp_path / "journal", "bot-00-chief"))
+    reg.register(build_doctor_tool(Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key"))
 
     manifests = load_bot_manifests(ROSTERS_DIR)
     assert set(manifests) == set(EXPECTED_SEAT_IDS)

@@ -18,6 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 import httpx
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 from pumpgrok.core.errors import DataStale
@@ -27,7 +28,7 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools import build_registry
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.rpc import RpcClient
-from pumpgrok.tools.safety.score_report import ScoreReportIn, build_score_report_tool
+from pumpgrok.tools.safety.score_report import SCORE_SPEC, ScoreReportIn, build_score_report_tool
 
 START = 1469918176.385
 MINT = "So11111111111111111111111111111111111111112"
@@ -241,8 +242,6 @@ async def test_checks_subset_limits_runnable() -> None:
 
 
 def test_score_spec_contract() -> None:
-    from pumpgrok.tools.safety.score_report import SCORE_SPEC
-
     assert SCORE_SPEC.name == "safety.score_report"
     assert SCORE_SPEC.timeout_s == 45.0
     assert SCORE_SPEC.retry.attempts == 1
@@ -250,5 +249,5 @@ def test_score_spec_contract() -> None:
 
 
 def test_score_input_rejects_unknown_fields() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ScoreReportIn(mint=MINT, curve_account=CURVE, venue_noise=1)  # type: ignore[call-arg]

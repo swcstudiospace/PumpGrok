@@ -8,16 +8,21 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from collections.abc import Iterator
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout, suppress
 from pathlib import Path
 from unittest import mock
 
 import pytest
+
+from pumpgrok.cli import main
+from pumpgrok.ledger.store import LedgerStore
+
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 
@@ -208,9 +213,7 @@ _TRADE_MINT = "So11111111111111111111111111111111111111112"
 _TRADE_APPROVAL = "apr-01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
-def _trade_flags(
-    seat: str, side: str = "buy", approval: str | None = _TRADE_APPROVAL
-) -> list[str]:
+def _trade_flags(seat: str, side: str = "buy", approval: str | None = _TRADE_APPROVAL) -> list[str]:
     flags = [
         "paper",
         side,
@@ -225,7 +228,7 @@ def _trade_flags(
     ]
     if approval is not None:
         flags += ["--approval-id", approval]
-    return flags + ["--seat", seat]
+    return [*flags, "--seat", seat]
 
 
 @pytest.fixture(autouse=True)
@@ -247,10 +250,8 @@ def _03_07_root_handlers() -> Iterator[None]:
     yield None
     for handler in list(root.handlers):
         root.removeHandler(handler)
-        try:
+        with suppress(Exception):  # best effort cleanup
             handler.close()
-        except Exception:  # pragma: no cover - best effort cleanup
-            pass
     root.setLevel(level)
 
 
@@ -265,8 +266,6 @@ class TestPaperRegistryPath:
         capsys: pytest.CaptureFixture[str],
         side: str,
     ) -> None:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         code = main(_trade_flags("desk", side=side))
         assert code == 1
@@ -287,8 +286,6 @@ class TestPaperRegistryPath:
         # bot-04-sniper holds exec.place, so find() succeeds and the unknown
         # approval_id fails closed with exit 1 (R63: the approval record is
         # the control, not the --seat string filter).
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         code = main(_trade_flags("bot-04-sniper", side=side))
         assert code == 1
@@ -301,9 +298,6 @@ class TestPaperRegistryPath:
     def test_paper_rejections_write_no_order_placed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from pumpgrok.cli import main
-        from pumpgrok.ledger.store import LedgerStore
-
         monkeypatch.chdir(tmp_path)
         for seat in ("desk", "bot-04-sniper", "sniper", "exit"):
             assert main(_trade_flags(seat)) == 1
@@ -312,9 +306,7 @@ class TestPaperRegistryPath:
             store = LedgerStore(str(store_path))
             try:
                 rows = [
-                    event
-                    for event in store.read(limit=10000)
-                    if event["type"] == "OrderPlaced"
+                    event for event in store.read(limit=10000) if event["type"] == "OrderPlaced"
                 ]
             finally:
                 store.close()
@@ -327,12 +319,7 @@ class TestOperatorVerbs:
     def _run(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
     ) -> tuple[int, str, str]:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
-        import io
-        from contextlib import redirect_stderr, redirect_stdout
-
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = main(argv)
@@ -348,8 +335,6 @@ class TestOperatorVerbs:
     def test_killswitch_set_prints_json_and_persists(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from pumpgrok.ledger.store import LedgerStore
-
         code, out, err = self._run(
             tmp_path, monkeypatch, ["killswitch", "set", "--reason", "03-07 red"]
         )
@@ -399,9 +384,7 @@ class TestOperatorVerbs:
     def test_state_status_prints_json(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        code, out, _ = self._run(
-            tmp_path, monkeypatch, ["state", "status", "--seat", "desk"]
-        )
+        code, out, _ = self._run(tmp_path, monkeypatch, ["state", "status", "--seat", "desk"])
         assert code == 0
         assert "halted" in json.loads(out)
 
@@ -434,9 +417,7 @@ class TestOperatorVerbs:
     def test_hidden_tools_schema_prints_json_schema(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        code, out, _ = self._run(
-            tmp_path, monkeypatch, ["tools", "exec.quote", "--help"]
-        )
+        code, out, _ = self._run(tmp_path, monkeypatch, ["tools", "exec.quote", "--help"])
         assert code == 0
         payload = json.loads(out)
         assert payload["name"] == "exec.quote"
@@ -452,8 +433,6 @@ class TestOperatorVerbs:
     def test_hidden_verb_absent_from_top_help(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit) as excinfo:
             main(["--help"])
@@ -489,11 +468,6 @@ def _run_cli(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
 ) -> tuple[int, str, str]:
     """Run main() under an isolated cwd and capture both streams."""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    from pumpgrok.cli import main
-
     monkeypatch.chdir(tmp_path)
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
@@ -507,8 +481,6 @@ class TestCliRegressionSweep:
     def test_top_help_exit_0_and_hides_tools_verb(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit) as excinfo:
             main(["--help"])
@@ -517,8 +489,6 @@ class TestCliRegressionSweep:
     def test_hidden_verb_absent_from_top_help(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit):
             main(["--help"])
@@ -527,8 +497,6 @@ class TestCliRegressionSweep:
     def test_paper_help_lists_five_flags(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from pumpgrok.cli import main
-
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit) as excinfo:
             main(["paper", "buy", "--help"])
@@ -538,8 +506,6 @@ class TestCliRegressionSweep:
             assert flag in out
 
     def test_no_direct_tool_imports_in_cli(self) -> None:
-        import re
-
         text = (ROOT / "src" / "pumpgrok" / "cli.py").read_text(encoding="utf-8")
         assert "build_operator_registry" in text
         assert not re.search(r"pumpgrok\.tools\.\w", text)

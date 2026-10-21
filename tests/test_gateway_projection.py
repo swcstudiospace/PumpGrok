@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
 
 import yaml
 
+from pumpgrok.contracts import projection as facade
 from pumpgrok.core.manifests import (
     EXPECTED_SEAT_IDS,
     effective_roster,
@@ -55,13 +56,16 @@ def test_effective_roster_schemas_verbatim() -> None:
         "approval_id",
         "rollback_plan",
     ]
-    assert projected["desk.brief"]["input"] == _roster_tools("bot-04-sniper")[
-        next(
-            i
-            for i, entry in enumerate(_roster_tools("bot-04-sniper"))
-            if entry["name"] == "desk.brief"
-        )
-    ]["input"]
+    assert (
+        projected["desk.brief"]["input"]
+        == _roster_tools("bot-04-sniper")[
+            next(
+                i
+                for i, entry in enumerate(_roster_tools("bot-04-sniper"))
+                if entry["name"] == "desk.brief"
+            )
+        ]["input"]
+    )
 
 
 def test_transport_names_use_underscore_form() -> None:
@@ -74,8 +78,7 @@ def test_transport_map_built_forward_from_roster() -> None:
     for seat_id in EXPECTED_SEAT_IDS:
         mapping = transport_map(ROSTERS_DIR, seat_id)
         expected = {
-            entry["name"].replace(".", "_"): entry["name"]
-            for entry in _roster_tools(seat_id)
+            entry["name"].replace(".", "_"): entry["name"] for entry in _roster_tools(seat_id)
         }
         assert mapping == expected, seat_id
         # the underscore form of an underscored name is ambiguous in reverse:
@@ -92,30 +95,21 @@ def test_transport_mapping_injective_over_registry(tmp_path: Path) -> None:
 
 def test_contracts_facade_matches_manifests_for_every_seat() -> None:
     """The service import path is a pure facade: no drift from the loader."""
-    from pumpgrok.contracts import projection as facade
-
     assert facade.default_contracts_dir() == ROSTERS_DIR
     for seat_id in EXPECTED_SEAT_IDS:
-        assert facade.effective_roster(seat_id) == effective_roster(
-            ROSTERS_DIR, seat_id
-        ), seat_id
-        assert facade.transport_map(seat_id) == transport_map(
-            ROSTERS_DIR, seat_id
-        ), seat_id
+        assert facade.effective_roster(seat_id) == effective_roster(ROSTERS_DIR, seat_id), seat_id
+        assert facade.transport_map(seat_id) == transport_map(ROSTERS_DIR, seat_id), seat_id
         entries = facade.exposure_entries(seat_id)
         assert [entry["name"] for entry in entries] == [
-            transport_name(entry["name"])
-            for entry in effective_roster(ROSTERS_DIR, seat_id)
+            transport_name(entry["name"]) for entry in effective_roster(ROSTERS_DIR, seat_id)
         ], seat_id
-        assert all(
-            set(entry) == {"name", "description", "inputSchema"} for entry in entries
-        ), seat_id
+        assert all(set(entry) == {"name", "description", "inputSchema"} for entry in entries), (
+            seat_id
+        )
 
 
 def test_contracts_facade_short_maps_match_roster_endpoints() -> None:
     """short<->seat maps derive from roster YAML, matching endpoint suffixes."""
-    from pumpgrok.contracts import projection as facade
-
     short_to_seat = facade.short_to_seat()
     assert set(short_to_seat) == {
         "chief",
@@ -129,9 +123,7 @@ def test_contracts_facade_short_maps_match_roster_endpoints() -> None:
         "signal",
         "journal",
     }
-    assert facade.seat_to_short() == {
-        seat: short for short, seat in short_to_seat.items()
-    }
+    assert facade.seat_to_short() == {seat: short for short, seat in short_to_seat.items()}
     for short, seat_id in short_to_seat.items():
         doc = yaml.safe_load((ROSTERS_DIR / f"{seat_id}.yaml").read_text(encoding="utf-8"))
         assert doc["short"] == short
