@@ -15,7 +15,7 @@ veto is armed but dormant while off-chain enrichment is unwired.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -26,7 +26,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import RetryPolicy, Tool, ToolInput, ToolOutput, ToolSpec, tool
-from pumpgrok.tools._common import SOLANA_RPC_SOURCE, MintStr, meta_now
+from pumpgrok.tools._common import SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
 from pumpgrok.tools.onchain.rpc import RpcClient
 from pumpgrok.tools.safety.checks import ADVISORY_IDS, CHECK_IDS, REQUIRED_IDS, CheckResult
 
@@ -153,7 +153,7 @@ async def run_score_report(
                 check=check_id,
                 source=SOLANA_RPC_SOURCE,
                 slot=None,
-                fetched_at=datetime.now(UTC),
+                fetched_at=utcnow(),
             )
         )
 
@@ -281,7 +281,7 @@ async def run_score_report(
             )
             evidence.append(
                 Evidence(
-                    check=check_id, source="unwired", slot=None, fetched_at=datetime.now(UTC)
+                    check=check_id, source="unwired", slot=None, fetched_at=utcnow()
                 )
             )
 

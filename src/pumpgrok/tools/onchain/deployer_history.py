@@ -6,9 +6,6 @@ window: ``tokens_seen`` is a signature count, not an adjudicated token
 count, and ``rugs``/``worst_pnl_pct`` stay unwired until the reputation
 book lands (Phase 4+).
 """
-
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 from pydantic import Field
@@ -17,7 +14,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
-from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now
+from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 _SIG_LIMIT = 100
@@ -67,7 +64,7 @@ async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict:
         raise DataStale(f"onchain.deployer_history upstream failed creator={inp.creator}") from exc
     if not isinstance(sigs, list):
         raise DataStale(f"onchain.deployer_history malformed creator={inp.creator}")
-    cutoff = datetime.now(UTC).timestamp() - inp.lookback_days * _DAY_S
+    cutoff = utcnow().timestamp() - inp.lookback_days * _DAY_S
     kept: list[dict] = []
     for entry in sigs:
         if not isinstance(entry, dict) or not isinstance(entry.get("signature"), str):
