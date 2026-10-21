@@ -57,12 +57,12 @@ GrokBot pipeline:
   <roster endpoint="/mcp/exit" effective-tools="15">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>
     <tool name="desk.memory_recall" kind="read" side_effect="read" gates=""/>
     <tool name="desk.ownership_resolve" kind="read" side_effect="read" gates=""/>
     <tool name="desk.receipt_check" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates=""/>
     <tool name="market.price" kind="read" side_effect="read" gates=""/>
     <tool name="exec.quote" kind="read" side_effect="read" gates=""/>
     <tool name="exec.simulate" kind="read" side_effect="read" gates=""/>

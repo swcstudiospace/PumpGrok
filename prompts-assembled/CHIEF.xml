@@ -77,18 +77,18 @@ The pipeline is a screening engine that runs beside the desk. CHIEF may prioriti
   <roster endpoint="/mcp/chief" effective-tools="15">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>
     <tool name="desk.memory_recall" kind="read" side_effect="read" gates=""/>
     <tool name="desk.ownership_resolve" kind="read" side_effect="read" gates=""/>
     <tool name="desk.receipt_check" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates=""/>
     <tool name="exec.positions" kind="read" side_effect="read" gates=""/>
     <tool name="portfolio.exposure" kind="read" side_effect="read" gates=""/>
     <tool name="portfolio.pnl" kind="read" side_effect="read" gates=""/>
     <tool name="risk.check_limits" kind="read" side_effect="read" gates=""/>
     <tool name="risk.halt_status" kind="read" side_effect="read" gates=""/>
-    <tool name="notify.alert" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="journal.append" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="notify.alert" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="journal.append" kind="write" side_effect="paper-write" gates=""/>
   </roster>
 </prompt>

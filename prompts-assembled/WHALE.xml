@@ -63,17 +63,17 @@ NEVER:
   <roster endpoint="/mcp/whale" effective-tools="14">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>
     <tool name="desk.memory_recall" kind="read" side_effect="read" gates=""/>
     <tool name="desk.ownership_resolve" kind="read" side_effect="read" gates=""/>
     <tool name="desk.receipt_check" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates=""/>
     <tool name="onchain.top_holders" kind="read" side_effect="read" gates=""/>
     <tool name="onchain.deployer_history" kind="read" side_effect="read" gates=""/>
     <tool name="onchain.large_transfers" kind="read" side_effect="read" gates=""/>
     <tool name="market.trades" kind="read" side_effect="read" gates=""/>
     <tool name="market.holders_snapshot" kind="read" side_effect="read" gates=""/>
-    <tool name="journal.append" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="journal.append" kind="write" side_effect="paper-write" gates=""/>
   </roster>
 </prompt>

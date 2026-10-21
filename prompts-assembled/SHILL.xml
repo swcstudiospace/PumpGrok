@@ -56,14 +56,14 @@ GrokBot pipeline:
   <roster endpoint="/mcp/shill" effective-tools="11">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>
     <tool name="desk.memory_recall" kind="read" side_effect="read" gates=""/>
     <tool name="desk.ownership_resolve" kind="read" side_effect="read" gates=""/>
     <tool name="desk.receipt_check" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates=""/>
     <tool name="onchain.token_metadata" kind="read" side_effect="read" gates=""/>
     <tool name="market.trades" kind="read" side_effect="read" gates=""/>
-    <tool name="journal.append" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="journal.append" kind="write" side_effect="paper-write" gates=""/>
   </roster>
 </prompt>

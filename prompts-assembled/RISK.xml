@@ -73,18 +73,18 @@ Analyzer, audit, and checker are additional evidence for checklist items 6-9. Th
   <roster endpoint="/mcp/risk" effective-tools="15">
     <tool name="desk.brief" kind="read" side_effect="read" gates=""/>
     <tool name="desk.docs_search" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.memory_retain" kind="write" side_effect="paper-write" gates=""/>
     <tool name="desk.memory_recall" kind="read" side_effect="read" gates=""/>
     <tool name="desk.ownership_resolve" kind="read" side_effect="read" gates=""/>
     <tool name="desk.receipt_check" kind="read" side_effect="read" gates=""/>
-    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates="g6"/>
-    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="desk.event_emit" kind="write" side_effect="paper-write" gates=""/>
+    <tool name="desk.doctor" kind="write" side_effect="paper-write" gates=""/>
     <tool name="portfolio.ledger_read" kind="read" side_effect="read" gates=""/>
     <tool name="portfolio.exposure" kind="read" side_effect="read" gates=""/>
     <tool name="portfolio.pnl" kind="read" side_effect="read" gates=""/>
     <tool name="risk.check_limits" kind="read" side_effect="read" gates=""/>
     <tool name="risk.drawdown" kind="read" side_effect="read" gates=""/>
     <tool name="risk.halt_status" kind="read" side_effect="read" gates=""/>
-    <tool name="risk.kill_switch" kind="write" side_effect="paper-write" gates="g6"/>
+    <tool name="risk.kill_switch" kind="write" side_effect="paper-write" gates=""/>
   </roster>
 </prompt>
