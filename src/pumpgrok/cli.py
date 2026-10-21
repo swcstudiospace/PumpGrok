@@ -35,6 +35,8 @@ import sys
 from collections.abc import Awaitable, Callable, Sequence
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, NoReturn, TextIO
+
 from pydantic import ValidationError
 
 from pumpgrok.config.settings import (
@@ -49,6 +51,7 @@ from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.idempotency import derive_idempotency_key
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
+from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
 from pumpgrok.engine.pipeline import decide_replay, format_decision
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
@@ -86,6 +89,10 @@ class UsageError(Exception):
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         raise UsageError(message)
+
+
+if TYPE_CHECKING:
+    _VerbsAction = argparse._SubParsersAction[_Parser]
 
 
 def _ticket(value: str) -> str:
@@ -202,7 +209,7 @@ async def _with_tools(
     seat: str,
     settings: Settings,
     capabilities: Sequence[str],
-    use: Callable[[list[Any]], Awaitable[int]],
+    use: Callable[[list[Tool]], Awaitable[int]],
 ) -> int:
     """Build the operator registry, resolve ``seat``, find every capability (I1).
 
@@ -224,7 +231,7 @@ async def _with_tools(
             raise UsageError(f"bad --seat {seat!r}: unknown seat") from None
         factory = IdFactory(WallClock(), make_rng(settings.replay.seed))
         with bind_correlation(CorrelationId.new(factory)):
-            tools: list[Any] = []
+            tools: list[Tool] = []
             for capability in capabilities:
                 try:
                     tools.append(
@@ -246,7 +253,7 @@ def _run_wired(
     seat: str,
     settings: Settings,
     capabilities: Sequence[str],
-    use: Callable[[list[Any]], Awaitable[int]],
+    use: Callable[[list[Tool]], Awaitable[int]],
 ) -> int:
     """Run one wired verb: registry build, find (I1), then the verb tail."""
     return asyncio.run(_with_tools(verb, seat, settings, capabilities, use))
@@ -254,7 +261,7 @@ def _run_wired(
 
 def _call_use(
     verb: str, index: int, fields: dict[str, Any]
-) -> Callable[[list[Any]], Awaitable[int]]:
+) -> Callable[[list[Tool]], Awaitable[int]]:
     """Tail that validates one input through the tool spec and calls the tool (B5).
 
     The input model comes from the resolved spec, so the CLI never imports a
@@ -262,7 +269,7 @@ def _call_use(
     absent-backend not_yet_implemented) prints the envelope with the exit map.
     """
 
-    async def use(tools: list[Any]) -> int:
+    async def use(tools: list[Tool]) -> int:
         tool = tools[index]
         try:
             payload = tool.spec.input_model(**fields)
@@ -282,10 +289,10 @@ def _call_use(
     return use
 
 
-def _skip_use(verb: str) -> Callable[[list[Any]], Awaitable[int]]:
+def _skip_use(verb: str) -> Callable[[list[Tool]], Awaitable[int]]:
     """Tail for Phase 4 orchestration verbs: find (I1) proves the path, then exit 5."""
 
-    async def use(_tools: list[Any]) -> int:
+    async def use(_tools: list[Tool]) -> int:
         return _not_implemented(verb)
 
     return use
@@ -326,7 +333,7 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
     _add_seat(parser)
 
 
-def _add_run(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run = verbs.add_parser("run", parents=[mode_option], help="run the desk")
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
     run.add_argument("--replay", metavar="DIR", default=None, help="recorded fixture directory")
@@ -338,7 +345,7 @@ def _add_run(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_simple(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
@@ -349,7 +356,7 @@ def _add_simple(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     report_period.add_argument("--weekly", action="store_true", help="weekly report")
 
 
-def _add_scout(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_scout(verbs: _VerbsAction, mode_option: _Parser) -> None:
     scout = verbs.add_parser("scout", parents=[mode_option], help="discovery verbs")
     scout_cmd = scout.add_subparsers(dest="cmd", required=True, metavar="SCOUT")
     scout_discover = scout_cmd.add_parser("discover", help="discover new launches")
@@ -359,7 +366,7 @@ def _add_scout(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     scout_pipeline.add_argument("--limit", type=int, default=5, help="max candidates this run")
 
 
-def _add_risk_chief_rug(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_risk_chief_rug(verbs: _VerbsAction, mode_option: _Parser) -> None:
     risk = verbs.add_parser("risk", parents=[mode_option], help="risk verbs")
     risk_cmd = risk.add_subparsers(dest="cmd", required=True, metavar="RISK")
     risk_audit = risk_cmd.add_parser("audit", help="audit open leads")
@@ -372,7 +379,7 @@ def _add_risk_chief_rug(verbs: Any, mode_option: argparse.ArgumentParser) -> Non
     rug_cmd.add_parser("watch", help="watch open paper positions")
 
 
-def _add_journal_ticket(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_journal_ticket(verbs: _VerbsAction, mode_option: _Parser) -> None:
     journal = verbs.add_parser("journal", parents=[mode_option], help="journal verbs")
     journal_cmd = journal.add_subparsers(dest="cmd", required=True, metavar="JOURNAL")
     journal_rollup = journal_cmd.add_parser("rollup", help="daily journal rollup")
@@ -388,7 +395,7 @@ def _add_journal_ticket(verbs: Any, mode_option: argparse.ArgumentParser) -> Non
     ticket_cmd.add_parser("list", help="list tickets")
 
 
-def _add_state(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_state(verbs: _VerbsAction, mode_option: _Parser) -> None:
     state = verbs.add_parser("state", parents=[mode_option], help="desk state verbs")
     state_cmd = state.add_subparsers(dest="cmd", required=True, metavar="STATE")
     state_status = state_cmd.add_parser("status", help="report desk status")
@@ -405,7 +412,7 @@ def _add_state(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     _add_seat(state_autonomy)
 
 
-def _add_tail(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
+def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
     killswitch_set = killswitch_cmd.add_parser("set", help="engage the killswitch")
@@ -413,9 +420,7 @@ def _add_tail(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     killswitch_flatten = killswitch_cmd.add_parser(
         "flatten", help="request flatten of every open paper position"
     )
-    killswitch_flatten.add_argument(
-        "--reason", required=True, help="why open positions flatten"
-    )
+    killswitch_flatten.add_argument("--reason", required=True, help="why open positions flatten")
     killswitch_clear = killswitch_cmd.add_parser(
         "clear", help="release the killswitch (human only)"
     )
@@ -565,7 +570,7 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
         _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
         return EXIT_CONFIG
 
-    async def use(_tools: list[Any]) -> int:
+    async def use(_tools: list[Tool]) -> int:
         # R63: no paper trade without a valid approval. Phase 3 has no
         # approval-issue/consume path (RiskEngine check plus the PaperAdapter
         # place transaction land in Phase 4), so every presented approval_id
@@ -623,14 +628,10 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
             ("risk.kill_switch",),
             _call_use(verb, 0, {"action": "flatten_request", "reason": args.reason}),
         )
-    return _run_wired(
-        verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {})
-    )
+    return _run_wired(verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {}))
 
 
-def _find_only(
-    verb: str, seat: str, settings: Settings, capabilities: Sequence[str]
-) -> int:
+def _find_only(verb: str, seat: str, settings: Settings, capabilities: Sequence[str]) -> int:
     """Section-12 verb whose multi-tool orchestration lands in Phase 4 (B5 partial).
 
     Every catalog tool resolves through find (I1 enforced; a wrong seat prints
@@ -655,9 +656,7 @@ def _tools_schema(tool_id: str) -> int:
             try:
                 spec = reg.spec(tool_id)
             except KeyError:
-                return _tool_error(
-                    f"tools {tool_id}", "unknown_tool", f"unknown tool: {tool_id}"
-                )
+                return _tool_error(f"tools {tool_id}", "unknown_tool", f"unknown tool: {tool_id}")
             _say(
                 sys.stdout,
                 json.dumps(
@@ -697,7 +696,7 @@ def _tools_entry(rest: list[str]) -> int:
     """Route the hidden `tools` verb without argparse (B8: absent from top help)."""
     if not rest:
         raise UsageError("tools requires a tool id (try `pumpgrok tools exec.quote --help`)")
-    if rest == ["--help"] or rest == ["-h"]:
+    if rest in (["--help"], ["-h"]):
         _say(sys.stdout, *_TOOLS_HELP)
         return EXIT_OK
     tool_id = rest[0]
@@ -728,6 +727,62 @@ _RUG_WATCH = (
 )
 
 
+def _verb_label(args: argparse.Namespace) -> str:
+    """Audit label for a find-only verb: the verb plus its subcommand, when it has one."""
+    verb: str = args.verb
+    cmd: str | None = getattr(args, "cmd", None)
+    return verb if cmd is None else f"{verb} {cmd}"
+
+
+def _doctor_verb(_args: argparse.Namespace, settings: Settings) -> int:
+    _say(sys.stdout, *doctor_report(settings))
+    return EXIT_OK
+
+
+def _live_verb(_args: argparse.Namespace, _settings: Settings) -> int:
+    # Human-only (R21): the HMAC-bound live.confirmation_record lands in Phase 4.
+    return _not_implemented("live confirm")
+
+
+def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
+    return _not_implemented(f"replay {args.cmd}")
+
+
+# Find-only verbs (B5 partial): verb -> (calling seat, capabilities resolved through find).
+_FIND_ONLY_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "scout": ("scout", _SCOUT_FLOW),
+    "risk": ("risk", _RISK_AUDIT),
+    "chief": ("chief", _CHIEF_PICKUP),
+    "rug": ("rug", _RUG_WATCH),
+    "journal": ("journal", ("journal.render_report",)),
+    "ticket": ("journal", ("journal.append", "portfolio.ledger_read")),
+    "report": ("journal", ("journal.render_report",)),
+    "audit": ("desk", ("desk.doctor",)),
+    "verify": ("desk", ("desk.receipt_check", "desk.ownership_resolve")),
+}
+
+_VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
+    "doctor": _doctor_verb,
+    "run": _run,
+    "paper": _paper,
+    "state": _state,
+    "killswitch": _killswitch,
+    "live": _live_verb,
+    "replay": _replay_verb,
+}
+
+
+def _route(args: argparse.Namespace, settings: Settings) -> int:
+    find_route = _FIND_ONLY_ROUTES.get(args.verb)
+    if find_route is not None:
+        seat, capabilities = find_route
+        return _find_only(_verb_label(args), seat, settings, capabilities)
+    handler = _VERB_HANDLERS.get(args.verb)
+    if handler is None:
+        return _not_implemented(args.verb)
+    return handler(args, settings)
+
+
 def _dispatch(argv: Sequence[str]) -> int:
     refuse_cli_secrets(argv)
     if argv and argv[0] == "tools":
@@ -735,48 +790,7 @@ def _dispatch(argv: Sequence[str]) -> int:
     args = build_parser().parse_args(list(argv))
     settings = load_settings(**_settings_kwargs(args.mode))
     setup_logging(mode=settings.effective_mode, profile=current_profile())
-    if args.verb == "doctor":
-        _say(sys.stdout, *doctor_report(settings))
-        return EXIT_OK
-    if args.verb == "run":
-        return _run(args, settings)
-    if args.verb == "paper":
-        return _paper(args, settings)
-    if args.verb == "state":
-        return _state(args, settings)
-    if args.verb == "killswitch":
-        return _killswitch(args, settings)
-    if args.verb == "scout":
-        return _find_only(f"scout {args.cmd}", "scout", settings, _SCOUT_FLOW)
-    if args.verb == "risk":
-        return _find_only("risk audit", "risk", settings, _RISK_AUDIT)
-    if args.verb == "chief":
-        return _find_only("chief pickup", "chief", settings, _CHIEF_PICKUP)
-    if args.verb == "rug":
-        return _find_only("rug watch", "rug", settings, _RUG_WATCH)
-    if args.verb == "journal":
-        return _find_only("journal rollup", "journal", settings, ("journal.render_report",))
-    if args.verb == "ticket":
-        return _find_only(
-            f"ticket {args.cmd}",
-            "journal",
-            settings,
-            ("journal.append", "portfolio.ledger_read"),
-        )
-    if args.verb == "report":
-        return _find_only("report", "journal", settings, ("journal.render_report",))
-    if args.verb == "audit":
-        return _find_only("audit", "desk", settings, ("desk.doctor",))
-    if args.verb == "verify":
-        return _find_only(
-            "verify", "desk", settings, ("desk.receipt_check", "desk.ownership_resolve")
-        )
-    if args.verb == "live":
-        # Human-only (R21): the HMAC-bound live.confirmation_record lands in Phase 4.
-        return _not_implemented("live confirm")
-    if args.verb == "replay":
-        return _not_implemented(f"{args.verb} {args.cmd}")
-    return _not_implemented(args.verb)
+    return _route(args, settings)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
