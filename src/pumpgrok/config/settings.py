@@ -351,6 +351,7 @@ NON_SETTING_ENV_NAMES = frozenset(
         "PUMPGROK_LOG_JSON",
         "PUMPGROK_LIVE_ENABLE",
         "PUMPGROK_KILLSWITCH",
+        "PUMPGROK_CONFIRMATION_KEY",
     }
 )
 

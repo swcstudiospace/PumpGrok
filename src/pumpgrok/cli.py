@@ -29,10 +29,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
 import re
+import sqlite3
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
@@ -379,6 +383,9 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     report_period = report.add_mutually_exclusive_group(required=True)
     report_period.add_argument("--daily", action="store_true", help="daily report")
     report_period.add_argument("--weekly", action="store_true", help="weekly report")
+    report.add_argument("--day", default=None, help="report day YYYY-MM-DD (default today UTC)")
+    report.add_argument("--week", default=None, help="week Monday YYYY-MM-DD (default this week)")
+    report.add_argument("--out", default=None, help="write markdown to this path (default stdout only)")
 
 
 def _add_scout(verbs: _VerbsAction, mode_option: _Parser) -> None:
@@ -466,7 +473,10 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     _add_paper_trade_flags(paper_sell)
     live = verbs.add_parser("live", parents=[mode_option], help="live verbs")
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
-    live_cmd.add_parser("confirm", help="confirm a live gate (not yet implemented)")
+    live_confirm = live_cmd.add_parser("confirm", help="record a human live-gate confirmation")
+    live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
+    live_confirm.add_argument("--notional-cap", required=True, help="per-order cap in SOL (0 < cap <= 1.0)")
+    live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
     replay_cmd.add_parser("trim", help="trim a replay dataset")
@@ -1000,9 +1010,150 @@ def _doctor_verb(_args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _live_verb(_args: argparse.Namespace, _settings: Settings) -> int:
-    # Human-only (R21): the HMAC-bound live.confirmation_record lands in Phase 4.
-    return _not_implemented("live confirm")
+def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
+    if args.cmd == "confirm":
+        return _live_confirm(args, settings)
+    return _not_implemented("live {0}".format(args.cmd))
+
+
+def _jsonable(value: Any) -> Any:
+    """Coerce a settings dump to canonical_json input: floats become repr strings."""
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, dict):
+        return {key: _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
+    """Write the HMAC-signed human confirmation record (paper-engine.md 7.3).
+
+    Binds the record to the config hash with the operator-held
+    ``PUMPGROK_CONFIRMATION_KEY`` that no seat or tool can read, and appends
+    ``ApprovalRecorded(kind=live_gate)`` to the ledger. Never changes the
+    effective mode.
+    """
+    by = _human_by(args.by, "live confirm")
+    try:
+        cap_sol = Decimal(str(args.notional_cap))
+    except InvalidOperation:
+        raise UsageError("bad --notional-cap {0!r}: want decimal SOL".format(args.notional_cap))
+    if not (Decimal("0") < cap_sol <= Decimal("1.0")):
+        raise UsageError("bad --notional-cap {0!r}: want 0 < cap <= 1.0".format(args.notional_cap))
+    try:
+        expires = datetime.fromisoformat(str(args.expires).replace("Z", "+00:00"))
+    except ValueError:
+        raise UsageError("bad --expires {0!r}: want ISO-8601 UTC".format(args.expires))
+    key = os.environ.get("PUMPGROK_CONFIRMATION_KEY", "")
+    if not key:
+        _say(sys.stderr, "live confirm refused: PUMPGROK_CONFIRMATION_KEY is not set")
+        return EXIT_CONFIG
+    from pumpgrok.core.idempotency import canonical_json
+
+    config_hash = hashlib.sha256(
+        canonical_json(_jsonable(settings.model_dump(mode="json"))).encode("utf-8")
+    ).hexdigest()
+    cap_lamports = int((cap_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
+    confirmed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    body = {
+        "ledger_id": _ledger_id_or_none(),
+        "config_hash": config_hash,
+        "confirmed_by": by,
+        "confirmed_at": confirmed_at,
+        "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "notional_cap_lamports": cap_lamports,
+        "wallet_allowlist_sha256": hashlib.sha256(b"[]").hexdigest(),
+        "statement": (
+            "I confirm live trading with the listed wallet and cap. "
+            "I have read SECURITY.md and RISK_POLICY.md."
+        ),
+    }
+    signature = hmac.new(
+        key.encode("utf-8"), canonical_json(body).encode("utf-8"), hashlib.sha256
+    ).digest()
+    record = dict(body)
+    record["signature"] = base64.b64encode(signature).decode("ascii")
+    target = Path.cwd() / "var" / "live_confirmation.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".tmp")
+    tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+    _append_live_approval(by, cap_lamports, record["signature"])
+    _say(sys.stdout, json.dumps({"confirmation_record": str(target), "config_hash": config_hash}))
+    return EXIT_OK
+
+
+def _ledger_id_or_none() -> str:
+    """Ledger id for the confirmation record, read-only; "none" when absent."""
+    ledger = Path.cwd() / "var" / "ledger.sqlite"
+    if not ledger.exists():
+        return "none"
+    try:
+        uri = "file:{0}?mode=ro".format(ledger.resolve().as_posix())
+        db = sqlite3.connect(uri, uri=True)
+        try:
+            row = db.execute("SELECT value FROM meta WHERE key = 'ledger_id'").fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return "none"
+    return str(row[0]) if row else "none"
+
+
+def _append_live_approval(by: str, cap_lamports: int, signature: str) -> None:
+    """Append ApprovalRecorded(kind=live_gate) with the confirmation signature."""
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        store.append(
+            ts_utc=now,
+            source="manual",
+            correlation_id="desk",
+            idempotency_key="live-confirm-{0}".format(signature[:16]),
+            type="ApprovalRecorded",
+            payload={
+                "source": "manual",
+                "id": "apr-live-{0}".format(signature[:16]),
+                "kind": "live_gate",
+                "approved_by": by,
+                "at": now,
+                "size_lamports": cap_lamports,
+                "token_units": 0,
+                "raw_message": "live confirm",
+            },
+        )
+    finally:
+        store.close()
+
+
+def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
+    """Emit the daily or weekly ASCII paper report to stdout (PAPER-006).
+
+    Reads the ledger read-only: the path is guarded and sqlite opens it with
+    ``mode=ro``, so reporting never creates ``var/`` files.
+    """
+    from pumpgrok.reporting.daily import DailyReport
+    from pumpgrok.reporting.render import render_daily, render_weekly
+    from pumpgrok.reporting.weekly import WeeklyReport
+
+    ledger = Path.cwd() / "var" / "ledger.sqlite"
+    mode = settings.effective_mode
+    if args.daily:
+        day = str(args.day or datetime.now(UTC).strftime("%Y-%m-%d"))
+        body = render_daily(DailyReport.build(ledger, day, mode=mode))
+    else:
+        week = str(args.week or datetime.now(UTC).strftime("%Y-%m-%d"))
+        body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd()))
+    if args.out:
+        target = Path(str(args.out))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(body, encoding="utf-8")
+        os.replace(tmp, target)
+    _say(sys.stdout, body.rstrip("\n"))
+    return EXIT_OK
 
 
 def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
@@ -1043,7 +1194,6 @@ _FIND_ONLY_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
     "chief": ("chief", _CHIEF_PICKUP),
     "rug": ("rug", _RUG_WATCH),
     "journal": ("journal", ("journal.render_report",)),
-    "report": ("journal", ("journal.render_report",)),
     "audit": ("desk", ("desk.doctor",)),
 }
 
@@ -1057,6 +1207,7 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "live": _live_verb,
     "replay": _replay_verb,
     "verify": _verify_verb,
+    "report": _report_verb,
 }
 
 

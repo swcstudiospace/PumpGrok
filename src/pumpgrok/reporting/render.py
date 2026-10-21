@@ -210,26 +210,25 @@ def render_daily(model: ReportModel) -> str:
 
 def render_weekly(model: ReportModel) -> str:
     """Render the weekly markdown: daily shape plus per-day table and live gate."""
-    daily = render_daily(model)
-    marker = _GATE_ABSENT
-    head, _, _ = daily.partition(marker)
-    tail = [head]
+    daily = render_daily(model).replace(
+        "# PumpGrok paper report - daily -", "# PumpGrok paper report - weekly -", 1
+    )
+    insert: list[str] = []
     if model.per_day:
-        tail.append(_PER_DAY_HEADER)
+        insert.append(_PER_DAY_HEADER)
         for line in model.per_day:
-            tail.append(_PER_DAY_ROW.format(line=line))
+            insert.append(_PER_DAY_ROW.format(line=line))
     else:
-        tail.append(_PER_DAY_EMPTY)
-    tail.append("\n")
+        insert.append(_PER_DAY_EMPTY)
+    insert.append("\n")
     if model.live_gate:
-        tail.append(_GATE_HEADER)
+        insert.append(_GATE_HEADER)
         for line in model.live_gate:
-            tail.append(_GATE_ROW.format(line=line))
+            insert.append(_GATE_ROW.format(line=line))
     else:
-        tail.append("## Live gate\nno gate evaluation recorded\n")
-    tail.append("\n")
-    tail.append(_render_unverified(model))
-    return assert_ascii("".join(tail))
+        insert.append("## Live gate\nno gate evaluation recorded\n")
+    insert.append("\n")
+    return assert_ascii(daily.replace(_GATE_ABSENT, "".join(insert), 1))
 
 
 def _render_positions(model: ReportModel) -> str:

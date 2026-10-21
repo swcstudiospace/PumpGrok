@@ -8,6 +8,7 @@ because no implementation ships in this release.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import ClassVar, NoReturn
 
@@ -28,6 +29,7 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.json import current_seat
 from pumpgrok.replay.clock import Clock
 
+log = logging.getLogger(__name__)
 ADAPTER_NAME = "LiveAdapterStub"
 # Seat recorded when a refused write has no bound seat (the desk itself).
 FALLBACK_SEAT = "desk"
@@ -68,6 +70,13 @@ class LiveAdapterStub:
                 "gate_result_json": canonical_json({"unmet": unmet}),
                 "stack_hash": "",
             },
+        )
+        log.critical(
+            "live_write_attempted adapter=%s method=%s seat=%s unmet=%s",
+            ADAPTER_NAME,
+            method,
+            seat,
+            ",".join(unmet),
         )
         raise LiveGateError(
             f"live {method} refused: no live adapter is available in this release",
