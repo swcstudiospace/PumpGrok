@@ -30,7 +30,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -39,6 +39,109 @@ from pydantic_settings import (
 )
 
 from pumpgrok.core.risk_budget import RiskBudget
+
+
+class DataSettings(BaseModel):
+    """Pump.fun REST plus PumpPortal websocket ingress (D8)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rest_url: str = "https://frontend-api.pump.fun"
+    ws_url: str = "wss://pumpportal.fun/api/data"
+    ws_max_queue: int = Field(default=16, ge=1)
+
+
+class RpcSettings(BaseModel):
+    """Solana JSON-RPC failover list. Endpoints are keyless URLs only.
+
+    Paid-provider keys travel in ``api_key`` and are sent as a header;
+    key-bearing endpoint values are refused at startup (T-02-01).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    endpoints: list[str] = Field(
+        default_factory=lambda: ["https://api.mainnet-beta.solana.com"]
+    )
+    api_key: SecretStr = SecretStr("")
+
+
+class GrokSettings(BaseModel):
+    """x.ai chat completions (R48). Secrets arrive via env only."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    base_url: str = "https://api.x.ai/v1"
+    strong_model: str = "grok-4.3"
+    strong_effort: str = "low"
+    fast_model: str = "grok-4.20-0309-non-reasoning"
+    api_key: SecretStr = SecretStr("")
+
+
+class JupiterSettings(BaseModel):
+    """Jupiter Swap V2 quote endpoint, informational only (R44, R38)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    quote_url: str = "https://api.jup.ag/swap/v2/order"
+
+
+class FilterSettings(BaseModel):
+    """Launch-monitor admission gates (vendor FilterConfig, ASCII codes)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    min_unique_buyers: int = Field(default=5, ge=0)
+    max_curve_progress: float = Field(default=0.40, ge=0)
+    require_metadata: bool = True
+    min_age_seconds: float = Field(default=120.0, ge=0)
+    max_risk_score: float = Field(default=7.0, ge=0)
+    min_total_score: float = Field(default=0.65, ge=0)
+    block_creator_after_rugs: int = Field(default=1, ge=0)
+    rug_loss_pct: float = Field(default=60.0, ge=0)
+    one_position_per_creator: bool = True
+    forget_creators_after_days: float = Field(default=30.0, ge=0)
+
+
+class ScoringWeights(BaseModel):
+    """Component weights; must sum to 1 downstream (vendor ScoringWeights)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    audit: float = 0.30
+    narrative: float = 0.25
+    timing: float = 0.15
+    metrics: float = 0.30
+
+
+class ScoringSettings(BaseModel):
+    """Engine scoring knobs (vendor ScoringConfig)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    weights: ScoringWeights = Field(default_factory=ScoringWeights)
+    timing_cache_seconds: float = Field(default=900.0, ge=0)
+
+
+class ExitsSettings(BaseModel):
+    """Exit-rule thresholds. Separate from ``risk`` (Pitfall 15, R20)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stop_loss_pct: float = Field(default=30.0, ge=0)
+    take_profit_pct: float = Field(default=120.0, ge=0)
+    trailing_stop_pct: float = Field(default=35.0, ge=0)
+    max_hold_seconds: float = Field(default=3600.0, ge=0)
+    stop_loss_poll_seconds: float = Field(default=15.0, ge=0)
+
+
+class OpsSettings(BaseModel):
+    """Process-lifetime state paths (vendor OpsConfig subset, Phase 2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reputation_path: str = "var/reputation.json"
+
 
 Mode = Literal["paper", "live"]
 
@@ -125,6 +228,14 @@ class Settings(BaseSettings):
     risk: RiskBudget = Field(default_factory=RiskBudget)
     replay: ReplaySettings = Field(default_factory=ReplaySettings)
     live: LiveSettings = Field(default_factory=LiveSettings)
+    data: DataSettings = Field(default_factory=DataSettings)
+    rpc: RpcSettings = Field(default_factory=RpcSettings)
+    grok: GrokSettings = Field(default_factory=GrokSettings)
+    jupiter: JupiterSettings = Field(default_factory=JupiterSettings)
+    filter: FilterSettings = Field(default_factory=FilterSettings)
+    scoring: ScoringSettings = Field(default_factory=ScoringSettings)
+    exits: ExitsSettings = Field(default_factory=ExitsSettings)
+    ops: OpsSettings = Field(default_factory=OpsSettings)
 
     @property
     def effective_mode(self) -> Mode:

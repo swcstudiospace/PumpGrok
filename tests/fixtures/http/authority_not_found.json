@@ -1,0 +1,12 @@
+{
+  "source": "hand-authored",
+  "note": "getAccountInfo response for an unknown mint (value null); served by httpx.MockTransport, no network",
+  "http": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "context": { "slot": 314159266 },
+      "value": null
+    }
+  }
+}

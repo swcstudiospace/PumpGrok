@@ -24,3 +24,51 @@ seed = 20260101
 # Marker only: enabling live requires the live gate (separate module).
 [live]
 enabled = false
+
+[data]
+rest_url = "https://frontend-api.pump.fun"
+ws_url = "wss://pumpportal.fun/api/data"
+ws_max_queue = 16
+
+[rpc]
+endpoints = ["https://api.mainnet-beta.solana.com"]
+
+[grok]
+base_url = "https://api.x.ai/v1"
+strong_model = "grok-4.3"
+strong_effort = "low"
+fast_model = "grok-4.20-0309-non-reasoning"
+
+[jupiter]
+quote_url = "https://api.jup.ag/swap/v2/order"
+
+[filter]
+min_unique_buyers = 5
+max_curve_progress = 0.40
+require_metadata = true
+min_age_seconds = 120.0
+max_risk_score = 7.0
+min_total_score = 0.65
+block_creator_after_rugs = 1
+rug_loss_pct = 60.0
+one_position_per_creator = true
+forget_creators_after_days = 30.0
+
+[scoring.weights]
+audit = 0.30
+narrative = 0.25
+timing = 0.15
+metrics = 0.30
+
+[scoring]
+timing_cache_seconds = 900.0
+
+[exits]
+stop_loss_pct = 30.0
+take_profit_pct = 120.0
+trailing_stop_pct = 35.0
+max_hold_seconds = 3600.0
+stop_loss_poll_seconds = 15.0
+
+[ops]
+reputation_path = "var/reputation.json"

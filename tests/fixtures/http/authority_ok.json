@@ -1,0 +1,32 @@
+{
+  "source": "hand-authored",
+  "note": "getAccountInfo jsonParsed response for a renounced mint; served by httpx.MockTransport, no network",
+  "http": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "context": { "slot": 314159265 },
+      "value": {
+        "data": {
+          "parsed": {
+            "info": {
+              "decimals": 9,
+              "freezeAuthority": null,
+              "isInitialized": true,
+              "mintAuthority": null,
+              "supply": "1000000000000000",
+              "extensions": []
+            },
+            "type": "mint"
+          },
+          "program": "spl-token",
+          "space": 82
+        },
+        "executable": false,
+        "lamports": 1461600,
+        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "rentEpoch": 18446744073709552000
+      }
+    }
+  }
+}
