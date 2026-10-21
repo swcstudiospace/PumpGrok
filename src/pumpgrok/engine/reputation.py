@@ -35,7 +35,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from pumpgrok.core.atomic_write import atomic_write_json
-from pumpgrok.replay.clock import Clock, WallClock
+from pumpgrok.replay.clock import Clock, WallClock, format_ts_utc
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,9 @@ class ReputationBook(BaseModel):
     version: int = 1
     creators: dict[str, CreatorRecord] = Field(default_factory=dict)
     updated_at: float = 0.0
+    # True when load quarantined a corrupt file: history was lost, act blind.
+    # Excluded from the dump so the vendor JSON shape never changes.
+    degraded: bool = Field(default=False, exclude=True)
 
     _clock: Clock = PrivateAttr(default_factory=WallClock)
 
@@ -85,8 +88,30 @@ class ReputationBook(BaseModel):
             raw: Any = json.loads(file.read_text(encoding="utf-8"))
             book = cls.model_validate(raw)
         except Exception as exc:
-            log.error("reputation book %s unreadable (%s), starting empty", file, exc)
             book = cls()
+            if clock is not None:
+                book._clock = clock
+            stamp = format_ts_utc(book._clock.now()).replace(":", "-")
+            quarantine = file.with_name(f"{file.name}.corrupt-{stamp}")
+            try:
+                file.rename(quarantine)
+            except OSError as move_exc:
+                log.error(
+                    "reputation book %s unreadable (%s), quarantine to %s failed (%s)",
+                    file,
+                    type(exc).__name__,
+                    quarantine,
+                    type(move_exc).__name__,
+                )
+            else:
+                log.error(
+                    "reputation book %s unreadable (%s), quarantined to %s",
+                    file,
+                    type(exc).__name__,
+                    quarantine,
+                )
+            book.degraded = True
+            return book
         if clock is not None:
             book._clock = clock
         return book
