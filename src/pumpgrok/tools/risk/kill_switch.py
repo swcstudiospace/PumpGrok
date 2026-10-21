@@ -124,6 +124,9 @@ def _status(
         source: Literal["env", "file", "command", "none"] = "env"
     elif file_set:
         source = "file"
+    elif ledger_active:
+        # Ledger engagements come only from the command path (CLI or tool).
+        source = "command"
     else:
         source = "none"
     since = None
