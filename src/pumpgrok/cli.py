@@ -393,11 +393,12 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
     if lamports > settings.risk.paper_equity_lamports:
         _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
         return EXIT_CONFIG
-    log.info(
-        "absent paper verb",
-        extra={"event": "absent_verb", "verb": verb, "size_lamports": lamports},
-    )
-    return _not_implemented(verb)
+    # R63: no paper trade without a valid approval. Phase 3 has no
+    # approval-issue/consume path (RiskEngine check plus the PaperAdapter
+    # place transaction land in Phase 4), so every presented approval_id is
+    # unknown: fail closed with exit 1 and write nothing.
+    _say(sys.stderr, f"refused: no valid approval_id for `{verb}` (R63)")
+    return EXIT_CONFIG
 
 
 def _state(args: argparse.Namespace) -> int:

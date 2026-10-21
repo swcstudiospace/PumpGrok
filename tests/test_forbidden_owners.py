@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from collections.abc import Iterator
@@ -10,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from pumpgrok.cli import EXIT_CONFIG, EXIT_NOT_IMPLEMENTED, main
+from pumpgrok.cli import EXIT_CONFIG, main
 
 TICKET = "SOL-20260101-001"
 MINT = "So11111111111111111111111111111111111111112"
@@ -85,13 +84,16 @@ def test_forbidden_seats_refused_on_state(
     assert "refused" in capsys.readouterr().err
 
 
-def test_allowed_seat_reaches_absent_verb(
+def test_allowed_seat_rejected_without_valid_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # Phase 3 (R63, plan 03-04): the desk seat reaches the verb, but no
+    # approval_id can be valid yet (RiskEngine plus the PaperAdapter place
+    # transaction land in Phase 4), so the trade is refused with exit 1
+    # instead of the old absent-verb exit 5. No OrderPlaced row is written.
     code = _paper_verb(tmp_path, monkeypatch, "buy", "desk")
-    assert code == EXIT_NOT_IMPLEMENTED
-    body = json.loads(capsys.readouterr().out)
-    assert body == {"ok": False, "status": "not-yet-implemented", "verb": "paper buy"}
+    assert code == EXIT_CONFIG
+    assert "no valid approval_id" in capsys.readouterr().err
 
 
 def test_bad_ticket_is_usage_error(
