@@ -300,6 +300,7 @@ class ApprovalRecorded(_ClosedModel):
     ticket_id: str = ""
     mint: str = ""
     size_lamports: MoneyInt = 0
+    token_units: MoneyInt
     max_slippage_bps: MoneyInt = 0
     exit_rule_id: str = ""
     raw_message: str = ""

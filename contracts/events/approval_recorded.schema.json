@@ -43,6 +43,10 @@
       "title": "Size Lamports",
       "type": "integer"
     },
+    "token_units": {
+      "title": "Token Units",
+      "type": "integer"
+    },
     "max_slippage_bps": {
       "default": 0,
       "title": "Max Slippage Bps",
@@ -69,7 +73,8 @@
     "id",
     "kind",
     "approved_by",
-    "at"
+    "at",
+    "token_units"
   ],
   "title": "ApprovalRecorded",
   "type": "object"
