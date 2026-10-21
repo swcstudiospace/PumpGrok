@@ -321,5 +321,169 @@ class TestPaperRegistryPath:
             assert rows == []
 
 
+class TestOperatorVerbs:
+    """Task 2: killswitch/state verbs plus hidden tools help (TOOL-011, B5, B8, R22)."""
+
+    def _run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+    ) -> tuple[int, str, str]:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_killswitch_set_requires_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, _, err = self._run(tmp_path, monkeypatch, ["killswitch", "set"])
+        assert code == 1
+        assert "--reason" in err
+
+    def test_killswitch_set_prints_json_and_persists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pumpgrok.ledger.store import LedgerStore
+
+        code, out, err = self._run(
+            tmp_path, monkeypatch, ["killswitch", "set", "--reason", "03-07 red"]
+        )
+        assert code == 0
+        payload = json.loads(out)
+        assert payload["active"] is True
+        assert "Traceback" not in err
+        store = LedgerStore(str(tmp_path / "var" / "desk" / "ledger.sqlite"))
+        try:
+            kinds = [event["type"] for event in store.read(limit=10000)]
+        finally:
+            store.close()
+        assert "KillSwitchSet" in kinds
+
+    def test_killswitch_flatten_requests_flatten(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path, monkeypatch, ["killswitch", "flatten", "--reason", "03-07 red"]
+        )
+        assert code == 0
+        payload = json.loads(out)
+        assert payload["flatten_requested"] is True
+
+    def test_killswitch_clear_records_intent_exit_5(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["killswitch", "clear", "--by", "op", "--reason", "03-07 red"],
+        )
+        assert code == 5
+        payload = json.loads(out)
+        assert payload["status"] == "not-yet-implemented"
+        assert payload["verb"] == "killswitch clear"
+        assert payload["intent"] == {"by": "op", "reason": "03-07 red"}
+        assert not (tmp_path / "var" / "desk" / "ledger.sqlite").is_file()
+
+    def test_killswitch_status_prints_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(tmp_path, monkeypatch, ["killswitch", "status"])
+        assert code == 0
+        assert "halted" in json.loads(out)
+
+    def test_state_status_prints_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path, monkeypatch, ["state", "status", "--seat", "desk"]
+        )
+        assert code == 0
+        assert "halted" in json.loads(out)
+
+    def test_state_halt_clear_records_intent_exit_5(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["state", "halt", "--clear", "--by", "op", "--reason", "r", "--seat", "desk"],
+        )
+        assert code == 5
+        payload = json.loads(out)
+        assert payload["verb"] == "state halt --clear"
+        assert payload["intent"] == {"by": "op", "reason": "r"}
+
+    def test_state_autonomy_records_intent_exit_5(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["state", "autonomy", "manual-ticket", "--seat", "desk"],
+        )
+        assert code == 5
+        payload = json.loads(out)
+        assert payload["verb"] == "state autonomy"
+        assert payload["intent"] == {"policy": "manual-ticket"}
+
+    def test_hidden_tools_schema_prints_json_schema(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(
+            tmp_path, monkeypatch, ["tools", "exec.quote", "--help"]
+        )
+        assert code == 0
+        payload = json.loads(out)
+        assert payload["name"] == "exec.quote"
+        assert "properties" in payload["input_schema"]
+
+    def test_hidden_tools_unknown_id_is_json_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        code, out, _ = self._run(tmp_path, monkeypatch, ["tools", "nope.x", "--help"])
+        assert code == 1
+        assert json.loads(out)["code"] == "unknown_tool"
+
+    def test_hidden_verb_absent_from_top_help(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--help"])
+        assert excinfo.value.code == 0
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["scout", "discover"],
+            ["scout", "pipeline", "--candidates"],
+            ["risk", "audit"],
+            ["chief", "pickup"],
+            ["rug", "watch"],
+            ["journal", "rollup", "--daily"],
+            ["ticket", "list"],
+            ["ticket", "create", "--mint", _TRADE_MINT],
+            ["report", "--daily"],
+            ["audit"],
+            ["verify", "--fixture", "smoke"],
+            ["live", "confirm"],
+            ["replay", "trim"],
+        ],
+    )
+    def test_find_only_verbs_print_json_exit_5(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+    ) -> None:
+        code, out, _ = self._run(tmp_path, monkeypatch, argv)
+        assert code == 5
+        assert json.loads(out)["status"] == "not-yet-implemented"
+
+
 if __name__ == "__main__":
     unittest.main()
