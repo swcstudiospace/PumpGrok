@@ -189,9 +189,17 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
     return None
 
 
+# PUMPGROK_* names read outside the Settings model: PUMPGROK_LOG_JSON by the
+# logging setup (honoured only under the dev profile) and PUMPGROK_LIVE_ENABLE
+# by the live gate (precondition 2; env-only, never a TOML key).
+NON_SETTING_ENV_NAMES = frozenset(
+    {"PUMPGROK_PROFILE", "PUMPGROK_CONFIG", "PUMPGROK_LOG_JSON", "PUMPGROK_LIVE_ENABLE"}
+)
+
+
 def allowed_env_names() -> set[str]:
     """Every PUMPGROK_* name the loader accepts, upper-cased."""
-    names = {"PUMPGROK_PROFILE", "PUMPGROK_CONFIG"}
+    names = set(NON_SETTING_ENV_NAMES)
 
     def visit(model: type[BaseModel], prefix: str) -> None:
         for field_name, field in model.model_fields.items():
@@ -318,20 +326,16 @@ def load_settings(**kwargs: Any) -> Settings:
     """Build Settings after running every startup guard.
 
     Raises ConfigError (names/locations only, never values) when any guard
-    or validation fails, or when the effective mode is live: the live gate
-    (design section 7.2) is not in this tree, so live must not start. Remove
-    the live refusal when the gate is wired.
+    or validation fails. A live effective mode is not refused here: the CLI
+    runs the live gate (execution/live/live_gate.py) before any other work.
     """
     problems = collect_startup_problems(os.environ)
     if problems:
         raise ConfigError(problems)
     try:
-        settings = Settings(**kwargs)
+        return Settings(**kwargs)
     except ValidationError as exc:
         raise ConfigError(_format_validation_error(exc)) from exc
-    if settings.effective_mode == "live":
-        raise ConfigError(["effective mode live is refused: the live gate is not built yet"])
-    return settings
 
 
 def refuse_cli_secrets(argv: Sequence[str]) -> None:

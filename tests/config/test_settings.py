@@ -107,20 +107,17 @@ def test_env_example_keys_are_declared() -> None:
     assert find_unknown_env({key: "x" for key in keys}, allowed_env_names()) == []
 
 
-def test_load_settings_refuses_live_mode_until_gate_exists(
+def test_load_settings_reports_live_mode_and_leaves_refusal_to_the_gate(
     clean_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     config = _write_toml(tmp_path / "op.toml", '[execution]\nmode = "live"\n')
     monkeypatch.setenv("PUMPGROK_CONFIG", config)
-    with pytest.raises(ConfigError, match="live gate"):
-        load_settings()
-    with pytest.raises(ConfigError, match="live gate"):
-        load_settings(mode="live")
+    assert load_settings().effective_mode == "live"
+    assert load_settings(mode="live").effective_mode == "live"
 
 
-def test_live_profile_refused_until_gate_exists(
+def test_live_profile_loads_and_gate_decides_startup(
     clean_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("PUMPGROK_PROFILE", "live")
-    with pytest.raises(ConfigError, match="live gate"):
-        load_settings()
+    assert load_settings().effective_mode == "live"
