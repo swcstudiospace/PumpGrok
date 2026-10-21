@@ -1,15 +1,19 @@
 """Command line: parse, check, main (FOUND-013, R30, R37; port of grokbot `pipeline.py` shape).
 
-Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and `doctor`;
-`paper buy|sell` resolve `exec.simulate` and `exec.place` through the registry
-and fail closed on unknown `--approval-id` (exit 1, R63); every other verb
-(`scout`, `risk`, `chief`, `rug`, `journal`, `ticket`, `state`, `killswitch`,
-`live confirm`, `replay`, `audit`, `verify`, `report`) parses its flags and
-returns not-yet-implemented (exit 5) until its subsystem lands. `paper` and
-`state` require `--seat` and refuse `sniper`/`exit`.
+Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and `doctor`
+print text (exemptions: the replay checkpoint prints the engine-decision line and the
+doctor report is human-readable). Every other section-12 verb is a thin JSON wrapper
+over catalog tools through `build_operator_registry` + `registry.find` (TOOL-011, I1):
+`paper buy|sell` (fail closed on unknown `--approval-id`, exit 1, R63), `state`,
+`killswitch`, `scout`, `risk`, `chief`, `rug`, `journal`, `ticket`, `report`,
+`audit`, `verify`. Absent backends print the JSON error envelope and exit 5 (B5
+partial until Phase 4); human-only verbs (`killswitch clear`, `state halt --clear`,
+`state autonomy`, `live confirm`) record their intent shape and exit 5 (R22); replay
+maintenance verbs exit 5. `paper` and `state` require `--seat` and refuse
+`sniper`/`exit`. Hidden `tools <id> --help` prints the tool JSON schema (B8).
 Exit codes: 0 ok; 1 config or usage; 2 ledger inconsistent; 3 live refused; 4 corrupt
 fixture; 5 not implemented. argparse's own exit 2 is overridden so that 2 means only a
-ledger inconsistency. Stdout carries the doctor report and the engine decision;
+ledger inconsistency. Stdout carries JSON (or the doctor report and the engine decision);
 diagnostics go to stderr.
 
 Run order: refuse key-bearing CLI values -> parse -> settings (mode R30) -> logging ->
@@ -248,6 +252,45 @@ def _run_wired(
     return asyncio.run(_with_tools(verb, seat, settings, capabilities, use))
 
 
+def _call_use(
+    verb: str, index: int, fields: dict[str, Any]
+) -> Callable[[list[Any]], Awaitable[int]]:
+    """Tail that validates one input through the tool spec and calls the tool (B5).
+
+    The input model comes from the resolved spec, so the CLI never imports a
+    tool module. Success prints the output JSON; PumpgrokError (including the
+    absent-backend not_yet_implemented) prints the envelope with the exit map.
+    """
+
+    async def use(tools: list[Any]) -> int:
+        tool = tools[index]
+        try:
+            payload = tool.spec.input_model(**fields)
+        except ValidationError as exc:
+            return _tool_error(
+                verb,
+                "invalid_arguments",
+                f"invalid arguments for {tool.spec.name}: {exc.errors()[0]['msg']}",
+            )
+        try:
+            out = await tool(payload)
+        except PumpgrokError as exc:
+            return _tool_error(verb, exc.code, exc.message)
+        _say(sys.stdout, json.dumps(out.model_dump(mode="json")))
+        return EXIT_OK
+
+    return use
+
+
+def _skip_use(verb: str) -> Callable[[list[Any]], Awaitable[int]]:
+    """Tail for Phase 4 orchestration verbs: find (I1) proves the path, then exit 5."""
+
+    async def use(_tools: list[Any]) -> int:
+        return _not_implemented(verb)
+
+    return use
+
+
 def _add_seat(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--seat",
@@ -365,8 +408,19 @@ def _add_state(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
 def _add_tail(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
-    killswitch_cmd.add_parser("set", help="engage the killswitch")
-    killswitch_cmd.add_parser("clear", help="release the killswitch")
+    killswitch_set = killswitch_cmd.add_parser("set", help="engage the killswitch")
+    killswitch_set.add_argument("--reason", required=True, help="why the killswitch is set")
+    killswitch_flatten = killswitch_cmd.add_parser(
+        "flatten", help="request flatten of every open paper position"
+    )
+    killswitch_flatten.add_argument(
+        "--reason", required=True, help="why open positions flatten"
+    )
+    killswitch_clear = killswitch_cmd.add_parser(
+        "clear", help="release the killswitch (human only)"
+    )
+    killswitch_clear.add_argument("--by", required=True, help="human releasing the killswitch")
+    killswitch_clear.add_argument("--reason", required=True, help="why the killswitch clears")
     killswitch_cmd.add_parser("status", help="report killswitch state")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")
@@ -381,7 +435,21 @@ def _add_tail(verbs: Any, mode_option: argparse.ArgumentParser) -> None:
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
     replay_cmd.add_parser("trim", help="trim a replay dataset")
     replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
-
+    tools_p = verbs.add_parser(
+        "tools",
+        parents=[mode_option],
+        help=argparse.SUPPRESS,
+        description=(
+            "Hidden developer verb (B8): print one catalog tool JSON schema. "
+            "Not listed in top-level help."
+        ),
+    )
+    tools_p.add_argument(
+        "id",
+        nargs="?",
+        default=None,
+        help="dotted tool id, e.g. exec.quote; with --help prints its JSON schema",
+    )
 
 def build_parser() -> argparse.ArgumentParser:
     mode_option = _Parser(add_help=False)
@@ -391,7 +459,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="execution mode; overrides PUMPGROK_MODE and the overlay",
     )
-    parser = _Parser(prog="pumpgrok", description="PumpGrok paper-first trading desk.")
+    parser = _Parser(
+        prog="pumpgrok",
+        description=(
+            "PumpGrok paper-first trading desk. Section-12 wrappers print JSON "
+            "by default; `run` prints the engine-decision line and `doctor` "
+            "prints a text report."
+        ),
+    )
     verbs = parser.add_subparsers(dest="verb", required=True, metavar="VERB")
     _add_run(verbs, mode_option)
     _add_simple(verbs, mode_option)
@@ -526,16 +601,136 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
     return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 
 
-def _state(args: argparse.Namespace) -> int:
+def _state(args: argparse.Namespace, settings: Settings) -> int:
     verb = f"state {args.cmd}"
     refused = _refuse_forbidden_seat(args.seat, verb)
     if refused is not None:
         return refused
-    return _not_implemented(verb)
+    if args.cmd == "halt" and args.clear:
+        # Human-only (R22): the ledger HaltCleared + ApprovalRecord land in Phase 4.
+        return _not_implemented("state halt --clear", {"by": args.by, "reason": args.reason})
+    if args.cmd == "autonomy":
+        # Human-only (R17, R40): the ledger ConfigChanged lands in Phase 4.
+        return _not_implemented("state autonomy", {"policy": args.policy})
+    return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _call_use(verb, 0, {}))
+
+
+def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
+    verb = f"killswitch {args.cmd}"
+    if args.cmd == "clear":
+        # Human-only (R22): the ledger KillSwitchCleared + ApprovalRecord
+        # kind killswitch_clear land in Phase 4. No tool, no seat.
+        return _not_implemented(verb, {"by": args.by, "reason": args.reason})
+    if args.cmd == "set":
+        return _run_wired(
+            verb,
+            "risk",
+            settings,
+            ("risk.kill_switch",),
+            _call_use(verb, 0, {"action": "set", "reason": args.reason}),
+        )
+    if args.cmd == "flatten":
+        return _run_wired(
+            verb,
+            "risk",
+            settings,
+            ("risk.kill_switch",),
+            _call_use(verb, 0, {"action": "flatten_request", "reason": args.reason}),
+        )
+    return _run_wired(
+        verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {})
+    )
+
+
+def _find_only(
+    verb: str, seat: str, settings: Settings, capabilities: Sequence[str]
+) -> int:
+    """Section-12 verb whose multi-tool orchestration lands in Phase 4 (B5 partial).
+
+    Every catalog tool resolves through find (I1 enforced; a wrong seat prints
+    the refusal envelope instead of 5), then the verb returns the
+    not-yet-implemented envelope because calling would need network backends
+    or Phase 4 orchestration. No tool implementation is called.
+    """
+    return _run_wired(verb, seat, settings, capabilities, _skip_use(verb))
+
+
+def _tools_schema(tool_id: str) -> int:
+    """Hidden developer verb (B8): print one catalog tool JSON schema, exit 0."""
+
+    async def _schema() -> int:
+        settings = load_settings()
+        reg, _, client = build_operator_registry(
+            data_dir=Path("var") / "desk",
+            repo_root=_repo_root(),
+            settings=settings,
+        )
+        try:
+            try:
+                spec = reg.spec(tool_id)
+            except KeyError:
+                return _tool_error(
+                    f"tools {tool_id}", "unknown_tool", f"unknown tool: {tool_id}"
+                )
+            _say(
+                sys.stdout,
+                json.dumps(
+                    {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "input_schema": spec.input_model.model_json_schema(),
+                        "output_schema": spec.output_model.model_json_schema(),
+                        "side_effect": str(spec.side_effect),
+                        "timeout_s": spec.timeout_s,
+                        "rate_limit_key": spec.rate_limit_key,
+                        "requires_approval": spec.requires_approval,
+                        "idempotent": spec.idempotent,
+                        "backend": spec.backend,
+                    }
+                ),
+            )
+            return EXIT_OK
+        finally:
+            await client.aclose()
+
+    return asyncio.run(_schema())
+
+
+def _tools_cmd(args: argparse.Namespace) -> int:
+    if args.id is None:
+        raise UsageError("tools requires a tool id (try `pumpgrok tools exec.quote --help`)")
+    return _tools_schema(args.id)
+
+
+_SCOUT_FLOW = ("market.trades", "market.liquidity", "onchain.authorities", "journal.append")
+_RISK_AUDIT = (
+    "portfolio.ledger_read",
+    "portfolio.exposure",
+    "portfolio.pnl",
+    "risk.drawdown",
+    "risk.check_limits",
+    "risk.halt_status",
+    "desk.event_emit",
+)
+_CHIEF_PICKUP = ("desk.brief", "risk.halt_status", "exec.positions", "notify.alert")
+_RUG_WATCH = (
+    "onchain.lp_status",
+    "onchain.authorities",
+    "onchain.top_holders",
+    "market.price",
+    "desk.event_emit",
+)
 
 
 def _dispatch(argv: Sequence[str]) -> int:
     refuse_cli_secrets(argv)
+    if (
+        len(argv) == 3
+        and argv[0] == "tools"
+        and not argv[1].startswith("-")
+        and argv[2] in ("--help", "-h")
+    ):
+        return _tools_schema(argv[1])
     args = build_parser().parse_args(list(argv))
     settings = load_settings(**_settings_kwargs(args.mode))
     setup_logging(mode=settings.effective_mode, profile=current_profile())
@@ -547,18 +742,40 @@ def _dispatch(argv: Sequence[str]) -> int:
     if args.verb == "paper":
         return _paper(args, settings)
     if args.verb == "state":
-        return _state(args)
-    if args.verb in (
-        "scout",
-        "risk",
-        "chief",
-        "rug",
-        "journal",
-        "ticket",
-        "killswitch",
-        "live",
-        "replay",
-    ):
+        return _state(args, settings)
+    if args.verb == "killswitch":
+        return _killswitch(args, settings)
+    if args.verb == "tools":
+        return _tools_cmd(args)
+    if args.verb == "scout":
+        return _find_only(f"scout {args.cmd}", "scout", settings, _SCOUT_FLOW)
+    if args.verb == "risk":
+        return _find_only("risk audit", "risk", settings, _RISK_AUDIT)
+    if args.verb == "chief":
+        return _find_only("chief pickup", "chief", settings, _CHIEF_PICKUP)
+    if args.verb == "rug":
+        return _find_only("rug watch", "rug", settings, _RUG_WATCH)
+    if args.verb == "journal":
+        return _find_only("journal rollup", "journal", settings, ("journal.render_report",))
+    if args.verb == "ticket":
+        return _find_only(
+            f"ticket {args.cmd}",
+            "journal",
+            settings,
+            ("journal.append", "portfolio.ledger_read"),
+        )
+    if args.verb == "report":
+        return _find_only("report", "journal", settings, ("journal.render_report",))
+    if args.verb == "audit":
+        return _find_only("audit", "desk", settings, ("desk.doctor",))
+    if args.verb == "verify":
+        return _find_only(
+            "verify", "desk", settings, ("desk.receipt_check", "desk.ownership_resolve")
+        )
+    if args.verb == "live":
+        # Human-only (R21): the HMAC-bound live.confirmation_record lands in Phase 4.
+        return _not_implemented("live confirm")
+    if args.verb == "replay":
         return _not_implemented(f"{args.verb} {args.cmd}")
     return _not_implemented(args.verb)
 
