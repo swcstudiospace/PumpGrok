@@ -301,7 +301,7 @@ class TestPaperRegistryPath:
         monkeypatch.chdir(tmp_path)
         for seat in ("desk", "bot-04-sniper", "sniper", "exit"):
             assert main(_trade_flags(seat)) == 1
-        store_path = tmp_path / "var" / "desk" / "ledger.sqlite"
+        store_path = tmp_path / "var" / "ledger.sqlite"
         if store_path.is_file():
             store = LedgerStore(str(store_path))
             try:
@@ -342,7 +342,7 @@ class TestOperatorVerbs:
         payload = json.loads(out)
         assert payload["active"] is True
         assert "Traceback" not in err
-        store = LedgerStore(str(tmp_path / "var" / "desk" / "ledger.sqlite"))
+        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
         try:
             kinds = [event["type"] for event in store.read(limit=10000)]
         finally:
@@ -372,7 +372,7 @@ class TestOperatorVerbs:
         assert payload["status"] == "not-yet-implemented"
         assert payload["verb"] == "killswitch clear"
         assert payload["intent"] == {"by": "op", "reason": "03-07 red"}
-        assert not (tmp_path / "var" / "desk" / "ledger.sqlite").is_file()
+        assert not (tmp_path / "var" / "ledger.sqlite").is_file()
 
     def test_killswitch_status_prints_json(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -451,7 +451,6 @@ class TestOperatorVerbs:
             ["ticket", "create", "--mint", _TRADE_MINT],
             ["report", "--daily"],
             ["audit"],
-            ["verify", "--fixture", "smoke"],
             ["live", "confirm"],
             ["replay", "trim"],
         ],
@@ -534,7 +533,6 @@ class TestCliRegressionSweep:
             (["ticket", "list"], 5),
             (["report", "--daily"], 5),
             (["audit"], 5),
-            (["verify", "--fixture", "smoke"], 5),
             (["live", "confirm"], 5),
             (["replay", "trim"], 5),
         ],
@@ -552,6 +550,19 @@ class TestCliRegressionSweep:
         if expected != 0:
             assert payload["ok"] is False
         assert "Traceback" not in err
+
+    def test_verify_fixture_replays_and_prints_stable_hash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """verify is a real verb (04-02): replay, CONSISTENT, stable events.hash."""
+        code, out, err = _run_cli(tmp_path, monkeypatch, ["verify", "--fixture", "smoke"])
+        assert code == 0
+        assert "events.hash=" in out
+        assert "verify=CONSISTENT" in out
+        assert "Traceback" not in err
+        second, out2, _ = _run_cli(tmp_path, monkeypatch, ["verify", "--fixture", "smoke"])
+        assert second == 0
+        assert out2 == out
 
 
 if __name__ == "__main__":
