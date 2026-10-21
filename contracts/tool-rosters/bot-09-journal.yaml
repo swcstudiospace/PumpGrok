@@ -101,8 +101,7 @@ tools:
 - name: notify.alert
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Send a human alert through the Notifier. Destinations are restricted to the notify.allowlist;
     anything outside it is refused.
   backend: notify.alert
@@ -162,13 +161,10 @@ tools:
     - severity
     - kind
     - text
-    - approval_id
-    - rollback_plan
 - name: journal.append
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Append a seat journal entry to the ledger. The body is validated against contracts/events/<kind>.schema.json.
   backend: journal.append
   input:
@@ -214,8 +210,6 @@ tools:
     required:
     - kind
     - body
-    - approval_id
-    - rollback_plan
     allOf:
     - if:
         properties:
@@ -229,8 +223,7 @@ tools:
 - name: journal.render_report
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Render the daily or weekly report to markdown under var/reports/ and optionally deliver
     it through notify.alert.
   backend: journal.render_report
@@ -261,5 +254,3 @@ tools:
         description: How this write is undone or compensated if it is wrong.
     required:
     - period
-    - approval_id
-    - rollback_plan

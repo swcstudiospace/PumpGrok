@@ -147,8 +147,7 @@ tools:
 - name: risk.kill_switch
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: 'Set the global kill switch or request a flatten of every open paper position. Actions
     set and flatten_request only: clear is the human CLI, not a tool action.'
   backend: risk.kill_switch
@@ -178,5 +177,3 @@ tools:
     required:
     - action
     - reason
-    - approval_id
-    - rollback_plan

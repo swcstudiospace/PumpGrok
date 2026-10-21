@@ -141,8 +141,7 @@ tools:
 - name: journal.append
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Append a smart-money signal to the ledger as a journal_note with note_kind whale. The body
     is validated against contracts/events/journal_note.schema.json.
   backend: journal.append
@@ -179,8 +178,6 @@ tools:
     required:
     - kind
     - body
-    - approval_id
-    - rollback_plan
     allOf:
     - if:
         properties:

@@ -56,8 +56,7 @@ tools:
 - name: journal.append
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: 'Append a social signal to the ledger as a journal_note with note_kind social. The body
     is validated against contracts/events/journal_note.schema.json. Detection only: no seat may post.'
   backend: journal.append
@@ -94,8 +93,6 @@ tools:
     required:
     - kind
     - body
-    - approval_id
-    - rollback_plan
     allOf:
     - if:
         properties:

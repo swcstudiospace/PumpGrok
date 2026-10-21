@@ -114,8 +114,7 @@ tools:
 - name: notify.alert
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Send a human alert through the Notifier. Destinations are restricted to the notify.allowlist;
     anything outside it is refused.
   backend: notify.alert
@@ -175,13 +174,10 @@ tools:
     - severity
     - kind
     - text
-    - approval_id
-    - rollback_plan
 - name: journal.append
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Append a seat journal entry to the ledger. The body is validated against contracts/events/<kind>.schema.json.
   backend: journal.append
   input:
@@ -220,8 +216,6 @@ tools:
     required:
     - kind
     - body
-    - approval_id
-    - rollback_plan
     allOf:
     - if:
         properties:

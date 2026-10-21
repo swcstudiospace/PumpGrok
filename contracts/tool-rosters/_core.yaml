@@ -45,8 +45,7 @@ tools:
 - name: desk.memory_retain
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Retain a decision or verified command in the seat memory bank. Refused without receipt_path
     or source.
   backend: core.memory_retain
@@ -85,8 +84,6 @@ tools:
         description: How this write is undone or compensated if it is wrong.
     required:
     - content
-    - approval_id
-    - rollback_plan
 - name: desk.memory_recall
   kind: read
   side_effect: read
@@ -158,8 +155,7 @@ tools:
 - name: desk.event_emit
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: Emit a seat-attributed event to the ledger. Seats may emit journal_note and escalation
     only. The payload is redacted and capped at 4 KB.
   backend: core.event_emit
@@ -206,8 +202,6 @@ tools:
         description: How this write is undone or compensated if it is wrong.
     required:
     - kind
-    - approval_id
-    - rollback_plan
     allOf:
     - if:
         properties:
@@ -221,8 +215,7 @@ tools:
 - name: desk.doctor
   kind: write
   side_effect: paper-write
-  gates:
-  - g6
+  gates: []
   description: 'Desk health for this seat: check prompt SHA, skills, roster, registry grants and paper
     execution mode; register the bot''s agent id; return the assembled prompt; repair.'
   backend: core.doctor
@@ -264,5 +257,3 @@ tools:
         description: How this write is undone or compensated if it is wrong.
     required:
     - action
-    - approval_id
-    - rollback_plan

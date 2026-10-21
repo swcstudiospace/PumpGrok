@@ -15,6 +15,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -722,6 +723,33 @@ def _write_roster(directory: Path, name: str, doc: dict) -> None:
     (directory / name).write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
+def _catalog_g6_tool_names() -> set[str]:
+    """Tool names the catalog declares as g6-gated (R57).
+
+    Derived from docs/TOOL_CATALOG.md itself: the per-tool `gates:` declarations
+    in its YAML roster example plus the section 10 gate-tag sentence naming the
+    tools that carry g6 outside the example.
+    """
+    text = (REPO_ROOT / "docs" / "TOOL_CATALOG.md").read_text()
+    g6: set[str] = set()
+    for block in re.findall(r"```yaml(.*?)```", text, re.DOTALL):
+        try:
+            doc = yaml.safe_load(block)
+        except yaml.YAMLError:
+            continue
+        if not isinstance(doc, dict):
+            continue
+        for tool in doc.get("tools") or []:
+            if not isinstance(tool, dict):
+                continue
+            if isinstance(tool.get("name"), str) and "g6" in (tool.get("gates") or []):
+                g6.add(tool["name"])
+    gate_tag = re.search(r"`g6` on (.+?) because", text)
+    if gate_tag is not None:
+        g6.update(re.findall(r"[a-z][a-z0-9_]*\.[a-z0-9_.]+", gate_tag.group(1)))
+    return g6
+
+
 class TestG7DeskIntegrity:
     def test_roster_bounds_are_the_retargeted_values(self, integrity_gate):
         assert integrity_gate.ROSTER_MIN_TOOLS == 8
@@ -754,12 +782,16 @@ class TestG7DeskIntegrity:
             "JOURNAL",
         ]
 
-    def test_write_tool_must_be_tagged_g6(self, integrity_gate):
-        tool = _tool(
-            "exec.place", kind="write", gates=[], required=["approval_id", "rollback_plan"]
-        )
+    def test_write_tool_without_g6_needs_no_approval_fields(self, integrity_gate):
+        # R57: approval gating applies only where declared. A paper-write tool with
+        # no g6 declaration passes without approval fields.
+        tool = _tool("journal.append", kind="write", gates=[], required=["kind", "body"])
+        assert integrity_gate.check_tool(tool, 0) == []
+
+    def test_g6_tool_must_require_approval_id(self, integrity_gate):
+        tool = _tool("exec.place", kind="write", gates=["g6"], required=["rollback_plan"])
         problems = integrity_gate.check_tool(tool, 0)
-        assert any("not tagged g6" in p for p in problems)
+        assert any("lacks 'approval_id'" in p for p in problems)
 
     def test_write_tool_must_require_rollback_plan(self, integrity_gate):
         tool = _tool("exec.place", kind="write", gates=["g6"], required=["approval_id"])
@@ -774,6 +806,27 @@ class TestG7DeskIntegrity:
 
     def test_read_tool_needs_no_gate(self, integrity_gate):
         assert integrity_gate.check_tool(_tool("desk.state_status"), 0) == []
+
+    def test_roster_g6_matches_catalog(self, integrity_gate):
+        # R57: roster g6 declarations must equal the TOOL_CATALOG declarations. The
+        # expected set is derived from the catalog itself: per-tool `gates:`
+        # declarations in its YAML examples plus the section 10 gate-tag sentence
+        # naming the tools that carry g6 outside the examples.
+        catalog_g6 = _catalog_g6_tool_names()
+        assert catalog_g6 == {"exec.place", "exec.cancel"}
+        roster_dir = REPO_ROOT / "contracts" / "tool-rosters"
+        mismatches = []
+        for path in sorted(roster_dir.glob("*.yaml")):
+            doc = yaml.safe_load(path.read_text())
+            for tool in doc.get("tools") or []:
+                name = tool.get("name")
+                has_g6 = "g6" in (tool.get("gates") or [])
+                if has_g6 != (name in catalog_g6):
+                    mismatches.append(
+                        f"{path.name}: tool '{name}' g6={has_g6} "
+                        f"but catalog declares g6={name in catalog_g6}"
+                    )
+        assert mismatches == []
 
     def test_roster_that_names_a_live_write_tool_is_refused(self, integrity_gate, tmp_path):
         core = [_tool(f"desk.core_{i}") for i in range(8)]
@@ -813,10 +866,10 @@ class TestG7DeskIntegrity:
         problems, _ = integrity_gate.run(
             tmp_path,
             tmp_path / "contracts/tool-rosters",
-            tmp_path / "contracts/tool-packs",
-            tmp_path / "prompts",
-            tmp_path / "prompts-assembled",
-            tmp_path / "grokbot/templates",
+            packs_dir=tmp_path / "contracts/tool-packs",
+            prompts_dir=tmp_path / "prompts",
+            assembled_dir=tmp_path / "prompts-assembled",
+            templates_dir=tmp_path / "grokbot/templates",
         )
         assert any("roster directory not found" in p for p in problems)
 
@@ -845,10 +898,10 @@ class TestG7DeskIntegrity:
         problems, counts = integrity_gate.run(
             tmp_path,
             rosters,
-            tmp_path / "contracts/tool-packs",
-            tmp_path / "prompts",
-            tmp_path / "prompts-assembled",
-            tmp_path / "grokbot/templates",
+            packs_dir=tmp_path / "contracts/tool-packs",
+            prompts_dir=tmp_path / "prompts",
+            assembled_dir=tmp_path / "prompts-assembled",
+            templates_dir=tmp_path / "grokbot/templates",
         )
         assert problems == []
         assert counts["rosters"] == 1

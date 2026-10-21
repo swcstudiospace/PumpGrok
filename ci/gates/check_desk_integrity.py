@@ -55,14 +55,16 @@ PLACEHOLDER_RE = re.compile(r"\{\{[A-Z_:]+\}\}")
 
 KINDS = {"read", "write"}
 GATES = {"g5", "g6"}
-# What each gate tag demands of the tool's input schema.
+# What each gate tag demands of the tool's input schema. Approval gating (G-6) applies
+# only where declared: a tool whose roster entry lists gates: [g6] must demand
+# approval_id and rollback_plan in input.required (R57; docs/TOOL_CATALOG.md
+# section 10: exec.place and exec.cancel). A paper-write tool with no g6 declaration
+# needs no approval fields. Live-write tools never appear in a roster at all —
+# check_roster refuses them outright (invariant I1).
 GATE_REQUIRED_FIELDS: dict[str, list[str]] = {
     "g5": ["rollback_plan", "approval_id"],
-    "g6": ["approval_id"],
+    "g6": ["approval_id", "rollback_plan"],
 }
-
-# Every kind: write tool is a G-6 tool: it must carry the g6 tag and demand these fields.
-WRITE_REQUIRED_FIELDS = ["approval_id", "rollback_plan"]
 
 # Assembled prompts are also written to these aliases under prompts/. They are output, not
 # source, so the placeholder check applies to them rather than the UUID check.
@@ -128,6 +130,19 @@ def load_yaml(path: Path) -> tuple[dict | None, str | None]:
 # ---------------------------------------------------------------------------
 
 
+def _gate_field_problems(label: str, gates: list, required: list) -> list[str]:
+    """Every declared gate tag must be backed by the fields its enforcement needs."""
+    problems = []
+    for gate in gates:
+        for field in GATE_REQUIRED_FIELDS[gate]:
+            if field not in required:
+                problems.append(
+                    f"{label} is tagged {gate} but input.required lacks '{field}' — "
+                    "the gate cannot enforce a field the schema does not demand"
+                )
+    return problems
+
+
 def check_tool(tool: object, index: int) -> list[str]:
     """Rules every tool obeys wherever it is declared."""
     if not isinstance(tool, dict):
@@ -165,19 +180,7 @@ def check_tool(tool: object, index: int) -> list[str]:
     if not isinstance(required, list):
         problems.append(f"{label} input.required must be a list")
         required = []
-    for gate in gates:
-        for field in GATE_REQUIRED_FIELDS[gate]:
-            if field not in required:
-                problems.append(
-                    f"{label} is tagged {gate} but input.required lacks '{field}' — "
-                    f"the gate cannot enforce a field the schema does not demand"
-                )
-    if tool.get("kind") == "write":
-        if "g6" not in gates:
-            problems.append(f"{label} is a write tool but not tagged g6 (every write is G-6)")
-        for field in WRITE_REQUIRED_FIELDS:
-            if field not in required:
-                problems.append(f"{label} is a write tool but input.required lacks '{field}'")
+    problems.extend(_gate_field_problems(label, gates, required))
     return problems
 
 
@@ -369,39 +372,35 @@ def check_template(path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def run(
-    repo: Path,
-    rosters_dir: Path,
-    packs_dir: Path,
-    prompts_dir: Path,
-    assembled_dir: Path,
-    templates_dir: Path,
-) -> tuple[list[str], dict[str, int]]:
-    """Run every check. Returns (problems, counts); each problem is '<file>: <reason>'."""
-    problems: list[str] = []
-    counts = {"rosters": 0, "packs": 0, "prompts": 0, "templates": 0}
+def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) -> list[str]:
+    problems = []
+    if not rosters_dir.is_dir():
+        return [f"{_rel(rosters_dir, repo)}: roster directory not found"]
+    core_tools, core_problems = load_core_tools(rosters_dir)
+    problems.extend(f"{_rel(rosters_dir / CORE_ROSTER, repo)}: {p}" for p in core_problems)
+    for path in sorted(rosters_dir.glob("*.yaml")):
+        if path.name == CORE_ROSTER:
+            continue
+        counts["rosters"] += 1
+        problems.extend(f"{_rel(path, repo)}: {p}" for p in check_roster(path, core_tools))
+    return problems
 
-    # --- rosters -----------------------------------------------------------
-    if rosters_dir.is_dir():
-        core_tools, core_problems = load_core_tools(rosters_dir)
-        problems.extend(f"{_rel(rosters_dir / CORE_ROSTER, repo)}: {p}" for p in core_problems)
-        for path in sorted(rosters_dir.glob("*.yaml")):
-            if path.name == CORE_ROSTER:
-                continue
-            counts["rosters"] += 1
-            problems.extend(f"{_rel(path, repo)}: {p}" for p in check_roster(path, core_tools))
-    else:
-        problems.append(f"{_rel(rosters_dir, repo)}: roster directory not found")
 
-    # --- packs -------------------------------------------------------------
+def _check_packs_dir(repo: Path, packs_dir: Path, counts: dict[str, int]) -> list[str]:
+    problems = []
     if packs_dir.is_dir():
         for path in sorted(packs_dir.glob("*.yaml")):
             counts["packs"] += 1
             problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
     else:
         print(f"  NOTE: {_rel(packs_dir, repo)}/ not found — pack check skipped")
+    return problems
 
-    # --- prompts -----------------------------------------------------------
+
+def _check_prompt_dirs(
+    repo: Path, prompts_dir: Path, assembled_dir: Path, counts: dict[str, int]
+) -> list[str]:
+    problems = []
     sources, assembled = prompt_files(prompts_dir, assembled_dir)
     if not prompts_dir.is_dir():
         print(f"  NOTE: {_rel(prompts_dir, repo)}/ not found — prompt source check skipped")
@@ -413,15 +412,36 @@ def run(
     for path in assembled:
         counts["prompts"] += 1
         problems.extend(f"{_rel(path, repo)}: {p}" for p in check_assembled_prompt(path))
+    return problems
 
-    # --- templates ---------------------------------------------------------
+
+def _check_templates_dir(repo: Path, templates_dir: Path, counts: dict[str, int]) -> list[str]:
+    problems = []
     if templates_dir.is_dir():
         for path in sorted(templates_dir.glob("*.md")):
             counts["templates"] += 1
             problems.extend(f"{_rel(path, repo)}: {p}" for p in check_template(path))
     else:
         print(f"  NOTE: {_rel(templates_dir, repo)}/ not found — template check skipped")
+    return problems
 
+
+def run(
+    repo: Path,
+    rosters_dir: Path,
+    *,
+    packs_dir: Path,
+    prompts_dir: Path,
+    assembled_dir: Path,
+    templates_dir: Path,
+) -> tuple[list[str], dict[str, int]]:
+    """Run every check. Returns (problems, counts); each problem is '<file>: <reason>'."""
+    counts = {"rosters": 0, "packs": 0, "prompts": 0, "templates": 0}
+    problems: list[str] = []
+    problems.extend(_check_rosters_dir(repo, rosters_dir, counts))
+    problems.extend(_check_packs_dir(repo, packs_dir, counts))
+    problems.extend(_check_prompt_dirs(repo, prompts_dir, assembled_dir, counts))
+    problems.extend(_check_templates_dir(repo, templates_dir, counts))
     return problems, counts
 
 
