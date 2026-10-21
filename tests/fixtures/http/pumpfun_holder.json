@@ -1,0 +1,11 @@
+{
+  "source": "hand-authored",
+  "note": "pump.fun /coins/{mint}/holders response shapes; served by httpx.MockTransport, no network",
+  "http": [
+    { "address": "Creator1111111111111111111111111111111111111", "amount": 250000000, "share": 0.25, "is_creator": true },
+    { "wallet": "Holder222222222222222222222222222222222222222", "balance": 180000000, "percentage": 18.0 },
+    { "owner": "Holder333333333333333333333333333333333333333", "amount": 120000000, "share": 0.12, "isCreator": false },
+    { "address": "Holder444444444444444444444444444444444444444", "amount": 80000000, "percentage": 8.0 },
+    { "address": "Holder555555555555555555555555555555555555555", "amount": 50000000, "share": 0.05 }
+  ]
+}
