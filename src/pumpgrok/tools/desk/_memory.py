@@ -22,15 +22,32 @@ class MemoryBank:
         self._path = path
         self._records: list[dict[str, Any]] = []
         self._by_key: dict[str, str] = {}
+        self._corrupt_lines = 0
         if path.is_file():
-            for raw_line in path.read_text(encoding="utf-8").splitlines():
-                line = raw_line.strip()
+            for raw_line in path.read_bytes().splitlines():
+                try:
+                    line = raw_line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    self._corrupt_lines += 1
+                    continue
                 if not line:
                     continue
-                record = json.loads(line)
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    self._corrupt_lines += 1
+                    continue
+                if not isinstance(record, dict):
+                    self._corrupt_lines += 1
+                    continue
                 self._records.append(record)
                 if "key" in record and "id" in record:
                     self._by_key[str(record["key"])] = str(record["id"])
+
+    @property
+    def corrupt_lines(self) -> int:
+        """Count of lines skipped at load; startup never fails on them."""
+        return self._corrupt_lines
 
     @property
     def path(self) -> Path:
@@ -44,11 +61,22 @@ class MemoryBank:
         digest = hashlib.sha256(json.dumps(record, sort_keys=True).encode("utf-8")).hexdigest()[:16]
         stored = {"id": digest, "key": key, **record}
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        # A torn final line (no newline) must not swallow the next record.
+        needs_break = (
+            self._path.is_file() and self._path.stat().st_size > 0 and not self._ends_with_newline()
+        )
         with open(self._path, "a", encoding="utf-8") as handle:
+            if needs_break:
+                handle.write("\n")
             handle.write(json.dumps(stored) + "\n")
         self._records.append(stored)
         self._by_key[key] = digest
         return digest
+
+    def _ends_with_newline(self) -> bool:
+        with open(self._path, "rb") as handle:
+            handle.seek(-1, 2)
+            return handle.read(1) == b"\n"
 
     def recall(self, query: str, limit: int) -> list[dict[str, Any]]:
         """Newest-first substring search over record content (case-insensitive)."""
