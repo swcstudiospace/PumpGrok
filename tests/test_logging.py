@@ -129,6 +129,24 @@ def test_text_mode_requires_dev_profile(root_handlers: None) -> None:
     assert json.loads(_lines(ignored_buffer)[0])["msg"] == "hello paper"
 
 
+def test_dev_text_traceback_is_redacted(root_handlers: None) -> None:
+    buffer = io.StringIO()
+    setup_logging(
+        mode="paper",
+        profile="dev",
+        environ={"PUMPGROK_LOG_JSON": "false"},
+        stream=buffer,
+    )
+    try:
+        raise RuntimeError(f"rpc failed at {PLANTED_CONN}")
+    except RuntimeError:
+        logging.getLogger("pumpgrok.test.devexc").exception("call failed")
+    text = buffer.getvalue()
+    assert "Traceback" in text
+    assert PLANTED_CONN not in text
+    assert "hunter2pw" not in text
+
+
 def test_exception_text_is_redacted(root_handlers: None) -> None:
     buffer = io.StringIO()
     setup_logging(mode="paper", profile="paper", environ={}, stream=buffer)

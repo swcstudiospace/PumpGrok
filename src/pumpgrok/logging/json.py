@@ -59,6 +59,17 @@ def _iso_millis(created: float) -> str:
     return text.replace("+00:00", "Z")
 
 
+class RedactingTextFormatter(logging.Formatter):
+    """Dev text format. The whole rendered line passes through redaction, traceback included.
+
+    Redacting only the message leaves ``exc_info`` unredacted: ``Formatter.format`` appends the
+    formatted traceback, and a record's ``exc_text`` may already be cached raw by another handler.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_text(super().format(record))
+
+
 class JsonFormatter(logging.Formatter):
     """Render one record as a canonical single-line JSON object (FOUNDATION_STACK 5.1)."""
 
@@ -117,7 +128,7 @@ def setup_logging(
     handler = logging.StreamHandler(stream if stream is not None else sys.stderr)
     handler.addFilter(RedactionFilter())
     if text_requested and profile == "dev":
-        handler.setFormatter(logging.Formatter(TEXT_FORMAT, datefmt="%H:%M:%S"))
+        handler.setFormatter(RedactingTextFormatter(TEXT_FORMAT, datefmt="%H:%M:%S"))
     else:
         handler.setFormatter(JsonFormatter(mode=mode, profile=profile))
     root = logging.getLogger()
