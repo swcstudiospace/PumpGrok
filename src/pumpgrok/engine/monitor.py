@@ -73,36 +73,47 @@ class SeenSet:
         return len(self._items)
 
 
+def _coerce_float(value: Any, default: float) -> float:
+    """Best-effort float for untrusted socket fields. Default on garbage."""
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 def parse_create_event(payload: dict[str, Any], now: float) -> Token | None:
     """A token-creation event becomes a Token. None when it is not one."""
-    if payload.get("txType") not in ("create", "created"):
-        return None
-    mint = payload.get("mint") or payload.get("mintAddress")
-    if not mint:
-        return None
+    try:
+        if payload.get("txType") not in ("create", "created"):
+            return None
+        mint = payload.get("mint") or payload.get("mintAddress")
+        if not mint:
+            return None
 
-    sol_in_curve = float(payload.get("vSolInBondingCurve") or 0.0)
-    created = payload.get("timestamp") or payload.get("createdTimestamp")
-    created_ts = (
-        float(created) / 1000.0 if created and float(created) > 1e11 else float(created or now)
-    )
+        created = payload.get("timestamp") or payload.get("createdTimestamp")
+        created_num = _coerce_float(created, now)
+        created_ts = created_num / 1000.0 if created and created_num > 1e11 else created_num
+        sol_in_curve = _coerce_float(payload.get("vSolInBondingCurve"), 0.0)
 
-    return Token(
-        mint=mint,
-        name=payload.get("name"),
-        symbol=payload.get("symbol"),
-        description=payload.get("description"),
-        image_uri=payload.get("image") or payload.get("image_uri"),
-        metadata_uri=payload.get("uri") or payload.get("metadata_uri"),
-        twitter=payload.get("twitter"),
-        telegram=payload.get("telegram"),
-        website=payload.get("website"),
-        creator=payload.get("traderPublicKey") or payload.get("creator"),
-        created_timestamp=created_ts,
-        sol_in_curve=sol_in_curve,
-        market_cap_sol=float(payload.get("marketCapSol") or 0.0),
-        curve_progress=min(1.0, sol_in_curve / CURVE_COMPLETION_SOL),
-    )
+        return Token(
+            mint=mint,
+            name=payload.get("name"),
+            symbol=payload.get("symbol"),
+            description=payload.get("description"),
+            image_uri=payload.get("image") or payload.get("image_uri"),
+            metadata_uri=payload.get("uri") or payload.get("metadata_uri"),
+            twitter=payload.get("twitter"),
+            telegram=payload.get("telegram"),
+            website=payload.get("website"),
+            creator=payload.get("traderPublicKey") or payload.get("creator"),
+            created_timestamp=created_ts,
+            sol_in_curve=sol_in_curve,
+            market_cap_sol=_coerce_float(payload.get("marketCapSol"), 0.0),
+            curve_progress=min(1.0, sol_in_curve / CURVE_COMPLETION_SOL),
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        log.warning("dropping malformed create event: %s", type(exc).__name__)
+        return None
 
 
 def passes_filter(token: Token, cfg: FilterSettings, now: float) -> tuple[bool, str]:
