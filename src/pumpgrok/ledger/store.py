@@ -133,6 +133,7 @@ def _row_hash(
 
 class LedgerStore:
     """Append-only hash-chained event ledger over sqlite3 stdlib."""
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +177,9 @@ class LedgerStore:
                     }
                 )
                 payload_json = _validated_payload(type, payload)
-                head = db.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;").fetchone()
+                head = db.execute(
+                    "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;"
+                ).fetchone()
                 if head is None:
                     seq, prev_hash = 1, GENESIS_PREV_HASH
                 else:
@@ -240,14 +243,18 @@ class LedgerStore:
             db = self._db
             db.execute("BEGIN IMMEDIATE;")
             try:
-                head = db.execute("SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;").fetchone()
+                head = db.execute(
+                    "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;"
+                ).fetchone()
                 if head is None:
                     seq, prev_hash = 1, GENESIS_PREV_HASH
                 else:
                     seq, prev_hash = head[0] + 1, head[1]
                 stored: list[dict[str, Any]] = []
                 for entry in pending:
-                    ts_utc, source, correlation_id, idempotency_key, type, payload = _check_envelope(entry)
+                    ts_utc, source, correlation_id, idempotency_key, type, payload = (
+                        _check_envelope(entry)
+                    )
                     payload_json = _validated_payload(type, payload)
                     hash_ = _row_hash(
                         prev_hash=prev_hash,
@@ -437,6 +444,21 @@ class LedgerStore:
             "prev_hash": prev_hash,
             "hash": hash_,
         }
+
+    def get_meta(self, key: str, default: str | None = None) -> str | None:
+        """Read one meta row (ledger_id, source, export_seq, ...)."""
+        row = self._db.execute("SELECT value FROM meta WHERE key = ?;", (key,)).fetchone()
+        if row is None:
+            return default
+        return str(row[0])
+
+    def set_meta(self, key: str, value: str) -> None:
+        """Upsert one meta row outside the hash chain (derived state only)."""
+        self._db.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
+            (key, value),
+        )
 
     def read_snapshots(self) -> list[dict[str, Any]]:
         """All snapshots in seq order with parsed state (drawdown backend)."""
