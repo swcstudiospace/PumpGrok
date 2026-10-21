@@ -12,9 +12,9 @@ Adaptations from the oracle (deliberate):
   ``FixtureClock``: burst, throttle, refill, no-overfill, and serialization
   without waiting. The port takes readings from the injected clock and waits
   on ``clock.sleep``; acquiring a covered token never suspends.
-- ``CircuitBreaker``, ``drain``, ``Heartbeat``, and ``install_signal_handlers``
-  have no production port in this plan (the breaker port lands in
-  ``risk/breakers.py`` in plan 04-05, lifecycle in plan 04-07). They are
+- ``CircuitBreaker`` runs against its real port (``risk/breakers.py``)
+  since plan 04-05; ``drain``, ``Heartbeat``, and ``install_signal_handlers``
+  have no production port in this plan (lifecycle lands in plan 04-07). They are
   pinned here as documented test-local mirrors of the vendor originals so
   the behavior cannot drift before the ports land; the owning plans rewire
   these tests to the ports. ``GrokOps``/``CallBudget``/``HealthServer`` rows
@@ -34,6 +34,7 @@ import pytest
 
 from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.risk.breakers import Breaker
 
 log = logging.getLogger(__name__)
 
@@ -87,11 +88,13 @@ async def test_limiter_serializes_calls() -> None:
     assert all(w >= 0 for w in waited)
 
 
-# --- test-local mirrors (pending risk/breakers.py, plan 04-05) -----------------
+# --- breaker port (risk/breakers.py, plan 04-05) ------------------------------
 #
-# Faithful copies of the vendor originals with English prose. The owning
-# plan rewires these tests to the production ports; until then the mirrors
-# pin the behavior the ports must reproduce.
+# The vendor ``CircuitBreaker`` (ops.py:131-182) runs against its production
+# port. ``Breaker`` keeps the vendor vocabulary (``is_open``, ``state``,
+# ``remaining_cooldown``, ``record_success``/``record_failure``, ``trips``)
+# with ``cooldown_s``/``now`` parameter names and a half-open probe gate
+# (``admit_probe``/``resolve_probe``) for the single probe call.
 
 
 class ManualClock:
@@ -107,57 +110,9 @@ class ManualClock:
         self.now += seconds
 
 
-class CircuitBreaker:
-    """Opens after N consecutive failures, probes after cooldown.
-
-    Test-local mirror of vendor ``ops.py:131-182``. The half-open probe is
-    the single call admitted right after cooldown: it runs with the failure
-    count one below threshold, so one more failure reopens immediately.
-    """
-
-    def __init__(self, failures: int, cooldown: float, clock: Callable[[], float]) -> None:
-        self.threshold = max(1, failures)
-        self.cooldown = max(0.0, cooldown)
-        self.clock = clock
-        self.consecutive_failures = 0
-        self.opened_at: float | None = None
-        self.trips = 0
-
-    @property
-    def is_open(self) -> bool:
-        if self.opened_at is None:
-            return False
-        if self.clock() - self.opened_at >= self.cooldown:
-            self.opened_at = None
-            self.consecutive_failures = self.threshold - 1
-            return False
-        return True
-
-    @property
-    def state(self) -> str:
-        if self.is_open:
-            return "open"
-        return "half-open" if self.consecutive_failures else "closed"
-
-    def remaining_cooldown(self) -> float:
-        if self.opened_at is None:
-            return 0.0
-        return max(0.0, self.cooldown - (self.clock() - self.opened_at))
-
-    def record_success(self) -> None:
-        self.consecutive_failures = 0
-        self.opened_at = None
-
-    def record_failure(self) -> None:
-        self.consecutive_failures += 1
-        if self.consecutive_failures >= self.threshold and self.opened_at is None:
-            self.opened_at = self.clock()
-            self.trips += 1
-
-
 def test_breaker_opens_after_threshold() -> None:
     clock = ManualClock()
-    breaker = CircuitBreaker(failures=3, cooldown=60.0, clock=clock)
+    breaker = Breaker(failures=3, cooldown_s=60.0, now=clock)
     assert breaker.state == "closed"
     breaker.record_failure()
     breaker.record_failure()
@@ -169,7 +124,7 @@ def test_breaker_opens_after_threshold() -> None:
 
 
 def test_success_resets_failures() -> None:
-    breaker = CircuitBreaker(failures=3, cooldown=60.0, clock=ManualClock())
+    breaker = Breaker(failures=3, cooldown_s=60.0, now=ManualClock())
     breaker.record_failure()
     breaker.record_failure()
     breaker.record_success()
@@ -179,7 +134,7 @@ def test_success_resets_failures() -> None:
 
 def test_breaker_closes_after_cooldown() -> None:
     clock = ManualClock()
-    breaker = CircuitBreaker(failures=2, cooldown=60.0, clock=clock)
+    breaker = Breaker(failures=2, cooldown_s=60.0, now=clock)
     breaker.record_failure()
     breaker.record_failure()
     assert breaker.is_open
@@ -190,7 +145,7 @@ def test_breaker_closes_after_cooldown() -> None:
 
 def test_reopens_immediately_if_probe_fails() -> None:
     clock = ManualClock()
-    breaker = CircuitBreaker(failures=2, cooldown=60.0, clock=clock)
+    breaker = Breaker(failures=2, cooldown_s=60.0, now=clock)
     breaker.record_failure()
     breaker.record_failure()
     clock.advance(61.0)
@@ -202,7 +157,7 @@ def test_reopens_immediately_if_probe_fails() -> None:
 
 def test_probe_success_closes_breaker() -> None:
     clock = ManualClock()
-    breaker = CircuitBreaker(failures=2, cooldown=60.0, clock=clock)
+    breaker = Breaker(failures=2, cooldown_s=60.0, now=clock)
     breaker.record_failure()
     breaker.record_failure()
     clock.advance(61.0)
@@ -214,7 +169,7 @@ def test_probe_success_closes_breaker() -> None:
 
 def test_remaining_cooldown_counts_down() -> None:
     clock = ManualClock()
-    breaker = CircuitBreaker(failures=1, cooldown=60.0, clock=clock)
+    breaker = Breaker(failures=1, cooldown_s=60.0, now=clock)
     breaker.record_failure()
     assert breaker.remaining_cooldown() == pytest.approx(60.0)
     clock.advance(15.0)
@@ -222,7 +177,7 @@ def test_remaining_cooldown_counts_down() -> None:
 
 
 def test_closed_breaker_has_no_cooldown() -> None:
-    breaker = CircuitBreaker(failures=3, cooldown=60.0, clock=ManualClock())
+    breaker = Breaker(failures=3, cooldown_s=60.0, now=ManualClock())
     assert breaker.remaining_cooldown() == 0.0
     assert breaker.state == "closed"
 

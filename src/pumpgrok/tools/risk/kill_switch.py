@@ -8,6 +8,7 @@ key, so repeats within the minute replay instead of duplicating.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import os
@@ -22,6 +23,7 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.risk.killswitch import kill_file_text
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -80,11 +82,17 @@ async def run_kill_switch(
     clock: Clock,
     killswitch_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Append the set event (idempotent per minute), then report the view."""
+    """Append the set event (idempotent per minute), write the file, report the view.
+
+    The file write makes the engagement survive restarts: the engine polls
+    the file source on every check (design 5.4). Clear stays CLI-only, so
+    this tool accepts ``set`` and ``flatten_request`` only.
+    """
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
     ts_utc = datetime.fromtimestamp(clock.now(), UTC).isoformat()
     key = kill_switch_key(inp.action, inp.reason, clock)
+    flatten = inp.action == "flatten_request"
     # Same minute repeat: the stored row already carries this intent.
     with contextlib.suppress(sqlite3.IntegrityError):
         store.append(
@@ -97,10 +105,13 @@ async def run_kill_switch(
                 "source": "paper",
                 "origin": "tool",
                 "reason": inp.reason,
-                "flatten_requested": inp.action == "flatten_request",
+                "flatten_requested": flatten,
                 "set_by": "risk.kill_switch",
             },
         )
+    if killswitch_path is not None:
+        text = kill_file_text(inp.reason, flatten)
+        await asyncio.to_thread(killswitch_path.write_text, text, encoding="utf-8")
     return _status(store, killswitch_path, correlation, clock)
 
 

@@ -22,7 +22,6 @@ minted autonomous approval, when applicable) that the adapter consumes.
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import sqlite3
 from collections.abc import Callable, Mapping
@@ -33,7 +32,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import Clock, IdFactory, calling_seat
@@ -42,6 +41,8 @@ from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
+from pumpgrok.risk.breakers import BREAKER_NAMES, BreakerSet
+from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
 
 STEP_IDS: tuple[str, ...] = (
@@ -109,9 +110,6 @@ FLOOR_HALTED_DAILY = "FLOOR HALTED " + chr(0x2013) + " DAILY LOSS LIMIT"
 #: A killed mint refuses buys desk-wide for the session; sells still pass.
 KILL_VERDICT_RE = re.compile(r"^RISK verdict=KILL mint=(?P<mint>\S+)(?:\s+reason=.*)?$")
 
-#: Alert-channel command shape (T-04-10): exact ``KILL`` head, optional
-#: ``FLATTEN`` flag, mandatory reason. Anything else is not a command.
-KILL_LINE_RE = re.compile(r"^KILL(?:\s+FLATTEN)?\s+(?P<reason>.+)$")
 
 _RECHECK_STEPS: frozenset[str] = frozenset(
     {
@@ -205,12 +203,14 @@ class _StepCtx:
     killed: set[str]
     equity: int
     approvals: dict[str, ApprovalRecord]
+    half_blocked: bool = False
     evaluated: dict[str, str] = field(default_factory=dict)
     approval: ApprovalRecord | None = None
     approval_id: str | None = None
     final_size: int | None = None
     caps: dict[str, int] = field(default_factory=dict)
     capped: bool = False
+    probe: bool = False
 
     def mark(self, step: str, status: str = "pass") -> None:
         """Record a step outcome (call args keep password-wording lints quiet)."""
@@ -250,10 +250,14 @@ class RiskEngine:
         self._limits = limits if limits is not None else EngineLimits()
         self._mode = mode
         self._autonomy = autonomy
-        self._killswitch_path = Path(killswitch_path) if killswitch_path is not None else None
-        self._alert_lines = alert_lines
-        start_env = dict(env) if env is not None else dict(os.environ)
-        self._killswitch_env_start = start_env.get("PUMPGROK_KILLSWITCH", "")
+        self._killswitch = KillSwitch(
+            clock,
+            store=store,
+            killswitch_path=killswitch_path,
+            alert_lines=alert_lines,
+            env=env,
+        )
+        self._breakers = BreakerSet(store, clock)
         self._get_reserves = get_reserves
         self._live_check = live_check
         self._observe_only = observe_only
@@ -286,52 +290,15 @@ class RiskEngine:
             state = reduce(state, event)
         return state
 
-    def _poll_kill(self) -> tuple[str, str, bool] | None:
+    def _poll_kill(self, source: str, correlation_id: str) -> tuple[str, str, bool] | None:
         """Active kill switch, if any: (source, reason, flatten_requested)."""
-        if self._killswitch_env_start.strip() not in ("", "0", "false"):
-            return ("env", self._killswitch_env_start.strip(), False)
-        file_state = self._kill_file_state()
-        if file_state is not None:
-            return file_state
-        alert_state = self._kill_alert_state()
-        if alert_state is not None:
-            return alert_state
-        return self._fold_uncached_kill()
-
-    def _kill_file_state(self) -> tuple[str, str, bool] | None:
-        if self._killswitch_path is None or not self._killswitch_path.is_file():
+        self._killswitch.observe(
+            ts_utc=self._now_ts(), source=source, correlation_id=correlation_id
+        )
+        state = self._killswitch.poll()
+        if not state.active:
             return None
-        first = self._killswitch_path.read_text(encoding="utf-8").splitlines()
-        line = first[0].strip() if first else ""
-        if line in ("FLATTEN", "FLATTEN:"):
-            return ("file", "flatten requested", True)
-        if line.startswith("FLATTEN ") or line.startswith("FLATTEN:"):
-            return ("file", line[len("FLATTEN") :].lstrip(" :"), True)
-        return ("file", line, False)
-
-    def _kill_alert_state(self) -> tuple[str, str, bool] | None:
-        if self._alert_lines is None:
-            return None
-        for raw in self._alert_lines():
-            match = KILL_LINE_RE.match(raw.strip())
-            if match is not None:
-                head = raw.strip().split(None, 2)[:2]
-                return ("alert_command", match.group("reason").strip(), "FLATTEN" in head)
-        return None
-
-    def _fold_uncached_kill(self) -> tuple[str, str, bool] | None:
-        for event in self._store.read(limit=None):
-            if event["type"] == "KillSwitchSet":
-                payload = event["payload"]
-                if isinstance(payload, dict):
-                    return (
-                        str(payload.get("origin", "command")),
-                        str(payload.get("reason", "")),
-                        bool(payload.get("flatten_requested", False)),
-                    )
-            elif event["type"] == "KillSwitchCleared":
-                return None
-        return None
+        return (state.source, state.reason, state.flatten_requested)
 
     def _killed_mints(self) -> set[str]:
         """Mints under a session RISK KILL verdict (upgrade-plan RISK-005)."""
@@ -465,6 +432,18 @@ class RiskEngine:
             return int(state.cash_lamports) + int(state.counters.realized_today_lamports)
         return int(equity_lamports(state))
 
+    def _cleared_today(self, today: str) -> bool:
+        """A human clear today suppresses re-detection for the rest of the day.
+
+        The halt stays meaningful (a fresh day re-evaluates from the day-start
+        baseline) while the clear stays effective (the same ongoing condition
+        does not re-trip until tomorrow).
+        """
+        for event in self._store.read(limit=None):
+            if event["type"] == "HaltCleared" and str(event.get("ts_utc", ""))[:10] == today:
+                return True
+        return False
+
     def _detect_breach(
         self,
         state: LedgerState,
@@ -474,6 +453,8 @@ class RiskEngine:
         source: str,
         correlation_id: str,
     ) -> str | None:
+        if self._cleared_today(ts_utc[:10]):
+            return None
         day_start = int(state.day_start_equity_lamports)
         peak = int(state.peak_equity_lamports)
         daily_limit = float(self._budget.daily_loss_halt_fraction)
@@ -567,6 +548,14 @@ class RiskEngine:
     ) -> RiskDecision:
         is_buy = order.side.value == "buy"
         state = self._fold()
+        self._breakers.sync_from_ledger()
+        ts_utc = self._now_ts()
+        equity = self._equity_for_halts(state)
+        self._breakers.refresh(
+            ts_utc=ts_utc, source=source, correlation_id=correlation_id, equity_now=equity
+        )
+        half_all = [name for name in BREAKER_NAMES if self._breakers.by_name(name).half_open]
+        half_avail = self._breakers.half_open_breakers()
         ctx = _StepCtx(
             order=order,
             seat=seat,
@@ -581,10 +570,11 @@ class RiskEngine:
             ),
             wanted={"human_buy"} if is_buy else {"human_sell", "exit_rule"},
             state=state,
-            kill=self._poll_kill(),
-            open_breakers=self._open_breakers(state),
+            kill=self._poll_kill(source, correlation_id),
+            open_breakers=set(self._breakers.open_breakers()),
+            half_blocked=is_buy and bool(half_all) and not half_avail,
             killed=self._killed_mints() if is_buy else set(),
-            equity=self._equity_for_halts(state),
+            equity=equity,
             approvals=self._approvals(),
             final_size=order.size_lamports if is_buy else None,
         )
@@ -594,6 +584,11 @@ class RiskEngine:
                 if self._skip(step, ctx):
                     continue
                 getattr(self, f"_step_{step}")(ctx)
+            if ctx.is_buy and not ctx.is_exit_sell and half_avail:
+                if self._breakers.admit_probe(half_avail[0]):
+                    ctx.probe = True
+                else:
+                    raise _Fail("breaker_open", "probe inflight")
         except _Fail as fail:
             return self._reject(order_hash, ctx, fail.reason)
         return self._accept(order_hash, ctx)
@@ -611,6 +606,7 @@ class RiskEngine:
             token_units=None if ctx.is_buy else order.token_units,
             capped=ctx.capped,
             caps=dict(ctx.caps),
+            probe=ctx.probe,
             evaluated=self._evaluated(ctx, None),
         )
 
@@ -627,6 +623,7 @@ class RiskEngine:
             token_units=None if ctx.is_buy else order.token_units,
             capped=ctx.capped,
             caps=dict(ctx.caps),
+            probe=ctx.probe,
             evaluated=self._evaluated(ctx, reason),
         )
 
@@ -670,8 +667,10 @@ class RiskEngine:
         ctx.mark("breaker_open")
         if ctx.open_breakers:
             raise _Fail("breaker_open", f"breaker={sorted(ctx.open_breakers)[0]}")
-        if ctx.killed:
-            raise _Fail("breaker_open", f"risk_kill:{sorted(ctx.killed)[0]}")
+        if ctx.order.mint in ctx.killed:
+            raise _Fail("breaker_open", f"risk_kill:{ctx.order.mint}")
+        if ctx.half_blocked:
+            raise _Fail("breaker_open", "probe inflight")
 
     def _step_live_gate(self, ctx: _StepCtx) -> None:
         ctx.mark("live_gate")
@@ -836,9 +835,137 @@ class RiskEngine:
         if reserves[0] < floor:
             raise _Fail("below_liquidity_floor", f"S0={reserves[0]} floor={floor}")
 
-    def _open_breakers(self, state: LedgerState) -> set[str]:
-        """Breakers open in the ledger fold (task 2 adds cooldown/half-open)."""
-        return {name for name, view in state.breakers.items() if view.state == "open"}
+    def note_tick(self, ts: float, *, ts_utc: str, source: str, correlation_id: str) -> None:
+        """Record a fresh price for the DataStale breaker (feed hook for 04-08)."""
+        self._breakers.note_tick(ts, ts_utc=ts_utc, source=source, correlation_id=correlation_id)
+
+    def note_miss(self, ts: float, *, ts_utc: str, source: str, correlation_id: str) -> None:
+        """Record a missed price read for the DataStale breaker (feed hook for 04-08)."""
+        self._breakers.note_miss(ts, ts_utc=ts_utc, source=source, correlation_id=correlation_id)
+
+    def resolve_probe(
+        self, name: str, ok: bool, *, source: str = "paper", correlation_id: str = "desk"
+    ) -> None:
+        """Resolve an admitted half-open probe; the adapter calls this per outcome."""
+        self._breakers.resolve_probe(
+            name, ok, ts_utc=self._now_ts(), source=source, correlation_id=correlation_id
+        )
+
+    def record_kill_verdict(
+        self, mint: str, reason: str, *, source: str = "paper", correlation_id: str = "desk"
+    ) -> None:
+        """Record a RISK KILL verdict on a mint; later buys for all seats refuse (RISK-005)."""
+        self._store.append(
+            ts_utc=self._now_ts(),
+            source=source,
+            correlation_id=correlation_id,
+            idempotency_key=f"kill-verdict|{mint}|{self._now_ts()[:10]}",
+            type="JournalNote",
+            payload={
+                "source": source,
+                "seat": "bot-02-risk",
+                "note_kind": "verdict",
+                "text": f"RISK verdict=KILL mint={mint} reason={reason}",
+                "refs": [],
+            },
+        )
+
+    def request_halt_clear(
+        self,
+        approval: ApprovalRecord,
+        reason: str,
+        *,
+        source: str = "paper",
+        correlation_id: str = "desk",
+    ) -> None:
+        """Append ``HaltCleared`` plus the ``halt_clear`` approval (CLI calls this in 04-07).
+
+        Human-only and refused unless a halt is latched; UTC rollover never
+        clears on its own (R5).
+        """
+        by = approval.approved_by
+        if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
+            raise ValueError(f"halt clear must come from a human, got {by!r}")
+        if approval.kind != "halt_clear":
+            raise ValueError(f"halt clear needs a halt_clear approval, got {approval.kind!r}")
+        if not self._fold().halt.active:
+            raise ValueError("no active halt to clear")
+        ts_utc = self._now_ts()
+        self._store.append(
+            ts_utc=ts_utc,
+            source=source,
+            correlation_id=correlation_id,
+            idempotency_key=f"halt-clear|{ts_utc[:10]}",
+            type="HaltCleared",
+            payload={
+                "source": source,
+                "reason": reason,
+                "cleared_by": by,
+                "approval_id": approval.id,
+                "note": reason,
+            },
+        )
+        self._store.append(
+            ts_utc=ts_utc,
+            source=source,
+            correlation_id=correlation_id,
+            idempotency_key=f"consumed|{approval.id}",
+            type="ApprovalRecorded",
+            payload={
+                "source": source,
+                "id": approval.id,
+                "kind": approval.kind,
+                "approved_by": by,
+                "at": approval.at.isoformat(),
+                "ticket_id": approval.ticket_id or "",
+                "mint": approval.mint or "",
+                "size_lamports": approval.size_lamports or 0,
+                "token_units": approval.token_units or 0,
+                "max_slippage_bps": approval.max_slippage_bps or 0,
+                "exit_rule_id": approval.exit_rule_id or "",
+                "raw_message": reason,
+                "consumed": True,
+            },
+        )
+
+    def plan_flatten(self, *, correlation_id: str = "desk") -> list[FlattenOrder]:
+        """Build one ``kill_flatten`` sell per open position with a minted approval.
+
+        The supervisor waits on the in-flight barrier, then places these via
+        ``PaperAdapter.place``; the EXIT seat is not in the path (design 5.4).
+        """
+        now = datetime.fromtimestamp(self._clock.now(), UTC)
+        orders: list[FlattenOrder] = []
+        for mint, pos in self._fold().positions.items():
+            if pos.token_units <= 0:
+                continue
+            approval = ApprovalRecord(
+                id=f"apr-{self._ids.ulid()}",
+                kind="autonomous_paper",
+                ticket_id=pos.ticket_id,
+                mint=mint,
+                token_units=pos.token_units,
+                max_slippage_bps=self._limits.max_slippage_bps,
+                approved_by="risk_engine",
+                raw_message=f"autonomous-paper kill_flatten {mint}",
+                at=now,
+            )
+            orders.append(
+                FlattenOrder(
+                    order=OrderRequest(
+                        ticket_id=pos.ticket_id,
+                        mint=mint,
+                        side=Side.SELL,
+                        decision_id=self._ids.ulid(),
+                        token_units=pos.token_units,
+                        max_slippage_bps=self._limits.max_slippage_bps,
+                        approval_id=approval.id,
+                        correlation_id=correlation_id,
+                    ),
+                    approval=approval,
+                )
+            )
+        return orders
 
     def _creator_of(self, mint: str, state: LedgerState) -> str:
         pos = state.positions.get(mint)

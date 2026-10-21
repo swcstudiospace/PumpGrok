@@ -77,6 +77,7 @@ async def run_halt_status(
     halt_active = False
     halt_reason: str | None = None
     kill_active = env_set or file_set
+    open_breakers: set[str] = set()
     for event in store.read(limit=None):
         if event["type"] == "HaltSet":
             halt_active = True
@@ -88,20 +89,26 @@ async def run_halt_status(
             kill_active = True
         elif event["type"] == "KillSwitchCleared":
             kill_active = env_set or file_set
+        elif event["type"] == "BreakerTripped":
+            open_breakers.add(str(event["payload"].get("breaker", "unknown")))
+        elif event["type"] == "BreakerReset":
+            open_breakers.discard(str(event["payload"].get("breaker", "unknown")))
     reasons: list[str] = []
     if kill_active:
         reasons.append("kill_switch")
     if halt_active and halt_reason:
         reasons.append(halt_reason)
+    if open_breakers:
+        reasons.append(f"breaker_open:{sorted(open_breakers)[0]}")
     ambient = ambient_correlation()
     return HaltStatusOut.model_validate(
         {
-            "halted": kill_active or halt_active,
+            "halted": kill_active or halt_active or bool(open_breakers),
             "reasons": reasons,
             "kill_switch_active": kill_active,
             "drawdown_halt": halt_reason == "drawdown",
             "daily_loss_halt": halt_reason == "daily_loss",
-            "breaker_open": False,
+            "breaker_open": bool(open_breakers),
             "effective_mode": mode,
             "meta": meta_now(
                 "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
