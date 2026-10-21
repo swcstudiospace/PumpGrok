@@ -79,11 +79,11 @@ _TRANSFER_TX = {
         "preBalances": [1000, 0],
         "postBalances": [1010, 0],
         "preTokenBalances": [
-            {"accountIndex": 0, "mint": MINT, "uiTokenAmount": {"amount": "10000000000000"}},
+            {"accountIndex": 0, "mint": MINT, "uiTokenAmount": {"amount": "1000000"}},
         ],
         "postTokenBalances": [
             {"accountIndex": 0, "mint": MINT, "uiTokenAmount": {"amount": "0"}},
-            {"accountIndex": 1, "mint": MINT, "uiTokenAmount": {"amount": "10000000000000"}},
+            {"accountIndex": 1, "mint": MINT, "uiTokenAmount": {"amount": "1000000"}},
         ],
     },
     "transaction": {"message": {"accountKeys": [{"pubkey": WALLET}, {"pubkey": R1}]}},
@@ -271,7 +271,7 @@ async def test_large_transfers_flags_whale_sell() -> None:
     transfer = out.transfers[0]
     assert transfer.kind == "sell"
     assert transfer.share == Decimal("0.01")
-    assert transfer.amount_units == 10_000_000_000_000
+    assert transfer.amount_units == 1_000_000
 
 
 async def test_large_transfers_default_watch_set_is_empty_result() -> None:
