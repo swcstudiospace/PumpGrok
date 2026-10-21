@@ -1,0 +1,450 @@
+# Path ownership manifest for the pumpgrok trading desk.
+# Every file resolves to EXACTLY ONE owning seat. LAST matching pattern wins.
+# A path matching nothing is UNOWNED and ci/gates/check_ownership.py fails the build.
+# Validate:  python3 ci/gates/check_ownership.py --validate-manifest
+version: 1
+
+bots:
+  bot-00-chief:
+    name: CHIEF - Desk Orchestrator
+    description: >
+      Supervisor and process guardian. Routes, halts, escalates, owns the scheduler and
+      orchestration docs. Never trades, never sizes, never holds keys. In channel.
+  bot-01-scout:
+    name: SCOUT - Alpha Hunter
+    languages: [python]
+    description: Discovery of new launches and volume anomalies. Read-only market tools.
+  bot-02-risk:
+    name: RISK - Absolute Safety Gate
+    languages: [python]
+    description: >
+      Portfolio limits, drawdown, breakers, kill switch, verdicts. Independent reviewer:
+      owns gates, contracts, ownership.yaml, SECURITY.md. Veto is absolute. In channel.
+  bot-03-whale:
+    name: WHALE - Smart-Money Analyst
+    languages: [python]
+    description: Holder quality and capital-flow analysis. Read-only on-chain tools.
+  bot-04-sniper:
+    name: SNIPER - Single-Write Execution
+    languages: [python]
+    description: Entry execution through the PaperAdapter. Paper-write only. Owns execution/.
+  bot-05-rug:
+    name: RUG - Safety Monitor
+    languages: [python]
+    description: Pre-trade safety scoring and post-fill rug monitoring. Owns tools/safety.
+  bot-06-exit:
+    name: EXIT - Position Manager
+    languages: [python]
+    description: Exit rules and paper sell execution. Paper-write only. Off-channel.
+  bot-07-shill:
+    name: SHILL - Sentiment and Velocity
+    languages: [python]
+    description: Social sentiment detection only. Never posts. Off-channel.
+  bot-08-signal:
+    name: SIGNAL - Momentum Scorer
+    languages: [python]
+    description: Momentum and confidence scoring; ported vendor scoring and checker. Off-channel.
+  bot-09-journal:
+    name: JOURNAL - Post-Trade Ledger
+    languages: [python]
+    description: Ledger of record, post-trade review, daily and weekly reports. Off-channel.
+
+ownership:
+  # --- General suffix rules (first, so directory rules below override) ----
+  - pattern: "**/*.py"
+    owner: bot-02-risk
+  - pattern: "**/*.md"
+    owner: bot-02-risk
+  - pattern: "**/*.yaml"
+    owner: bot-02-risk
+  - pattern: "**/*.yml"
+    owner: bot-02-risk
+  - pattern: "**/*.toml"
+    owner: bot-02-risk
+  - pattern: "**/*.json"
+    owner: bot-02-risk
+  - pattern: "**/*.jsonl"
+    owner: bot-09-journal
+  - pattern: "**/*.xml"
+    owner: bot-00-chief
+  - pattern: "**/*.sh"
+    owner: bot-00-chief
+  - pattern: "**/*.mdc"
+    owner: bot-02-risk
+  - pattern: "**/.gitkeep"
+    owner: bot-02-risk
+
+  # --- Root files ----------------------------------------------------------
+  - pattern: "README.md"
+    owner: bot-00-chief
+  - pattern: "AGENTS.md"
+    owner: bot-02-risk
+  - pattern: "ARCHITECTURE.md"
+    owner: bot-02-risk
+  - pattern: "SECURITY.md"
+    owner: bot-02-risk
+  - pattern: "CHANGELOG.md"
+    owner: bot-09-journal
+  - pattern: "SETUP.md"
+    owner: bot-00-chief
+  - pattern: "LICENSE"
+    owner: bot-02-risk
+  - pattern: "banner.jpg"
+    owner: bot-00-chief
+  - pattern: ".python-version"
+    owner: bot-02-risk
+  - pattern: ".planning/**"
+    owner: bot-00-chief
+  - pattern: "ownership.yaml"
+    owner: bot-02-risk
+  - pattern: "openapi.yaml"
+    owner: bot-02-risk
+    contract_surface: true
+  - pattern: ".pre-commit-config.yaml"
+    owner: bot-02-risk
+  - pattern: ".gitignore"
+    owner: bot-02-risk
+  - pattern: ".devcontainer.json"
+    owner: bot-02-risk
+  - pattern: "desk_cli.py"
+    owner: bot-00-chief
+  - pattern: "pyproject.toml"
+    owner: bot-02-risk
+  - pattern: "uv.lock"
+    owner: bot-02-risk
+  - pattern: "Makefile"
+    owner: bot-02-risk
+  - pattern: "Dockerfile"
+    owner: bot-02-risk
+  - pattern: "docker-compose.yml"
+    owner: bot-02-risk
+  - pattern: ".env.example"
+    owner: bot-02-risk
+  - pattern: "plugin.json"
+    owner: bot-00-chief
+  - pattern: ".claude-plugin/**"
+    owner: bot-00-chief
+  - pattern: ".grok-plugin/**"
+    owner: bot-00-chief
+  - pattern: ".cursor-plugin/**"
+    owner: bot-00-chief
+  - pattern: "issues/**"
+    owner: bot-00-chief
+
+  # --- CI, gates, security (RISK = QUALITY analogue) ----------------------
+  - pattern: ".github/workflows/**"
+    owner: bot-02-risk
+  - pattern: ".github/workflows/gates.yml"
+    owner: bot-02-risk
+  - pattern: ".github/workflows/ci.yml"
+    owner: bot-02-risk
+  - pattern: ".github/workflows/security-pr.yml"
+    owner: bot-02-risk
+  - pattern: "ci/**"
+    owner: bot-02-risk
+
+  # --- Contracts: the only shared surface ---------------------------------
+  - pattern: "contracts/**"
+    owner: bot-02-risk
+    contract_surface: true
+
+  # --- Docs: RISK owns by default; CHIEF owns orchestration docs ----------
+  - pattern: "docs/**"
+    owner: bot-02-risk
+  - pattern: "docs/desk-operating-model.md"
+    owner: bot-00-chief
+  - pattern: "docs/cross-bot-protocol.md"
+    owner: bot-00-chief
+  - pattern: "docs/runbooks/**"
+    owner: bot-00-chief
+  - pattern: "docs/design/paper-engine.md"
+    owner: bot-04-sniper
+
+  # --- Prompts: shared core is RISK; each seat owns its own source --------
+  - pattern: "prompts/**"
+    owner: bot-02-risk
+  - pattern: "prompts/_shared/core-directives.xml"
+    owner: bot-02-risk
+  - pattern: "prompts/bot-00-chief.xml"
+    owner: bot-00-chief
+  - pattern: "prompts/bot-01-scout.xml"
+    owner: bot-01-scout
+  - pattern: "prompts/bot-02-risk.xml"
+    owner: bot-02-risk
+  - pattern: "prompts/bot-03-whale.xml"
+    owner: bot-03-whale
+  - pattern: "prompts/bot-04-sniper.xml"
+    owner: bot-04-sniper
+  - pattern: "prompts/bot-05-rug.xml"
+    owner: bot-05-rug
+  - pattern: "prompts/bot-06-exit.xml"
+    owner: bot-06-exit
+  - pattern: "prompts/bot-07-shill.xml"
+    owner: bot-07-shill
+  - pattern: "prompts/bot-08-signal.xml"
+    owner: bot-08-signal
+  - pattern: "prompts/bot-09-journal.xml"
+    owner: bot-09-journal
+  # Generated files (R36): regenerated by scripts/assemble-prompts.sh and
+  # scripts/generate-templates.py; CHIEF owns the generator and its output.
+  - pattern: "prompts-assembled/**"
+    owner: bot-00-chief
+  - pattern: "agents/**"
+    owner: bot-00-chief
+  - pattern: "rules/**"
+    owner: bot-02-risk
+  - pattern: "rules/pumpgrok-team.mdc"
+    owner: bot-02-risk
+  - pattern: "scripts/**"
+    owner: bot-00-chief
+  - pattern: "scripts/check.sh"
+    owner: bot-02-risk
+  - pattern: "hermes/**"
+    owner: bot-00-chief
+
+  # --- Skills: RISK by default; seat-specific overrides -------------------
+  - pattern: "skills/**"
+    owner: bot-02-risk
+  - pattern: "skills/desk-operating-model/**"
+    owner: bot-00-chief
+  - pattern: "skills/desk-trade-lifecycle/**"
+    owner: bot-00-chief
+  - pattern: "skills/desk-monitoring/**"
+    owner: bot-00-chief
+  - pattern: "skills/desk-incident-response/**"
+    owner: bot-00-chief
+  - pattern: "skills/pumpgrok-setup/**"
+    owner: bot-00-chief
+  - pattern: "skills/tool-connections/**"
+    owner: bot-00-chief
+  - pattern: "skills/hermes-cron-desk/**"
+    owner: bot-00-chief
+  - pattern: "skills/desk-folders-and-journal/**"
+    owner: bot-00-chief
+  - pattern: "skills/desk-doctor/**"
+    owner: bot-00-chief
+  - pattern: "skills/discovery-tools/**"
+    owner: bot-01-scout
+  - pattern: "skills/solana-market-data/**"
+    owner: bot-01-scout
+  - pattern: "skills/grokbot-pipeline/**"
+    owner: bot-01-scout
+  - pattern: "skills/holder-and-flow-analysis/**"
+    owner: bot-03-whale
+  - pattern: "skills/jupiter-routing/**"
+    owner: bot-04-sniper
+  - pattern: "skills/desk-execution-protocol/**"
+    owner: bot-04-sniper
+  - pattern: "skills/solana-api-reference/**"
+    owner: bot-04-sniper
+  - pattern: "skills/paper-broker/**"
+    owner: bot-04-sniper
+  - pattern: "skills/position-monitoring/**"
+    owner: bot-05-rug
+  - pattern: "skills/safety-scoring/**"
+    owner: bot-05-rug
+  - pattern: "skills/desk-strategy-lab/**"
+    owner: bot-06-exit
+  - pattern: "skills/social-sentiment/**"
+    owner: bot-07-shill
+  - pattern: "skills/browser-ops/**"
+    owner: bot-07-shill
+  - pattern: "skills/momentum-signals/**"
+    owner: bot-08-signal
+  - pattern: "skills/replay-and-backtest/**"
+    owner: bot-08-signal
+  - pattern: "skills/desk-post-trade-review/**"
+    owner: bot-09-journal
+  - pattern: "skills/portfolio-ledger/**"
+    owner: bot-09-journal
+  - pattern: "skills/daily-report/**"
+    owner: bot-09-journal
+
+  # --- Source: RISK owns infrastructure; seats own their modules (R31, R36)
+  - pattern: "src/pumpgrok/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/__init__.py"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/core/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/config/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/logging/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/ledger/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/replay/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/risk/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/cli.py"
+    owner: bot-00-chief
+  - pattern: "src/pumpgrok/supervisor/**"
+    owner: bot-00-chief
+  - pattern: "src/pumpgrok/tools/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/tools/market/**"
+    owner: bot-01-scout
+  - pattern: "src/pumpgrok/tools/onchain/**"
+    owner: bot-05-rug
+  - pattern: "src/pumpgrok/tools/onchain/holders.py"
+    owner: bot-03-whale
+  - pattern: "src/pumpgrok/tools/onchain/transfers.py"
+    owner: bot-03-whale
+  - pattern: "src/pumpgrok/tools/safety/**"
+    owner: bot-05-rug
+  - pattern: "src/pumpgrok/tools/exec/**"
+    owner: bot-04-sniper
+  - pattern: "src/pumpgrok/tools/social/**"
+    owner: bot-07-shill
+  - pattern: "src/pumpgrok/tools/journal/**"
+    owner: bot-09-journal
+  - pattern: "src/pumpgrok/tools/portfolio/**"
+    owner: bot-09-journal
+  - pattern: "src/pumpgrok/tools/notify/**"
+    owner: bot-00-chief
+  - pattern: "src/pumpgrok/tools/risk/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/execution/**"
+    owner: bot-04-sniper
+  # Must come AFTER src/pumpgrok/execution/** (last match wins): the disabled live
+  # stub and the live gate are RISK's (R31).
+  - pattern: "src/pumpgrok/execution/live/**"
+    owner: bot-02-risk
+  - pattern: "src/pumpgrok/engine/**"
+    owner: bot-08-signal
+  - pattern: "src/pumpgrok/engine/monitor.py"
+    owner: bot-01-scout
+  - pattern: "src/pumpgrok/engine/watcher.py"
+    owner: bot-05-rug
+  - pattern: "src/pumpgrok/engine/exits.py"
+    owner: bot-06-exit
+  - pattern: "src/pumpgrok/reporting/**"
+    owner: bot-09-journal
+  - pattern: "services/desk-gateway/**"
+    owner: bot-00-chief
+  - pattern: "tools/**"
+    owner: bot-02-risk
+  - pattern: "vendor/**"
+    owner: bot-02-risk
+
+  # --- Tests follow the module they pin (R36) ------------------------------
+  - pattern: "tests/**"
+    owner: bot-02-risk
+  - pattern: "tests/engine/**"
+    owner: bot-08-signal
+  - pattern: "tests/engine/test_monitor*.py"
+    owner: bot-01-scout
+  - pattern: "tests/engine/test_watcher*.py"
+    owner: bot-05-rug
+  - pattern: "tests/engine/test_exits*.py"
+    owner: bot-06-exit
+  - pattern: "tests/replay/**"
+    owner: bot-02-risk
+  - pattern: "tests/fixtures/replay/**"
+    owner: bot-02-risk
+  - pattern: "tests/execution/**"
+    owner: bot-04-sniper
+  - pattern: "tests/tools/exec/**"
+    owner: bot-04-sniper
+  - pattern: "tests/tools/market/**"
+    owner: bot-01-scout
+  - pattern: "tests/tools/safety/**"
+    owner: bot-05-rug
+  - pattern: "tests/tools/onchain/**"
+    owner: bot-05-rug
+  - pattern: "tests/tools/onchain/test_holders*.py"
+    owner: bot-03-whale
+  - pattern: "tests/tools/onchain/test_transfers*.py"
+    owner: bot-03-whale
+  - pattern: "tests/tools/social/**"
+    owner: bot-07-shill
+  - pattern: "tests/tools/journal/**"
+    owner: bot-09-journal
+  - pattern: "tests/tools/portfolio/**"
+    owner: bot-09-journal
+  - pattern: "tests/ledger/**"
+    owner: bot-02-risk
+  - pattern: "tests/reporting/**"
+    owner: bot-09-journal
+  - pattern: "tests/desk/**"
+    owner: bot-00-chief
+  - pattern: "tests/safety/**"
+    owner: bot-02-risk
+  - pattern: "tests/test_registry_least_privilege.py"
+    owner: bot-02-risk
+  # Characterization tests pin moved vendor code; each subtree follows its module owner.
+  - pattern: "tests/characterization/**"
+    owner: bot-02-risk
+  - pattern: "tests/characterization/engine/**"
+    owner: bot-08-signal
+  - pattern: "tests/characterization/engine/test_monitor*.py"
+    owner: bot-01-scout
+  - pattern: "tests/characterization/engine/test_watcher*.py"
+    owner: bot-05-rug
+  - pattern: "tests/characterization/engine/test_exits*.py"
+    owner: bot-06-exit
+  - pattern: "tests/characterization/execution/**"
+    owner: bot-04-sniper
+  - pattern: "tests/characterization/risk/**"
+    owner: bot-02-risk
+  - pattern: "tests/characterization/ledger/**"
+    owner: bot-02-risk
+
+  # --- Receipts: one rule per seat ----------------------------------------
+  - pattern: ".receipts/bot-00-chief/**"
+    owner: bot-00-chief
+  - pattern: ".receipts/bot-01-scout/**"
+    owner: bot-01-scout
+  - pattern: ".receipts/bot-02-risk/**"
+    owner: bot-02-risk
+  - pattern: ".receipts/bot-03-whale/**"
+    owner: bot-03-whale
+  - pattern: ".receipts/bot-04-sniper/**"
+    owner: bot-04-sniper
+  - pattern: ".receipts/bot-05-rug/**"
+    owner: bot-05-rug
+  - pattern: ".receipts/bot-06-exit/**"
+    owner: bot-06-exit
+  - pattern: ".receipts/bot-07-shill/**"
+    owner: bot-07-shill
+  - pattern: ".receipts/bot-08-signal/**"
+    owner: bot-08-signal
+  - pattern: ".receipts/bot-09-journal/**"
+    owner: bot-09-journal
+
+  # --- Runtime state is gitignored; the .gitkeep that pins it is RISK's ----
+  - pattern: "var/**"
+    owner: bot-02-risk
+
+  # --- Always LAST (programming-desk/ownership.yaml:431-433) ---------------
+  - pattern: "**/*.proto"
+    owner: bot-02-risk
+    contract_surface: true
+
+contract_consumers:
+  "contracts/events/**":
+    - bot-00-chief
+    - bot-01-scout
+    - bot-02-risk
+    - bot-03-whale
+    - bot-04-sniper
+    - bot-05-rug
+    - bot-06-exit
+    - bot-07-shill
+    - bot-08-signal
+    - bot-09-journal
+  "contracts/tool-rosters/**":
+    - bot-00-chief
+    - bot-01-scout
+    - bot-02-risk
+    - bot-03-whale
+    - bot-04-sniper
+    - bot-05-rug
+    - bot-06-exit
+    - bot-07-shill
+    - bot-08-signal
+    - bot-09-journal
+  "openapi.yaml":
+    - bot-00-chief
+    - bot-09-journal
