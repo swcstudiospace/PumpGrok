@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from collections.abc import Iterator
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
