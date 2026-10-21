@@ -1,0 +1,24 @@
+# Dev profile. Paper-equivalent risk; never live.
+# Selected with PUMPGROK_PROFILE=dev.
+# PUMPGROK_LOG_JSON=false is honoured ONLY under this profile (enforced by
+# the logging module); JSON logs stay the default everywhere else.
+
+[execution]
+mode = "paper"
+
+[risk]
+max_trade_fraction = "0.02"
+max_token_fraction = "0.05"
+daily_loss_halt_fraction = "0.05"
+drawdown_halt_fraction = "0.15"
+max_open_positions = 3
+max_trades_per_day = 20
+liquidity_floor_multiple = 10
+partial_fill_fraction = "0.02"
+
+[replay]
+seed = 20260101
+
+# Marker only: enabling live requires the live gate (separate module).
+[live]
+enabled = false
