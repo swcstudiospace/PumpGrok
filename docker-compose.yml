@@ -5,7 +5,7 @@
 #
 # The pumpgrok service is a one-shot (R50). It deliberately has NO restart policy: a restart
 # policy would relaunch the exit-0 replay command in a loop, so the service never settles
-# (research Pitfall 6). Do not add `restart:` here. Liveness is the image HEALTHCHECK
+# (research Pitfall 6). Do not add a restart policy here. Liveness is the image HEALTHCHECK
 # (`pumpgrok doctor`).
 
 services:

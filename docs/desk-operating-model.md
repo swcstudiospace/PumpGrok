@@ -63,6 +63,12 @@ Live execution is a configuration mode, not an engagement level. `pumpgrok run -
 refused by the live gate (exit 3) until all nine R21 preconditions hold, and in this release one of
 them, a registered live adapter, never holds.
 
+## Gates
+
+Every change by any seat passes the gate set in `docs/quality-gates.md`: G-1 path ownership,
+G-2 verification receipt, G-3 committed secrets, G-4 contract-first changes, G-5/G-6 rollback and
+destructive operations, and G-7 desk integrity.
+
 ## What Phase 1 ships
 
 Phase 1 is the foundation. It ships the settings loader, the append-only hash-chained ledger, the

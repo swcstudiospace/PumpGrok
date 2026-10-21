@@ -57,6 +57,8 @@ Work lands on `bot-0N-<seat>/<unit>` branches, one PR per batch. The gates workf
 (`.github/workflows/gates.yml`) derives the acting seat from the branch prefix and fails a branch
 that does not start with a seat id. G-1 then checks the seat's paths against `ownership.yaml`.
 
+Valid seat ids are `bot-00-chief` through `bot-09-journal`, listed in `docs/desk-operating-model.md`.
+
 ## Engagement levels
 
 The desk runs at one of two engagement levels, `research` or `paper` (R16). Live execution is a

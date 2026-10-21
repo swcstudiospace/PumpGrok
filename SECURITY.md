@@ -8,7 +8,7 @@ exits 3 until every precondition of the live gate holds.
 
 ## Key custody
 
-No key material exists in paper mode; nothing to custody.
+Key custody: no key material exists in paper mode; nothing to custody.
 
 The desk never requests, accepts, stores, prints or reasons about seed phrases, private keys or
 recovery phrases. The settings model has no wallet-key field. Startup refuses environment names

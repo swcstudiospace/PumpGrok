@@ -4,6 +4,14 @@ A feature that crosses seats has to be coordinated. Two seats that edit the same
 change a shared interface without telling each other, produce silent breakage on a trading desk.
 This protocol keeps seat boundaries enforceable by the gates, not by good intentions.
 
+## Seats and levels
+
+The ten seats are `bot-00-chief` (CHIEF), `bot-01-scout` (SCOUT), `bot-02-risk` (RISK),
+`bot-03-whale` (WHALE), `bot-04-sniper` (SNIPER), `bot-05-rug` (RUG), `bot-06-exit` (EXIT),
+`bot-07-shill` (SHILL), `bot-08-signal` (SIGNAL) and `bot-09-journal` (JOURNAL). Engagement levels
+are `research | paper` only (R16). Every seat's change passes gates G-1 through G-7
+(`docs/quality-gates.md`).
+
 ## Rules that always apply
 
 1. **One owner per path.** Every tracked path resolves to exactly one seat in `ownership.yaml`.
