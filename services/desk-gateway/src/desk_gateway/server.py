@@ -14,6 +14,9 @@ only, compared with ``hmac.compare_digest`` in a loop over every seat.
 No match is 401, a match for another seat is 403, and a path seat with
 no configured token fails closed with 503 and no token detail. Only the
 seat short name and the status code are ever logged.
+
+Body: auth runs before the body is read. Content-Length must be a single
+non-negative integer (400) and at most 1 MiB (413).
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -41,6 +45,7 @@ from pumpgrok.contracts.projection import (
     transport_map,
     transport_name,
 )
+from pumpgrok.core.binding_key import load_or_create_binding_key
 from pumpgrok.core.bot import BotManifest
 from pumpgrok.core.errors import NotYetImplemented, PumpgrokError
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
@@ -160,11 +165,12 @@ def build_gateway_registry(
     reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml", active_clock))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, active_clock))
     reg.register(build_event_emit_tool(store, active_clock, data_dir / "journal"))
+    binding_key = load_or_create_binding_key(data_dir)
     reg.register(
         build_doctor_tool(
             Settings(mode="paper"),
             data_dir / "bindings",
-            os.urandom(32),
+            binding_key,
             active_clock,
         )
     )
@@ -202,6 +208,9 @@ def _error_result(code: str, message: str) -> dict[str, Any]:
 
 HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
+
+_MAX_BODY_BYTES = 1 << 20  # 1 MiB; tool arguments are small JSON
+_CONTENT_LENGTH_RE = re.compile(r"[0-9]+")
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -275,6 +284,16 @@ class _Handler(BaseHTTPRequestHandler):
             }
         }
 
+    def _declared_length(self) -> int | None:
+        """Return the single declared body length, or None when it is malformed."""
+        values = self.headers.get_all("Content-Length")
+        if not values:
+            return 0
+        value = values[0].strip()
+        if len(values) != 1 or _CONTENT_LENGTH_RE.fullmatch(value) is None:
+            return None
+        return int(value)
+
     def do_POST(self) -> None:
         state = self.server.gateway_state  # type: ignore[attr-defined]
         short = _short_from_path(self.path)
@@ -283,13 +302,37 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": {"code": "unknown_seat", "message": "unknown seat"}})
             log.info("seat=%s status=%s", short, 404)
             return
-        length = int(self.headers.get("Content-Length") or 0)
-        raw = self.rfile.read(length) if length > 0 else b""
         denied = self._authenticate(short, state["tokens"])
         if denied is not None:
             self._send_json(denied, self._auth_error_body(denied))
             log.info("seat=%s status=%s", short, denied)
             return
+        length = self._declared_length()
+        if length is None:
+            self._send_json(
+                400,
+                {
+                    "error": {
+                        "code": "bad_length",
+                        "message": "Content-Length must be a non-negative integer",
+                    }
+                },
+            )
+            log.info("seat=%s status=%s", short, 400)
+            return
+        if length > _MAX_BODY_BYTES:
+            self._send_json(
+                413,
+                {
+                    "error": {
+                        "code": "body_too_large",
+                        "message": f"body exceeds {_MAX_BODY_BYTES} bytes",
+                    }
+                },
+            )
+            log.info("seat=%s status=%s", short, 413)
+            return
+        raw = self.rfile.read(length) if length > 0 else b""
         self._handle_rpc(state, short, seat_id, raw)
 
     def _handle_rpc(

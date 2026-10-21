@@ -11,7 +11,6 @@ catalog over the same root for operator verbs (TOOL-011).
 
 from __future__ import annotations
 
-import os
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.core.binding_key import load_or_create_binding_key
 from pumpgrok.core.errors import NotYetImplemented
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.manifests import load_bot_manifests
@@ -194,7 +194,8 @@ def _register_desk(
     reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml", clock))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, clock))
     reg.register(build_event_emit_tool(store, clock, data_dir / "journal"))
-    reg.register(build_doctor_tool(settings, data_dir / "bindings", os.urandom(32), clock))
+    binding_key = load_or_create_binding_key(data_dir)
+    reg.register(build_doctor_tool(settings, data_dir / "bindings", binding_key, clock))
 
 
 def build_operator_registry(
