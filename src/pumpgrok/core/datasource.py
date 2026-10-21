@@ -47,7 +47,7 @@ class DataSource(Protocol):
     `Freshness.stale == True` or raises DataStale when no cache exists.
     """
 
-    name: str  # 'pumpfun_rest' | 'pumpportal_ws' | 'jupiter_lite' | 'solana_rpc' | 'xai_grok'
+    name: str  # 'pumpfun_rest' | 'pumpportal_ws' | 'jupiter' | 'solana_rpc' | 'xai_grok'
     rate_limit_key: str
 
     async def fetch(

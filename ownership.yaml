@@ -290,7 +290,7 @@ ownership:
   - pattern: "src/pumpgrok/tools/onchain/**"
     owner: bot-05-rug
   - pattern: "src/pumpgrok/tools/onchain/holders.py"
-    owner: bot-03-whale
+    owner: bot-05-rug # R35: top_holders is a RUG grant (transfers stay WHALE)
   - pattern: "src/pumpgrok/tools/onchain/transfers.py"
     owner: bot-03-whale
   - pattern: "src/pumpgrok/tools/safety/**"
@@ -392,6 +392,15 @@ ownership:
     owner: bot-02-risk
   - pattern: "tests/characterization/ledger/**"
     owner: bot-02-risk
+  # STRUCT-002 flat files: last match wins, each follows its module owner (R36).
+  - pattern: "tests/characterization/test_authority_check.py"
+    owner: bot-05-rug
+  - pattern: "tests/characterization/test_holder_check.py"
+    owner: bot-05-rug
+  - pattern: "tests/characterization/test_priority_fee.py"
+    owner: bot-05-rug
+  - pattern: "tests/characterization/test_jupiter_quote.py"
+    owner: bot-01-scout
 
   # --- Receipts: one rule per seat ----------------------------------------
   - pattern: ".receipts/bot-00-chief/**"
