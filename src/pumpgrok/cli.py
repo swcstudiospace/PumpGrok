@@ -28,7 +28,7 @@ import os
 import re
 import sys
 from collections.abc import Sequence
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, NoReturn, TextIO
 
@@ -392,7 +392,7 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
         return refused
     lamports = size_sol_to_lamports(args.size_sol)
     if lamports > settings.risk.paper_equity_lamports:
-        _say(sys.stderr, f"usage error: --size-sol exceeds paper equity")
+        _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
         return EXIT_CONFIG
     log.info(
         "absent paper verb",

@@ -21,13 +21,12 @@ Deliberate divergences from the oracle:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import logging
 import statistics
 from collections.abc import Callable
-from typing import Any, TypeVar
-
-_T = TypeVar("_T")
+from typing import Any
 
 import httpx
 
@@ -150,7 +149,7 @@ class Analyzer:
 # --------------------------------------------------------------------------
 
 
-def _safe_parse(parse: Callable[[dict[str, Any]], _T], raw: dict[str, Any]) -> _T | None:
+def _safe_parse[T](parse: Callable[[dict[str, Any]], T], raw: dict[str, Any]) -> T | None:
     """One poisoned row degrades to a skip, never to a lost analysis."""
     try:
         return parse(raw)
@@ -201,15 +200,11 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
     token.website = token.website or info.get("website")
     token.creator = token.creator or info.get("creator")
     if info.get("market_cap") is not None:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             token.market_cap_sol = float(info["market_cap"])
-        except (ValueError, TypeError):
-            pass
     if info.get("virtual_sol_reserves") is not None:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             token.sol_in_curve = float(info["virtual_sol_reserves"]) / 1e9
-        except (ValueError, TypeError):
-            pass
     return token
 
 

@@ -76,7 +76,7 @@ class SeenSet:
 def _coerce_float(value: Any, default: float) -> float:
     """Best-effort float for untrusted socket fields. Default on garbage."""
     try:
-        return float(value)  # type: ignore[arg-type]
+        return float(value)
     except (TypeError, ValueError):
         return default
 
