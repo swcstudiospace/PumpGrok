@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""CLI contracts for PumpGrok tools. Stdlib unittest; no network."""
+"""CLI contracts for PumpGrok tools. unittest + pytest; no network."""
 
 from __future__ import annotations
 
 import importlib.util
 import io
 import json
+import logging
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from collections.abc import Iterator
 from pathlib import Path
 from unittest import mock
 
+import pytest
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 
@@ -198,6 +200,124 @@ class TicketHelperDocs(unittest.TestCase):
         text = (TOOLS / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("ticket_helper.py --write", text)
         self.assertIn("ticket_helper.py next", text)
+
+
+_TRADE_TICKET = "SOL-20260101-001"
+_TRADE_MINT = "So11111111111111111111111111111111111111112"
+_TRADE_APPROVAL = "apr-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+
+def _trade_flags(
+    seat: str, side: str = "buy", approval: str | None = _TRADE_APPROVAL
+) -> list[str]:
+    flags = [
+        "paper",
+        side,
+        "--ticket",
+        _TRADE_TICKET,
+        "--mint",
+        _TRADE_MINT,
+        "--size-sol",
+        "0.5",
+        "--slippage-bps",
+        "100",
+    ]
+    if approval is not None:
+        flags += ["--approval-id", approval]
+    return flags + ["--seat", seat]
+
+
+@pytest.fixture(autouse=True)
+def _03_07_clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip PUMPGROK_* and secret-shaped names so CLI tests set what they need."""
+    for name in list(os.environ):
+        if name.startswith("PUMPGROK_") or any(
+            frag in name.lower()
+            for frag in ("secret", "password", "token", "api_key", "auth", "credential")
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _03_07_root_handlers() -> Iterator[None]:
+    """main() installs a handler bound to the test's stderr; remove it afterwards."""
+    root = logging.getLogger()
+    level = root.level
+    yield None
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+        try:
+            handler.close()
+        except Exception:  # pragma: no cover - best effort cleanup
+            pass
+    root.setLevel(level)
+
+
+class TestPaperRegistryPath:
+    """Task 1 tracer: paper buy/sell resolve through the registry (TOOL-011, R63)."""
+
+    @pytest.mark.parametrize("side", ["buy", "sell"])
+    def test_paper_operator_seat_refused_by_registry_as_json(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        side: str,
+    ) -> None:
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        code = main(_trade_flags("desk", side=side))
+        assert code == 1
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["ok"] is False
+        assert payload["code"] == "permission_denied"
+        assert "Traceback" not in captured.err
+
+    @pytest.mark.parametrize("side", ["buy", "sell"])
+    def test_paper_writer_seat_reaches_approval_gate(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        side: str,
+    ) -> None:
+        # bot-04-sniper holds exec.place, so find() succeeds and the unknown
+        # approval_id fails closed with exit 1 (R63: the approval record is
+        # the control, not the --seat string filter).
+        from pumpgrok.cli import main
+
+        monkeypatch.chdir(tmp_path)
+        code = main(_trade_flags("bot-04-sniper", side=side))
+        assert code == 1
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["ok"] is False
+        assert payload["code"] == "approval_unknown"
+        assert "no valid approval_id" in captured.err
+
+    def test_paper_rejections_write_no_order_placed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pumpgrok.cli import main
+        from pumpgrok.ledger.store import LedgerStore
+
+        monkeypatch.chdir(tmp_path)
+        for seat in ("desk", "bot-04-sniper", "sniper", "exit"):
+            assert main(_trade_flags(seat)) == 1
+        store_path = tmp_path / "var" / "desk" / "ledger.sqlite"
+        if store_path.is_file():
+            store = LedgerStore(str(store_path))
+            try:
+                rows = [
+                    event
+                    for event in store.read(limit=10000)
+                    if event["type"] == "OrderPlaced"
+                ]
+            finally:
+                store.close()
+            assert rows == []
 
 
 if __name__ == "__main__":

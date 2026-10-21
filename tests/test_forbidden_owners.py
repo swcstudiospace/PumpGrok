@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -87,13 +87,16 @@ def test_forbidden_seats_refused_on_state(
 def test_allowed_seat_rejected_without_valid_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Phase 3 (R63, plan 03-04): the desk seat reaches the verb, but no
-    # approval_id can be valid yet (RiskEngine plus the PaperAdapter place
-    # transaction land in Phase 4), so the trade is refused with exit 1
-    # instead of the old absent-verb exit 5. No OrderPlaced row is written.
+    # Phase 3 plan 03-07 (TOOL-011, R63): the desk seat resolves through the
+    # registry, where the chief manifest holds no exec.simulate grant, so the
+    # trade is refused with a JSON permission_denied envelope and exit 1.
+    # No OrderPlaced row is written.
     code = _paper_verb(tmp_path, monkeypatch, "buy", "desk")
     assert code == EXIT_CONFIG
-    assert "no valid approval_id" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["code"] == "permission_denied"
 
 
 def test_bad_ticket_is_usage_error(
