@@ -114,7 +114,9 @@ def _registry(audits: list[GrantAudit], clock: _Clock) -> ToolRegistry:
     return reg
 
 
-def _bot(bot_id: str, grants: list[ToolGrant]) -> BotManifest:
+def _bot(
+    bot_id: str, grants: list[ToolGrant], writes_to_exchange: bool = False
+) -> BotManifest:
     return BotManifest(
         id=bot_id,
         display=bot_id,
@@ -132,6 +134,7 @@ def _bot(bot_id: str, grants: list[ToolGrant]) -> BotManifest:
         owned_paths=[],
         receipts_dir="var/receipts",
         prompt_source="test",
+        writes_to_exchange=writes_to_exchange,
     )
 
 
@@ -155,6 +158,7 @@ def test_find_live_write_raises_for_every_caller_and_audits() -> None:
                 ToolGrant(name="market.price", side_effect=SideEffect.READ),
                 ToolGrant(name="exec.live_place", side_effect=SideEffect.PAPER_WRITE),
             ],
+            writes_to_exchange=True,
         ),
     ]
     for bot in readers:
