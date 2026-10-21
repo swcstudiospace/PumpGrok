@@ -91,6 +91,41 @@
       "default": "",
       "title": "Venue Tx Ref",
       "type": "string"
+    },
+    "curve_before_s": {
+      "default": 0,
+      "description": "S0 decision reserves, lamports",
+      "title": "Curve Before S",
+      "type": "integer"
+    },
+    "curve_before_t": {
+      "default": 0,
+      "description": "T0 decision reserves, token units",
+      "title": "Curve Before T",
+      "type": "integer"
+    },
+    "curve_after_s": {
+      "default": 0,
+      "description": "S1 CONFIRMING reserves, lamports",
+      "title": "Curve After S",
+      "type": "integer"
+    },
+    "curve_after_t": {
+      "default": 0,
+      "description": "T1 CONFIRMING reserves, token units",
+      "title": "Curve After T",
+      "type": "integer"
+    },
+    "route": {
+      "default": "curve",
+      "description": "fill basis; always curve (R38)",
+      "title": "Route",
+      "type": "string"
+    },
+    "realised_slippage_bps": {
+      "default": 0,
+      "title": "Realised Slippage Bps",
+      "type": "integer"
     }
   },
   "required": [

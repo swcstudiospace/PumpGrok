@@ -38,6 +38,24 @@
       "default": 0,
       "title": "Fees Lamports",
       "type": "integer"
+    },
+    "quote_out": {
+      "default": 0,
+      "description": "decision-time expected out units",
+      "title": "Quote Out",
+      "type": "integer"
+    },
+    "other_amount_threshold": {
+      "default": 0,
+      "description": "minimum acceptable out units",
+      "title": "Other Amount Threshold",
+      "type": "integer"
+    },
+    "confirm_out": {
+      "default": 0,
+      "description": "CONFIRMING-time recomputed out units",
+      "title": "Confirm Out",
+      "type": "integer"
     }
   },
   "required": [

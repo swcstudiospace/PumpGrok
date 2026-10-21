@@ -113,6 +113,9 @@ class OrderRejected(_ClosedModel):
     detail: str
     stage: str = Field(description="ACCEPTED | CONFIRMING")
     fees_lamports: MoneyInt = 0
+    quote_out: MoneyInt = Field(default=0, description="decision-time expected out units")
+    other_amount_threshold: MoneyInt = Field(default=0, description="minimum acceptable out units")
+    confirm_out: MoneyInt = Field(default=0, description="CONFIRMING-time recomputed out units")
 
 
 class FillRecorded(_ClosedModel):
@@ -132,6 +135,12 @@ class FillRecorded(_ClosedModel):
     cash_delta_lamports: MoneyInt = 0
     latency_s: PriceDecimal = Decimal("0")
     venue_tx_ref: str = ""
+    curve_before_s: MoneyInt = Field(default=0, description="S0 decision reserves, lamports")
+    curve_before_t: MoneyInt = Field(default=0, description="T0 decision reserves, token units")
+    curve_after_s: MoneyInt = Field(default=0, description="S1 CONFIRMING reserves, lamports")
+    curve_after_t: MoneyInt = Field(default=0, description="T1 CONFIRMING reserves, token units")
+    route: str = Field(default="curve", description="fill basis; always curve (R38)")
+    realised_slippage_bps: MoneyInt = 0
 
 
 class PositionOpened(_ClosedModel):

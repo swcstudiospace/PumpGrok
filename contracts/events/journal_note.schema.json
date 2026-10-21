@@ -19,7 +19,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Seat journal entry; the skip cycle uses seat=desk, note_kind=note.",
+  "description": "Seat journal entry; the replay cycle uses seat=desk, note_kind=verdict.",
   "properties": {
     "source": {
       "enum": [

@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import struct
 from decimal import Decimal
+from typing import Final
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,6 +26,13 @@ from pumpgrok.tools._common import (
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
+
+#: Bonding-curve layout verification state (R65). ASSUMED until a live probe
+#: against mainnet bonding-curve accounts decodes under this layout and a
+#: human reviews the probe record in tests/fixtures/rpc/bonding_curve/.
+#: While ASSUMED, no paper entry may consume an RPC-derived price: the
+#: PaperAdapter refuses with data_unavailable (fail closed).
+LAYOUT_STATUS: Final[str] = "ASSUMED"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
 #: 85 SOL, ``vendor/grokbot-pumpfun/src/monitor.py:30``). [ASSUMED] threshold.
@@ -143,3 +151,14 @@ def curve_market_cap_lamports(state: CurveState) -> int:
     return (
         state.virtual_sol_reserves_lamports * state.total_supply_units
     ) // state.virtual_token_reserves_units
+
+
+def rpc_curve_price_allowed(*, curve_source: str) -> bool:
+    """True when a price from ``curve_source`` may price a paper entry.
+
+    RPC-derived reserves are untrusted bytes until the layout is VERIFIED
+    (T-04-08): while ``LAYOUT_STATUS`` is ASSUMED they fail closed with
+    ``data_unavailable`` at the entry gate. Fixture, rest and pumpportal
+    integer ticks never pass through this layout, so replay is unaffected.
+    """
+    return not (curve_source == "rpc" and LAYOUT_STATUS != "VERIFIED")
