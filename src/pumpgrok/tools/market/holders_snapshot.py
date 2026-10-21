@@ -90,6 +90,7 @@ async def run_holders_snapshot(inp: HoldersSnapshotIn, rpc: RpcClient) -> dict[s
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return HoldersSnapshotOut.model_validate(out).model_dump()

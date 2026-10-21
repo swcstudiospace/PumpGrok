@@ -101,10 +101,12 @@ async def run_kill_switch(
                 "set_by": "risk.kill_switch",
             },
         )
-    return _status(store, killswitch_path, correlation)
+    return _status(store, killswitch_path, correlation, clock)
 
 
-def _status(store: LedgerStore, killswitch_path: Path | None, correlation: str) -> dict[str, Any]:
+def _status(
+    store: LedgerStore, killswitch_path: Path | None, correlation: str, clock: Clock
+) -> dict[str, Any]:
     """Fold env, file and ledger causes into one view."""
     env_set = os.environ.get("PUMPGROK_KILLSWITCH", "").strip() == "1"
     file_set = killswitch_path is not None and killswitch_path.is_file()
@@ -138,7 +140,7 @@ def _status(store: LedgerStore, killswitch_path: Path | None, correlation: str) 
             "source": source,
             "flatten_requested": flatten_requested,
             "reason": reason,
-            "meta": meta_now("killswitch", correlation),
+            "meta": meta_now("killswitch", correlation, clock),
         }
     ).model_dump()
 

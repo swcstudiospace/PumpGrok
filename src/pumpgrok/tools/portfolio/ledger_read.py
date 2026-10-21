@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
@@ -53,7 +53,7 @@ LEDGER_READ_SPEC = ToolSpec(
 )
 
 
-async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore) -> dict[str, Any]:
+async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
     """Filter events and fetch the latest snapshot (read-only, no locks)."""
     ambient = ambient_correlation()
     events = store.read(
@@ -67,16 +67,18 @@ async def run_ledger_read(inp: LedgerReadIn, store: LedgerStore) -> dict[str, An
         {
             "events": events,
             "latest_snapshot": store.latest_snapshot(),
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_ledger_read_tool(store: LedgerStore) -> Tool:
-    """Bind ``portfolio.ledger_read`` to one store (no globals)."""
+def build_ledger_read_tool(store: LedgerStore, clock: Clock) -> Tool:
+    """Bind ``portfolio.ledger_read`` to one store and clock (no globals)."""
 
     @tool(LEDGER_READ_SPEC)
     async def _ledger_read(payload: LedgerReadIn) -> dict[str, Any]:
-        return await run_ledger_read(payload, store)
+        return await run_ledger_read(payload, store, clock)
 
     return _ledger_read

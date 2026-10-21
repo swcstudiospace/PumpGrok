@@ -153,7 +153,7 @@ async def run_journal_append(
         {
             "seq": seq,
             "journal_path": str(journal_path),
-            "meta": meta_now("ledger", correlation),
+            "meta": meta_now("ledger", correlation, clock),
         }
     ).model_dump()
 

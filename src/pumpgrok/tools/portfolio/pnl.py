@@ -111,8 +111,9 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
             "trades": trades,
             "closed_trades": closed,
             "win_rate": (Decimal(wins) / Decimal(closed) if closed else None),
-            "profit_factor": (Decimal(gross_profit) / Decimal(gross_loss) if gross_loss else None),
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

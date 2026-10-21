@@ -102,7 +102,9 @@ async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dic
                 {"mint": mint, "exposure_lamports": lamports}
                 for mint, lamports in sorted(per_token.items())
             ],
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

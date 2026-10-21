@@ -137,6 +137,7 @@ class bind_correlation:
             _span_counter.reset(self._span_token)
         _correlation.reset(self._token)
 
+
 _calling_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "pumpgrok_calling_seat", default=None
 )

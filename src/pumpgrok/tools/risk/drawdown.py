@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
@@ -59,7 +59,9 @@ DRAWDOWN_SPEC = ToolSpec(
 )
 
 
-async def run_drawdown(inp: DrawdownIn, store: LedgerStore, budget: RiskBudget) -> dict[str, Any]:
+async def run_drawdown(
+    inp: DrawdownIn, store: LedgerStore, budget: RiskBudget, clock: Clock
+) -> dict[str, Any]:
     """Scan snapshots in the window; empty history yields zeros."""
     snapshots = store.read_snapshots()
     equities = [int(s["state"].get("equity_lamports", 0)) for s in snapshots]
@@ -75,16 +77,18 @@ async def run_drawdown(inp: DrawdownIn, store: LedgerStore, budget: RiskBudget) 
             "drawdown_fraction": drawdown,
             "loss_velocity_lamports_per_h": loss_velocity,
             "halted": drawdown >= budget.drawdown_halt_fraction,
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_drawdown_tool(store: LedgerStore, budget: RiskBudget) -> Tool:
-    """Bind ``risk.drawdown`` to one store and budget (no globals)."""
+def build_drawdown_tool(store: LedgerStore, budget: RiskBudget, clock: Clock) -> Tool:
+    """Bind ``risk.drawdown`` to one store, budget and clock (no globals)."""
 
     @tool(DRAWDOWN_SPEC)
     async def _drawdown(payload: DrawdownIn) -> dict[str, Any]:
-        return await run_drawdown(payload, store, budget)
+        return await run_drawdown(payload, store, budget, clock)
 
     return _drawdown

@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import Field
 
 from pumpgrok.core.adapter import ExecutionAdapter
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import MintStr, meta_now
@@ -56,7 +56,9 @@ POSITIONS_SPEC = ToolSpec(
 )
 
 
-async def run_positions(inp: PositionsIn, adapter: ExecutionAdapter) -> dict[str, Any]:
+async def run_positions(
+    inp: PositionsIn, adapter: ExecutionAdapter, clock: Clock
+) -> dict[str, Any]:
     """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
     positions = await adapter.positions(inp.mint)
     ambient = ambient_correlation()
@@ -72,16 +74,18 @@ async def run_positions(inp: PositionsIn, adapter: ExecutionAdapter) -> dict[str
     return PositionsOut.model_validate(
         {
             "positions": rows,
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_positions_tool(adapter: ExecutionAdapter) -> Tool:
-    """Bind ``exec.positions`` to one adapter (no globals)."""
+def build_positions_tool(adapter: ExecutionAdapter, clock: Clock) -> Tool:
+    """Bind ``exec.positions`` to one adapter and clock (no globals)."""
 
     @tool(POSITIONS_SPEC)
     async def _positions(payload: PositionsIn) -> dict[str, Any]:
-        return await run_positions(payload, adapter)
+        return await run_positions(payload, adapter, clock)
 
     return _positions

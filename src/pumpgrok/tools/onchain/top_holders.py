@@ -117,6 +117,7 @@ async def run_top_holders(inp: TopHoldersIn, rpc: RpcClient) -> dict[str, Any]:
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return TopHoldersOut.model_validate(out).model_dump()

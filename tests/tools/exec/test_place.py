@@ -22,6 +22,7 @@ from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.exec.place import PLACE_SPEC, PlaceIn, build_place_tool
 
 MINT = "So11111111111111111111111111111111111111112"
@@ -88,7 +89,7 @@ def test_bad_approval_id_rejected_fail_closed() -> None:
 
 async def test_exit_buy_refused_with_seat_may_trade_before_adapter() -> None:
     adapter = _CountingAdapter()
-    tool = build_place_tool(adapter, lambda: EXIT_BUDGET)
+    tool = build_place_tool(adapter, lambda: EXIT_BUDGET, FixtureClock(start=1469918176.385))
     out = await tool(PlaceIn.model_validate(_buy()))
     assert out.status == "rejected"
     assert out.reason == "seat_may_trade"
@@ -97,7 +98,7 @@ async def test_exit_buy_refused_with_seat_may_trade_before_adapter() -> None:
 
 async def test_valid_shape_reaches_adapter_and_surfaces_not_yet_implemented() -> None:
     adapter = _CountingAdapter()
-    tool = build_place_tool(adapter, lambda: SNIPER_BUDGET)
+    tool = build_place_tool(adapter, lambda: SNIPER_BUDGET, FixtureClock(start=1469918176.385))
     with pytest.raises(NotYetImplemented) as excinfo:
         await tool(PlaceIn.model_validate(_buy()))
     assert excinfo.value.code == "not_yet_implemented"
@@ -106,7 +107,7 @@ async def test_valid_shape_reaches_adapter_and_surfaces_not_yet_implemented() ->
 
 async def test_idempotency_key_covers_ticket_side_decision_only() -> None:
     adapter = _CountingAdapter()
-    tool = build_place_tool(adapter, lambda: EXIT_BUDGET)
+    tool = build_place_tool(adapter, lambda: EXIT_BUDGET, FixtureClock(start=1469918176.385))
     out = await tool(PlaceIn.model_validate(_buy()))
     assert out.idempotency_key == exec_place_key(TICKET, "buy", DECISION)
     # A new decision is a new order (R23); tool/bot never enter the key.

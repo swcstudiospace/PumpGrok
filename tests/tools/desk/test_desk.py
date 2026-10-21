@@ -15,7 +15,7 @@ from pumpgrok.config.settings import NotifySettings, Settings
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.doctor import doctor_report
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock, WallClock
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk._tokens import digest_compare, digest_token
 from pumpgrok.tools.desk.brief import BRIEF_SPEC, BriefIn, build_brief_tool
@@ -121,7 +121,7 @@ def test_digest_helpers() -> None:
 
 
 async def test_docs_search_finds_catalog_chunk() -> None:
-    tool = build_docs_search_tool(REPO_ROOT)
+    tool = build_docs_search_tool(REPO_ROOT, FixtureClock(start=START))
     out = await tool(DocsSearchIn(query="TOOL_CATALOG", limit=5))
     assert out.chunks, "search over a non-empty tree must hit"
     assert {"path", "line", "text"} <= set(out.chunks[0])
@@ -129,13 +129,14 @@ async def test_docs_search_finds_catalog_chunk() -> None:
 
 async def test_memory_retain_recall_round_trip(tmp_path: Path) -> None:
     bank = _bank(tmp_path)
-    retain = build_memory_retain_tool(bank)
+    clock = FixtureClock(start=START)
+    retain = build_memory_retain_tool(bank, clock)
     with pytest.raises(ValidationError):
         MemoryRetainIn(content="no provenance")
     first = await retain(MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json"))
     again = await retain(MemoryRetainIn(content="exit rule verified", receipt_path="r/1.json"))
     assert first.id == again.id
-    recall = build_memory_recall_tool(bank)
+    recall = build_memory_recall_tool(bank, clock)
     out = await recall(MemoryRecallIn(query="exit rule"))
     assert len(out.items) == 1 and out.items[0]["content"] == "exit rule verified"
     assert bank.path.is_file()
@@ -144,7 +145,7 @@ async def test_memory_retain_recall_round_trip(tmp_path: Path) -> None:
 
 
 async def test_ownership_last_match_wins() -> None:
-    tool = build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml")
+    tool = build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml", FixtureClock(start=START))
     out = await tool(
         OwnershipResolveIn(
             paths=["docs/desk-operating-model.md", "contracts/tool-rosters/bot-02-risk.yaml"]
@@ -159,7 +160,9 @@ async def test_ownership_last_match_wins() -> None:
 
 
 async def test_receipt_check_reports_gate_rows() -> None:
-    tool = build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, WallClock())
+    tool = build_receipt_check_tool(
+        REPO_ROOT / "ci" / "gates", REPO_ROOT, FixtureClock(start=START)
+    )
     with pytest.raises(ValidationError):
         ReceiptCheckIn(bot="not-a-seat", receipt={})
     out = await tool(ReceiptCheckIn(bot="bot-04-sniper", receipt={"commands": []}, strict=False))
@@ -206,7 +209,9 @@ async def test_event_emit_scrubs_and_caps(tmp_path: Path) -> None:
 
 async def test_doctor_check_shares_cli_path(tmp_path: Path) -> None:
     settings = Settings(mode="paper")
-    tool = build_doctor_tool(settings, tmp_path / "bindings", b"test-key")
+    tool = build_doctor_tool(
+        settings, tmp_path / "bindings", b"test-key", FixtureClock(start=START)
+    )
     out = await tool(DoctorIn(action="check"))
     assert out.ok is True
     rows = {r["check"]: r for r in out.rows}
@@ -217,20 +222,27 @@ async def test_doctor_check_shares_cli_path(tmp_path: Path) -> None:
 
 async def test_doctor_register_and_fail_closed_prompt(tmp_path: Path) -> None:
     settings = Settings(mode="paper")
-    tool = build_doctor_tool(settings, tmp_path / "bindings", b"test-key")
+    tool = build_doctor_tool(
+        settings, tmp_path / "bindings", b"test-key", FixtureClock(start=START)
+    )
     first = await tool(DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1"))
     assert first.ok is True
     again = await tool(DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1"))
     assert again.ok is True
-    other = build_doctor_tool(settings, tmp_path / "bindings", b"other-key")
+    other = build_doctor_tool(
+        settings, tmp_path / "bindings", b"other-key", FixtureClock(start=START)
+    )
     mismatch = await other(DoctorIn(action="register", agent_uuid="a-1", channel_id="c-1"))
     assert mismatch.ok is False
     prompt = await tool(DoctorIn(action="install_prompt"))
     assert prompt.ok is False and "Phase 4" in prompt.rows[0]["detail"]
 
+
 async def test_doctor_register_rejects_traversal(tmp_path: Path) -> None:
     settings = Settings(mode="paper")
-    tool = build_doctor_tool(settings, tmp_path / "bindings", b"test-key")
+    tool = build_doctor_tool(
+        settings, tmp_path / "bindings", b"test-key", FixtureClock(start=START)
+    )
     for bad in ("../evil", "a/b", "x" * 65, ""):
         out = await tool(DoctorIn(action="register", agent_uuid=bad, channel_id="c-1"))
         assert out.ok is False

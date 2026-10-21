@@ -138,15 +138,19 @@ def register_read_tools(registry: ToolRegistry, rpc: RpcClient) -> ToolRegistry:
 
 
 def _register_trading(
-    reg: ToolRegistry, rpc: RpcClient, adapter: NotYetImplementedAdapter, budget: RiskBudget
+    reg: ToolRegistry,
+    rpc: RpcClient,
+    adapter: NotYetImplementedAdapter,
+    budget: RiskBudget,
+    clock: Clock,
 ) -> None:
     """Scoring, quote/simulate/place/cancel and position tools (refusing adapter)."""
     reg.register(build_score_report_tool(rpc))
-    reg.register(build_quote_tool(adapter))
+    reg.register(build_quote_tool(adapter, clock))
     reg.register(build_simulate_tool())
-    reg.register(build_place_tool(adapter, lambda: budget))
+    reg.register(build_place_tool(adapter, lambda: budget, clock))
     reg.register(build_cancel_tool())
-    reg.register(build_positions_tool(adapter))
+    reg.register(build_positions_tool(adapter, clock))
 
 
 def _register_ledger_and_risk(
@@ -154,13 +158,13 @@ def _register_ledger_and_risk(
 ) -> None:
     """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
     kill_switch_file = data_dir / "KILLSWITCH"
-    reg.register(build_ledger_read_tool(store))
+    reg.register(build_ledger_read_tool(store, clock))
     reg.register(build_ledger_write_tool(store, clock))
     reg.register(build_exposure_tool(store, clock))
     reg.register(build_pnl_tool(store, clock))
-    reg.register(build_check_limits_tool(store, budget))
-    reg.register(build_drawdown_tool(store, budget))
-    reg.register(build_halt_status_tool(store, kill_switch_file, "paper"))
+    reg.register(build_check_limits_tool(store, budget, clock))
+    reg.register(build_drawdown_tool(store, budget, clock))
+    reg.register(build_halt_status_tool(store, kill_switch_file, clock, "paper"))
     reg.register(build_kill_switch_tool(store, clock, kill_switch_file))
     reg.register(build_journal_append_tool(store, clock, data_dir / "journal"))
     reg.register(build_render_report_tool(store, clock, data_dir / "reports"))
@@ -184,13 +188,13 @@ def _register_desk(
         )
     )
     reg.register(build_brief_tool(store, bank, clock, None, "paper"))
-    reg.register(build_docs_search_tool(repo_root))
-    reg.register(build_memory_retain_tool(bank))
-    reg.register(build_memory_recall_tool(bank))
-    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
+    reg.register(build_docs_search_tool(repo_root, clock))
+    reg.register(build_memory_retain_tool(bank, clock))
+    reg.register(build_memory_recall_tool(bank, clock))
+    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml", clock))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, clock))
     reg.register(build_event_emit_tool(store, clock, data_dir / "journal"))
-    reg.register(build_doctor_tool(settings, data_dir / "bindings", os.urandom(32)))
+    reg.register(build_doctor_tool(settings, data_dir / "bindings", os.urandom(32), clock))
 
 
 def build_operator_registry(
@@ -221,7 +225,7 @@ def build_operator_registry(
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
-    _register_trading(reg, rpc, adapter, budget)
+    _register_trading(reg, rpc, adapter, budget, active_clock)
     _register_ledger_and_risk(reg, store, active_clock, data_dir, budget)
     _register_desk(
         reg,

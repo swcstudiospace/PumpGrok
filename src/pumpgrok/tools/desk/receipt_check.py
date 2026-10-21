@@ -173,7 +173,9 @@ async def run_receipt_check(
     return ReceiptCheckOut.model_validate(
         {
             "gates": gates,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

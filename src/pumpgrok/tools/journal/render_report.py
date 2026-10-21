@@ -156,7 +156,9 @@ async def run_render_report(
         {
             "report_path": str(target),
             "summary": summary,
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

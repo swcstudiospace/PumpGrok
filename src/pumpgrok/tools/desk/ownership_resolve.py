@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import meta_now
@@ -62,7 +62,9 @@ def _load_rules(manifest_path: Path) -> list[dict[str, Any]]:
     return [r for r in rules if isinstance(r, dict) and "pattern" in r and "owner" in r]
 
 
-async def run_ownership_resolve(inp: OwnershipResolveIn, manifest_path: Path) -> dict[str, Any]:
+async def run_ownership_resolve(
+    inp: OwnershipResolveIn, manifest_path: Path, clock: Clock
+) -> dict[str, Any]:
     """Resolve each path; last matching rule wins."""
     rules = _load_rules(manifest_path)
     resolved: list[dict[str, str | bool]] = []
@@ -87,16 +89,18 @@ async def run_ownership_resolve(inp: OwnershipResolveIn, manifest_path: Path) ->
         {
             "resolved": resolved,
             "unowned": unowned,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_ownership_resolve_tool(manifest_path: Path) -> Tool:
-    """Bind ``desk.ownership_resolve`` to one manifest path (no globals)."""
+def build_ownership_resolve_tool(manifest_path: Path, clock: Clock) -> Tool:
+    """Bind ``desk.ownership_resolve`` to one manifest path and clock."""
 
     @tool(OWNERSHIP_RESOLVE_SPEC)
     async def _ownership_resolve(payload: OwnershipResolveIn) -> dict[str, Any]:
-        return await run_ownership_resolve(payload, manifest_path)
+        return await run_ownership_resolve(payload, manifest_path, clock)
 
     return _ownership_resolve

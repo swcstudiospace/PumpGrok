@@ -87,6 +87,7 @@ async def run_token_metadata(inp: TokenMetadataIn, rpc: RpcClient) -> dict[str, 
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return TokenMetadataOut.model_validate(out).model_dump()

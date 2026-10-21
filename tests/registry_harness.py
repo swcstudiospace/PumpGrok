@@ -31,7 +31,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock, WallClock
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools import build_registry, register_read_tools
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
@@ -99,18 +99,18 @@ def build_full_registry(
 
     register_read_tools(reg, rpc)
     reg.register(build_score_report_tool(rpc))
-    reg.register(build_quote_tool(adapter))
+    reg.register(build_quote_tool(adapter, clock))
     reg.register(build_simulate_tool())
-    reg.register(build_place_tool(adapter, lambda: budget))
+    reg.register(build_place_tool(adapter, lambda: budget, clock))
     reg.register(build_cancel_tool())
-    reg.register(build_positions_tool(adapter))
-    reg.register(build_ledger_read_tool(store))
+    reg.register(build_positions_tool(adapter, clock))
+    reg.register(build_ledger_read_tool(store, clock))
     reg.register(build_ledger_write_tool(store, clock))
     reg.register(build_exposure_tool(store, clock))
     reg.register(build_pnl_tool(store, clock))
-    reg.register(build_check_limits_tool(store, budget))
-    reg.register(build_drawdown_tool(store, budget))
-    reg.register(build_halt_status_tool(store, tmp_path / "KILLSWITCH", "paper"))
+    reg.register(build_check_limits_tool(store, budget, clock))
+    reg.register(build_drawdown_tool(store, budget, clock))
+    reg.register(build_halt_status_tool(store, tmp_path / "KILLSWITCH", clock, "paper"))
     reg.register(build_kill_switch_tool(store, clock, tmp_path / "KILLSWITCH"))
     reg.register(build_journal_append_tool(store, clock, tmp_path / "journal"))
     reg.register(build_render_report_tool(store, clock, tmp_path / "reports"))
@@ -121,13 +121,15 @@ def build_full_registry(
         )
     )
     reg.register(build_brief_tool(store, bank, clock, None, "paper"))
-    reg.register(build_docs_search_tool(REPO_ROOT))
-    reg.register(build_memory_retain_tool(bank))
-    reg.register(build_memory_recall_tool(bank))
-    reg.register(build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml"))
-    reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, WallClock()))
+    reg.register(build_docs_search_tool(REPO_ROOT, clock))
+    reg.register(build_memory_retain_tool(bank, clock))
+    reg.register(build_memory_recall_tool(bank, clock))
+    reg.register(build_ownership_resolve_tool(REPO_ROOT / "ownership.yaml", clock))
+    reg.register(build_receipt_check_tool(REPO_ROOT / "ci" / "gates", REPO_ROOT, clock))
     reg.register(build_event_emit_tool(store, clock, tmp_path / "journal"))
-    reg.register(build_doctor_tool(Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key"))
+    reg.register(
+        build_doctor_tool(Settings(mode="paper"), tmp_path / "bindings", b"03-04-doc-key", clock)
+    )
 
     manifests = load_bot_manifests(ROSTERS_DIR)
     assert set(manifests) == set(EXPECTED_SEAT_IDS)

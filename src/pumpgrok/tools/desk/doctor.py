@@ -18,7 +18,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from pumpgrok.config.settings import Settings
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.doctor import doctor_report, subsystem_statuses
@@ -151,7 +151,7 @@ def _register_rows(
 
 
 async def run_doctor(
-    inp: DoctorIn, settings: Settings, bindings_dir: Path, binding_key: bytes
+    inp: DoctorIn, settings: Settings, bindings_dir: Path, binding_key: bytes, clock: Clock
 ) -> dict[str, Any]:
     """Dispatch check/register; prompt assembly fails closed (Phase 4)."""
     if inp.action == "check":
@@ -174,16 +174,20 @@ async def run_doctor(
         {
             "ok": ok,
             "rows": rows,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_doctor_tool(settings: Settings, bindings_dir: Path, binding_key: bytes) -> Tool:
-    """Bind ``desk.doctor`` to settings, a bindings dir and an HMAC key."""
+def build_doctor_tool(
+    settings: Settings, bindings_dir: Path, binding_key: bytes, clock: Clock
+) -> Tool:
+    """Bind ``desk.doctor`` to settings, a bindings dir, an HMAC key and a clock."""
 
     @tool(DOCTOR_SPEC)
     async def _doctor(payload: DoctorIn) -> dict[str, Any]:
-        return await run_doctor(payload, settings, bindings_dir, binding_key)
+        return await run_doctor(payload, settings, bindings_dir, binding_key, clock)
 
     return _doctor

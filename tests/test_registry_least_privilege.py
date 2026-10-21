@@ -134,7 +134,9 @@ async def test_exit_cannot_place_buy() -> None:
             return await super().place(request)
 
     adapter = _CountingAdapter()
-    exit_tool = build_place_tool(adapter, lambda: RiskBudget(**EXIT_BUDGET_KWARGS))
+    exit_tool = build_place_tool(
+        adapter, lambda: RiskBudget(**EXIT_BUDGET_KWARGS), FixtureClock(start=1469918176.385)
+    )
     out = await exit_tool(PlaceIn.model_validate(_buy()))
     assert out.status == "rejected"
     assert out.reason == "seat_may_trade"
@@ -253,9 +255,7 @@ async def test_journal_append_binds_calling_seat(tmp_path: Path) -> None:
     scout = manifests["bot-01-scout"]
     factory = IdFactory(FixtureClock(start=1469918176.385), random.Random(41))
     with bind_correlation(CorrelationId.new(factory)):
-        append = reg.find(
-            "journal.append", max_side_effect=SideEffect.PAPER_WRITE, bot=scout
-        )
+        append = reg.find("journal.append", max_side_effect=SideEffect.PAPER_WRITE, bot=scout)
         out = await append(
             JournalAppendIn(
                 kind="journal_note",
@@ -287,12 +287,15 @@ async def test_event_emit_uses_calling_seat_not_chief(tmp_path: Path) -> None:
     scout = manifests["bot-01-scout"]
     factory = IdFactory(FixtureClock(start=1469918176.385), random.Random(43))
     with bind_correlation(CorrelationId.new(factory)):
-        emit = reg.find(
-            "desk.event_emit", max_side_effect=SideEffect.PAPER_WRITE, bot=scout
-        )
+        emit = reg.find("desk.event_emit", max_side_effect=SideEffect.PAPER_WRITE, bot=scout)
         out = await emit(
-            EventEmitIn(kind="escalation", task_id="t-9", payload={"kind": "rug_alert"})
+            EventEmitIn(
+                kind="escalation",
+                task_id="t-9",
+                payload={"kind": "rug_alert", "detail": "seat check"},
+            )
         )
+        assert out.seq == 1
     files = list((tmp_path / "journal").glob("*.jsonl"))
     assert len(files) == 1
     payload = json.loads(files[0].read_text(encoding="utf-8").splitlines()[-1])["payload"]

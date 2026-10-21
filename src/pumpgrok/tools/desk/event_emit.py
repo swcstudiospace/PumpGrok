@@ -132,7 +132,9 @@ async def run_event_emit(
     return EventEmitOut.model_validate(
         {
             "seq": out["seq"],
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

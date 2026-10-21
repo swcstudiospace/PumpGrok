@@ -12,7 +12,7 @@ from typing import Any, Self
 
 from pydantic import Field, model_validator
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import meta_now
@@ -72,7 +72,7 @@ def memory_retain_key(bot: str, content: str) -> str:
     return hashlib.sha256(f"desk.memory_retain\n{bot}\n{digest}".encode()).hexdigest()[:32]
 
 
-async def run_memory_retain(inp: MemoryRetainIn, bank: MemoryBank) -> dict[str, Any]:
+async def run_memory_retain(inp: MemoryRetainIn, bank: MemoryBank, clock: Clock) -> dict[str, Any]:
     """Store the record (or replay the id for a duplicate key)."""
     bot = inp.task_id or "shared"
     key = memory_retain_key(bot, inp.content)
@@ -90,16 +90,18 @@ async def run_memory_retain(inp: MemoryRetainIn, bank: MemoryBank) -> dict[str, 
     return MemoryRetainOut.model_validate(
         {
             "id": record_id,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_memory_retain_tool(bank: MemoryBank) -> Tool:
-    """Bind ``desk.memory_retain`` to one bank (no globals)."""
+def build_memory_retain_tool(bank: MemoryBank, clock: Clock) -> Tool:
+    """Bind ``desk.memory_retain`` to one bank and clock (no globals)."""
 
     @tool(MEMORY_RETAIN_SPEC)
     async def _memory_retain(payload: MemoryRetainIn) -> dict[str, Any]:
-        return await run_memory_retain(payload, bank)
+        return await run_memory_retain(payload, bank, clock)
 
     return _memory_retain

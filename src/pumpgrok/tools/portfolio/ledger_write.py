@@ -88,7 +88,7 @@ async def run_ledger_write(inp: LedgerWriteIn, store: LedgerStore, clock: Clock)
                 "seq": existing["seq"],
                 "hash": existing["hash"],
                 "duplicate": True,
-                "meta": meta_now("ledger", correlation),
+                "meta": meta_now("ledger", correlation, clock),
             }
         ).model_dump()
     return LedgerWriteOut.model_validate(
@@ -96,7 +96,7 @@ async def run_ledger_write(inp: LedgerWriteIn, store: LedgerStore, clock: Clock)
             "seq": row["seq"],
             "hash": row["hash"],
             "duplicate": False,
-            "meta": meta_now("ledger", correlation),
+            "meta": meta_now("ledger", correlation, clock),
         }
     ).model_dump()
 

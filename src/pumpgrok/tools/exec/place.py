@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 
 from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
 from pumpgrok.core.idempotency import exec_place_key
-from pumpgrok.core.ids import ULID_RE, ambient_correlation
+from pumpgrok.core.ids import ULID_RE, Clock, ambient_correlation
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
@@ -100,6 +100,7 @@ async def run_place(
     inp: PlaceIn,
     adapter: ExecutionAdapter,
     get_budget: Callable[[], RiskBudget],
+    clock: Clock,
 ) -> dict[str, Any]:
     """Validate the B7 contract, then hand the order to the adapter.
 
@@ -119,7 +120,7 @@ async def run_place(
                 "idempotency_key": key,
                 "status": "rejected",
                 "reason": "seat_may_trade",
-                "meta": meta_now("exec", correlation),
+                "meta": meta_now("exec", correlation, clock),
             }
         ).model_dump()
     request = _request_of(inp)
@@ -133,16 +134,18 @@ async def run_place(
             "idempotency_key": key,
             "status": fill.status.value,
             "reason": fill.reason,
-            "meta": meta_now("exec", correlation),
+            "meta": meta_now("exec", correlation, clock),
         }
     ).model_dump()
 
 
-def build_place_tool(adapter: ExecutionAdapter, get_budget: Callable[[], RiskBudget]) -> Tool:
-    """Bind ``exec.place`` to one adapter and one budget provider (no globals)."""
+def build_place_tool(
+    adapter: ExecutionAdapter, get_budget: Callable[[], RiskBudget], clock: Clock
+) -> Tool:
+    """Bind ``exec.place`` to one adapter, one budget provider and a clock."""
 
     @tool(PLACE_SPEC)
     async def _place(payload: PlaceIn) -> dict[str, Any]:
-        return await run_place(payload, adapter, get_budget)
+        return await run_place(payload, adapter, get_budget, clock)
 
     return _place

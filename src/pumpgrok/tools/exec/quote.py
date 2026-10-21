@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import Field
 
 from pumpgrok.core.adapter import ExecutionAdapter
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import J4, MintStr, meta_now
@@ -66,23 +66,25 @@ QUOTE_SPEC = ToolSpec(
 )
 
 
-async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter) -> dict[str, Any]:
+async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter, clock: Clock) -> dict[str, Any]:
     """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
     quote = await adapter.quote(inp.input_mint, inp.output_mint, inp.amount, inp.slippage_bps)
     ambient = ambient_correlation()
     return QuoteOut.model_validate(
         {
             **quote.model_dump(mode="json"),
-            "meta": meta_now("jupiter", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "jupiter", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_quote_tool(adapter: ExecutionAdapter) -> Tool:
-    """Bind ``exec.quote`` to one adapter (no globals)."""
+def build_quote_tool(adapter: ExecutionAdapter, clock: Clock) -> Tool:
+    """Bind ``exec.quote`` to one adapter and clock (no globals)."""
 
     @tool(QUOTE_SPEC)
     async def _quote(payload: QuoteIn) -> dict[str, Any]:
-        return await run_quote(payload, adapter)
+        return await run_quote(payload, adapter, clock)
 
     return _quote

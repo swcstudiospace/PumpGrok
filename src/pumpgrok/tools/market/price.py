@@ -85,7 +85,9 @@ async def run_price(inp: PriceIn, rpc: RpcClient) -> dict[str, Any]:
         "graduated": state.complete,
         "context_slot": slot,
         "meta": meta_now(
-            SOLANA_RPC_SOURCE, inp.correlation_id or (str(ambient) if ambient else None)
+            SOLANA_RPC_SOURCE,
+            inp.correlation_id or (str(ambient) if ambient else None),
+            rpc.clock,
         ),
     }
     return PriceOut.model_validate(out).model_dump()

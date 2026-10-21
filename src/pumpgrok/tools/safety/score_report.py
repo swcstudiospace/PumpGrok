@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pumpgrok.config.settings import SafetyThresholds
 from pumpgrok.core.errors import DataStale
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import RetryPolicy, Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import SOLANA_RPC_SOURCE, MintStr, meta_now, utcnow
@@ -198,6 +198,7 @@ def _reader_row(
     check_id: CheckId,
     reading: dict[str, Any] | None,
     evaluate: Callable[[dict[str, Any]], CheckResult],
+    clock: Clock,
     *,
     weight: Decimal,
     blind_reason: str,
@@ -207,7 +208,7 @@ def _reader_row(
     if reading is None:
         return _blind(check_id, weight, blind_reason)
     evidence.append(
-        Evidence(check=check_id, source=SOLANA_RPC_SOURCE, slot=None, fetched_at=utcnow())
+        Evidence(check=check_id, source=SOLANA_RPC_SOURCE, slot=None, fetched_at=utcnow(clock))
     )
     return evaluate(reading)
 
@@ -218,6 +219,8 @@ def _reader_rows(
     readings: _Readings,
     active: SafetyThresholds,
     evidence: list[Evidence],
+    *,
+    clock: Clock,
 ) -> list[CheckResult]:
     """Rows for the data-backed checks, in the stable report order."""
     rows: list[CheckResult] = []
@@ -227,6 +230,7 @@ def _reader_rows(
                 "mint_authority",
                 readings.auth,
                 check_mint_authority,
+                clock,
                 weight=Decimal("0.15"),
                 blind_reason="mint authority unreadable",
                 evidence=evidence,
@@ -238,6 +242,7 @@ def _reader_rows(
                 "freeze_authority",
                 readings.auth,
                 check_freeze_authority,
+                clock,
                 weight=Decimal("0.15"),
                 blind_reason="freeze authority unreadable",
                 evidence=evidence,
@@ -249,6 +254,7 @@ def _reader_rows(
                 "lp_status",
                 readings.lp,
                 check_lp_status,
+                clock,
                 weight=Decimal("0.15"),
                 blind_reason="curve account unreadable",
                 evidence=evidence,
@@ -260,6 +266,7 @@ def _reader_rows(
                 "top10_concentration",
                 readings.top,
                 lambda top: check_top10_concentration(top, active),
+                clock,
                 weight=Decimal("0.15"),
                 blind_reason="holder sample unreadable",
                 evidence=evidence,
@@ -280,6 +287,7 @@ def _reader_rows(
                     "deployer_history",
                     readings.dep,
                     check_deployer_history,
+                    clock,
                     weight=Decimal("0.10"),
                     blind_reason="creator window unreadable",
                     evidence=evidence,
@@ -291,6 +299,7 @@ def _reader_rows(
                 "token2022_extensions",
                 readings.meta,
                 check_token2022_extensions,
+                clock,
                 weight=Decimal("0.05"),
                 blind_reason="mint metadata unreadable",
                 evidence=evidence,
@@ -302,6 +311,7 @@ def _reader_rows(
                 "liquidity_depth",
                 readings.liq,
                 lambda liq: check_liquidity_depth(liq, inp.intended_size_lamports, active),
+                clock,
                 weight=Decimal("0.15"),
                 blind_reason="liquidity unreadable",
                 evidence=evidence,
@@ -310,7 +320,7 @@ def _reader_rows(
     return rows
 
 
-def _advisory_rows(wanted: set[str], evidence: list[Evidence]) -> list[CheckResult]:
+def _advisory_rows(wanted: set[str], evidence: list[Evidence], clock: Clock) -> list[CheckResult]:
     """Advisory checks are blind by construction in Phase 3 and carry no weight."""
     rows: list[CheckResult] = []
     for check_id in CHECK_IDS:
@@ -326,7 +336,7 @@ def _advisory_rows(wanted: set[str], evidence: list[Evidence]) -> list[CheckResu
                 )
             )
             evidence.append(
-                Evidence(check=check_id, source="unwired", slot=None, fetched_at=utcnow())
+                Evidence(check=check_id, source="unwired", slot=None, fetched_at=utcnow(clock))
             )
     return rows
 
@@ -367,8 +377,8 @@ async def run_score_report(
 
     evidence: list[Evidence] = []
     readings = await _read_all(inp, rpc, runnable)
-    rows = _reader_rows(inp, runnable, readings, active, evidence)
-    rows.extend(_advisory_rows(wanted, evidence))
+    rows = _reader_rows(inp, runnable, readings, active, evidence, clock=rpc.clock)
+    rows.extend(_advisory_rows(wanted, evidence, rpc.clock))
 
     score = _score(rows)
     top = readings.top
@@ -388,6 +398,7 @@ async def run_score_report(
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return ScoreReportOut.model_validate(out).model_dump()

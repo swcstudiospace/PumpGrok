@@ -237,6 +237,7 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return LargeTransfersOut.model_validate(out).model_dump(by_alias=True)

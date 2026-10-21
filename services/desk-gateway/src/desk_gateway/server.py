@@ -132,18 +132,18 @@ def build_gateway_registry(
 
     register_read_tools(reg, rpc)
     reg.register(build_score_report_tool(rpc))
-    reg.register(build_quote_tool(adapter))
+    reg.register(build_quote_tool(adapter, active_clock))
     reg.register(build_simulate_tool())
-    reg.register(build_place_tool(adapter, lambda: budget))
+    reg.register(build_place_tool(adapter, lambda: budget, active_clock))
     reg.register(build_cancel_tool())
-    reg.register(build_positions_tool(adapter))
-    reg.register(build_ledger_read_tool(store))
+    reg.register(build_positions_tool(adapter, active_clock))
+    reg.register(build_ledger_read_tool(store, active_clock))
     reg.register(build_ledger_write_tool(store, active_clock))
     reg.register(build_exposure_tool(store, active_clock))
     reg.register(build_pnl_tool(store, active_clock))
-    reg.register(build_check_limits_tool(store, budget))
-    reg.register(build_drawdown_tool(store, budget))
-    reg.register(build_halt_status_tool(store, data_dir / "KILLSWITCH", "paper"))
+    reg.register(build_check_limits_tool(store, budget, active_clock))
+    reg.register(build_drawdown_tool(store, budget, active_clock))
+    reg.register(build_halt_status_tool(store, data_dir / "KILLSWITCH", active_clock, "paper"))
     reg.register(build_kill_switch_tool(store, active_clock, data_dir / "KILLSWITCH"))
     reg.register(build_journal_append_tool(store, active_clock, data_dir / "journal"))
     reg.register(build_render_report_tool(store, active_clock, data_dir / "reports"))
@@ -154,10 +154,10 @@ def build_gateway_registry(
         )
     )
     reg.register(build_brief_tool(store, bank, active_clock, None, "paper"))
-    reg.register(build_docs_search_tool(repo_root))
-    reg.register(build_memory_retain_tool(bank))
-    reg.register(build_memory_recall_tool(bank))
-    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml"))
+    reg.register(build_docs_search_tool(repo_root, active_clock))
+    reg.register(build_memory_retain_tool(bank, active_clock))
+    reg.register(build_memory_recall_tool(bank, active_clock))
+    reg.register(build_ownership_resolve_tool(repo_root / "ownership.yaml", active_clock))
     reg.register(build_receipt_check_tool(repo_root / "ci" / "gates", repo_root, active_clock))
     reg.register(build_event_emit_tool(store, active_clock, data_dir / "journal"))
     reg.register(
@@ -165,6 +165,7 @@ def build_gateway_registry(
             Settings(mode="paper"),
             data_dir / "bindings",
             os.urandom(32),
+            active_clock,
         )
     )
     manifests = load_bot_manifests(default_contracts_dir())

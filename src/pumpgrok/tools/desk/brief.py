@@ -73,7 +73,7 @@ async def run_brief(
     mode: Literal["paper", "live"] = "paper",
 ) -> dict[str, Any]:
     """Fold halt + recall; etag covers (task_id, refresh, UTC minute)."""
-    halt = await run_halt_status(HaltStatusIn(), store, killswitch_path, mode)
+    halt = await run_halt_status(HaltStatusIn(), store, killswitch_path, clock, mode)
     halt.pop("meta", None)
     recall = bank.recall(inp.task_id, 5)
     minute = datetime.fromtimestamp(clock.now(), UTC).strftime("%Y-%m-%dT%H:%M")
@@ -85,7 +85,9 @@ async def run_brief(
             "halt": halt,
             "recall": recall,
             "etag": etag,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

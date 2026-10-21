@@ -96,8 +96,13 @@ _AGENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 # in _register_rows, before building the path:
 if not _AGENT_RE.fullmatch(inp.agent_uuid or ""):
-    return False, [{"check": "register", "status": "fail",
-                     "detail": "agent_uuid must be [A-Za-z0-9_-], max 64"}]
+    return False, [
+        {
+            "check": "register",
+            "status": "fail",
+            "detail": "agent_uuid must be [A-Za-z0-9_-], max 64",
+        }
+    ]
 ```
 
 ### WR-02: Seat attribution on ledger writes is caller-claimed or hardcoded

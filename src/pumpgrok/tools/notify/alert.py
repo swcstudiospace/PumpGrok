@@ -90,7 +90,9 @@ async def run_alert(inp: AlertIn, notifier: Notifier, clock: Clock) -> dict[str,
     return AlertOut.model_validate(
         {
             **result,
-            "meta": meta_now("notify", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "notify", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 

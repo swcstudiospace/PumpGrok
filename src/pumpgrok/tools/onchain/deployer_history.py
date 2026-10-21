@@ -66,7 +66,7 @@ async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict[s
         raise DataStale(f"onchain.deployer_history upstream failed creator={inp.creator}") from exc
     if not isinstance(sigs, list):
         raise DataStale(f"onchain.deployer_history malformed creator={inp.creator}")
-    cutoff = utcnow().timestamp() - inp.lookback_days * _DAY_S
+    cutoff = utcnow(rpc.clock).timestamp() - inp.lookback_days * _DAY_S
     kept: list[dict[str, Any]] = []
     for entry in sigs:
         if not isinstance(entry, dict) or not isinstance(entry.get("signature"), str):
@@ -87,6 +87,7 @@ async def run_deployer_history(inp: DeployerHistoryIn, rpc: RpcClient) -> dict[s
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
+            rpc.clock,
         ),
     }
     return DeployerHistoryOut.model_validate(out).model_dump()

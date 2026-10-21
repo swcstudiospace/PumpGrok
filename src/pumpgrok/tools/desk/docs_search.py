@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import meta_now
@@ -71,7 +71,7 @@ def _iter_text_files(repo_root: Path) -> list[Path]:
     return files
 
 
-async def run_docs_search(inp: DocsSearchIn, repo_root: Path) -> dict[str, Any]:
+async def run_docs_search(inp: DocsSearchIn, repo_root: Path, clock: Clock) -> dict[str, Any]:
     """Scan text lines for the query; stop at ``limit`` chunks."""
     needle = inp.query.lower()
     chunks: list[dict[str, str | int]] = []
@@ -99,16 +99,18 @@ async def run_docs_search(inp: DocsSearchIn, repo_root: Path) -> dict[str, Any]:
     return DocsSearchOut.model_validate(
         {
             "chunks": chunks,
-            "meta": meta_now("desk", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "desk", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_docs_search_tool(repo_root: Path) -> Tool:
-    """Bind ``desk.docs_search`` to one repo root (no globals)."""
+def build_docs_search_tool(repo_root: Path, clock: Clock) -> Tool:
+    """Bind ``desk.docs_search`` to one repo root and clock (no globals)."""
 
     @tool(DOCS_SEARCH_SPEC)
     async def _docs_search(payload: DocsSearchIn) -> dict[str, Any]:
-        return await run_docs_search(payload, repo_root)
+        return await run_docs_search(payload, repo_root, clock)
 
     return _docs_search

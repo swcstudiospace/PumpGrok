@@ -158,7 +158,7 @@ async def test_ledger_read_round_trip(tmp_path: Path) -> None:
         )
     )
     assert LEDGER_READ_SPEC.side_effect is SideEffect.READ
-    reader = build_ledger_read_tool(store)
+    reader = build_ledger_read_tool(store, clock)
     out = await reader(LedgerReadIn())
     assert len(out.events) == 1
     assert out.events[0]["type"] == "Escalation"

@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
@@ -95,7 +95,7 @@ def _row(
 
 
 async def run_check_limits(
-    inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget
+    inp: CheckLimitsIn, store: LedgerStore, budget: RiskBudget, clock: Clock
 ) -> dict[str, Any]:
     """Evaluate structural checks; engine rules skip until Phase 4."""
     try:
@@ -132,16 +132,18 @@ async def run_check_limits(
             "reason": first_fail,
             "rules": rules,
             "limits": limits,
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
 
-def build_check_limits_tool(store: LedgerStore, budget: RiskBudget) -> Tool:
-    """Bind ``risk.check_limits`` to one store and budget (no globals)."""
+def build_check_limits_tool(store: LedgerStore, budget: RiskBudget, clock: Clock) -> Tool:
+    """Bind ``risk.check_limits`` to one store, budget and clock (no globals)."""
 
     @tool(CHECK_LIMITS_SPEC)
     async def _check_limits(payload: CheckLimitsIn) -> dict[str, Any]:
-        return await run_check_limits(payload, store, budget)
+        return await run_check_limits(payload, store, budget, clock)
 
     return _check_limits

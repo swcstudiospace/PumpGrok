@@ -114,6 +114,11 @@ class RpcClient:
         self._retry = retry
 
     @property
+    def clock(self) -> Clock:
+        """The injected replay clock (envelope stamps read this, never wall time)."""
+        return self._clock
+
+    @property
     def endpoint_count(self) -> int:
         return len(self._endpoints)
 

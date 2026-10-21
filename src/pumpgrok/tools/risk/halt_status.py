@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from pumpgrok.core.ids import ambient_correlation
+from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
@@ -68,6 +68,7 @@ async def run_halt_status(
     inp: HaltStatusIn,
     store: LedgerStore,
     killswitch_path: Path | None,
+    clock: Clock,
     mode: Literal["paper", "live"] = "paper",
 ) -> dict[str, Any]:
     """Fold halt events and kill-switch causes into one view."""
@@ -102,7 +103,9 @@ async def run_halt_status(
             "daily_loss_halt": halt_reason == "daily_loss",
             "breaker_open": False,
             "effective_mode": mode,
-            "meta": meta_now("ledger", inp.correlation_id or (str(ambient) if ambient else None)),
+            "meta": meta_now(
+                "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
+            ),
         }
     ).model_dump()
 
@@ -110,12 +113,13 @@ async def run_halt_status(
 def build_halt_status_tool(
     store: LedgerStore,
     killswitch_path: Path | None,
+    clock: Clock,
     mode: Literal["paper", "live"] = "paper",
 ) -> Tool:
-    """Bind ``risk.halt_status`` to one store, file path and mode."""
+    """Bind ``risk.halt_status`` to one store, file path, clock and mode."""
 
     @tool(HALT_STATUS_SPEC)
     async def _halt_status(payload: HaltStatusIn) -> dict[str, Any]:
-        return await run_halt_status(payload, store, killswitch_path, mode)
+        return await run_halt_status(payload, store, killswitch_path, clock, mode)
 
     return _halt_status

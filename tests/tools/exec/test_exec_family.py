@@ -20,6 +20,7 @@ from pumpgrok.core.idempotency import exec_cancel_key
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.exec.cancel import CANCEL_SPEC, CancelIn, build_cancel_tool
 from pumpgrok.tools.exec.positions import POSITIONS_SPEC, PositionsIn, build_positions_tool
 from pumpgrok.tools.exec.quote import QUOTE_SPEC, QuoteIn, build_quote_tool
@@ -44,7 +45,7 @@ def test_quote_spec_and_delegation() -> None:
 
 
 async def test_quote_delegates_and_raises_not_yet_implemented() -> None:
-    tool = build_quote_tool(NotYetImplementedAdapter())
+    tool = build_quote_tool(NotYetImplementedAdapter(), FixtureClock(start=1469918176.385))
     with pytest.raises(NotYetImplemented) as excinfo:
         await tool(QuoteIn(input_mint=MINT, output_mint=MINT, amount=1_000_000))
     assert excinfo.value.code == "not_yet_implemented"
@@ -98,7 +99,7 @@ def test_positions_spec() -> None:
 
 
 async def test_positions_delegates_and_raises() -> None:
-    tool = build_positions_tool(NotYetImplementedAdapter())
+    tool = build_positions_tool(NotYetImplementedAdapter(), FixtureClock(start=1469918176.385))
     with pytest.raises(NotYetImplemented) as excinfo:
         await tool(PositionsIn())
     assert excinfo.value.code == "not_yet_implemented"

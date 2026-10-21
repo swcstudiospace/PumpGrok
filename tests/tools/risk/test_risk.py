@@ -79,7 +79,7 @@ def test_check_limits_reports_r34_rule_ids() -> None:
 
 async def test_check_limits_missing_approval_fails_closed(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    tool = build_check_limits_tool(store, RiskBudget())
+    tool = build_check_limits_tool(store, RiskBudget(), FixtureClock(start=START))
     out = await tool(
         CheckLimitsIn(ticket_id=TICKET, mint=MINT, side="buy", size_lamports=100_000_000)
     )
@@ -91,7 +91,7 @@ async def test_check_limits_missing_approval_fails_closed(tmp_path: Path) -> Non
 
 async def test_drawdown_empty_ledger(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    tool = build_drawdown_tool(store, RiskBudget())
+    tool = build_drawdown_tool(store, RiskBudget(), FixtureClock(start=START))
     assert DRAWDOWN_SPEC.rate_limit_key == "ledger"
     out = await tool(DrawdownIn(window_hours=24))
     assert out.peak_equity_lamports == 0
@@ -121,7 +121,9 @@ async def test_kill_switch_set_marks_active(tmp_path: Path) -> None:
 
 async def test_halt_status_combined_view(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    tool = build_halt_status_tool(store, tmp_path / "KILLSWITCH", mode="paper")
+    tool = build_halt_status_tool(
+        store, tmp_path / "KILLSWITCH", FixtureClock(start=START), mode="paper"
+    )
     assert HALT_STATUS_SPEC.side_effect is SideEffect.READ
     out = await tool(HaltStatusIn())
     assert out.halted is False
