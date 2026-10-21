@@ -12,6 +12,7 @@ offending input value.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 from dataclasses import dataclass
@@ -74,16 +75,8 @@ def _reject_constant(name: str) -> Any:
     raise ValueError(f"non-finite number {name} is not allowed")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 16), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def verify_manifest(dataset_dir: Path) -> FixtureManifest:
-    """Check manifest shape, listed sha256 digests and stray data files. Writes nothing."""
+def _load_manifest(dataset_dir: Path) -> FixtureManifest:
+    """Read and validate manifest.json. The listed files' digests are checked by `_verify`."""
     manifest_path = dataset_dir / MANIFEST_NAME
     try:
         raw = json.loads(manifest_path.read_text(encoding="utf-8"), parse_constant=_reject_constant)
@@ -91,7 +84,7 @@ def verify_manifest(dataset_dir: Path) -> FixtureManifest:
         raise CorruptFixture("manifest is missing or not valid JSON", file=MANIFEST_NAME) from None
 
     try:
-        manifest = FixtureManifest.model_validate(raw)
+        return FixtureManifest.model_validate(raw)
     except ValidationError as exc:
         problems = [
             f"{'.'.join(str(part) for part in err['loc'])}: {err['type']}"
@@ -99,49 +92,73 @@ def verify_manifest(dataset_dir: Path) -> FixtureManifest:
         ]
         raise CorruptFixture("manifest is invalid", file=MANIFEST_NAME, problems=problems) from None
 
+
+def _verify(dataset_dir: Path) -> tuple[FixtureManifest, dict[str, bytes]]:
+    """Check the manifest, every listed digest and stray data files, reading each file once.
+
+    Returns the verified bytes. Callers parse those bytes, never the path again, so a file
+    replaced after its digest was checked cannot be the one that gets parsed.
+    """
+    manifest = _load_manifest(dataset_dir)
+    contents: dict[str, bytes] = {}
     for name, expected in sorted(manifest.sha256.items()):
         target = dataset_dir / name
+        # is_symlink() before is_file(): is_file() follows links, so a listed name could otherwise
+        # resolve to a file outside the dataset directory.
+        if target.is_symlink():
+            raise CorruptFixture("listed file is a symlink", file=name)
         if not target.is_file():
             raise CorruptFixture("listed file is missing", file=name)
-        if _sha256(target) != expected:
+        data = target.read_bytes()
+        if hashlib.sha256(data).hexdigest() != expected:
             raise CorruptFixture("sha256 does not match manifest", file=name)
+        contents[name] = data
 
     for stray in sorted(dataset_dir.glob("*.jsonl")):
         if stray.name not in manifest.sha256:
             raise CorruptFixture("data file is not listed in the manifest", file=stray.name)
+    return manifest, contents
+
+
+def verify_manifest(dataset_dir: Path) -> FixtureManifest:
+    """Check manifest shape, listed sha256 digests and stray data files. Writes nothing."""
+    manifest, _ = _verify(dataset_dir)
     return manifest
 
 
-def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read every line as a JSON object. Any blank, unparseable or non-object line raises."""
+def _parse_jsonl(data: bytes, name: str) -> list[dict[str, Any]]:
+    """Parse every line as a JSON object. Any blank, unparseable or non-object line raises."""
     records: list[dict[str, Any]] = []
     try:
-        with path.open(encoding="utf-8") as fh:
+        with io.TextIOWrapper(io.BytesIO(data), encoding="utf-8") as fh:
             for number, line in enumerate(fh, 1):
                 text = line.strip()
                 if not text:
-                    raise CorruptFixture("blank line", file=path.name, line=number)
+                    raise CorruptFixture("blank line", file=name, line=number)
                 try:
                     record = json.loads(text, parse_constant=_reject_constant)
                 except ValueError:
-                    raise CorruptFixture(
-                        "line is not valid JSON", file=path.name, line=number
-                    ) from None
+                    raise CorruptFixture("line is not valid JSON", file=name, line=number) from None
                 if not isinstance(record, dict):
-                    raise CorruptFixture("line is not a JSON object", file=path.name, line=number)
+                    raise CorruptFixture("line is not a JSON object", file=name, line=number)
                 records.append(record)
     except UnicodeDecodeError:
-        raise CorruptFixture("file is not UTF-8", file=path.name) from None
+        raise CorruptFixture("file is not UTF-8", file=name) from None
     return records
 
 
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read every line of a JSONL file as a JSON object. Any bad line raises."""
+    return _parse_jsonl(path.read_bytes(), path.name)
+
+
 def load_dataset(dataset_dir: Path) -> FixtureDataset:
-    """Verify the manifest, then read and order-check events. Call before opening any ledger."""
-    manifest = verify_manifest(dataset_dir)
+    """Verify the manifest, then parse and order-check events. Call before opening any ledger."""
+    manifest, contents = _verify(dataset_dir)
     if EVENTS_NAME not in manifest.sha256:
         raise CorruptFixture("manifest does not list events.jsonl", file=MANIFEST_NAME)
 
-    records = read_jsonl(dataset_dir / EVENTS_NAME)
+    records = _parse_jsonl(contents[EVENTS_NAME], EVENTS_NAME)
     previous = float("-inf")
     for number, record in enumerate(records, 1):
         stamp_text = record.get("ts_utc")

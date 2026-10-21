@@ -119,3 +119,14 @@ def test_strict_reader_rejects_non_finite_numbers_and_non_objects(tmp_path: Path
     path.write_text("[1, 2]\n")
     with pytest.raises(CorruptFixture):
         read_jsonl(path)
+
+
+def test_symlinked_listed_file_is_refused(tmp_path: Path) -> None:
+    # A listed name must resolve to a file inside the dataset directory, never through a link.
+    dataset = _copy_smoke(tmp_path)
+    outside = tmp_path / "outside.jsonl"
+    shutil.copyfile(dataset / "events.jsonl", outside)
+    (dataset / "events.jsonl").unlink()
+    (dataset / "events.jsonl").symlink_to(outside)
+    with pytest.raises(CorruptFixture, match="symlink"):
+        load_dataset(dataset)
