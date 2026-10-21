@@ -1,0 +1,31 @@
+# Usage:
+#   docker compose config --quiet                 # validate
+#   docker compose build pumpgrok
+#   docker compose run --rm pumpgrok              # one skip-only replay cycle, exits 0
+#
+# The pumpgrok service is a one-shot (R50). It deliberately has NO restart policy: a restart
+# policy would relaunch the exit-0 replay command in a loop, so the service never settles
+# (research Pitfall 6). Do not add `restart:` here. Liveness is the image HEALTHCHECK
+# (`pumpgrok doctor`).
+
+services:
+  pumpgrok:
+    build: .
+    image: pumpgrok:local
+    container_name: pumpgrok
+    env_file:
+      - path: .env
+        required: false          # optional operator PUMPGROK_* values; never baked into the image
+    environment:
+      PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+    ports:
+      - "127.0.0.1:8080:8080"    # loopback only; reserved for /healthz (AUTO-004)
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
