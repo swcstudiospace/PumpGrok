@@ -167,10 +167,16 @@ md_files = [p for p in glob.glob("**/*.md", recursive=True)
 planning_files = glob.glob(".planning/**/*.md", recursive=True)
 for path in sorted(set(md_files + planning_files)) + glob.glob("rules/*.mdc"):
     try:
-        if emoji_re.search(open(path, encoding="utf-8").read()):
-            err(f"{path}: contains emoji")
-    except Exception:
-        pass
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except UnicodeDecodeError as exc:
+        err(f"{path}: not valid UTF-8, emoji check cannot run: {exc}")
+        continue
+    except OSError as exc:
+        err(f"{path}: unreadable, emoji check cannot run: {exc}")
+        continue
+    if emoji_re.search(text):
+        err(f"{path}: contains emoji")
 
 # ------------------------------------------------------------------
 # Report
