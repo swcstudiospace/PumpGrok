@@ -3,4 +3,4 @@
 The definitions live in the sibling modules; code imports `pumpgrok.core`.
 """
 
-from pumpgrok.core import *  # noqa: F401,F403
+from pumpgrok.core import *

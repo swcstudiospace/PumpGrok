@@ -338,7 +338,7 @@ def event_type_to_snake(event_type: EventType) -> str:
 EVENT_TYPE_SNAKE: dict[EventType, str] = {t: event_type_to_snake(t) for t in EventType}
 
 
-def event_json_schemas() -> dict[str, dict]:
+def event_json_schemas() -> dict[str, dict[str, Any]]:
     """Export one JSON Schema per R32 type, keyed by snake_case name.
 
     Consumed by plan 01-07 ``contracts/events/<snake>.schema.json`` generation.
@@ -346,6 +346,6 @@ def event_json_schemas() -> dict[str, dict]:
     return {event_type_to_snake(t): m.model_json_schema() for t, m in EVENT_MODELS.items()}
 
 
-def model_json_schema() -> dict[str, dict]:
+def model_json_schema() -> dict[str, dict[str, Any]]:
     """Alias of :func:`event_json_schemas` for plan 01-07 consumers."""
     return event_json_schemas()

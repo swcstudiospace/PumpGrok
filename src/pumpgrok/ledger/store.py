@@ -13,6 +13,7 @@ Ids arrive via ``core/ids.py``; the store mints none.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import sqlite3
 from collections.abc import Mapping
@@ -167,10 +168,8 @@ class LedgerStore:
             )
             db.execute("COMMIT;")
         except Exception:
-            try:
+            with contextlib.suppress(sqlite3.Error):
                 db.execute("ROLLBACK;")
-            except sqlite3.Error:
-                pass
             raise
         return {
             "seq": seq,

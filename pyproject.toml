@@ -59,6 +59,7 @@ ignore = [
 "tests/**" = ["S", "T20", "PLR"]
 "ci/**" = ["T20", "S603", "S607"]
 "scripts/**" = ["T20"]
+"src/pumpgrok/replay/rng.py" = ["S311"]  # FOUND-012/R27: seeded deterministic replay RNG, never crypto
 
 [tool.ruff.lint.isort]
 known-first-party = ["pumpgrok"]

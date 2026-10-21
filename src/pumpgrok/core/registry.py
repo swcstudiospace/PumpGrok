@@ -18,10 +18,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
+from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.bot import BotManifest
 from pumpgrok.core.errors import LiveGateError, PermissionDenied
 from pumpgrok.core.ids import (
@@ -32,9 +32,6 @@ from pumpgrok.core.ids import (
 )
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput
-
-if TYPE_CHECKING:
-    from pumpgrok.core.adapter import OrderRequest
 
 log = logging.getLogger("pumpgrok.core")
 
@@ -201,8 +198,6 @@ class ToolRegistry:
                 cid = next_span(current_correlation())
                 with bind_correlation(cid):
                     if spec.requires_approval:
-                        from pumpgrok.core.adapter import OrderRequest
-
                         req = OrderRequest.model_validate(
                             payload.model_dump() | {"correlation_id": str(cid)}
                         )
