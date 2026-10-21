@@ -14,7 +14,7 @@ TOOL_NAME_RE = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
 
 
 class RetryPolicy(BaseModel):
-    """tenacity policy (D5). `attempts=1` means no retry."""
+    """Retry policy (D5). Not applied yet: ToolSpec refuses attempts > 1 until it is wired."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -66,7 +66,7 @@ class ToolSpec(BaseModel):
     side_effect: SideEffect
     timeout_s: float = Field(gt=0.0, le=300.0)
     retry: RetryPolicy = Field(default_factory=RetryPolicy.none)
-    rate_limit_key: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    rate_limit_key: str = Field(pattern=r"^[a-z][a-z0-9_]*$")  # recorded only; no limiter yet
     requires_approval: bool = False  # roster gate g6: approval_id required in input
     idempotent: bool = False  # True for every write; input carries or derives a key
     backend: str = Field(min_length=1)  # endpoint or module path, for the audit log
@@ -82,6 +82,12 @@ class ToolSpec(BaseModel):
             raise ValueError(f"{self.name}: write tools must be idempotent")
         if self.side_effect is SideEffect.READ and self.requires_approval:
             raise ValueError(f"{self.name}: read tools cannot require approval")
+        return self
+
+    @model_validator(mode="after")
+    def _retry_is_not_wired(self) -> Self:
+        if self.retry.attempts > 1:
+            raise ValueError(f"{self.name}: retry is not applied yet; declare attempts=1")
         return self
 
     def input_json_schema(self) -> dict[str, Any]:
@@ -102,8 +108,9 @@ class Tool(Protocol):
 def tool(spec: ToolSpec) -> Callable[[Callable[[Any], Awaitable[Any]]], Tool]:
     """Attach a ToolSpec to an async function and validate I/O.
 
-    The registry is the only caller of the returned object; it applies timeout,
-    retry, rate limit, correlation stamping and the audit log around it.
+    The registry is the only caller of the returned object; it applies the timeout,
+    correlation stamping and the approval check around it. Retry and rate limiting are
+    not applied yet (see ToolSpec.retry and ToolSpec.rate_limit_key).
     """
 
     def wrap(fn: Callable[[Any], Awaitable[Any]]) -> Tool:

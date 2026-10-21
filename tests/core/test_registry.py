@@ -20,7 +20,7 @@ from pumpgrok.core.errors import LiveGateError, PermissionDenied
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.core.tool import ToolInput, ToolMeta, ToolOutput, ToolSpec
+from pumpgrok.core.tool import RetryPolicy, ToolInput, ToolMeta, ToolOutput, ToolSpec
 
 ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
 
@@ -90,6 +90,21 @@ def _live_spec() -> ToolSpec:
         backend="test",
         idempotent=True,
     )
+
+
+def test_retry_is_refused_until_wired() -> None:
+    with pytest.raises(ValueError, match="retry is not applied yet"):
+        ToolSpec(
+            name="market.price",
+            description="Read-only price probe for tests.",
+            input_model=_In,
+            output_model=_Out,
+            side_effect=SideEffect.READ,
+            timeout_s=5.0,
+            retry=RetryPolicy(attempts=3),
+            rate_limit_key="market",
+            backend="test",
+        )
 
 
 async def _call(payload: Any) -> Any:  # pragma: no cover - replaced below

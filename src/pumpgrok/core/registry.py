@@ -42,8 +42,8 @@ log = logging.getLogger("pumpgrok.core")
 class GrantAudit(BaseModel):
     """One row per resolution attempt.
 
-    Every LIVE_WRITE attempt is a row with `allowed=False` and is also emitted as
-    a critical alert. `at` is the injected Clock's time (R27), never `datetime.now`.
+    Every LIVE_WRITE attempt is a row with `allowed=False`. Critical alert emission is
+    not wired yet. `at` is the injected Clock's time (R27), never `datetime.now`.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -187,8 +187,8 @@ class ToolRegistry:
         )
 
     def _wrap(self, t: Tool, bot: BotManifest) -> Tool:
-        """Apply Clock-routed timeout and retry, rate limit, correlation stamping and,
-        for approval-gated tools, the limits/approval check (I2). Returns a Tool."""
+        """Apply the Clock-routed timeout, correlation stamping and, for approval-gated
+        tools, the limits/approval check (I2). Retry and rate limiting are not applied yet."""
         spec = t.spec
         check_limits = self._check_limits
         clock = self._clock
@@ -210,8 +210,7 @@ class ToolRegistry:
                             raise PermissionDenied(
                                 "RiskEngine.check refused", tool=spec.name, bot=bot.id
                             )
-                    # rate limit applied here by the implementation; retries use
-                    # tenacity(sleep=clock.sleep, ...) per spec.retry (R27)
+                    # Not wired yet: spec.rate_limit_key and spec.retry (attempts must be 1).
                     async with clock.timeout(spec.timeout_s):
                         return await t(payload)
 
