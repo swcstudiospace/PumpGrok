@@ -88,3 +88,51 @@ def test_transport_mapping_injective_over_registry(tmp_path: Path) -> None:
     transports = [transport_name(name) for name in reg.names()]
     assert len(set(transports)) == len(transports), "transport collision over registry"
     assert len(reg.names()) == 37
+
+
+def test_contracts_facade_matches_manifests_for_every_seat() -> None:
+    """The service import path is a pure facade: no drift from the loader."""
+    from pumpgrok.contracts import projection as facade
+
+    assert facade.default_contracts_dir() == ROSTERS_DIR
+    for seat_id in EXPECTED_SEAT_IDS:
+        assert facade.effective_roster(seat_id) == effective_roster(
+            ROSTERS_DIR, seat_id
+        ), seat_id
+        assert facade.transport_map(seat_id) == transport_map(
+            ROSTERS_DIR, seat_id
+        ), seat_id
+        entries = facade.exposure_entries(seat_id)
+        assert [entry["name"] for entry in entries] == [
+            transport_name(entry["name"])
+            for entry in effective_roster(ROSTERS_DIR, seat_id)
+        ], seat_id
+        assert all(
+            set(entry) == {"name", "description", "inputSchema"} for entry in entries
+        ), seat_id
+
+
+def test_contracts_facade_short_maps_match_roster_endpoints() -> None:
+    """short<->seat maps derive from roster YAML, matching endpoint suffixes."""
+    from pumpgrok.contracts import projection as facade
+
+    short_to_seat = facade.short_to_seat()
+    assert set(short_to_seat) == {
+        "chief",
+        "scout",
+        "risk",
+        "whale",
+        "sniper",
+        "rug",
+        "exit",
+        "shill",
+        "signal",
+        "journal",
+    }
+    assert facade.seat_to_short() == {
+        seat: short for short, seat in short_to_seat.items()
+    }
+    for short, seat_id in short_to_seat.items():
+        doc = yaml.safe_load((ROSTERS_DIR / f"{seat_id}.yaml").read_text(encoding="utf-8"))
+        assert doc["short"] == short
+        assert doc["endpoint"] == f"/mcp/{short}"
