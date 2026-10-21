@@ -69,6 +69,9 @@ def _buy_line(event: dict[str, Any]) -> dict[str, Any]:
         "size_sol": round(int(payload.get("filled_lamports", 0)) / LAMPORTS_PER_SOL, 6),
         "entry_price": float(payload.get("price_avg", "0")) / 1000.0,
         "tx_hash": DRY_RUN_TX,
+        # Bare tx_hash keeps tools/pipeline_evidence.py --candidates matching;
+        # the unique paper ref rides alongside per paper-engine 964.
+        "venue_tx_ref": str(payload.get("venue_tx_ref", "")),
     }
 
 
@@ -90,7 +93,6 @@ def _skip_line(event: dict[str, Any]) -> dict[str, Any]:
 
 def _close_line(event: dict[str, Any]) -> dict[str, Any]:
     payload = event["payload"]
-    venue_tx_ref = str(payload.get("venue_tx_ref", ""))
     return {
         "type": "close",
         "ts": _epoch(str(event["ts_utc"])),
@@ -105,7 +107,10 @@ def _close_line(event: dict[str, Any]) -> dict[str, Any]:
         "pnl_pct": float(payload.get("pnl_pct", "0")),
         "hold_seconds": int(payload.get("hold_seconds", 0)),
         "reason": str(payload.get("reason", "")),
-        "tx_hash": venue_tx_ref if venue_tx_ref.startswith(DRY_RUN_TX) else DRY_RUN_TX,
+        # Bare tx_hash keeps the evidence tooling matching; the unique paper
+        # ref rides alongside per paper-engine 964.
+        "tx_hash": DRY_RUN_TX,
+        "venue_tx_ref": str(payload.get("venue_tx_ref", "")),
         "score": 0,
     }
 
