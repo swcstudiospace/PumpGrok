@@ -39,14 +39,14 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **TOOL-001**: `market.{price,ohlcv,liquidity,trades,holders_snapshot}` (`docs/TOOL_CATALOG.md` section 1) return typed outputs carrying `freshness` and `source` fields and pass tests on recorded respx fixtures with no live network.
 - [x] **TOOL-002**: `onchain.{token_metadata,authorities,lp_status,top_holders,deployer_history,large_transfers,priority_fee}` (section 2) go through the single RPC client `src/pumpgrok/tools/onchain/rpc.py` with tenacity jittered retries and ordered failover over `rpc.endpoints[]`; the API key travels in `solana.rpc_api_key`, never inside a URL or a log line; `deployer_history` and `large_transfers` are WHALE grants (R35).
 - [x] **TOOL-003**: `safety.score_report` (section 3) produces a scored report with per-check reasons and thresholds read from config; a check without data returns `BLIND`, never an exception.
-- [ ] **TOOL-004**: `exec.{quote,simulate,place,cancel,positions}` (section 4) call the configured `ExecutionAdapter`; `exec.place` and `exec.cancel` carry `g6` and require `approval_id`; `exec.place` input carries `decision_id` (a ULID minted per decision) and the idempotency key is derived by the tool from `(ticket_id, side, decision_id)`, never caller-supplied; approval consumption is written in the same ledger transaction as the order (R23); `exec.simulate` writes no ledger event.
+- [x] **TOOL-004**: `exec.{quote,simulate,place,cancel,positions}` (section 4) call the configured `ExecutionAdapter`; `exec.place` and `exec.cancel` carry `g6` and require `approval_id`; `exec.place` input carries `decision_id` (a ULID minted per decision) and the idempotency key is derived by the tool from `(ticket_id, side, decision_id)`, never caller-supplied; approval consumption is written in the same ledger transaction as the order (R23); `exec.simulate` writes no ledger event.
 - [x] **TOOL-005**: `portfolio.{ledger_read,ledger_write,exposure,pnl}`, `risk.{check_limits,drawdown,kill_switch,halt_status}` and `journal.{append,render_report}` (sections 5, 6, 8) exist with the catalog schemas; `risk.check_limits` reports the R34 rule ids; `risk.kill_switch` accepts only `set` and `flatten_request` (R22); `journal.append` and `desk.event_emit` `kind` is the snake_case form of an R32 event type and seats may write only `journal_note` and `escalation` (every other type is appended by the engine, risk, adapter or supervisor); `portfolio.ledger_write` is `PermissionDenied` for all ten seats (`docs/design/interfaces.md` section 4).
 - [x] **TOOL-006**: `notify.alert` (section 7) dispatches through an abstract `Notifier` whose stdout and file sinks are always on and whose Telegram and webhook sinks are enabled only by config and send only to a configured allowlist of chat ids and URLs (R39); RISK and RUG rosters do not carry `notify.alert` (R35) and escalate via `desk.event_emit kind=escalation`, which the supervisor relays to `notify.alert`; the alert `kind` enum includes the escalation kinds `bot_restart_exhausted, heartbeat_stale, persistence_down, clock_skew, ledger_inconsistent` (R40); sends are rate limited and idempotent.
 - [x] **TOOL-007**: The desk core eight `desk.{brief,docs_search,memory_retain,memory_recall,ownership_resolve,receipt_check,event_emit,doctor}` (section 9) are resolvable by every seat, `desk.event_emit` `kind` follows R32 snake_case, and `desk.doctor check` is the same code path as `pumpgrok doctor`.
 - [x] **TOOL-008**: Every registered tool has a pydantic v2 input and output model (`additionalProperties: false`), a `side_effect` in `{read, paper-write}`, `timeout_s`, a `RetryPolicy` and a `rate_limit_key`; money fields are integers in base units named `<x>_lamports: int` and `<x>_units: int` (token base units), prices and ratios are `Decimal` strings, no float money anywhere, and only the CLI boundary accepts `--size-sol` (R28); untrusted upstream payloads (pump.fun, PumpPortal, Jupiter, RPC, x.ai) are parsed with `extra="ignore"` models and a malformed payload yields a typed error (`DataStale`/`BLIND`), never an escaping exception.
 - [x] **TOOL-009**: The least-privilege tests of `docs/design/interfaces.md` section 4 pass: no seat resolves a live-write tool, only sniper and exit resolve `exec.place`, exit cannot place a BUY, chief has no exposure tools, shill's only write is `journal.append`, every roster name exists in the registry, and `tools/social/` (bot-07-shill, R31) issues GET only.
 - [x] **TOOL-010**: `services/desk-gateway/` serves `/mcp/<seat>` from the in-process registry so that `tools/list` equals `contracts/tool-rosters/<seat>.yaml` plus `_core.yaml`, transport names are the dotted ids with `.` replaced by `_` derived at exposure time and never stored (R19), and a token for seat A on `/mcp/<seat B>` is 403.
-- [ ] **TOOL-011**: Operator can run every verb of `docs/TOOL_CATALOG.md` section 12 plus the R12 and R40 additions; each verb is a thin wrapper over catalog tools and prints JSON by default; `pumpgrok paper buy | sell` requires `--ticket --mint --size-sol --slippage-bps --approval-id`.
+- [x] **TOOL-011**: Operator can run every verb of `docs/TOOL_CATALOG.md` section 12 plus the R12 and R40 additions; each verb is a thin wrapper over catalog tools and prints JSON by default; `pumpgrok paper buy | sell` requires `--ticket --mint --size-sol --slippage-bps --approval-id`.
 
 ### Skills (SKILL)
 
@@ -63,7 +63,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [ ] **PAPER-004**: Replay runs the full desk over `tests/fixtures/replay/<dataset>/` with `FixtureClock`, one seeded RNG and fixture timestamps as ledger `ts_utc`; LLM calls are served from the recorder's `canonical_request_hash` records (`outcome` in `{ok, timeout, error}`, virtual `latency_s`) and a missing record fails the replay (R27); two runs over `smoke-10m` give identical `events.hash`, JSONL bytes and final state, a different seed differs, and a 180 s hole trips `DataStale` (section 9); `pumpgrok run --record <dataset> --duration <s>` writes new datasets from live transports stamping the clock's ts (R40).
 - [ ] **PAPER-005**: A bonding-curve graduation event force-closes the open paper position at the last curve price with reason `graduated` and freezes MTM, a BUY on a graduated token is rejected `post_graduation_no_reserves` (R8, R38), and after `blind_max_s = 300` without a price EXIT force-closes at `last_good` with reason `blind_flatten` and escalates (R25); open positions are marked to market at liquidation value every 60 s.
 - [ ] **PAPER-006**: `pumpgrok report --daily` (00:05Z) and `--weekly` (Monday 00:15Z, R40) render the sections of `docs/design/paper-engine.md` section 8.3 (summary, trades, open positions, rejected signals by R34 reason, safety outcomes, risk events, bot health, data freshness, live gate on weekly, unverified) with `str.format` only (R9), ASCII only, snapshot-tested from a fixture ledger (section 9).
-- [ ] **PAPER-007**: Tickets are `SOL-YYYYMMDD-NNN` sequence-allocated in the ledger; approvals are persisted as `ApprovalRecorded` with kind in `{human_buy, human_sell, exit_rule, autonomous_paper, killswitch_clear, halt_clear, live_gate}` (R33); under `manual-ticket` a buy needs a human phrase matching the ticket token-for-token (`rules/pumpgrok-team.mdc:28`, mismatch -> `OrderRejected reason=approval_mismatch`) and each exit rule needs a per-ticket `exit_rule` approval, while under `autonomous-paper` the EXIT rule engine is always on (R17); sniper and exit send once per ticket because `exec.place` is idempotent on `(ticket_id, side, decision_id)` (R18, R23) and an unknown or timed-out result enters state `UNKNOWN` and is never auto-retried (D9, `rules/pumpgrok-team.mdc:30`).
+- [x] **PAPER-007**: Tickets are `SOL-YYYYMMDD-NNN` sequence-allocated in the ledger; approvals are persisted as `ApprovalRecorded` with kind in `{human_buy, human_sell, exit_rule, autonomous_paper, killswitch_clear, halt_clear, live_gate}` (R33); under `manual-ticket` a buy needs a human phrase matching the ticket token-for-token (`rules/pumpgrok-team.mdc:28`, mismatch -> `OrderRejected reason=approval_mismatch`) and each exit rule needs a per-ticket `exit_rule` approval, while under `autonomous-paper` the EXIT rule engine is always on (R17); sniper and exit send once per ticket because `exec.place` is idempotent on `(ticket_id, side, decision_id)` (R18, R23) and an unknown or timed-out result enters state `UNKNOWN` and is never auto-retried (D9, `rules/pumpgrok-team.mdc:30`).
 
 ### Risk (RISK)
 
@@ -158,14 +158,14 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | TOOL-001 | Phase 3 Tools and Skills | Complete |
 | TOOL-002 | Phase 3 Tools and Skills | Complete |
 | TOOL-003 | Phase 3 Tools and Skills | Complete |
-| TOOL-004 | Phase 3 Tools and Skills | Pending |
+| TOOL-004 | Phase 3 Tools and Skills | Complete |
 | TOOL-005 | Phase 3 Tools and Skills | Complete |
 | TOOL-006 | Phase 3 Tools and Skills | Complete |
 | TOOL-007 | Phase 3 Tools and Skills | Complete |
 | TOOL-008 | Phase 3 Tools and Skills | Complete |
 | TOOL-009 | Phase 3 Tools and Skills | Complete |
 | TOOL-010 | Phase 3 Tools and Skills | Complete |
-| TOOL-011 | Phase 3 Tools and Skills | Pending |
+| TOOL-011 | Phase 3 Tools and Skills | Complete |
 | SKILL-001 | Phase 3 Tools and Skills | Complete |
 | SKILL-002 | Phase 3 Tools and Skills | Complete |
 | SKILL-003 | Phase 3 Tools and Skills | Complete |
@@ -176,7 +176,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | PAPER-004 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-005 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-006 | Phase 4 Paper Trading and Autonomy | Pending |
-| PAPER-007 | Phase 4 Paper Trading and Autonomy | Pending |
+| PAPER-007 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-001 | Phase 4 Paper Trading and Autonomy | Pending |
 | RISK-002 | Phase 4 Paper Trading and Autonomy | Pending |
 | RISK-003 | Phase 4 Paper Trading and Autonomy | Pending |

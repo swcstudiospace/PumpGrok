@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 04
 current_phase_name: Paper Trading and Autonomy
 status: planning
-stopped_at: Phase 3 complete, ready to plan Phase 04
-last_updated: "2026-10-21T16:32:46.292Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-10-21T22:41:09.994Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 3 complete, transitioned to Phase 04
-state_head: 8a2c29a2a59a8665c1581ebfc7028350593fa8b2
+state_head: 48493ec6c1482217d6030e2c3f8373e70987311f
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 26
-  completed_plans: 26
+  total_plans: 35
+  completed_plans: 33
   percent: 60
 ---
 
@@ -63,6 +63,7 @@ Progress: [██████░░░░] 60%
 |------|----------|-------|-------|
 | Phase 03-tools-and-skills P05 | 27min | 3 tasks | 14 files |
 | Phase 03-tools-and-skills P06 | 10min | 4 tasks | 65 files |
+| Phase 04 P07 | single session | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [Binding]: R44 Jupiter quote via api.jup.ag/swap/v2/order, quote-only; R45 no PumpPortal trade key; R46 trade events from Solana JSON-RPC logsSubscribe; R48 x.ai models grok-4.3 and grok-4.20-0309-non-reasoning
 - [Phase 3]: 03-05: owner-thread tool loop for sqlite affinity; seat-map miss falls back to registry-wide map for permission_denied
 - [Phase 3]: B10 applied as listing-AND-grants: grant violations shrink skill bots, prompt listings expand where grants allow; roster manifests untouched
+- [Phase 04]: Registry adapter default is p_drop=0.0 on the seeded make_rng stream; SystemRandom banned by the static guard
+- [Phase 04]: human_sell approvals accept size_lamports or token_units; matches() enforces only stated legs
+- [Phase 04]: Exit 5 survives only for 04-09 verbs; every served verb runs against its backend with JSON
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T14:04:25.718Z
-Stopped at: Phase 3 complete, ready to plan Phase 04
+Last session: 2026-10-21T22:41:08.372Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None

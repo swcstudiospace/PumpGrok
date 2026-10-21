@@ -142,6 +142,15 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Vendor tree deleted after the six retirement checks (STRUCT-006)
 
 **Plans**: TBD
+- [x] 04-01-PLAN.md
+- [x] 04-02-PLAN.md
+- [x] 04-03-PLAN.md
+- [x] 04-04-PLAN.md
+- [x] 04-05-PLAN.md
+- [x] 04-06-PLAN.md
+- [x] 04-07-PLAN.md
+- [ ] 04-08-PLAN.md
+- [ ] 04-09-PLAN.md
 
 ### Phase 5: Hardening
 
@@ -179,5 +188,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
 | 3. Tools and Skills | 7/7 | Complete    | 2026-10-21 |
-| 4. Paper Trading and Autonomy | 0/TBD | Not started | - |
+| 4. Paper Trading and Autonomy | 7/9 | In Progress | - |
 | 5. Hardening | 0/TBD | Not started | - |
