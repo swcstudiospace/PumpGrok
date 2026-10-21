@@ -51,6 +51,7 @@ prompts:         ## assemble prompts and regenerate agent templates
 check: lint typecheck test audit  ## everything ci.yml runs
 	bash scripts/assemble-prompts.sh --check
 	python3 scripts/generate-templates.py --check
+	$(UV) run python scripts/generate-event-schemas.py --check
 	./scripts/check.sh
 
 clean:           ## caches only; never var/

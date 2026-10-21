@@ -2,7 +2,7 @@
 name: EXIT
 title: Position Manager
 description: Owns the sell side only. Never opens positions.
-seat: Trading Floor
+seat: DM
 skills:
   - position-monitoring
   - desk-execution-protocol

@@ -2,7 +2,7 @@
 name: SHILL
 title: Sentiment & Velocity
 description: Owns social and narrative context. Detects organic momentum vs coordinated distribution signals.
-seat: Trading Floor
+seat: DM
 skills:
   - social-sentiment
   - discovery-tools
