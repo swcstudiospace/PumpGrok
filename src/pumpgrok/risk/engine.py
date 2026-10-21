@@ -6,10 +6,12 @@ and ``BreakerTripped`` rows. Decisions bind ``order_hash``: the adapter must
 refuse to proceed without a passed ``RiskDecision`` whose hash matches.
 
 The 19 R34 steps run in exact order with first-failure-wins. Steps 13 and 14
-cap rather than reject. Sells carrying an exit reason in
-``EXIT_SELL_REASONS`` skip steps 2-4 and 9-19 (reducing risk is always
-allowed); every other order evaluates every step, so a manual sell is still
-refused by an active kill switch, halt or open breaker. Steps 10-12 are
+cap rather than reject. A degraded reputation book (R62) refuses buys with the
+breaker-scope reason ``reputation_degraded`` plus one Escalation per UTC day;
+sells are not new entries, so exits and kill-flatten still run. Sells carrying
+an exit reason in ``EXIT_SELL_REASONS`` skip steps 2-4 and 9-19 (reducing risk
+is always allowed); every other order evaluates every step, so a manual sell is
+still refused by an active kill switch, halt or open breaker. Steps 10-12 are
 buy-only. Steps 13, 14, 18 and 19 compare lamport sizes, so sells auto-pass
 them; steps 9, 15, 16 and 17 evaluate for sells too (trade counting, halt
 detection and mark freshness are side-independent).
@@ -37,6 +39,7 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import Clock, IdFactory, calling_seat
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
@@ -129,7 +132,12 @@ _RECHECK_STEPS: frozenset[str] = frozenset(
 
 
 class RiskDecision(BaseModel):
-    """One bound decision. ``reason`` is the first-failure R34 id, or ``pass``."""
+    """One bound decision. ``reason`` is the first-failure R34 id, or ``pass``.
+
+    A degraded reputation book (R62) refuses buys with the breaker-scope
+    reason ``reputation_degraded``; the ``breaker_open`` evaluated row reads
+    ``fail`` so the 19 R34 rows never change shape.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -242,6 +250,7 @@ class RiskEngine:
         live_check: Callable[[], list[str]] | None = None,
         observe_only: frozenset[str] = frozenset(),
         scan_kill_verdicts: bool = True,
+        reputation: ReputationBook | None = None,
     ) -> None:
         self._store = store
         self._budget = budget
@@ -250,6 +259,7 @@ class RiskEngine:
         self._limits = limits if limits is not None else EngineLimits()
         self._mode = mode
         self._autonomy = autonomy
+        self._reputation = reputation
         self._killswitch = KillSwitch(
             clock,
             store=store,
@@ -263,6 +273,15 @@ class RiskEngine:
         self._observe_only = observe_only
         self._scan_kill_verdicts = scan_kill_verdicts
         self._decisions: dict[str, RiskDecision] = {}
+
+    @property
+    def reputation(self) -> ReputationBook | None:
+        """Attached reputation book, if the desk wired one (R62)."""
+        return self._reputation
+
+    def set_reputation(self, book: ReputationBook | None) -> None:
+        """Attach (or detach) the book; a rebuilt book takes effect at once."""
+        self._reputation = book
 
     def _now_ts(self) -> str:
         return format_ts_utc(self._clock.now())
@@ -628,9 +647,12 @@ class RiskEngine:
         )
 
     def _evaluated(self, ctx: _StepCtx, failed: str | None) -> list[dict[str, str]]:
+        # reputation_degraded is a breaker-scope reason (R62), not a 20th step:
+        # it fails the breaker_open row so the 19 R34 rows never change shape.
+        fail_key = "breaker_open" if failed == "reputation_degraded" else failed
         rows: list[dict[str, str]] = []
         for step in STEP_IDS:
-            status = "fail" if step == failed else ctx.evaluated.get(step, "skip")
+            status = "fail" if step == fail_key else ctx.evaluated.get(step, "skip")
             rows.append({"id": step, "status": status})
         return rows
 
@@ -665,12 +687,37 @@ class RiskEngine:
 
     def _step_breaker_open(self, ctx: _StepCtx) -> None:
         ctx.mark("breaker_open")
+        # R62: a degraded reputation book fails closed for buys only. Exit
+        # sells skip this step, and manual sells are not new entries, so
+        # exits and kill-flatten still run while buys refuse.
+        if ctx.is_buy and self._reputation is not None and self._reputation.degraded:
+            self._write_reputation_escalation(ctx)
+            raise _Fail("reputation_degraded", "reputation book degraded")
         if ctx.open_breakers:
             raise _Fail("breaker_open", f"breaker={sorted(ctx.open_breakers)[0]}")
         if ctx.order.mint in ctx.killed:
             raise _Fail("breaker_open", f"risk_kill:{ctx.order.mint}")
         if ctx.half_blocked:
             raise _Fail("breaker_open", "probe inflight")
+
+    def _write_reputation_escalation(self, ctx: _StepCtx) -> None:
+        """One Escalation per UTC day while the reputation book is degraded."""
+        source = ctx.source if ctx.source in ("paper", "replay", "manual") else "paper"
+        day = self._now_ts()[:10]
+        with _suppress_integrity():
+            self._store.append(
+                ts_utc=self._now_ts(),
+                source=source,
+                correlation_id=ctx.correlation_id,
+                idempotency_key=f"reputation-degraded|{day}",
+                type="Escalation",
+                payload={
+                    "source": source,
+                    "kind": "reputation_degraded",
+                    "seat": "bot-02-risk",
+                    "detail": "reputation book degraded: buys refused until restore or rebuild",
+                },
+            )
 
     def _step_live_gate(self, ctx: _StepCtx) -> None:
         ctx.mark("live_gate")

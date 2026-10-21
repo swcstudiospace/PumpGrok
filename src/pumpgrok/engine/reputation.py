@@ -30,17 +30,23 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from pumpgrok.core.atomic_write import atomic_write_json
 from pumpgrok.replay.clock import Clock, WallClock, format_ts_utc
 
+if TYPE_CHECKING:
+    from pumpgrok.ledger.store import LedgerStore
+
 log = logging.getLogger(__name__)
 
 # How many addresses to remember. Past that, evict the stalest.
 MAX_CREATORS = 50_000
+
+# Lamports per SOL: the ledger settles in lamports, the book in SOL.
+LAMPORTS_PER_SOL = 1_000_000_000
 
 
 class CreatorRecord(BaseModel):
@@ -120,6 +126,36 @@ class ReputationBook(BaseModel):
         """Atomically, like the pipeline state: half a file is worse than none."""
         self.updated_at = self._clock.now()
         atomic_write_json(path, self.model_dump(mode="json"))
+
+    @classmethod
+    def rebuild_from_ledger(
+        cls,
+        store: LedgerStore,
+        *,
+        clock: Clock | None = None,
+        rug_loss_pct: float = 60.0,
+    ) -> ReputationBook:
+        """Reconstruct the book from ledger fills after a quarantine (R62).
+
+        Scans ``PositionOpened`` rows for the mint creator and ``PositionClosed``
+        rows for ``realized_pnl_lamports`` plus the fractional ``pnl_pct`` to
+        rebuild per-creator losses. The ledger settles in lamports and stores
+        ``pnl_pct`` as a fraction; the book keeps SOL and percent, so both are
+        converted. A close whose mint never opened cannot be attributed and is
+        skipped. When nothing is restorable the book stays ``degraded`` and
+        keeps refusing.
+        """
+        events = store.read(types=["PositionOpened", "PositionClosed"], limit=None)
+        mint_creator = _mint_creators(events)
+        book = cls()
+        if clock is not None:
+            book._clock = clock
+        restored = False
+        for event in events:
+            restored = _replay_event(book, mint_creator, event, rug_loss_pct) or restored
+        if not restored:
+            book.degraded = True
+        return book
 
     # -- accounting --------------------------------------------------------
 
@@ -210,3 +246,64 @@ class ReputationBook(BaseModel):
     def summary(self) -> str:
         bad = sum(1 for r in self.creators.values() if r.is_known_bad)
         return f"{len(self.creators)} creators, {bad} with rugs"
+
+
+def _mint_creators(events: list[dict[str, Any]]) -> dict[str, str]:
+    """First opener wins per mint; unattributed mints stay out."""
+    mint_creator: dict[str, str] = {}
+    for event in events:
+        if event["type"] != "PositionOpened":
+            continue
+        payload = event["payload"]
+        if not isinstance(payload, dict):
+            continue
+        mint = str(payload.get("mint", ""))
+        creator = str(payload.get("creator", ""))
+        if mint and creator:
+            mint_creator.setdefault(mint, creator)
+    return mint_creator
+
+
+def _replay_event(
+    book: ReputationBook,
+    mint_creator: dict[str, str],
+    event: dict[str, Any],
+    rug_loss_pct: float,
+) -> bool:
+    """Fold one ledger row into the book; True when it restored history."""
+    payload = event["payload"]
+    if not isinstance(payload, dict):
+        return False
+    if event["type"] == "PositionOpened":
+        creator = str(payload.get("creator", ""))
+        if not creator:
+            return False
+        book.record_open(creator)
+        return True
+    if event["type"] != "PositionClosed":
+        return False
+    return _replay_close(book, mint_creator, payload, rug_loss_pct)
+
+
+def _replay_close(
+    book: ReputationBook,
+    mint_creator: dict[str, str],
+    payload: dict[str, Any],
+    rug_loss_pct: float,
+) -> bool:
+    """Attribute one close to its opener; False when it cannot be used."""
+    creator = mint_creator.get(str(payload.get("mint", "")), "")
+    if not creator:
+        return False
+    try:
+        pnl_lamports = int(payload.get("realized_pnl_lamports", 0))
+        pnl_pct = float(str(payload.get("pnl_pct", "0"))) * 100.0
+    except (TypeError, ValueError):
+        return False
+    book.record_close(
+        creator,
+        pnl_sol=pnl_lamports / LAMPORTS_PER_SOL,
+        pnl_pct=pnl_pct,
+        rug_loss_pct=rug_loss_pct,
+    )
+    return True
