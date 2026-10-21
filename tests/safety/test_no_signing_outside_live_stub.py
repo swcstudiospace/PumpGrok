@@ -100,7 +100,7 @@ PROBES: list[tuple[str, str, bool]] = [
     ("core/probe.py", "from solders.keypair import Keypair as K\n", True),
     ("core/probe.py", "f(sign=1)\n", True),
     ("core/probe.py", 'signature = raw.get("signature")\n', False),
-    ('core/probe.py', '"""Never a real signature here."""\nVALUE = 1\n', False),
+    ("core/probe.py", '"""Never a real signature here."""\nVALUE = 1\n', False),
     ("core/probe.py", "signature_hash = 1\n", False),
     ("execution/live/probe.py", "def sign(tx):\n    return tx\n", False),
     ("execution/live/probe.py", "sig = Keypair()\n", False),
