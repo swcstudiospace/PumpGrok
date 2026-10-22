@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Hardening
 status: planning
-stopped_at: Phase 4 complete, ready to plan Phase 05
-last_updated: "2026-10-22T04:04:11.048Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-10-22T07:41:39.646Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 4 complete, transitioned to Phase 05
-state_head: 192a65b74a164b7a8de391f2b5877cf885a70846
+state_head: "0b890978e96bab6ff9d40fead759e5e58cb46efe"
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 44
+  completed_plans: 41
   percent: 80
 ---
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 80%
 | Phase 03-tools-and-skills P05 | 27min | 3 tasks | 14 files |
 | Phase 04 P07 | single session | 3 tasks | 16 files |
 | Phase 04 P09 | single session | 3 tasks | 11 files |
+| Phase 05-hardening P05 | 1 session | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,7 @@ Recent decisions affecting current work:
 - [Phase 04]: Registry adapter default is p_drop=0.0 on the seeded make_rng stream; SystemRandom banned by the static guard
 - [Phase 04]: human_sell approvals accept size_lamports or token_units; matches() enforces only stated legs
 - [Phase 04]: 04-09 reports keep str.format via named template constants (R9); cli and live-gate messages use f-strings; WallClock is the only wall-time source and HEAD~3 ruff is clean (59 UP findings were plan-introduced, fixed)
+- [Phase 05]: 05-05: matrix paths canonical (tests/desk per SAFETY_INVARIANTS section 6); INV-S-01 renamed to matrix name
 
 ### Pending Todos
 
@@ -106,6 +108,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T22:41:08.372Z
-Stopped at: Phase 4 complete, ready to plan Phase 05
+Last session: 2026-10-22T07:41:35.043Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None

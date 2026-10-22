@@ -92,7 +92,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **OBS-002**: A cycle bound to a ULID correlation id yields child spans `<ulid>.<n>` on every tool call, log record and ledger event (R29; `tests/test_correlation.py::test_correlation_id_chain`).
 - [ ] **OBS-003**: `GET /metrics` exposes `pumpgrok_cycle_seconds{seat}`, `pumpgrok_bot_crashes_total{seat}`, `pumpgrok_orders_total{side,outcome}`, `pumpgrok_equity_sol`, `pumpgrok_drawdown_pct`, `pumpgrok_data_age_seconds{source}`, `pumpgrok_breaker_state{breaker}`, `pumpgrok_kill_switch`, `pumpgrok_ledger_seq` (`docs/design/paper-engine.md` section 6.6) and span timings for every tool call are logged.
 - [ ] **OBS-004**: `docs/runbooks/{setup,engine,start_stop,kill_switch,breaker_reset,outage,rollback,reading_reports,go_live}.md` exist, each command in them is one of the canonical commands or a `pumpgrok` verb, and they pass `./scripts/check.sh`.
-- [ ] **OBS-005**: `CHANGELOG.md` records every phase, `AGENTS.md` indexes the rules a cloud agent must read, and the milestone report (phase reports appended to this file, section 6.6) lists the final test, gate and audit results.
+- [x] **OBS-005**: `CHANGELOG.md` records every phase, `AGENTS.md` indexes the rules a cloud agent must read, and the milestone report (phase reports appended to this file, section 6.6) lists the final test, gate and audit results.
 
 ### Security (SEC)
 
@@ -196,7 +196,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | OBS-002 | Phase 1 Foundation | Complete |
 | OBS-003 | Phase 5 Hardening | Pending |
 | OBS-004 | Phase 5 Hardening | Pending |
-| OBS-005 | Phase 5 Hardening | Pending |
+| OBS-005 | Phase 5 Hardening | Complete |
 | SEC-001 | Phase 1 Foundation | Complete |
 | SEC-002 | Phase 1 Foundation | Complete |
 | SEC-003 | Phase 2 Restructure | Complete |
