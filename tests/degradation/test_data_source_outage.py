@@ -27,13 +27,7 @@ from pumpgrok.supervisor.seat_task import append_escalation
 
 BASE = 1767225600.0
 MINT = "So11111111111111111111111111111111111111112"
-MIXED = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "http"
-    / "adversarial"
-    / "mixed.json"
-)
+MIXED = Path(__file__).resolve().parents[1] / "fixtures" / "http" / "adversarial" / "mixed.json"
 
 
 def _store(tmp_path: Path) -> LedgerStore:
@@ -98,10 +92,7 @@ async def test_blind_window_marks_last_good_then_escalates(tmp_path: Path) -> No
             source="paper",
             correlation_id="desk",
         )
-        kinds = [
-            event["payload"]["kind"]
-            for event in store.read(types=["Escalation"], limit=None)
-        ]
+        kinds = [event["payload"]["kind"] for event in store.read(types=["Escalation"], limit=None)]
         assert kinds == ["blind_flatten"]
         assert store.verify() is True
     finally:

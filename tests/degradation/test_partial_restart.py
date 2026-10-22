@@ -78,9 +78,7 @@ async def test_single_seat_restart_latches_observe_only_while_others_tick(
         assert observe_only.is_latched("bot-01-scout")
         assert not observe_only.is_latched("bot-07-shill")
         assert healthy.cycles == 6
-        escalations = [
-            event for event in store.read(limit=None) if event["type"] == "Escalation"
-        ]
+        escalations = [event for event in store.read(limit=None) if event["type"] == "Escalation"]
         kinds = [event["payload"]["kind"] for event in escalations]
         assert kinds.count("bot_restart_exhausted") == 1
         keys = [event["idempotency_key"] for event in store.read(limit=None)]
@@ -112,7 +110,9 @@ def test_tripped_breaker_survives_restart_with_cooldown(tmp_path: Path) -> None:
     clock = FixtureClock(start=BASE)
     store = _store(tmp_path)
     try:
-        store.append_batch([_rejected_row(offset, index) for index, offset in enumerate((0.0, 1.0, 2.0))])
+        store.append_batch(
+            [_rejected_row(offset, index) for index, offset in enumerate((0.0, 1.0, 2.0))]
+        )
         first = BreakerSet(store, clock)
         first.refresh(
             ts_utc=format_ts_utc(BASE + 2.0),
@@ -149,9 +149,7 @@ async def test_restarted_supervisor_resumes_from_ledger_state(tmp_path: Path) ->
         outcomes = await restarted.run_once()
         assert all(outcome == "ok" for outcome in outcomes.values())
         assert restarted.ready() is True
-        rollovers = [
-            row for row in store.read(limit=None) if row["type"] == "DailyRollover"
-        ]
+        rollovers = [row for row in store.read(limit=None) if row["type"] == "DailyRollover"]
         assert len(rollovers) == 1
         keys = [event["idempotency_key"] for event in store.read(limit=None)]
         assert len(set(keys)) == len(keys)

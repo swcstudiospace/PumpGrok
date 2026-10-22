@@ -171,6 +171,7 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
     finally:
         store.close()
 
+
 def test_smoke_cycle_cli_exits_0_with_no_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
 ) -> None:

@@ -631,13 +631,9 @@ def run_once_replay(
                 payload = row.get("payload") or {}
                 day = str(payload.get("day_utc", ""))
                 if row.get("type") != "DailyRollover" or not day:
-                    raise RuntimeError(
-                        f"replay seat cycles must be read-only: {before} -> {after}"
-                    )
+                    raise RuntimeError(f"replay seat cycles must be read-only: {before} -> {after}")
                 if row.get("idempotency_key") != rollover_key(day):
-                    raise RuntimeError(
-                        f"replay seat cycles must be read-only: {before} -> {after}"
-                    )
+                    raise RuntimeError(f"replay seat cycles must be read-only: {before} -> {after}")
         if not supervisor.ready():
             raise RuntimeError("supervisor not ready after full cycle")
     finally:

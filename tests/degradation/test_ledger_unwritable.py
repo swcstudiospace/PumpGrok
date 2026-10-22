@@ -81,10 +81,7 @@ def test_unwritable_store_buffers_1000_then_refuses_and_drains(tmp_path: Path) -
             source="paper",
             correlation_id="desk",
         )
-        kinds = [
-            event["payload"]["kind"]
-            for event in store.read(types=["Escalation"], limit=None)
-        ]
+        kinds = [event["payload"]["kind"] for event in store.read(types=["Escalation"], limit=None)]
         assert kinds == ["persistence_down"]
         drained = degraded.drain_buffer(store)
         assert drained == LEDGER_BUFFER_CAP

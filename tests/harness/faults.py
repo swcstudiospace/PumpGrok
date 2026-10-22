@@ -54,6 +54,7 @@ class InjectedRateLimit(InjectedFault):
 class InjectedUnknown(InjectedFault):
     """Raised by FaultMode.UNKNOWN: the attempt outcome is unknown, never retried."""
 
+
 class FaultInjector:
     """Apply one fault at `at_index` of an event stream, or to a write sink.
 
@@ -147,9 +148,7 @@ class FaultyLLMClient:
         self.calls: list[dict[str, Any]] = []
         self.fired = 0
 
-    async def complete(
-        self, request: Mapping[str, Any], clock: Any
-    ) -> dict[str, Any]:
+    async def complete(self, request: Mapping[str, Any], clock: Any) -> dict[str, Any]:
         """Answer one model-resolution request, faulting once at `at_call`."""
         index = len(self.calls)
         self.calls.append(dict(request))
@@ -180,9 +179,7 @@ class FaultyRpcClient:
     when every endpoint was malformed.
     """
 
-    def __init__(
-        self, modes: list[FaultMode | None], *, retry_after_s: float = 1.0
-    ) -> None:
+    def __init__(self, modes: list[FaultMode | None], *, retry_after_s: float = 1.0) -> None:
         if not modes:
             raise ValueError("modes must list at least one endpoint")
         self._modes = list(modes)
@@ -219,9 +216,7 @@ class FaultyRpcClient:
             if mode is FaultMode.UNWRITABLE:
                 continue
         if bad_bodies == len(self._modes):
-            raise DataStale(
-                f"rpc bad body method={method} endpoints={len(self._modes)}"
-            )
+            raise DataStale(f"rpc bad body method={method} endpoints={len(self._modes)}")
         raise RpcError(f"rpc failed method={method} endpoints={len(self._modes)}")
 
 
@@ -252,13 +247,9 @@ class FaultyDataSource:
         from pumpgrok.core.datasource import Freshness
 
         age = 121.0 if stale else 0.0
-        return Freshness(
-            fetched_at=datetime.now(UTC), age_s=age, max_age_s=120.0
-        )
+        return Freshness(fetched_at=datetime.now(UTC), age_s=age, max_age_s=120.0)
 
-    async def fetch(
-        self, request: Mapping[str, Any], *, max_age_s: float
-    ) -> tuple[Any, Any]:
+    async def fetch(self, request: Mapping[str, Any], *, max_age_s: float) -> tuple[Any, Any]:
         """Return the cached value with a stale marker, or raise DataStale."""
         self.fetches += 1
         if self._mode is FaultMode.STALE:

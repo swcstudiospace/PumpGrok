@@ -167,7 +167,13 @@ def test_faulty_ledger_store_unwritable_refuses_with_eacces(tmp_path: Path) -> N
                 correlation_id="desk",
                 idempotency_key="k-0",
                 type="JournalNote",
-                payload={"source": "paper", "seat": "desk", "note_kind": "note", "text": "t", "refs": []},
+                payload={
+                    "source": "paper",
+                    "seat": "desk",
+                    "note_kind": "note",
+                    "text": "t",
+                    "refs": [],
+                },
             )
         assert excinfo.value.errno == errno.EACCES
         assert faulty.fired == 1
@@ -191,6 +197,7 @@ async def test_three_virtual_days_yield_three_rollovers(tmp_path: Path) -> None:
     clock = FixtureClock(start=BASE)
     store = _store(tmp_path)
     try:
+
         async def _ok(ctx: SeatContext) -> dict[str, Any]:
             return {"ok": True}
 
@@ -220,6 +227,7 @@ async def test_rollover_is_idempotent_within_a_day(tmp_path: Path) -> None:
     clock = FixtureClock(start=BASE)
     store = _store(tmp_path)
     try:
+
         async def _ok(ctx: SeatContext) -> dict[str, Any]:
             return {"ok": True}
 
