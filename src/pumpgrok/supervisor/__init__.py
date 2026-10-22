@@ -13,7 +13,7 @@ Every wait goes through the injected :class:`Clock`; no wall-clock sleeps,
 
 from __future__ import annotations
 
-from pumpgrok.supervisor.health import HealthServer, build_status, is_ok, write_health_json
+from pumpgrok.supervisor.health import HealthServer, is_ok, write_health_json
 from pumpgrok.supervisor.lifecycle import (
     cancel_and_wait,
     drain,
