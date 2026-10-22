@@ -45,11 +45,11 @@ gates:           ## G-1..G-7 for BOT/TASK (stdlib + pyyaml only, like CI)
 	python3 ci/gates/run_all.py --bot $(BOT) --base origin/main --receipt .receipts/$(BOT)/$(TASK).json
 
 prompts:         ## assemble prompts and regenerate agent templates
-	bash scripts/assemble-prompts.sh
+	UV_BIN=$(UV) bash scripts/assemble-prompts.sh
 	$(UV) run python scripts/generate-templates.py
 
 check: lint typecheck test audit  ## everything ci.yml runs
-	bash scripts/assemble-prompts.sh --check
+	UV_BIN=$(UV) bash scripts/assemble-prompts.sh --check
 	$(UV) run python scripts/generate-templates.py --check
 	$(UV) run python scripts/generate-event-schemas.py --check
 	./scripts/check.sh

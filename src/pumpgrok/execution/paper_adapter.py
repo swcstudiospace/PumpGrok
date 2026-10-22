@@ -168,8 +168,8 @@ class PaperAdapter(ExecutionAdapter):
         self._last_reserves: dict[str, tuple[int, int]] = {}
         self._frozen_marks: dict[str, int] = {}
         self._active_places: set[str] = set()
-        # Place key -> the order the owning place() registered in the barrier.
-        self._owned_order: dict[str, str] = {}
+        # Per-call owner token -> the order that call registered in the barrier.
+        self._owned_order: dict[object, str] = {}
 
     @property
     def inflight_barrier(self) -> InflightBarrier:
@@ -363,16 +363,11 @@ class PaperAdapter(ExecutionAdapter):
         ledger_source = source if source is not None else self._source
         order_hash = order_hash_for(request)
         key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
-        if key in self._active_places:
-            return await self._place_order(
-                request,
-                seat=seat,
-                exit_reason=exit_reason,
-                creator=creator,
-                source=source,
-                correlation_id=correlation_id,
-            )
-        self._active_places.add(key)
+        # One token per call: a call only ever clears the barrier entry it registered.
+        owner = object()
+        owns_key = key not in self._active_places
+        if owns_key:
+            self._active_places.add(key)
         try:
             fill = await self._place_order(
                 request,
@@ -381,21 +376,52 @@ class PaperAdapter(ExecutionAdapter):
                 creator=creator,
                 source=source,
                 correlation_id=correlation_id,
+                owner=owner,
             )
         except BaseException:
-            self._risk.release_order_probes(
-                order_hash, False, source=ledger_source, correlation_id=correlation_id
+            self._settle_probes(
+                order_hash, owner, key, False, source=ledger_source, correlation_id=correlation_id
             )
             raise
+        else:
+            self._settle_probes(
+                order_hash, owner, key, True, source=ledger_source, correlation_id=correlation_id
+            )
+            return fill
         finally:
-            self._active_places.discard(key)
-            stale = self._owned_order.pop(key, None)
-            if stale is not None:
-                self._inflight.discard(stale)
-        self._risk.release_order_probes(
-            order_hash, True, source=ledger_source, correlation_id=correlation_id
-        )
-        return fill
+            if owns_key:
+                self._active_places.discard(key)
+            self._clear_owned(owner)
+
+    def _settle_probes(
+        self,
+        order_hash: str,
+        owner: object,
+        key: str,
+        ok: bool,
+        *,
+        source: str,
+        correlation_id: str,
+    ) -> None:
+        """Release the breaker probe at this call's final outcome, when this call settles it.
+
+        A call settles the order it wrote (its token is in ``_owned_order``). A call that
+        refused before any write settles only when no order was written for the decision.
+        A call that lost the write race (``in_flight``, or a repeat of an order another
+        call placed) leaves the probe to the call that placed it, so it is not released
+        while that order is still in flight.
+        """
+        settles = owner in self._owned_order or self._store.by_key(key) is None
+        if settles:
+            self._risk.release_order_probes(
+                order_hash, ok, source=source, correlation_id=correlation_id
+            )
+
+    def _clear_owned(self, owner: object) -> None:
+        """Remove the barrier entry this call registered, if any; idempotent."""
+        order_id = self._owned_order.pop(owner, None)
+        if order_id is not None:
+            self._inflight.discard(order_id)
 
     async def _place_order(
         self,
@@ -406,6 +432,7 @@ class PaperAdapter(ExecutionAdapter):
         creator: str | None = None,
         source: str | None = None,
         correlation_id: str = "desk",
+        owner: object,
     ) -> Fill:
         """Risk, batch, latency, CONFIRMING re-check, then a curve-priced fill."""
         ledger_source = source if source is not None else self._source
@@ -477,6 +504,7 @@ class PaperAdapter(ExecutionAdapter):
                 seat=seat,
                 exit_reason=exit_reason,
                 creator=creator,
+                owner=owner,
             )
         return await self._place_sell(
             request,
@@ -486,6 +514,7 @@ class PaperAdapter(ExecutionAdapter):
             seat=seat,
             exit_reason=exit_reason,
             creator=creator,
+            owner=owner,
         )
 
     async def _await_confirmation(
@@ -499,6 +528,7 @@ class PaperAdapter(ExecutionAdapter):
         seat: str | None,
         exit_reason: str | None,
         creator: str | None,
+        owner: object,
     ) -> tuple[CurveSnapshot, float, int | None]:
         """Latency sleep, cancel check, curve re-read, stop re-check, drop draw.
 
@@ -512,8 +542,7 @@ class PaperAdapter(ExecutionAdapter):
         for repeat reconstruction, and ``OrderUnknownError`` is raised. The
         timed-out attempt is never retried (single-send rule).
         """
-        owner_key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
-        self._owned_order[owner_key] = order_id
+        self._owned_order[owner] = order_id
         self._inflight.add(order_id)
         latency_s, dropped = draw_latency(self._rng, p_drop=self._p_drop)
         try:
@@ -620,6 +649,7 @@ class PaperAdapter(ExecutionAdapter):
         seat: str | None,
         exit_reason: str | None,
         creator: str | None,
+        owner: object,
     ) -> Fill:
         size = decision_size
         if curve0.s_lamports < self._floor(size):
@@ -673,6 +703,7 @@ class PaperAdapter(ExecutionAdapter):
             seat=seat,
             exit_reason=exit_reason,
             creator=creator,
+            owner=owner,
         )
         if cap_now is not None and cap_now < filled:
             # CONFIRMING recomputed a smaller trade cap during the wait: fill only
@@ -841,6 +872,7 @@ class PaperAdapter(ExecutionAdapter):
         seat: str | None,
         exit_reason: str | None,
         creator: str | None,
+        owner: object,
     ) -> Fill:
         units, filled_units = await self._sell_targets(
             request, curve0, ledger_source=ledger_source, correlation_id=correlation_id
@@ -884,6 +916,7 @@ class PaperAdapter(ExecutionAdapter):
             seat=seat,
             exit_reason=exit_reason,
             creator=creator,
+            owner=owner,
         )
         state = self._fold_state()
         pos = state.positions.get(request.mint)

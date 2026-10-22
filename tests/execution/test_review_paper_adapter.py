@@ -719,6 +719,120 @@ async def test_flatten_waits_for_in_flight_order_before_closing(tmp_path: Path) 
         store.close()
 
 
+# -- PR6 round 5: barrier ownership is per call, cleanup on every exit path --
+
+
+class _BlockOnReads:
+    """Answers each curve read at once unless its 1-based number is in ``block_on``."""
+
+    def __init__(self, snap: CurveSnapshot, block_on: set[int]) -> None:
+        self._snap = snap
+        self._block_on = block_on
+        self.reads = 0
+        self.gate = asyncio.Event()
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        self.reads += 1
+        if self.reads in self._block_on:
+            await self.gate.wait()
+        return self._snap
+
+
+async def _pair_at_confirmation(
+    adapter: PaperAdapter, clock: FixtureClock, source: _BlockOnReads, request: OrderRequest
+) -> tuple[asyncio.Task[Fill], asyncio.Task[Fill]]:
+    """Start an owner call (blocked on its decision read), then a same-key retry
+    that reaches its own confirmation read (read 3) and blocks there."""
+    first = asyncio.create_task(adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
+    for _ in range(50):
+        await asyncio.sleep(0)
+    retry = asyncio.create_task(adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
+    for _ in range(400):
+        if source.reads >= 3:
+            break
+        clock.advance_to(clock.now() + 1.0)
+        await asyncio.sleep(0)
+    assert source.reads == 3
+    return first, retry
+
+
+async def test_cancelled_place_during_confirmation_read_clears_barrier(tmp_path: Path) -> None:
+    """(a) Cancel a place() waiting on its confirmation curve read: flatten must not wait on it."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        source = _BlockOnReads(_snap(), block_on={2})
+        adapter = _adapter(store, clock, price_source=source)
+        ids = IdFactory(clock, make_rng(16))
+        task = asyncio.create_task(
+            adapter.place(_order(ids, MINT), seat="bot-04-sniper", correlation_id="test")
+        )
+        for _ in range(400):
+            if source.reads >= 2:
+                break
+            clock.advance_to(clock.now() + 1.0)
+            await asyncio.sleep(0)
+        assert len(adapter.inflight_barrier) == 1
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(adapter.inflight_barrier) == 0
+        assert adapter.inflight_barrier.wait_empty(timeout_s=0.01) is True
+    finally:
+        store.close()
+
+
+async def test_cancelled_retry_clears_only_its_own_barrier_entry(tmp_path: Path) -> None:
+    """(c) A cancelled same-key retry removes its own order and leaves nothing behind."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        source = _BlockOnReads(_snap(), block_on={1, 3})
+        adapter = _adapter(store, clock, price_source=source)
+        request = _order(IdFactory(clock, make_rng(17)), MINT)
+        first, retry = await _pair_at_confirmation(adapter, clock, source, request)
+        assert len(adapter.inflight_barrier) == 1
+        retry.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await retry
+        assert len(adapter.inflight_barrier) == 0
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert len(adapter.inflight_barrier) == 0
+    finally:
+        store.close()
+
+
+async def test_cancelled_owner_does_not_remove_retry_order(tmp_path: Path) -> None:
+    """(b) Start a same-key retry, cancel the first call: the retry stays registered.
+
+    The retry keeps its own barrier entry, and flatten waits for it.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        source = _BlockOnReads(_snap(), block_on={1, 3})
+        adapter = _adapter(store, clock, price_source=source)
+        request = _order(IdFactory(clock, make_rng(18)), MINT)
+        first, retry = await _pair_at_confirmation(adapter, clock, source, request)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert len(adapter.inflight_barrier) == 1
+        assert adapter.inflight_barrier.wait_empty(timeout_s=0.01) is False
+        source.gate.set()
+        for _ in range(400):
+            if retry.done():
+                break
+            clock.advance_to(clock.now() + 1.0)
+            await asyncio.sleep(0)
+        assert isinstance(await retry, Fill)
+        assert len(adapter.inflight_barrier) == 0
+    finally:
+        store.close()
+
+
 # -- PR6 round 4 finding 2: an aborted order must not block flatten -------
 
 
@@ -750,5 +864,67 @@ async def test_aborted_order_clears_barrier_so_flatten_does_not_wait(tmp_path: P
         assert isinstance(results[0], RuntimeError), results[0]
         assert len(adapter.inflight_barrier) == 0
         assert adapter.inflight_barrier.wait_empty(timeout_s=0.01) is True
+    finally:
+        store.close()
+
+
+# -- PR6 round 5 follow-up: a failed owner must not release the retry's probe --
+
+
+async def test_owner_failure_after_retry_keeps_retry_probe(tmp_path: Path) -> None:
+    """Owner stalls before its batch write; a same-key retry places the order and holds
+    the admitted probe; the owner then fails with in_flight. The retry's probe must stay
+    held, so the retry fills and a third order is still refused by the probe."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        engine = _tripped_engine(store, clock)
+        source = _BlockOnReads(_snap(), block_on={1})
+        adapter = PaperAdapter(
+            store=store,
+            risk=engine,
+            ids=IdFactory(clock, make_rng(41)),
+            clock=clock,
+            rng=make_rng(41),
+            budget=RiskBudget(),
+            price_source=source,
+            p_drop=0.0,
+        )
+        request = _order(IdFactory(clock, random.Random(19)), MINT)
+        owner = asyncio.create_task(
+            adapter.place(request, seat="bot-04-sniper", correlation_id="test")
+        )
+        for _ in range(50):
+            await asyncio.sleep(0)
+        assert source.reads == 1
+        retry = asyncio.create_task(
+            adapter.place(request, seat="bot-04-sniper", correlation_id="test")
+        )
+        for _ in range(50):
+            await asyncio.sleep(0)
+        assert source.reads == 2
+        assert len(adapter.inflight_barrier) == 1
+        assert len(store.read(types=["OrderPlaced"], limit=None)) == 1
+
+        source.gate.set()
+        for _ in range(50):
+            await asyncio.sleep(0)
+        assert owner.done()
+        with pytest.raises(OrderRejectedError) as owner_exc:
+            await owner
+        assert owner_exc.value.reason == "in_flight"
+
+        probe_blocked = engine.check(_order(IdFactory(clock, random.Random(20)), OTHER))
+        assert probe_blocked.passed is False
+        assert probe_blocked.reason == "breaker_open"
+
+        for _ in range(400):
+            if retry.done():
+                break
+            clock.advance_to(clock.now() + 1.0)
+            await asyncio.sleep(0)
+        fill = await retry
+        assert isinstance(fill, Fill)
+        assert len(store.read(types=["FillRecorded"], limit=None)) == 1
     finally:
         store.close()

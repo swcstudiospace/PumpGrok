@@ -25,7 +25,7 @@ from pumpgrok.tools.notify.notifier import DESTINATION_TIMEOUT_S, HttpxNotifier,
 from pumpgrok.tools.notify.telegram import TelegramSender, TelegramSendError
 from pumpgrok.tools.notify.webhook import WebhookSender
 
-TOKEN = "123456789:AAFakeSyntheticTelegramTokenValue_0"
+TOKEN = "123456789:AAFakeSyntheticTelegramTokenValue_0"  # pragma: allowlist secret: fake
 CHAT = "12345"
 SLOW_URL = "https://slow.example.test/hook"
 FAST_URL = "https://fast.example.test/hook"
