@@ -15,6 +15,7 @@ adapter, writing ``var/replay/<dataset>/ledger.sqlite`` with no network.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
@@ -30,7 +31,7 @@ from pumpgrok.engine.pipeline import decide_replay
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.json import bind_seat
-from pumpgrok.replay.clock import FixtureClock, format_ts_utc, parse_ts_utc
+from pumpgrok.replay.clock import FixtureClock, WallClock, format_ts_utc, parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
@@ -39,9 +40,12 @@ from pumpgrok.risk.engine import RiskEngine, utc_day
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.health import (
     HEALTH_FILE_INTERVAL_S,
+    HealthServer,
     build_status,
     write_health_json,
 )
+from pumpgrok.supervisor.lifecycle import install_signal_handlers
+from pumpgrok.supervisor.metrics import Metrics
 from pumpgrok.supervisor.seat_task import (
     CLOCK_SKEW_S,
     ClockSkew,
@@ -217,6 +221,7 @@ class Supervisor:
         degraded: DegradedState | None = None,
         health_path: str | Path | None = None,
         risk: Any | None = None,
+        cycle_observer: Callable[[str, float, str], None] | None = None,
     ) -> None:
         unknown = set(cycles) - set(ROSTER)
         if unknown:
@@ -247,6 +252,7 @@ class Supervisor:
                 correlation_id=correlation_id,
                 notifier=notifier,
                 observe_only=self.observe_only,
+                cycle_observer=cycle_observer,
             )
             for seat in ROSTER
         }
@@ -639,3 +645,131 @@ def run_once_replay(
     finally:
         store.close()
     return result
+
+
+def build_serve_replay(
+    dataset_dir: str | Path,
+    filter_cfg: Any,
+    *,
+    seed: int,
+    clock: Clock | None = None,
+    ledger_path: str | Path | None = None,
+    health_path: str | Path | None = None,
+) -> tuple[Supervisor, Metrics, LedgerStore]:
+    """Construct the D1 serve supervisor over a replayed ledger.
+
+    Runs ``run_replay`` once to rebuild the ledger, then wires the ten
+    offline seat cycles from ``_replay_cycles`` with ``source="replay"`` so
+    the health body carries ``ledger_source=replay`` (never live data). The
+    returned store stays open; the caller closes it after the serve loop.
+    """
+    if clock is None:
+        clock = WallClock()
+    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
+    source_dir = Path(dataset_dir)
+    dataset = load_dataset(source_dir)
+    if ledger_path is not None:
+        target = Path(ledger_path)
+    else:
+        target = REPLAY_ROOT / dataset.manifest.dataset / "ledger.sqlite"
+    rng = make_rng(seed)
+    store = LedgerStore(str(target))
+    try:
+        raw_autonomy = read_autonomy(store)
+        if raw_autonomy == "autonomous-paper":
+            autonomy_level: Literal["manual-ticket", "autonomous-paper"] = "autonomous-paper"
+        else:
+            autonomy_level = "manual-ticket"
+        risk = RiskEngine(
+            store=store,
+            budget=RiskBudget(),
+            ids=IdFactory(clock, rng),
+            clock=clock,
+            limits=EngineLimits(),
+            autonomy=autonomy_level,
+            env={},
+        )
+        degraded = DegradedState()
+        replay_llm = load_llm_records(source_dir)
+        cycles = _replay_cycles(
+            clock=clock,
+            rng=rng,
+            store=store,
+            risk=risk,
+            degraded=degraded,
+            dataset_events=list(dataset.events),
+            replay_llm=replay_llm,
+            dataset_name=dataset.manifest.dataset,
+            filter_cfg=filter_cfg,
+        )
+
+        def _snapshot() -> dict[str, Any]:
+            """Scrape-time gauges: ledger_seq is real; kill switch matches the health body."""
+            try:
+                seq = store.count()
+            except Exception:
+                seq = 0
+            return {"ledger_seq": seq, "kill_switch": False}
+
+        metrics = Metrics(snapshot=_snapshot)
+        supervisor = Supervisor(
+            store=store,
+            clock=clock,
+            rng=rng,
+            cycles=cycles,
+            mode="paper",
+            source="replay",
+            correlation_id="desk",
+            notifier=None,
+            degraded=degraded,
+            health_path=health_path,
+            risk=risk,
+            cycle_observer=metrics.observe,
+        )
+    except Exception:
+        store.close()
+        raise
+    return supervisor, metrics, store
+
+
+async def serve_replay(
+    dataset_dir: str | Path,
+    filter_cfg: Any,
+    *,
+    seed: int,
+    port: int,
+    ledger_path: str | Path | None = None,
+    health_path: str | Path | None = None,
+) -> int:
+    """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
+
+    Listens on all container interfaces: Docker forwards published ports to the
+    container IP, never to its loopback, so a 127.0.0.1 in-container bind is
+    unreachable from the host. LAN safety comes from the compose file, which
+    publishes 127.0.0.1:8080 only; there are no unauthenticated write routes.
+    SIGINT/SIGTERM stop the loop and the server closes before the store does.
+    Returns 0.
+    """
+    supervisor, metrics, store = build_serve_replay(
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        ledger_path=ledger_path,
+        health_path=health_path,
+    )
+    server = HealthServer(
+        supervisor.clock,
+        supervisor.health_status,
+        supervisor.ready,
+        get_metrics=metrics.exposition,
+    )
+    bound = await server.start("0.0.0.0", port)
+    log.info("serve listening on 0.0.0.0:%d (ledger_source=replay)", bound)
+    install_signal_handlers(supervisor.request_stop)
+    try:
+        return await supervisor.serve_forever()
+    finally:
+        with contextlib.suppress(Exception):
+            await server.stop()
+        with contextlib.suppress(Exception):
+            store.close()

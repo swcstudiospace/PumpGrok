@@ -50,6 +50,7 @@ from pumpgrok.config.settings import (
     ConfigError,
     Settings,
     current_profile,
+    health_port,
     load_settings,
     refuse_cli_secrets,
 )
@@ -74,8 +75,7 @@ from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
-from pumpgrok.supervisor.scheduler import run_once_replay
+from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import build_operator_registry
 
 EXIT_OK = 0
@@ -369,6 +369,11 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
     run.add_argument("--replay", metavar="DIR", default=None, help="recorded fixture directory")
     run.add_argument(
+        "--serve",
+        action="store_true",
+        help="replay a recorded dataset in a loop, serving /healthz and /metrics",
+    )
+    run.add_argument(
         "--record", metavar="DATASET", default=None, help="record a dataset (not yet implemented)"
     )
     run.add_argument(
@@ -536,6 +541,14 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             return EXIT_LIVE
     if args.record is not None or args.duration is not None:
         return _not_implemented("run --record")
+    if args.serve:
+        if args.once or not args.replay:
+            _say(
+                sys.stderr,
+                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
+            )
+            return EXIT_NOT_IMPLEMENTED
+        return _serve_replay_loop(Path(args.replay), settings)
     if not (args.once and args.replay):
         _say(
             sys.stderr,
@@ -543,6 +556,21 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         )
         return EXIT_NOT_IMPLEMENTED
     return _skip_cycle(Path(args.replay), settings)
+
+
+def _serve_replay_loop(source: Path, settings: Settings) -> int:
+    """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics."""
+    dataset_name = source.resolve().name
+    if not DATASET_NAME_RE.fullmatch(dataset_name):
+        raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
+    port = health_port(settings)
+    if port <= 0:
+        _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
+        return EXIT_CONFIG
+    log.info("serve starting (dataset=%s port=%d)", dataset_name, port)
+    return asyncio.run(
+        serve_replay(source, settings.filter, seed=settings.replay.seed, port=port)
+    )
 
 
 def _skip_cycle(source: Path, settings: Settings) -> int:

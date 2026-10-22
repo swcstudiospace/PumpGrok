@@ -1,25 +1,51 @@
 # Usage:
 #   docker compose config --quiet                 # validate
 #   docker compose build pumpgrok
-#   docker compose run --rm pumpgrok              # one skip-only replay cycle, exits 0
+#   docker compose up -d pumpgrok                 # long-running serve: replays the
+#                                                 # recorded dataset in a loop and
+#                                                 # serves /healthz and /metrics
+#   docker compose run --rm pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke
+#                                                 # Phase 1 criterion 4 one-shot
 #
-# The pumpgrok service is a one-shot (R50). It deliberately has NO restart policy: a restart
-# policy would relaunch the exit-0 replay command in a loop, so the service never settles
-# (research Pitfall 6). Do not add a restart policy here. Liveness is the image HEALTHCHECK
-# (`pumpgrok doctor`).
-
+# The pumpgrok service runs `run --mode paper --serve --replay <dataset>` (D1): a
+# long-running loop over a recorded dataset, labelled ledger_source=replay, with
+# /healthz and /metrics on 127.0.0.1:8080. Restart policy unless-stopped applies
+# to this serve path only (D1/D9 supersede the old no-restart rule); the one-shot
+# form above still runs a single cycle and exits 0 (Phase 1 criterion 4 intact).
+# Liveness is the /healthz probe below (stdlib urllib; no curl in slim images).
+#
+# Bind-mount ownership: the container runs as the non-root `pumpgrok` user while
+# the host ./var/ directory is owned by the host user. On Linux hosts, make the
+# host ./var/ directory writable by the container user before the first `up`;
+# see docs/runbooks/start_stop.md. Do not paper over this with a compose user
+# mapping, which changes the security posture.
+# Port split: the serve process listens on all container interfaces because
+# Docker forwards published ports to the container IP, never to its loopback;
+# LAN safety comes from publishing the host loopback only (127.0.0.1:8080).
 services:
   pumpgrok:
     build: .
     image: pumpgrok:local
     container_name: pumpgrok
+    command: ["run", "--mode", "paper", "--serve", "--replay", "tests/fixtures/replay/smoke"]
     env_file:
       - path: .env
         required: false          # optional operator PUMPGROK_* values; never baked into the image
     environment:
       PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+      PUMPGROK_HEALTH__PORT: "8080"
+    volumes:
+      - ./var:/app/var
     ports:
-      - "127.0.0.1:8080:8080"    # loopback only; reserved for /healthz (AUTO-004)
+      - "127.0.0.1:8080:8080"    # loopback only; /healthz and /metrics (AUTO-004)
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PUMPGROK_HEALTH__PORT', '8080') + '/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
     logging:
       driver: json-file
       options:

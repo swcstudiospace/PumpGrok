@@ -9,6 +9,11 @@ returns ``200`` only after the ledger reconciled CONSISTENT and every seat
 completed one cycle. ``GET /metrics`` returns the Prometheus exposition bytes
 (Phase 5, OBS-003) with the exposition content type; only GET is served.
 
+``run --serve`` binds this server on 127.0.0.1:``PUMPGROK_HEALTH__PORT``
+(serve mode only; ``--once``/``--replay`` force port 0 per INV-C-11) with the
+health body labelled ``ledger_source=replay``. ``pumpgrok doctor`` probes both
+endpoints with stdlib ``urllib``.
+
 ``var/health.json`` carries the same body, written atomically (tmp +
 ``os.replace`` via ``atomic_write_json``, R26) every
 ``health.file_interval_s = 10`` virtual seconds.

@@ -28,8 +28,10 @@ from pumpgrok.supervisor.scheduler import (
     LedgerUnavailable,
     Supervisor,
     assert_no_skew,
+    build_serve_replay,
     cycle_timeout_s,
     run_once_replay,
+    serve_replay,
 )
 from pumpgrok.supervisor.seat_task import (
     CLOCK_SKEW_S,
@@ -60,7 +62,7 @@ __all__ = [
     "append_escalation",
     "assert_no_skew",
     "build_registry",
-    "build_status",
+    "build_serve_replay",
     "cancel_and_wait",
     "cycle_timeout_s",
     "drain",
@@ -68,6 +70,7 @@ __all__ = [
     "is_ok",
     "relay_tail",
     "run_once_replay",
+    "serve_replay",
     "shutdown",
     "write_health_json",
 ]

@@ -8,7 +8,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 WORKDIR /build
-COPY pyproject.toml uv.lock README.md ./
+COPY .python-version pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
@@ -26,7 +26,7 @@ WORKDIR /app
 COPY tests/fixtures/replay/smoke /app/tests/fixtures/replay/smoke
 USER pumpgrok
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["pumpgrok", "doctor"]
+    CMD ["python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PUMPGROK_HEALTH__PORT', '8080') + '/healthz', timeout=4)"]
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["pumpgrok"]
 # One skip-only replay cycle, then exit 0 (R50). Ledger output goes to /app/var, the only
