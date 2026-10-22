@@ -22,12 +22,30 @@ from typing import Any
 from pumpgrok.replay.recorder import canonical_request_hash
 from pumpgrok.replay.runner import llm_request_for
 
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _derive_mint(label: str, length: int = 44) -> str:
+    """Derive a deterministic base58 mint from a domain-separated label."""
+    out: list[str] = []
+    counter = 0
+    while len(out) < length:
+        first = hashlib.sha256(f"smoke-10m/{label}:{counter}".encode()).digest()
+        second = hashlib.sha256(first).digest()
+        for byte in first + second:
+            if len(out) >= length:
+                break
+            out.append(_B58[byte % 58])
+        counter += 1
+    return "".join(out)
+
+
 DATASET = "smoke-10m"
 BASE_EPOCH = 1767225600.0  # 2026-01-01T00:00:00Z
 STEP_S = 15.0
 COUNT = 41
-MINT_A = "Smoke10MintAAAA111111111111111111111111111111"
-MINT_B = "Smoke10MintBBBB222222222222222222222222222222"
+MINT_A = _derive_mint("mint-a")
+MINT_B = _derive_mint("mint-b")
 LATENCY_S = 1.9
 
 
@@ -90,8 +108,9 @@ def main() -> None:
         "sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "notes": (
             "Hand-authored CI smoke dataset (not recorded from live feeds). "
-            "Two mints, 41 ticks over ten minutes, one complete=true tick, "
-            "one recorded LLM ok outcome."
+            "Two derived 44-char base58 mints (sha256 over smoke-10m/mint-a and "
+            "smoke-10m/mint-b), 41 ticks over ten minutes, one complete=true "
+            "tick, one recorded LLM ok outcome."
         ),
     }
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")

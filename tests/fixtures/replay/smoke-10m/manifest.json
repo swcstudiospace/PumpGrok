@@ -8,8 +8,8 @@
     "pumpportal": "hand-authored"
   },
   "sha256": {
-    "events.jsonl": "df6c18c4cc68be67c0e5c74d7e23030419a3e5ff58697669fb5a146fd8c5f156",
+    "events.jsonl": "751a0a6e42df9461465bd644b99d82416d8741dd24beeb1a9eb65aa563444bc0",
     "llm.jsonl": "6ea1b215ee18d2a44298d9ae66bb51fcebbb4926ff814e544618b456adacdcc9"
   },
-  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two mints, 41 ticks over ten minutes, one complete=true tick, one recorded LLM ok outcome."
+  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two derived 44-char base58 mints (sha256 over smoke-10m/mint-a and smoke-10m/mint-b), 41 ticks over ten minutes, one complete=true tick, one recorded LLM ok outcome."
 }
