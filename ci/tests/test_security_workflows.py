@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 GITLEAKS_CONFIG = REPO_ROOT / "ci" / "security" / "gitleaks.toml"
 BANDIT_SARIF_CONVERTER = REPO_ROOT / "ci" / "security" / "bandit_json_to_sarif.py"
+EXCEPTIONS_GATE = REPO_ROOT / "ci" / "security" / "check_exceptions.py"
 
 WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
 
@@ -221,6 +222,76 @@ class TestCiWorkflow:
         trigger = _trigger(_load_yaml("ci.yml"))
         assert trigger["push"]["branches"] == ["main"]
         assert trigger["pull_request"]["branches"] == ["main"]
+
+    def test_nightly_soak_schedule_requires_soak(self):
+        doc = _load_yaml("ci.yml")
+        trigger = _trigger(doc)
+        assert any("cron" in item for item in trigger["schedule"])
+        soak = doc["jobs"]["soak"]
+        assert soak["runs-on"] == "ubuntu-latest"
+        assert soak["if"] == "github.event_name == 'schedule'"
+        step = soak["steps"][-1]
+        assert str(step["env"]["PUMPGROK_REQUIRE_SOAK"]) == "1"
+        assert "pytest -q -m slow tests/soak" in step["run"]
+
+
+class TestSecurityPrPushTrigger:
+    def test_triggers_on_pull_request_and_push_to_main(self, security_pr):
+        trigger = _trigger(security_pr)
+        assert trigger["pull_request"]["branches"] == ["main"]
+        assert trigger["push"]["branches"] == ["main"]
+
+    def test_pip_audit_runs_through_uv_run(self, security_pr):
+        run = _step(security_pr, "pip-audit")["run"]
+        assert "uv run pip-audit -r req.txt --strict" in run
+        assert "uv sync --frozen" in run
+
+    def test_scanner_installs_are_version_pinned(self, security_pr):
+        runs = " ".join(_run_blocks(security_pr))
+        assert 'pip install "semgrep==' in runs
+        assert 'pip install "bandit==' in runs
+        assert "\nrun: pip install semgrep\n" not in runs
+        assert "\nrun: pip install bandit\n" not in runs
+
+
+class TestSecurityExceptions:
+    @pytest.fixture(scope="module")
+    def gate(self):
+        spec = importlib.util.spec_from_file_location("check_exceptions", EXCEPTIONS_GATE)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_exceptions_table_has_columns_and_zero_rows(self, gate):
+        text = (REPO_ROOT / "SECURITY.md").read_text()
+        assert "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |" in text
+        import datetime
+
+        assert gate.check_text(text, datetime.date(2026, 10, 22)) == []
+
+    def test_expired_expiry_is_reported(self, gate):
+        import datetime
+
+        text = (
+            "## Exceptions\n\n"
+            "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |\n"
+            "|---|---|---|---|---|\n"
+            "| pip-audit | sha256:abc | no fix released | bot-02-risk | 2026-01-01 |\n"
+        )
+        errors = gate.check_text(text, datetime.date(2026, 10, 22))
+        assert len(errors) == 1 and "expired" in errors[0]
+
+    def test_malformed_row_is_reported(self, gate):
+        import datetime
+
+        text = (
+            "## Exceptions\n\n"
+            "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |\n"
+            "|---|---|---|---|---|\n"
+            "| pip-audit | sha256:abc | no fix released | bot-02-risk | soon |\n"
+        )
+        errors = gate.check_text(text, datetime.date(2026, 10, 22))
+        assert len(errors) == 1 and "ISO" in errors[0]
 
 
 class TestPreCommitHooks:

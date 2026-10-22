@@ -5,9 +5,19 @@
 # best-effort, to code scanning. The artifact upload is the guaranteed path; the code-scanning
 # upload is a bonus that never blocks the gate.
 #
-# Triggers on every pull request into main, not on a path filter: a required check behind a path
-# filter stays pending on pull requests that do not touch the filtered paths. The dependency job
-# audits the uv.lock export, so pyproject.toml and uv.lock changes are covered on every run.
+# Security PR gate: secrets, SAST and SCA on every pull request into main and on
+# every push to main.
+#
+# Each scanner runs independently so one tool's finding does not hide another's. Each writes a
+# SARIF file that is uploaded as a workflow artifact unconditionally (if: always()) and,
+# best-effort, to code scanning. The artifact upload is the guaranteed path; the code-scanning
+# upload is a bonus that never blocks the gate.
+#
+# Triggers on every pull request into main plus every push to main (SEC-005 evidence
+# is the first main-branch run): a required check behind a path filter stays pending
+# on pull requests that do not touch the filtered paths, and without the push trigger
+# the gate never runs on main itself. The dependency job audits the uv.lock export,
+# so pyproject.toml and uv.lock changes are covered on every run.
 #
 # Runners are GitHub-hosted (ubuntu-latest). Self-hosted runners are not used.
 
@@ -15,6 +25,8 @@ name: Security PR Gate
 
 on:
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 permissions:
@@ -90,7 +102,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Semgrep
-        run: pip install semgrep
+        # Pinned (SEC-005): unpinned scanner installs fail the guard in
+        # ci/tests/test_security_workflows.py. Verified on PyPI 2026-10-22.
+        run: pip install "semgrep==1.182.1"
 
       - name: Semgrep — repo rules + registry security/secrets packs
         # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
@@ -142,7 +156,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Bandit
-        run: pip install bandit
+        # Pinned (SEC-005): unpinned scanner installs fail the guard in
+        # ci/tests/test_security_workflows.py. Verified on PyPI 2026-10-22.
+        run: pip install "bandit==1.9.4"
 
       - name: Bandit baseline — snapshot the base ref's own findings
         # A whole-repo scan fails every PR on findings already present on the base ref. Bandit's
@@ -224,11 +240,14 @@ jobs:
         # pins them). uv export emits the exact set the Makefile audit target scans. pip-audit has
         # no severity threshold, so it fails on any known vulnerability in the export; that is
         # stricter than the HIGH+ policy of the Trivy step below, and is left that way on purpose.
+        # pip-audit runs through `uv run` (R49 V-4) so the scanned tool is the locked one from
+        # the dev group, never an ambient pip install.
         run: |
           set -euo pipefail
-          pip install "uv==0.13.4" pip-audit
+          pip install "uv==0.13.4"
+          uv sync --frozen
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o req.txt
-          pip-audit -r req.txt --strict
+          uv run pip-audit -r req.txt --strict
 
       - name: Trivy filesystem scan — HIGH+ dependency vulnerabilities
         # ignore-unfixed is deliberately NOT set: a HIGH or CRITICAL finding with no fix released

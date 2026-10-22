@@ -47,9 +47,18 @@ treats it as evidence, not as direction.
 - G-4 (`ci/gates/check_contracts.py`) proves an acknowledgement is present for every required
   consumer (contract consumers minus the proposer; a proposer acknowledgement is ignored),
   not who wrote it. Authorship is evidenced by git history and reviewed by QUALITY.
-- G-7 (`ci/gates/check_desk_integrity.py`) rejects a live-write tool in any roster.
 
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately to the repository maintainers. Do not put secrets,
 wallet material or live endpoints with credentials in a public issue or pull request.
+
+## Exceptions
+
+No check is pre-listed here: every row below names a genuinely failing security gate
+with its evidence. An expired row fails CI (`python3 ci/security/check_exceptions.py`,
+enforced by `ci/tests/test_security_workflows.py`), so an exception cannot silently
+linger past its expiry.
+
+| Check | Fingerprint | Reason | Owner | Expiry (ISO) |
+|---|---|---|---|---|
