@@ -13,6 +13,7 @@ dependencies = [
     "websockets>=17.3,<18",
     "pyyaml>=6.0.3,<7",
     "tenacity>=9.2.1,<10",
+    "prometheus-client>=0.26,<0.27",
 ]
 
 [project.scripts]
@@ -91,5 +92,6 @@ addopts = "-q --strict-markers"
 markers = [
     "replay: runs against tests/fixtures/replay/<dataset>",
     "characterization: pins vendor behaviour during the port",
+    "slow: multi-day soak replay (nightly; PUMPGROK_REQUIRE_SOAK=1 makes absence fail)",
 ]
 filterwarnings = ["error::DeprecationWarning:pumpgrok.*"]
