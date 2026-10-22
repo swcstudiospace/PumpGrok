@@ -197,6 +197,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pyyaml pytest
+      - name: Install uv (pinned to the version that wrote uv.lock)
+        run: pip install "uv==0.13.4"
+      - name: Install the project so every owning test module collects
+        run: uv sync --frozen
       - name: Gate test suite
-        run: python3 -m pytest ci/tests/ -v
+        run: uv run pytest ci/tests/ -v

@@ -54,4 +54,16 @@ description = "Repo-wide false-positive suppressions"
 # extension, and a credential embedded in a lockfile must still reach a scanner.
 regexes = [
   '''\$\{[A-Za-z_][A-Za-z0-9_]*\}''',
+  # Synthetic values planted on purpose by the redaction, logging and gate tests. Each entry
+  # is a full literal, so a real credential of any other value still fails the scan.
+  '''123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi''',  # pragma: allowlist secret: synthetic test value
+  '''A1b2C3d4E5f6G7h8I9j0K''',
+  '''Zq8Lr2Tv9Wm4Xk7Nb1Hc6Yd3Pe5Fg0Js''',
+  '''abc123def456\.solana-mainnet\.quiknode\.pro/ABCDEFGHIJ1234567890''',
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.abcdefghijklmnop''',
+  '''helius-rpc\.com/\?api-key=AbCdEfGhIjKlMnOpQrStUvWx1234''',
+  '''xai-0123456789abcdef0123456789abcdef''',  # pragma: allowlist secret: synthetic test value
+  '''xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6''',  # pragma: allowlist secret: synthetic test value
+  '''xai-abcdef1234567890abcdef1234567890''',  # pragma: allowlist secret: synthetic test value
+  '''AbCdEfGhIjKlMnOpQrStUvWx1234''',
 ]
