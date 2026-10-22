@@ -90,3 +90,18 @@ def test_health_port_rejects_out_of_range_values(
             load_settings()
     monkeypatch.setenv("PUMPGROK_HEALTH__PORT", "65535")
     assert load_settings().health.port == 65535
+
+
+def test_health_host_rejects_invalid_values(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for bad in ("256.300.1.1", " ", "not a host!", "host_name", ""):
+        monkeypatch.setenv("PUMPGROK_HEALTH__HOST", bad)
+        with pytest.raises(ConfigError):
+            load_settings()
+
+
+def test_health_host_accepts_valid_hosts(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    for good in ("127.0.0.1", "0.0.0.0", "localhost", "::1"):
+        monkeypatch.setenv("PUMPGROK_HEALTH__HOST", good)
+        assert load_settings().health.host == good

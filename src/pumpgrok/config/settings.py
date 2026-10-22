@@ -23,6 +23,7 @@ the process environment instead).
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import tomllib
@@ -30,7 +31,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -251,6 +252,10 @@ class LiveSettings(BaseModel):
     enabled: bool = False
 
 
+_HEALTH_HOST_LABEL_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
+_HEALTH_HOST_NUMERIC_RE = re.compile(r"[0-9.]+")
+
+
 class HealthSettings(BaseModel):
     """Health server bind host and port (INV-C-11).
 
@@ -266,6 +271,31 @@ class HealthSettings(BaseModel):
 
     host: str = Field(default="127.0.0.1", min_length=1)
     port: int = Field(default=0, ge=0, le=65535)
+
+    @field_validator("host")
+    @classmethod
+    def _validate_host(cls, v: str) -> str:
+        """Accept an IP literal or an RFC 1123 hostname; fail fast otherwise.
+
+        Without this, a typo such as ``256.300.1.1`` survives load_settings()
+        and only fails later as an unhandled socket.gaierror from
+        asyncio.start_server. Dotted-numeric values must parse as IPv4 so a
+        mistyped address is not mistaken for a hostname.
+        """
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            pass
+        else:
+            return v
+        if ":" in v or _HEALTH_HOST_NUMERIC_RE.fullmatch(v):
+            raise ValueError(f"invalid health host: {v!r}")
+        name = v[:-1] if v.endswith(".") else v
+        if not name or len(name) > 253:
+            raise ValueError(f"invalid health host: {v!r}")
+        if not all(_HEALTH_HOST_LABEL_RE.match(label) for label in name.split(".")):
+            raise ValueError(f"invalid health host: {v!r}")
+        return v
 
 
 class Settings(BaseSettings):
