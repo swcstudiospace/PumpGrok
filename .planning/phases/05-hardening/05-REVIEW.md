@@ -184,6 +184,7 @@ hence Warning rather than Blocker; the existing test
 **Fix:** Validate at load time and raise `ConfigError` on failure, e.g.
 ```python
 import ipaddress
+
 try:
     ipaddress.ip_address(v)  # or accept a hostname regex for names
 except ValueError:
