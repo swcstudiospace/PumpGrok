@@ -11,6 +11,7 @@ They do not run the scanners (that needs network access and the tools installed)
 
 from __future__ import annotations
 
+import datetime
 import importlib.util
 import subprocess
 import tomllib
@@ -265,13 +266,9 @@ class TestSecurityExceptions:
     def test_exceptions_table_has_columns_and_zero_rows(self, gate):
         text = (REPO_ROOT / "SECURITY.md").read_text()
         assert "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |" in text
-        import datetime
-
         assert gate.check_text(text, datetime.date(2026, 10, 22)) == []
 
     def test_expired_expiry_is_reported(self, gate):
-        import datetime
-
         text = (
             "## Exceptions\n\n"
             "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |\n"
@@ -282,8 +279,6 @@ class TestSecurityExceptions:
         assert len(errors) == 1 and "expired" in errors[0]
 
     def test_malformed_row_is_reported(self, gate):
-        import datetime
-
         text = (
             "## Exceptions\n\n"
             "| Check | Fingerprint | Reason | Owner | Expiry (ISO) |\n"

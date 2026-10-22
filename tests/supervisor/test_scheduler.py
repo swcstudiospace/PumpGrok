@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ import pytest
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.engine import utc_day
 from pumpgrok.supervisor.health import build_status, is_ok, write_health_json
 from pumpgrok.supervisor.scheduler import ROSTER, SEAT_CADENCES, Supervisor, cycle_timeout_s
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
@@ -200,10 +202,6 @@ def test_same_day_restart_latches_rollover_quietly(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """WR-03: a same-day restart latches the day instead of retrying the insert."""
-    import logging
-
-    from pumpgrok.risk.engine import utc_day
-
     clock = FixtureClock(start=1_700_000_000.0)
     store = _store(tmp_path)
     try:
@@ -218,9 +216,7 @@ def test_same_day_restart_latches_rollover_quietly(
         with caplog.at_level(logging.WARNING, logger="pumpgrok.supervisor.scheduler"):
             restarted._emit_rollover(clock.now())
             restarted._emit_rollover(clock.now())
-        rollovers = [
-            row for row in store.read(limit=None) if row["type"] == "DailyRollover"
-        ]
+        rollovers = [row for row in store.read(limit=None) if row["type"] == "DailyRollover"]
         assert len(rollovers) == 1
         assert restarted._last_rollover_day == day
         assert "daily rollover append failed" not in caplog.text

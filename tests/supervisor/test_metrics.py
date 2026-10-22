@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.supervisor.metrics import NINE_FAMILIES, Metrics, build_registry
+from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
+from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.rng import make_rng
+from pumpgrok.supervisor.health import HealthServer
+from pumpgrok.supervisor.metrics import (
+    EXPOSITION_CONTENT_TYPE,
+    NINE_FAMILIES,
+    Metrics,
+    build_registry,
+)
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 
 def _snapshot() -> dict[str, Any]:
@@ -120,11 +134,6 @@ def test_unknown_breaker_state_maps_to_open() -> None:
 
 
 async def test_seat_run_guarded_drives_metrics_observer(tmp_path: Path) -> None:
-    from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
-    from pumpgrok.replay.clock import FixtureClock
-    from pumpgrok.replay.rng import make_rng
-    from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
-
     recreate_ledger_db(tmp_path / "ledger.sqlite")
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     clock = FixtureClock(start=10.0)
@@ -160,14 +169,6 @@ async def test_seat_run_guarded_drives_metrics_observer(tmp_path: Path) -> None:
 
 
 async def test_metrics_route_serves_exposition_with_content_type() -> None:
-    import asyncio
-    import urllib.error
-    import urllib.request
-
-    from pumpgrok.replay.clock import FixtureClock
-    from pumpgrok.supervisor.health import HealthServer
-    from pumpgrok.supervisor.metrics import EXPOSITION_CONTENT_TYPE
-
     clock = FixtureClock(start=0.0)
     metrics = Metrics(snapshot=_snapshot)
     server = HealthServer(
@@ -213,13 +214,6 @@ async def test_metrics_route_serves_exposition_with_content_type() -> None:
 
 
 async def test_metrics_route_without_provider_is_unavailable() -> None:
-    import asyncio
-    import urllib.error
-    import urllib.request
-
-    from pumpgrok.replay.clock import FixtureClock
-    from pumpgrok.supervisor.health import HealthServer
-
     server = HealthServer(FixtureClock(start=0.0), lambda: {"status": "ok"}, lambda: True)
     port = await server.start("127.0.0.1", 0)
     try:
@@ -238,14 +232,6 @@ async def test_metrics_route_without_provider_is_unavailable() -> None:
 
 async def test_metrics_route_snapshot_failure_is_503_with_body() -> None:
     """WR-05: a snapshot failure is an explicit 503, never a dropped connection."""
-    import asyncio
-    import json
-    import urllib.error
-    import urllib.request
-
-    from pumpgrok.replay.clock import FixtureClock
-    from pumpgrok.supervisor.health import HealthServer
-    from pumpgrok.supervisor.metrics import Metrics
 
     def _boom() -> dict:
         raise RuntimeError("snapshot exploded")

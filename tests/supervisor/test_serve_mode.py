@@ -8,6 +8,7 @@ Prometheus exposition. The one-shot ``--once --replay`` path stays intact.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import urllib.request
@@ -17,7 +18,8 @@ from pathlib import Path
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.config.settings import FilterSettings
+from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.supervisor.health import HealthServer
 from pumpgrok.supervisor.metrics import NINE_FAMILIES
 from pumpgrok.supervisor.scheduler import ROSTER, build_serve_replay
@@ -45,8 +47,6 @@ def root_handlers() -> Iterator[None]:
 
 
 def _settings_kwargs() -> dict:
-    from pumpgrok.config.settings import FilterSettings
-
     return {"filter": FilterSettings(), "seed": 20260101}
 
 
@@ -138,8 +138,6 @@ def test_serve_binds_port_and_serves_both_endpoints(tmp_path: Path) -> None:
 
         code, body, mcode, mbody, mtype = asyncio.run(_run())
         assert code == 200
-        import json
-
         assert json.loads(body)["ledger_source"] == "replay"
         assert mcode == 200
         for family in NINE_FAMILIES:
@@ -183,8 +181,6 @@ def test_one_shot_still_exits_zero_without_binding(
 
 def test_serve_snapshot_and_body_reflect_kill_switch(tmp_path: Path) -> None:
     """WR-04: an engaged kill switch trips the gauge and the health body together."""
-    from pumpgrok.replay.clock import format_ts_utc
-
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, metrics, store = build_serve_replay(
         SMOKE,

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 
 import pytest
+from pydantic import ValidationError
 
 from pumpgrok.config.settings import (
     ConfigError,
@@ -13,6 +15,7 @@ from pumpgrok.config.settings import (
     health_port,
     load_settings,
 )
+from pumpgrok.supervisor.scheduler import serve_replay
 
 
 @pytest.fixture
@@ -57,7 +60,7 @@ def test_health_port_rejects_negative_or_text(
 
 def test_health_settings_are_frozen() -> None:
     settings = Settings()
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         settings.health.port = 8080  # type: ignore[misc]
 
 
@@ -75,10 +78,6 @@ def test_serve_host_env_override(clean_env: None, monkeypatch: pytest.MonkeyPatc
 
 
 def test_serve_replay_binds_loopback_by_default() -> None:
-    import inspect
-
-    from pumpgrok.supervisor.scheduler import serve_replay
-
     assert inspect.signature(serve_replay).parameters["host"].default == "127.0.0.1"
 
 

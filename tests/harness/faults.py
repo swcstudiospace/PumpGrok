@@ -22,7 +22,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import IO, Any
 
+from pumpgrok.core.datasource import Freshness, Health, HealthStatus
 from pumpgrok.core.errors import DataStale
+from pumpgrok.execution.paper_adapter import CurveSnapshot
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.tools.onchain.rpc import RpcError
 
@@ -244,8 +246,6 @@ class FaultyDataSource:
         self.fired = 0
 
     def _freshness(self, *, stale: bool) -> Any:
-        from pumpgrok.core.datasource import Freshness
-
         age = 121.0 if stale else 0.0
         return Freshness(fetched_at=datetime.now(UTC), age_s=age, max_age_s=120.0)
 
@@ -276,8 +276,6 @@ class FaultyDataSource:
 
     async def health(self) -> Any:
         """Degraded while faulted, ok otherwise."""
-        from pumpgrok.core.datasource import Health, HealthStatus
-
         status = HealthStatus.DOWN if self.fired else HealthStatus.OK
         return Health(
             status=status,
@@ -321,8 +319,6 @@ class FaultyPriceSource:
         if self._mode is FaultMode.UNKNOWN:
             self.fired += 1
             raise InjectedUnknown("injected price unknown result; never retried")
-        from pumpgrok.execution.paper_adapter import CurveSnapshot
-
         return CurveSnapshot(mint=mint, s_lamports=42_000_000_000, t_units=766_428_571)
 
 

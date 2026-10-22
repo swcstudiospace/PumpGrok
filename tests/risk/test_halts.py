@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
@@ -145,8 +146,6 @@ async def test_halt_survives_utc_rollover_until_human_clear(tmp_path: Path) -> N
         status = await run_halt_status(HaltStatusIn(), store, None, clock)
         assert status["halted"] is True
         assert status["daily_loss_halt"] is True
-        from pumpgrok.core.approvals import ApprovalRecord
-
         bot_clear = None
         try:
             bot_clear = ApprovalRecord(

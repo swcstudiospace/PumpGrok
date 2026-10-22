@@ -14,7 +14,7 @@ import pytest
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.replay.runner import ledger_events_hash, run_replay
 
 SMOKE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
@@ -139,8 +139,6 @@ def test_verify_failure_removes_the_created_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """WR-07: an append/verify failure removes the just-created ledger file."""
-    from pumpgrok.ledger.store import LedgerInconsistent
-
     target = tmp_path / "bad.sqlite"
     monkeypatch.setattr(LedgerStore, "verify", lambda self: False)
     with pytest.raises(LedgerInconsistent, match="replay ledger failed verification"):
