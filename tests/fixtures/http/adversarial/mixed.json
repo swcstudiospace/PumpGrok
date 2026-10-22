@@ -1,0 +1,45 @@
+{
+  "notes": "Adversarial curve payloads for tests/degradation/test_data_source_outage.py. Records tagged expect_ok parse through parse_upstream(CurveSnapshot) and are flagged by the caller (confusable mint via non-ASCII detection since NFKC does not fold Cyrillic lookalikes, negative reserves via sign check); records tagged expect_stale must raise typed DataStale and never a raw ValueError, ValidationError, or TypeError into the seat loop.",
+  "records": [
+    {
+      "name": "valid",
+      "expect_ok": true,
+      "payload": {"mint": "So11111111111111111111111111111111111111112", "s_lamports": 42000000000, "t_units": 766428571, "complete": false}
+    },
+    {
+      "name": "nan_reserves_string",
+      "expect_ok": false,
+      "payload": {"mint": "So11111111111111111111111111111111111111112", "s_lamports": "NaN", "t_units": 766428571}
+    },
+    {
+      "name": "float_reserves",
+      "expect_ok": false,
+      "payload": {"mint": "So11111111111111111111111111111111111111112", "s_lamports": 42.5, "t_units": 766428571}
+    },
+    {
+      "name": "missing_mint",
+      "expect_ok": false,
+      "payload": {"s_lamports": 42000000000, "t_units": 766428571}
+    },
+    {
+      "name": "wrong_types",
+      "expect_ok": false,
+      "payload": {"mint": 42, "s_lamports": [1], "t_units": {"n": 2}}
+    },
+    {
+      "name": "null_body",
+      "expect_ok": false,
+      "payload": null
+    },
+    {
+      "name": "confusable_mint",
+      "expect_ok": true,
+      "payload": {"mint": "Sо11111111111111111111111111111111111111112", "s_lamports": 42000000000, "t_units": 1}
+    },
+    {
+      "name": "negative_reserves",
+      "expect_ok": true,
+      "payload": {"mint": "So11111111111111111111111111111111111111112", "s_lamports": -5, "t_units": 766428571}
+    }
+  ]
+}

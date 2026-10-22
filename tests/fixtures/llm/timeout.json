@@ -1,0 +1,10 @@
+{
+  "outcome": "timeout",
+  "latency_s": 1.9,
+  "response": {
+    "model": "grok-replay",
+    "verdict": "skip",
+    "note": "synthetic timeout outcome; the test fills in request_hash"
+  },
+  "notes": "Template, not a loader row: tests/degradation/test_llm_failure.py computes the canonical request hash for its own request and builds the llm.jsonl row from this template."
+}
