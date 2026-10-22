@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import unicodedata
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -20,7 +19,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.core.tool import parse_upstream
 from pumpgrok.execution.paper_adapter import CurveSnapshot
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
-from pumpgrok.replay.clock import FixtureClock, format_ts_utc
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.breakers import DataStaleBreaker
 from pumpgrok.supervisor.scheduler import DegradedState
 from pumpgrok.supervisor.seat_task import append_escalation

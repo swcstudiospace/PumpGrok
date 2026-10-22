@@ -14,8 +14,8 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.config.settings import ConfigError, load_settings
+from pumpgrok.core.risk_budget import RiskBudget
 
 
 @pytest.fixture

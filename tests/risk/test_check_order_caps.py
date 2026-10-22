@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 import json
 import random
 import sqlite3
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -221,9 +221,7 @@ def _seed(rule: str, store: LedgerStore, clock: FixtureClock, ids: IdFactory) ->
             _append(
                 store, clock, "PositionOpened", _position_payload(mint, CREATOR_1, 1_000, 1_000)
             )
-    elif rule == "already_open":
-        _append(store, clock, "PositionOpened", _position_payload(MINT_A, CREATOR_1, 1_000, 1_000))
-    elif rule == "creator_already_open":
+    elif rule == "already_open" or rule == "creator_already_open":
         _append(store, clock, "PositionOpened", _position_payload(MINT_A, CREATOR_1, 1_000, 1_000))
     elif rule == "max_token_fraction":
         # Residual-basis row: zero open units passes already_open, so the

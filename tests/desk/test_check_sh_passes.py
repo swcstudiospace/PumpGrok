@@ -8,7 +8,6 @@ hygiene rules: emoji sweep, frontmatter and reference checks.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

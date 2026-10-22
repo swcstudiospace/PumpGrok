@@ -53,7 +53,7 @@ def test_cron_never_trades() -> None:
     assert PROFILES.is_file(), "hermes/profiles.yaml is missing"
     doc = _jobs_doc()
     assert list(doc.get("forbidden_owners", [])) == ["sniper", "exit"]
-    assert REQUIRED_FORBIDDEN_ACTIONS <= set(doc.get("forbidden_actions", []))
+    assert set(doc.get("forbidden_actions", [])) >= REQUIRED_FORBIDDEN_ACTIONS
 
     defaults = doc.get("defaults", {})
     default_engagement = set(defaults.get("engagement_required", []))

@@ -30,8 +30,6 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RULES = REPO_ROOT / "rules" / "pumpgrok-team.mdc"
 ENGINE = REPO_ROOT / "src" / "pumpgrok" / "risk" / "engine.py"

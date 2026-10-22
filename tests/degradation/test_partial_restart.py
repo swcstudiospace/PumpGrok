@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng

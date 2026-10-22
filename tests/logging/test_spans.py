@@ -8,7 +8,6 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 
@@ -70,47 +69,40 @@ def _captured(records: list[logging.LogRecord]) -> Iterator[None]:
 
 def test_span_duration_equals_clock_delta(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
-    with _captured(records):
-        with bind_clock(clock):
-            with span("probe", seat="bot-00-chief"):
-                clock.advance_to(1_000.0 + 2.5)
+    with _captured(records), bind_clock(clock), span("probe", seat="bot-00-chief"):
+        clock.advance_to(1_000.0 + 2.5)
     assert len(records) == 1
     record = records[0]
-    assert getattr(record, "event") == "span"
-    assert getattr(record, "duration_ms") == pytest.approx(2500.0)
-    assert getattr(record, "span") == "probe"
+    assert record.event == "span"
+    assert record.duration_ms == pytest.approx(2500.0)
+    assert record.span == "probe"
 
 
 async def test_span_supports_async_with(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
-    with _captured(records):
-        with bind_clock(clock):
-            async with span("probe"):
-                # FixtureClock.sleep only fires when virtual time advances;
-                # move it synchronously instead of awaiting a timer.
-                clock.advance_to(clock.now() + 1.5)
+    with _captured(records), bind_clock(clock):
+        async with span("probe"):
+            # FixtureClock.sleep only fires when virtual time advances;
+            # move it synchronously instead of awaiting a timer.
+            clock.advance_to(clock.now() + 1.5)
     assert len(records) == 1
-    assert getattr(records[0], "duration_ms") == pytest.approx(1500.0)
+    assert records[0].duration_ms == pytest.approx(1500.0)
 
 
 def test_spans_nest_with_parent_and_depth(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
-    with _captured(records):
-        with bind_clock(clock):
-            with span("outer"):
-                with span("inner"):
-                    pass
+    with _captured(records), bind_clock(clock), span("outer"), span("inner"):
+        pass
     seen = [
-        (getattr(record, "span"), getattr(record, "parent"), getattr(record, "depth"))
+        (record.span, record.parent, record.depth)
         for record in records
     ]
     assert seen == [("inner", "outer", 2), ("outer", None, 1)]
 
 
 def test_span_without_bound_clock_raises() -> None:
-    with pytest.raises(PumpgrokError, match="no span clock bound"):
-        with span("probe"):
-            pass  # pragma: no cover
+    with pytest.raises(PumpgrokError, match="no span clock bound"), span("probe"):
+        pass  # pragma: no cover
 
 
 def test_current_clock_returns_bound_clock(clock: FixtureClock) -> None:
@@ -123,9 +115,8 @@ def test_span_fields_pass_through_redaction_filter(
 ) -> None:
     buffer = io.StringIO()
     setup_logging(mode="paper", profile="paper", environ={}, stream=buffer)
-    with bind_clock(clock):
-        with span("probe", api_key="test-value-not-a-secret"):
-            pass
+    with bind_clock(clock), span("probe", api_key="test-value-not-a-secret"):
+        pass
     lines = [line for line in buffer.getvalue().splitlines() if line]
     assert len(lines) == 1
     body = json.loads(lines[0])
@@ -202,6 +193,6 @@ async def test_registry_tool_call_emits_one_span(clock: FixtureClock) -> None:
             await found(_In())
     spans = [r for r in records if getattr(r, "event", None) == "span"]
     assert len(spans) == 1
-    assert getattr(spans[0], "span") == "market.price"
-    assert getattr(spans[0], "duration_ms") == pytest.approx(250.0)
+    assert spans[0].span == "market.price"
+    assert spans[0].duration_ms == pytest.approx(250.0)
     assert getattr(spans[0], "correlation_id", "").endswith(".1")

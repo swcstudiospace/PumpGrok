@@ -18,8 +18,6 @@ from harness.faults import (
     FaultMode,
     FaultyLLMClient,
     InjectedFault,
-    InjectedRateLimit,
-    InjectedUnknown,
 )
 from pumpgrok.config.settings import ScoringWeights
 from pumpgrok.core.budget import CallBudget

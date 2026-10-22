@@ -95,7 +95,6 @@ def test_unwritable_store_buffers_1000_then_refuses_and_drains(tmp_path: Path) -
 
 def test_sink_unwritable_raises_eacces(tmp_path: Path) -> None:
     injector = FaultInjector(FaultMode.UNWRITABLE)
-    with pytest.raises(PermissionError) as excinfo:
-        with injector.open_sink(tmp_path / "sink.jsonl"):
-            pass
+    with pytest.raises(PermissionError) as excinfo, injector.open_sink(tmp_path / "sink.jsonl"):
+        pass
     assert excinfo.value.errno == errno.EACCES

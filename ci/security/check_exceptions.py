@@ -11,7 +11,6 @@ so an expired exception fails CI instead of silently lingering.
 from __future__ import annotations
 
 import datetime as _datetime
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

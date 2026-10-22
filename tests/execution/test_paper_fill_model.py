@@ -7,7 +7,6 @@ import random
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.ids import IdFactory
