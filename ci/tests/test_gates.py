@@ -688,6 +688,10 @@ class TestG5G6RollbackAndDestructive:
 
 
 def _tool(name: str = "desk.state_status", kind: str = "read", gates=None, required=None) -> dict:
+    # Every required field is declared as a property: a required name with no
+    # declared property is refused by G-7 (additionalProperties: false would reject
+    # every call), so the fixture must be a valid schema.
+    fields = list(required or [])
     return {
         "name": name,
         "kind": kind,
@@ -696,8 +700,8 @@ def _tool(name: str = "desk.state_status", kind: str = "read", gates=None, requi
         "input": {
             "type": "object",
             "additionalProperties": False,
-            "properties": {},
-            "required": list(required or []),
+            "properties": {field: {"type": "string"} for field in fields},
+            "required": fields,
         },
     }
 
