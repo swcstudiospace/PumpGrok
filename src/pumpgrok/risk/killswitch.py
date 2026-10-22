@@ -102,6 +102,16 @@ class _SuppressIntegrity:
         return isinstance(exc, sqlite3.IntegrityError)
 
 
+def env_engaged(raw: str | None) -> bool:
+    """True when a killswitch env value engages the switch (R22).
+
+    Anything non-empty other than ``"0"``/``"false"`` engages; ``"1"`` is
+    just the conventional spelling. Shared by ``poll``, ``live_sources``,
+    and the operator status views so they never disagree on what "set" means.
+    """
+    return raw is not None and raw.strip() not in ("", "0", "false")
+
+
 def _file_state(line: str) -> KillState:
     """File source state for a stripped first line (empty file still engages)."""
     if line in ("FLATTEN", "FLATTEN:"):
@@ -131,7 +141,7 @@ class KillSwitch:
 
     def poll(self) -> KillState:
         """Current switch state; env (start) beats file beats alert beats ledger."""
-        if self._env_start.strip() not in ("", "0", "false"):
+        if env_engaged(self._env_start):
             return KillState(True, "env", self._env_start.strip(), False)
         if self._path is not None and self._path.is_file():
             first = self._path.read_text(encoding="utf-8").splitlines()
@@ -185,8 +195,8 @@ class KillSwitch:
     def live_sources(self) -> list[str]:
         """Live sources currently set: env-now, file, alert (ledger excluded)."""
         live: list[str] = []
-        env_now = os.environ.get("PUMPGROK_KILLSWITCH", "").strip()
-        if env_now not in ("", "0", "false") or self._env_start not in ("", "0", "false"):
+        env_now = os.environ.get("PUMPGROK_KILLSWITCH", "")
+        if env_engaged(env_now) or env_engaged(self._env_start):
             live.append("env")
         if self._path is not None and self._path.is_file():
             live.append("file")

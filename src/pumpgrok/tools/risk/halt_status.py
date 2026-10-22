@@ -18,6 +18,7 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.risk.killswitch import env_engaged
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -72,7 +73,7 @@ async def run_halt_status(
     mode: Literal["paper", "live"] = "paper",
 ) -> dict[str, Any]:
     """Fold halt events and kill-switch causes into one view."""
-    env_set = os.environ.get("PUMPGROK_KILLSWITCH", "").strip() == "1"
+    env_set = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
     file_set = await asyncio.to_thread(_killswitch_file_set, killswitch_path)
     halt_active = False
     halt_reason: str | None = None

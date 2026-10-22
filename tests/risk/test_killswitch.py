@@ -26,11 +26,22 @@ from pumpgrok.risk.killswitch import (
     ClearRefused,
     InflightBarrier,
     KillSwitch,
+    env_engaged,
     kill_file_text,
     parse_kill_line,
 )
-from pumpgrok.tools.risk.halt_status import HaltStatusIn, build_halt_status_tool
-from pumpgrok.tools.risk.kill_switch import KillSwitchIn, build_kill_switch_tool
+from pumpgrok.tools.risk.halt_status import (
+    HaltStatusIn,
+    build_halt_status_tool,
+    run_halt_status,
+)
+from pumpgrok.tools.risk.kill_switch import (
+    KillSwitchIn,
+    build_kill_switch_tool,
+)
+from pumpgrok.tools.risk.kill_switch import (
+    _status as _kill_switch_status,
+)
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 EQUITY = 10_000_000_000
@@ -488,5 +499,38 @@ def test_kill_clear_same_reason_after_reengage_refuses(tmp_path: Path) -> None:
         assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 1
         ks.request_clear(second, "all clear take two", ts_utc=format_ts_utc(START))
         assert ks.poll().active is False
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("value", ["1", "stop", "TRUE", " yes "])
+def test_env_engaged_accepts_any_truthy_spelling(value: str) -> None:
+    """WR-02: any non-empty value besides 0/false engages the switch."""
+    assert env_engaged(value) is True
+
+
+@pytest.mark.parametrize("value", [None, "", "0", "false", " 0 ", " false "])
+def test_env_engaged_rejects_falsy_spellings(value: str | None) -> None:
+    assert env_engaged(value) is False
+
+
+async def test_status_views_agree_with_engine_on_truthy_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-02: PUMPGROK_KILLSWITCH=stop engages the engine and both views."""
+    monkeypatch.setenv("PUMPGROK_KILLSWITCH", "stop")
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        ks = KillSwitch(clock, store=store)
+        assert ks.poll().active is True
+        assert ks.live_sources() == ["env"]
+        halt = await run_halt_status(HaltStatusIn(), store, None, clock)
+        assert halt["halted"] is True
+        assert halt["kill_switch_active"] is True
+        assert "kill_switch" in halt["reasons"]
+        status = _kill_switch_status(store, None, "t", clock)
+        assert status["active"] is True
+        assert status["source"] == "env"
     finally:
         store.close()

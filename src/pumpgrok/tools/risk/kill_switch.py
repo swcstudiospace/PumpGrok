@@ -23,7 +23,7 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.risk.killswitch import kill_file_text
+from pumpgrok.risk.killswitch import env_engaged, kill_file_text
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -119,7 +119,7 @@ def _status(
     store: LedgerStore, killswitch_path: Path | None, correlation: str, clock: Clock
 ) -> dict[str, Any]:
     """Fold env, file and ledger causes into one view."""
-    env_set = os.environ.get("PUMPGROK_KILLSWITCH", "").strip() == "1"
+    env_set = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
     file_set = killswitch_path is not None and killswitch_path.is_file()
     latest_set: dict[str, Any] | None = None
     cleared_after = False
