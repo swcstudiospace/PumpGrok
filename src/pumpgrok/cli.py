@@ -58,7 +58,6 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import DataStale, PumpgrokError, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
-from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
@@ -76,7 +75,6 @@ from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
-from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.scheduler import run_once_replay
 from pumpgrok.tools import build_operator_registry
 
@@ -692,7 +690,7 @@ def _set_autonomy(policy: str, by: str) -> int:
     return EXIT_OK
 
 
-def _halt_clear(by: str, reason: str) -> int:
+def _halt_clear(by: str, reason: str, settings: Settings) -> int:
     """Append ``HaltCleared`` plus the consumed ``halt_clear`` approval (R5)."""
     verb = "state halt --clear"
     store = LedgerStore(str(PAPER_LEDGER_PATH))
@@ -700,10 +698,10 @@ def _halt_clear(by: str, reason: str) -> int:
         clock = WallClock()
         engine = RiskEngine(
             store=store,
-            budget=RiskBudget(),
+            budget=settings.risk,
             ids=IdFactory(clock, make_rng()),
             clock=clock,
-            limits=EngineLimits(),
+            limits=settings.limits,
         )
         approval = ApprovalRecord(
             id=_mint_approval_id(),
@@ -714,7 +712,7 @@ def _halt_clear(by: str, reason: str) -> int:
         )
         try:
             engine.request_halt_clear(approval, reason, source="paper", correlation_id="desk")
-        except ValueError as exc:
+        except (ValueError, sqlite3.IntegrityError, LedgerInconsistent) as exc:
             return _tool_error(verb, "halt_clear_refused", str(exc))
     finally:
         store.close()
@@ -766,7 +764,7 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "halt" and args.clear:
         # Human-only (R22): the ledger HaltCleared + ApprovalRecord.
         by = _human_by(args.by, verb)
-        return _halt_clear(by, args.reason or "")
+        return _halt_clear(by, args.reason or "", settings)
     if args.cmd == "autonomy":
         # Human-only (R17, R40): ConfigChanged plus a journal note, one batch.
         by = _human_by(args.by, verb)
@@ -800,7 +798,7 @@ def _killswitch_clear(by: str, reason: str) -> int:
             switch.request_clear(
                 approval, reason, ts_utc=format_ts_utc(clock.now()), source="paper"
             )
-        except (ClearRefused, ValueError) as exc:
+        except (ClearRefused, ValueError, sqlite3.IntegrityError, LedgerInconsistent) as exc:
             return _tool_error(verb, "killswitch_clear_refused", str(exc))
     finally:
         store.close()

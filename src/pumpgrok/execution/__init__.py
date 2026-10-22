@@ -32,18 +32,24 @@ def build_adapter(
     """Build the PaperAdapter for live-paper and replay runs.
 
     Tests construct the adapter through this factory with scripted curves
-    and ``p_drop=0.0``. ``settings`` is accepted for the future registry
-    signature and ignored.
+    and ``p_drop=0.0``. The operator risk budget and engine limits come
+    from ``settings`` (``[risk]`` / ``[limits]``); objects without those
+    attributes fall back to defaults.
     """
-    del settings
+    budget = getattr(settings, "risk", None)
+    if budget is None:
+        budget = RiskBudget()
+    limits = getattr(settings, "limits", None)
+    if limits is None:
+        limits = EngineLimits()
     return PaperAdapter(
         store=store,
         risk=risk,
         ids=ids,
         clock=clock,
         rng=rng,
-        budget=RiskBudget(),
-        limits=EngineLimits(),
+        budget=budget,
+        limits=limits,
         price_source=price_source,
         source=source,
         curve_origin=curve_origin,

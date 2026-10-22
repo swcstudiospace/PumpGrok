@@ -39,6 +39,7 @@ from pydantic_settings import (
 )
 
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.risk.limits import EngineLimits
 
 
 class DataSettings(BaseModel):
@@ -264,6 +265,7 @@ class Settings(BaseSettings):
     mode: Mode | None = Field(default=None)
     execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
     risk: RiskBudget = Field(default_factory=RiskBudget)
+    limits: EngineLimits = Field(default_factory=EngineLimits)
     replay: ReplaySettings = Field(default_factory=ReplaySettings)
     live: LiveSettings = Field(default_factory=LiveSettings)
     data: DataSettings = Field(default_factory=DataSettings)

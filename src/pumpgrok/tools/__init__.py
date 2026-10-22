@@ -11,6 +11,7 @@ catalog over the same root for operator verbs (TOOL-011).
 
 from __future__ import annotations
 
+import logging
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,7 +31,6 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -79,6 +79,9 @@ if TYPE_CHECKING:
 
 
 __all__ = ["build_operator_registry", "build_registry", "register_read_tools"]
+
+
+log = logging.getLogger(__name__)
 
 
 async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
@@ -266,18 +269,23 @@ def build_operator_registry(
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
     live = settings.effective_mode == "live"
     curves = _CachingPriceSource(price_source)
+    budget = settings.risk
     engine = RiskEngine(
         store=store,
-        budget=RiskBudget(),
+        budget=budget,
         ids=IdFactory(active_clock, make_rng()),
         clock=active_clock,
-        limits=EngineLimits(),
+        limits=settings.limits,
         mode="live" if live else "paper",
         autonomy="manual-ticket" if live else read_autonomy(store),  # type: ignore[arg-type]
         killswitch_path=data_dir / "KILLSWITCH",
         get_reserves=curves.last.get,
     )
-    budget = RiskBudget()
+    log.info(
+        "operator registry effective budget=%s limits=%s",
+        budget.model_dump(mode="json"),
+        settings.limits.model_dump(mode="json"),
+    )
     adapter = pumpgrok.execution.build_adapter(
         settings,
         store=store,
