@@ -4,7 +4,7 @@ milestone: v2
 current_phase: 04
 current_phase_name: Paper Trading and Autonomy
 status: planning
-stopped_at: Completed 04-07-PLAN.md
+stopped_at: Completed 04-09-PLAN.md
 last_updated: "2026-10-21T22:41:09.994Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 3 complete, transitioned to Phase 04
@@ -62,8 +62,8 @@ Progress: [██████░░░░] 60%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 03-tools-and-skills P05 | 27min | 3 tasks | 14 files |
-| Phase 03-tools-and-skills P06 | 10min | 4 tasks | 65 files |
 | Phase 04 P07 | single session | 3 tasks | 16 files |
+| Phase 04 P09 | single session | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -79,7 +79,7 @@ Recent decisions affecting current work:
 - [Phase 3]: B10 applied as listing-AND-grants: grant violations shrink skill bots, prompt listings expand where grants allow; roster manifests untouched
 - [Phase 04]: Registry adapter default is p_drop=0.0 on the seeded make_rng stream; SystemRandom banned by the static guard
 - [Phase 04]: human_sell approvals accept size_lamports or token_units; matches() enforces only stated legs
-- [Phase 04]: Exit 5 survives only for 04-09 verbs; every served verb runs against its backend with JSON
+- [Phase 04]: 04-09 reports keep str.format via named template constants (R9); cli and live-gate messages use f-strings; WallClock is the only wall-time source and HEAD~3 ruff is clean (59 UP findings were plan-introduced, fixed)
 
 ### Pending Todos
 

@@ -30,7 +30,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **STRUCT-003**: Vendor `monitor, analyzer, scoring, reputation, agents/*, tune` are ported to `src/pumpgrok/engine/` and vendor `risk.py` exit rules and `PositionWatcher` to `src/pumpgrok/engine/{exits,watcher}.py` (R31) with every Russian string translated and reason codes unchanged; the 1:1 characterization tests for these modules are green while `cd vendor/grokbot-pumpfun && python3 -m pytest -q` still passes as the oracle; `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` prints one `skip` or `buy` decision from the engine.
 - [ ] **STRUCT-004**: Vendor `executor, risk (RiskManager -> RiskEngine), ops, state, log` are ported into `src/pumpgrok/{execution,risk,supervisor,ledger}/` using the R31 module names with adapted characterization tests, bringing `tests/characterization/` to all 13 vendor modules with at least 164 1:1 tests (`docs/MIGRATION_MAP.md` section 3.1); the vendor daily-loss auto-clear (`risk.py:106-117`) is intentionally not ported (R5) and its test is marked as such; ported tests assert reason codes, never free text.
 - [x] **STRUCT-005**: `cli.py` exposes every verb of `docs/DISCOVERY.md:11-16` plus R12 and R40 (`live confirm`, `replay trim | rebuild-ticks`, `run --record <dataset> --duration <s>`, `verify --fixture <dataset>`, `state halt --clear --by --reason`, `state autonomy <manual-ticket | autonomous-paper>`, `paper buy | sell --ticket --mint --size-sol --slippage-bps --approval-id`), verbs whose subsystem is absent return `not-yet-implemented`; the six Hermes cron prompts wrap `pumpgrok` subcommands only (`docs/MIGRATION_MAP.md` section 4.3), `jobs.yaml` `forbidden_owners: [sniper, exit]` is also enforced by the CLI; `scripts/hermes-*.sh` are rewritten for `PUMPGROK_*` env and `micro-live` is retired from `ARCHITECTURE.md`, `README.md`, `SETUP.md`, `skills/desk-operating-model`, `skills/pumpgrok-setup` and `scripts/hermes-verify-isolation.sh` (R16); `docs/MIGRATION_MAP.md` gains the engagement-level row and the markdown-prose quarantine table (R16).
-- [ ] **STRUCT-006**: `vendor/grokbot-pumpfun/` is deleted only when all six retirement checks of `docs/MIGRATION_MAP.md` section 3.4 hold (`rg -l -F "vendor/grokbot-pumpfun" . --glob '!vendor/**'` empty, `409e74c` cited only by `docs/VENDOR_PIN.md`, `src/pumpgrok/engine/LICENSE-grokbot-pumpfun` present, all 13 characterization modules green, `check.sh` no longer excludes `vendor/`).
+- [x] **STRUCT-006**: `vendor/grokbot-pumpfun/` is deleted only when all six retirement checks of `docs/MIGRATION_MAP.md` section 3.4 hold (`rg -l -F "vendor/grokbot-pumpfun" . --glob '!vendor/**'` empty, `409e74c` cited only by `docs/VENDOR_PIN.md`, `src/pumpgrok/engine/LICENSE-grokbot-pumpfun` present, all 13 characterization modules green, `check.sh` no longer excludes `vendor/`).
 - [x] **STRUCT-007**: All 23 existing skills gain `bots: [...]` and `gates: [...]` frontmatter and the `L1 - Summary / L2 - Method / Failure modes / References` body (`docs/design/interfaces.md` section 3); `skills/jupiter-routing` becomes quote/route preparation feeding `exec.quote` and `exec.place` (R18); `skills/browser-ops` is detection/research only (R39); every Jupiter v6 reference becomes the quote-only `api.jup.ag/swap/v2/order` path (R44) and `--max-micro` phrasing is removed (R14, R40); `tools/README.md` lists `desk_state.py` until `tools/` is deleted; the four plugin manifests say `"license": "AGPL-3.0"` and no `your-org` placeholder remains; `README.md`, `ARCHITECTURE.md` and `docs/runbooks/setup.md` describe `src/pumpgrok/`.
 - [x] **STRUCT-008**: `JitoConfig` and `solana.wallet_private_key` do not exist in the settings model (R3), recorded as `docs/FOUNDATION_STACK.md` MIGRATION_NOTES M-10; `solders` and `solana` are not declared in `pyproject.toml`.
 
@@ -62,7 +62,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [ ] **PAPER-003**: JSONL journal export under `var/journal/` resumes from `meta.export_seq` without duplicates and also emits the vendor-shape `trades.jsonl` lines; `desk.md` and every markdown view under `var/desk/` is written via tmp file + `os.replace` (R26), derived and never read back (`docs/MIGRATION_MAP.md` section 4.5).
 - [ ] **PAPER-004**: Replay runs the full desk over `tests/fixtures/replay/<dataset>/` with `FixtureClock`, one seeded RNG and fixture timestamps as ledger `ts_utc`; LLM calls are served from the recorder's `canonical_request_hash` records (`outcome` in `{ok, timeout, error}`, virtual `latency_s`) and a missing record fails the replay (R27); two runs over `smoke-10m` give identical `events.hash`, JSONL bytes and final state, a different seed differs, and a 180 s hole trips `DataStale` (section 9); `pumpgrok run --record <dataset> --duration <s>` writes new datasets from live transports stamping the clock's ts (R40).
 - [ ] **PAPER-005**: A bonding-curve graduation event force-closes the open paper position at the last curve price with reason `graduated` and freezes MTM, a BUY on a graduated token is rejected `post_graduation_no_reserves` (R8, R38), and after `blind_max_s = 300` without a price EXIT force-closes at `last_good` with reason `blind_flatten` and escalates (R25); open positions are marked to market at liquidation value every 60 s.
-- [ ] **PAPER-006**: `pumpgrok report --daily` (00:05Z) and `--weekly` (Monday 00:15Z, R40) render the sections of `docs/design/paper-engine.md` section 8.3 (summary, trades, open positions, rejected signals by R34 reason, safety outcomes, risk events, bot health, data freshness, live gate on weekly, unverified) with `str.format` only (R9), ASCII only, snapshot-tested from a fixture ledger (section 9).
+- [x] **PAPER-006**: `pumpgrok report --daily` (00:05Z) and `--weekly` (Monday 00:15Z, R40) render the sections of `docs/design/paper-engine.md` section 8.3 (summary, trades, open positions, rejected signals by R34 reason, safety outcomes, risk events, bot health, data freshness, live gate on weekly, unverified) with `str.format` only (R9), ASCII only, snapshot-tested from a fixture ledger (section 9).
 - [x] **PAPER-007**: Tickets are `SOL-YYYYMMDD-NNN` sequence-allocated in the ledger; approvals are persisted as `ApprovalRecorded` with kind in `{human_buy, human_sell, exit_rule, autonomous_paper, killswitch_clear, halt_clear, live_gate}` (R33); under `manual-ticket` a buy needs a human phrase matching the ticket token-for-token (`rules/pumpgrok-team.mdc:28`, mismatch -> `OrderRejected reason=approval_mismatch`) and each exit rule needs a per-ticket `exit_rule` approval, while under `autonomous-paper` the EXIT rule engine is always on (R17); sniper and exit send once per ticket because `exec.place` is idempotent on `(ticket_id, side, decision_id)` (R18, R23) and an unknown or timed-out result enters state `UNKNOWN` and is never auto-retried (D9, `rules/pumpgrok-team.mdc:30`).
 
 ### Risk (RISK)
@@ -99,13 +99,13 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **SEC-001**: No secret is committed: `.env.example` contains placeholders only, `python3 ci/gates/check_secrets.py --base origin/main` exits 0 on every PR, and G-3 recognises Solana base58 64-byte keys, JSON byte arrays, Helius/QuickNode keyed URLs and Telegram tokens.
 - [x] **SEC-002**: Secrets reach the desk only through env (or a secret manager injecting env); `--rpc https://...?api-key=` style CLI flags are refused and the operator confirmation secret is readable only by `pumpgrok live confirm` and `LiveGate.validate`, never by a seat or tool (R21).
 - [x] **SEC-003**: `tests/safety/test_no_signing_outside_live_stub.py` walks the AST and fails on any `sign`, `send_transaction`, `sendTransaction` or `Keypair` symbol outside `src/pumpgrok/execution/live/`, and the live stub itself builds no transaction.
-- [ ] **SEC-004**: `pumpgrok run --mode live` (or env `PUMPGROK_MODE=live`, R30) with any of the nine R21 preconditions unmet exits 3 listing every unmet line and sends nothing; precondition 8 (a registered live adapter implementation) is always unmet because none ships; `LiveAdapter.place`/`cancel` (`src/pumpgrok/execution/live/live_adapter.py`) always raise `LiveGateError` after appending `LiveWriteAttempted` and a critical alert; every registry grant decision is a `GrantAudit` row.
+- [x] **SEC-004**: `pumpgrok run --mode live` (or env `PUMPGROK_MODE=live`, R30) with any of the nine R21 preconditions unmet exits 3 listing every unmet line and sends nothing; precondition 8 (a registered live adapter implementation) is always unmet because none ships; `LiveAdapter.place`/`cancel` (`src/pumpgrok/execution/live/live_adapter.py`) always raise `LiveGateError` after appending `LiveWriteAttempted` and a critical alert; every registry grant decision is a `GrantAudit` row.
 - [ ] **SEC-005**: `security-pr.yml` (gitleaks, semgrep, bandit, pip-audit via the R2 bridge, trivy) is green on `main` or every exception is listed in `SECURITY.md` with an expiry.
 
 ### Go-live gate (GOLIVE)
 
-- [ ] **GOLIVE-001**: `pumpgrok live confirm --by human:<name> --notional-cap <sol> --expires <iso>` writes the HMAC-signed confirmation record bound to the config hash using an operator secret no seat or tool can read (R21) and appends `ApprovalRecorded(kind=live_gate)` plus `ConfigChanged(keys_changed=["live.confirmation"])`; it never changes `execution.mode`.
-- [ ] **GOLIVE-002**: `LiveGate.validate` (`src/pumpgrok/execution/live/live_gate.py`) evaluates the paper window and the thresholds `closed_trades >= 50`, `profit_factor >= 1.2`, `max_drawdown <= drawdown_halt_fraction` only over ledger events with `source=paper`, refuses any ledger containing `source=replay` for its metrics, and `0 < live.notional_cap_sol <= 1.0` (R21, REVIEW); the weekly report prints each precondition with OK/unmet.
+- [x] **GOLIVE-001**: `pumpgrok live confirm --by human:<name> --notional-cap <sol> --expires <iso>` writes the HMAC-signed confirmation record bound to the config hash using an operator secret no seat or tool can read (R21) and appends `ApprovalRecorded(kind=live_gate)` plus `ConfigChanged(keys_changed=["live.confirmation"])`; it never changes `execution.mode`.
+- [x] **GOLIVE-002**: `LiveGate.validate` (`src/pumpgrok/execution/live/live_gate.py`) evaluates the paper window and the thresholds `closed_trades >= 50`, `profit_factor >= 1.2`, `max_drawdown <= drawdown_halt_fraction` only over ledger events with `source=paper`, refuses any ledger containing `source=replay` for its metrics, and `0 < live.notional_cap_sol <= 1.0` (R21, REVIEW); the weekly report prints each precondition with OK/unmet.
 - [ ] **GOLIVE-003**: `docs/runbooks/go_live.md` documents the full procedure, `tests/execution/test_live_gate_fails_fast.py` proves each of the nine preconditions independently, and the milestone ships with `live.enabled = false` in every overlay.
 
 ## v2 Requirements
@@ -152,7 +152,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | STRUCT-003 | Phase 2 Restructure | Complete |
 | STRUCT-004 | Phase 4 Paper Trading and Autonomy | Pending |
 | STRUCT-005 | Phase 2 Restructure | Complete |
-| STRUCT-006 | Phase 4 Paper Trading and Autonomy | Pending |
+| STRUCT-006 | Phase 4 Paper Trading and Autonomy | Complete |
 | STRUCT-007 | Phase 2 Restructure | Complete |
 | STRUCT-008 | Phase 1 Foundation | Complete |
 | TOOL-001 | Phase 3 Tools and Skills | Complete |
@@ -175,7 +175,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | PAPER-003 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-004 | Phase 4 Paper Trading and Autonomy | Pending |
 | PAPER-005 | Phase 4 Paper Trading and Autonomy | Pending |
-| PAPER-006 | Phase 4 Paper Trading and Autonomy | Pending |
+| PAPER-006 | Phase 4 Paper Trading and Autonomy | Complete |
 | PAPER-007 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-001 | Phase 4 Paper Trading and Autonomy | Pending |
 | RISK-002 | Phase 4 Paper Trading and Autonomy | Pending |
@@ -200,10 +200,10 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | SEC-001 | Phase 1 Foundation | Complete |
 | SEC-002 | Phase 1 Foundation | Complete |
 | SEC-003 | Phase 2 Restructure | Complete |
-| SEC-004 | Phase 4 Paper Trading and Autonomy | Pending |
+| SEC-004 | Phase 4 Paper Trading and Autonomy | Complete |
 | SEC-005 | Phase 5 Hardening | Pending |
-| GOLIVE-001 | Phase 4 Paper Trading and Autonomy | Pending |
-| GOLIVE-002 | Phase 4 Paper Trading and Autonomy | Pending |
+| GOLIVE-001 | Phase 4 Paper Trading and Autonomy | Complete |
+| GOLIVE-002 | Phase 4 Paper Trading and Autonomy | Complete |
 | GOLIVE-003 | Phase 5 Hardening | Pending |
 
 **Coverage:**

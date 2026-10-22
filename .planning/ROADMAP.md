@@ -135,11 +135,11 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Hash-chained WAL ledger with snapshots, reducer, JSONL export and tamper detection (PAPER-002, PAPER-003)
 - [ ] Deterministic replay and recorder with canonical request hashes (PAPER-004)
 - [ ] Graduation, post-graduation rejection and BLIND flatten rules (PAPER-005)
-- [ ] Daily and weekly reports, tickets and approvals (PAPER-006, PAPER-007)
+- [x] Daily and weekly reports, tickets and approvals (PAPER-006, PAPER-007)
 - [ ] Risk engine, halts, breakers, kill switch and observe-only degradation (RISK-001..006)
 - [ ] Supervisor with heartbeats, restarts, health endpoints and graceful shutdown; degraded-mode matrix (AUTO-001..006)
-- [ ] Live adapter stub that always refuses with `LiveGateError`, live gate validation and confirmation record (SEC-004, GOLIVE-001, GOLIVE-002)
-- [ ] Vendor tree deleted after the six retirement checks (STRUCT-006)
+- [x] Live adapter stub that always refuses with `LiveGateError`, live gate validation and confirmation record (SEC-004, GOLIVE-001, GOLIVE-002)
+- [x] Vendor tree deleted after the six retirement checks (STRUCT-006)
 
 **Plans**: TBD
 - [x] 04-01-PLAN.md
@@ -150,7 +150,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] 04-06-PLAN.md
 - [x] 04-07-PLAN.md
 - [ ] 04-08-PLAN.md
-- [ ] 04-09-PLAN.md
+- [x] 04-09-PLAN.md
 
 ### Phase 5: Hardening
 
