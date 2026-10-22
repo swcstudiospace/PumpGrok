@@ -266,6 +266,7 @@ class SeatTask:
         notifier: Notifier | None = None,
         observe_only: ObserveOnly | None = None,
         policy: RestartPolicy | None = None,
+        cycle_observer: Callable[[str, float, str], None] | None = None,
     ) -> None:
         self.seat_id = seat_id
         self.cadence_s = cadence_s
@@ -278,6 +279,7 @@ class SeatTask:
         self._notifier = notifier
         self._observe_only = observe_only if observe_only is not None else ObserveOnly()
         self._policy = policy if policy is not None else RestartPolicy()
+        self._cycle_observer = cycle_observer
         self.last_started_at: float | None = None
         self.last_finished_at: float | None = None
         self.last_ok: bool | None = None
@@ -331,6 +333,7 @@ class SeatTask:
         self.last_finished_at = finished
         self.last_duration_s = max(0.0, finished - started)
         self.last_ok = outcome == "ok"
+        self._observe_cycle(outcome)
         self.cycles += 1
         if outcome == "ok":
             self._stale_raised = False
@@ -338,6 +341,21 @@ class SeatTask:
             self.crashes += 1
             await self._on_crash(ctx)
         return outcome
+
+    def _observe_cycle(self, outcome: str) -> None:
+        """Report virtual seconds and outcome to the metrics observer, if any.
+
+        Best-effort telemetry: an observer failure must never break the cycle.
+        The observer (Metrics.observe) records the histogram at the site that
+        sets last_duration_s and counts crashes at the site that increments
+        crashes, without seat_task.py importing prometheus_client.
+        """
+        if self._cycle_observer is None:
+            return
+        try:
+            self._cycle_observer(self.seat_id, self.last_duration_s, outcome)
+        except Exception as exc:
+            log.warning("seat %s cycle observer failed: %s", self.seat_id, exc)
 
     async def _on_crash(self, ctx: SeatContext) -> None:
         now = self._clock.now()

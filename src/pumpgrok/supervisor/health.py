@@ -6,7 +6,8 @@ vendor ``status()`` keys plus the supervisor additions from
 paper-engine.md 6.6 (autonomy level, ledger status/source, kill switch,
 breakers, per-seat freshness, equity, drawdown, data age). ``GET /readyz``
 returns ``200`` only after the ledger reconciled CONSISTENT and every seat
-completed one cycle. No metrics endpoint here (Phase 5).
+completed one cycle. ``GET /metrics`` returns the Prometheus exposition bytes
+(Phase 5, OBS-003) with the exposition content type; only GET is served.
 
 ``var/health.json`` carries the same body, written atomically (tmp +
 ``os.replace`` via ``atomic_write_json``, R26) every
@@ -24,6 +25,7 @@ from typing import Any
 
 from pumpgrok.core.atomic_write import atomic_write_json
 from pumpgrok.core.ids import Clock
+from pumpgrok.supervisor.metrics import EXPOSITION_CONTENT_TYPE
 
 log = logging.getLogger(__name__)
 
@@ -84,21 +86,27 @@ def write_health_json(path: str, status: Mapping[str, Any]) -> None:
 
 
 def _reason(status: int) -> str:
-    return "OK" if status == 200 else "Service Unavailable"
+    if status == 200:
+        return "OK"
+    if status == 405:
+        return "Method Not Allowed"
+    return "Service Unavailable"
 
 
 class HealthServer:
-    """Minimal asyncio HTTP server for /healthz and /readyz."""
+    """Minimal asyncio HTTP server for /healthz, /readyz and /metrics."""
 
     def __init__(
         self,
         clock: Clock,
         get_status: Callable[[], Mapping[str, Any]],
         is_ready: Callable[[], bool],
+        get_metrics: Callable[[], bytes] | None = None,
     ) -> None:
         self._clock = clock
         self._get_status = get_status
         self._is_ready = is_ready
+        self._get_metrics = get_metrics
         self._server: asyncio.AbstractServer | None = None
 
     async def start(self, host: str = "127.0.0.1", port: int = 0) -> int:
@@ -121,7 +129,16 @@ class HealthServer:
         try:
             request = await reader.read(65536)
             path = self._path_of(request)
-            if path == "/readyz":
+            if path == "/metrics":
+                if self._method_of(request) != "GET":
+                    self._respond(writer, 405, {"error": "method not allowed"})
+                elif self._get_metrics is None:
+                    self._respond(writer, 503, {"metrics": False})
+                else:
+                    self._respond_bytes(
+                        writer, 200, self._get_metrics(), EXPOSITION_CONTENT_TYPE
+                    )
+            elif path == "/readyz":
                 code = 200 if self._is_ready() else 503
                 self._respond(writer, code, {"ready": self._is_ready()})
             else:
@@ -144,11 +161,34 @@ class HealthServer:
             return "/healthz"
 
     @staticmethod
+    def _method_of(request: bytes) -> str:
+        """Request method; tolerant default GET mirrors _path_of (never evals bytes)."""
+        try:
+            line = request.split(b"\r\n", 1)[0].decode("latin-1")
+            parts = line.split(" ")
+            return parts[0].upper() if parts and parts[0] else "GET"
+        except Exception:
+            return "GET"
+
+    @staticmethod
     def _respond(writer: asyncio.StreamWriter, code: int, body: Mapping[str, Any]) -> None:
         payload = json.dumps(dict(body)).encode("utf-8")
         head = (
             f"HTTP/1.1 {code} {_reason(code)}\r\n"
             "Content-Type: application/json\r\n"
+            f"Content-Length: {len(payload)}\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("latin-1")
+        writer.write(head + payload)
+
+    @staticmethod
+    def _respond_bytes(
+        writer: asyncio.StreamWriter, code: int, payload: bytes, content_type: str
+    ) -> None:
+        """Serve pre-rendered bytes (the /metrics exposition); never json.dumps them."""
+        head = (
+            f"HTTP/1.1 {code} {_reason(code)}\r\n"
+            f"Content-Type: {content_type}\r\n"
             f"Content-Length: {len(payload)}\r\n"
             "Connection: close\r\n\r\n"
         ).encode("latin-1")

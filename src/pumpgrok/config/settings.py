@@ -250,6 +250,18 @@ class LiveSettings(BaseModel):
 
     enabled: bool = False
 
+class HealthSettings(BaseModel):
+    """Health server bind port (INV-C-11).
+
+    Default 0 (disabled: never bind a socket under test or --once/--replay).
+    The container sets PUMPGROK_HEALTH__PORT=8080 via compose (plan 07);
+    --once/--replay forces 0 through health_port() regardless of this value.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    port: int = 0
+
 
 class Settings(BaseSettings):
     """Merged application settings. Build via load_settings(), not directly."""
@@ -278,6 +290,7 @@ class Settings(BaseSettings):
     exits: ExitsSettings = Field(default_factory=ExitsSettings)
     ops: OpsSettings = Field(default_factory=OpsSettings)
     notify: NotifySettings = Field(default_factory=NotifySettings)
+    health: HealthSettings = Field(default_factory=HealthSettings)
 
     @property
     def effective_mode(self) -> Mode:
@@ -497,6 +510,18 @@ def load_settings(**kwargs: Any) -> Settings:
         return Settings(**kwargs)
     except ValidationError as exc:
         raise ConfigError(_format_validation_error(exc)) from exc
+
+
+def health_port(settings: Settings, *, once: bool = False, replay: str | None = None) -> int:
+    """Effective health server port (INV-C-11).
+
+    ``--once`` and ``--replay`` force 0 (disabled: CI never binds a socket);
+    otherwise the configured ``health.port`` applies (container sets
+    PUMPGROK_HEALTH__PORT=8080 via compose in plan 07).
+    """
+    if once or replay:
+        return 0
+    return settings.health.port
 
 
 def refuse_cli_secrets(argv: Sequence[str]) -> None:
