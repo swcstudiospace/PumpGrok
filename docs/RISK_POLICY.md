@@ -4,7 +4,7 @@ Tracker: SPE-18001 https://linear.app/swcstudio/issue/SPE-18001/n7-safety-invari
 
 Also closes the defaults table of node n6: SPE-18000 https://linear.app/swcstudio/issue/SPE-18000 (clarification q3, "Risk budget").
 
-This document is the human-readable policy behind the numbers in `src/pumpgrok/risk/limits.py` and the gates in `ci/gates/`. It is owned by `bot-02-risk` (D3, R36: RISK owns `ci/**`, `contracts/**`, `ownership.yaml`, `SECURITY.md`, `rules/pumpgrok-team.mdc`, this file). Where it states a number, the number is a REVIEW default until a human confirms it through the risk-limits interview (`skills/desk-risk-limits/SKILL.md:3,18`); where it states a rule, the rule is enforced in code and proven by the test named in docs/SAFETY_INVARIANTS.md (referenced below as `INV-*`). Names of config keys, rule ids, events and approval kinds follow orchestrator resolutions R16-R40. Every repository fact cites `file:line`; inferences are tagged `[INFERENCE]`. ASCII only; the two constitutional strings that contain U+2013 are written with a hyphen here and keep their original bytes in code (R7, INV-S-09).
+This document is the human-readable policy behind the numbers in `src/pumpgrok/core/risk_budget.py` and the gates in `ci/gates/`. It is owned by `bot-02-risk` (D3, R36: RISK owns `ci/**`, `contracts/**`, `ownership.yaml`, `SECURITY.md`, `rules/pumpgrok-team.mdc`, this file). Where it states a number, the number is a REVIEW default until a human confirms it through the risk-limits interview (`skills/desk-risk-limits/SKILL.md:3,18`); where it states a rule, the rule is enforced in code and proven by the test named in docs/SAFETY_INVARIANTS.md (referenced below as `INV-*`). Names of config keys, rule ids, events and approval kinds follow orchestrator resolutions R16-R40. Every repository fact cites `file:line`; inferences are tagged `[INFERENCE]`. ASCII only; the two constitutional strings that contain U+2013 are written with a hyphen here and keep their original bytes in code (R7, INV-S-09).
 
 ## 1. Purpose and constitutional anchors
 
@@ -36,7 +36,7 @@ The ultrathink clarification q3 ("Risk budget", spec xml lines 483-490) offered 
 
 If the human chooses another posture, the values in section 2.2 change in one place (`src/pumpgrok/config/overlays/paper.toml`, `[risk]`; R30), the change goes through section 7, and the 14-day paper clock restarts because the live-gate statistics would no longer describe the configuration being promoted.
 
-### 2.2 Risk budget (`[risk]`, `RiskBudget` in `src/pumpgrok/risk/limits.py`)
+### 2.2 Risk budget (`[risk]`, `RiskBudget` in `src/pumpgrok/core/risk_budget.py`)
 
 R20 fixes the budget schema: nine keys, fractions of equity in `0..1`, the same names in `RiskBudget` (interfaces), per-seat `risk_budget` (ROSTER), the TOML `[risk]` block and the `risk.check_limits` output. Equity = cash + mark-to-market of open positions, in lamports internally (R28), reported in SOL.
 
@@ -169,12 +169,10 @@ Detection of, and paper trading on, signals that are publicly observable without
 
 ### 4.4 Absence checks that prove the boundary
 
-| Check | Where | Test |
-|---|---|---|
-| No tool in any roster or in the registry matches `post|reply|like|follow|dm|broadcast|promote|shill|wash|volume` | `contracts/tool-rosters/*.yaml`, `ToolRegistry` | `tests/safety/test_no_manipulation_tools.py::test_no_posting_or_volume_tools` (INV-S-07) |
-| No module under `src/pumpgrok/tools/social/` imports or calls an HTTP verb other than GET, or sends anything on a websocket except subscription frames | AST | same test |
-| `src/pumpgrok/tools/notify/` sends only to destinations present in the configured allowlist; never to a public social endpoint (R39) | AST + sentinel allowlist | same test |
-| `skills/browser-ops/SKILL.md` contains no posting or wallet-UI procedure (R39) | text scan | same test |
+| No tool in any roster or in the registry matches `post|reply|like|follow|dm|broadcast|wash|volume|promote|shill` | `contracts/tool-rosters/*.yaml`, `ToolRegistry` | `tests/safety/test_no_manipulation_tools.py::test_roster_names_carry_no_manipulation_names` and `::test_registered_tools_carry_no_manipulation_names` (INV-S-07) |
+| No module under `src/pumpgrok/tools/social/` imports or calls an HTTP verb other than GET, or sends anything on a websocket except subscription frames | AST | `tests/safety/test_no_manipulation_tools.py::test_social_has_no_write_verbs_sc4_literal` and `::test_social_has_no_manipulation_helpers` |
+| `src/pumpgrok/tools/notify/` sends only to destinations present in the configured allowlist; never to a public social endpoint (R39) | AST + allowlist setting | `tests/safety/test_no_manipulation_tools.py::test_notify_posts_only_to_allowlisted_destinations` |
+| `skills/browser-ops/SKILL.md` contains no posting or wallet-UI procedure (R39) | text scan | `tests/safety/test_no_manipulation_tools.py::test_browser_ops_skill_has_no_posting_or_wallet_procedure` |
 | Only sniper and exit hold `exec.place`; one order in flight per seat (single-send) | registry, supervisor cadence | `tests/test_registry_least_privilege.py::test_only_sniper_and_exit_resolve_exec_place` (INV-R-14); `tests/execution/test_single_send.py` (INV-R-12) |
 | No Hermes cron owner is sniper or exit; `send_transaction`, `sign`, `store_key`, `raise_engagement` forbidden | `hermes/cron/jobs.yaml:79-84` | `tests/desk/test_hermes_cron_contract.py::test_cron_never_trades` (INV-S-10) |
 
@@ -241,4 +239,4 @@ Change control for limits and gates:
 | 7 | Whether `research` engagement should also block `exec.simulate` (read-only quote) | No; simulate has no side effect and `research` blocks only `exec.place` |
 | 8 | Inbound command grammar beyond `KILL [FLATTEN] <reason>` and `STATUS` | Nothing else; any other inbound text is logged and ignored |
 | 9 | Where the weekly risk review minutes live | `var/journal/` as `JournalNote note_kind=review` plus the receipt; no Notion/Linear dependency assumed |
-| 10 | Home of the non-budget engine constants (`min_trade_sol`, creator rule, slippage bound, breaker thresholds) that R20 does not list | `[risk.engine]` beside `RiskBudget` in `risk/limits.py`; REVIEW |
+| 10 | Home of the non-budget engine constants (`min_trade_sol`, creator rule, slippage bound, breaker thresholds) that R20 does not list | `[risk.engine]` (`EngineLimits` in `src/pumpgrok/risk/limits.py`) beside `RiskBudget` in `src/pumpgrok/core/risk_budget.py`; REVIEW |

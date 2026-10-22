@@ -712,6 +712,7 @@ SIGTERM/SIGINT -> `request_stop` (vendor semantics: second signal logs and does 
 
 - `GET /healthz` -> JSON, `200` if `status == "ok"` else `503` (vendor contract, ops.py:349-355); keys are the vendor `status()` keys (pipeline.py:392-419: `status, mode, uptime_seconds, stalled, open_positions, blind_positions, trades_today, realized_pnl_sol, halted, breaker, ...`; `realized_pnl_sol` is rendered from `realized_today_lamports` for compatibility) plus `autonomy_level, ledger_status, ledger_source, kill_switch, breakers{...}, seats{seat: {state, last_ok_ts, stale}}, equity_lamports, drawdown_pct, data_age_s`.
 - `GET /readyz` -> `200` only after the ledger reconciled CONSISTENT and every seat completed one cycle.
+- `pumpgrok run --mode paper --serve` replays a recorded dataset in a loop and serves `/healthz` and `/metrics` on `PUMPGROK_HEALTH__PORT`; `--once` and `--replay` force port `0` so CI never binds a socket (INV-C-11). While serving a recording the health body carries `ledger_source=replay`.
 - `GET /metrics` -> `prometheus_client` text (D5) from `supervisor/metrics.py`, metric families: `pumpgrok_cycle_seconds{seat}` histogram, `pumpgrok_bot_crashes_total{seat}`, `pumpgrok_orders_total{side,outcome}`, `pumpgrok_equity_lamports`, `pumpgrok_drawdown_pct`, `pumpgrok_data_age_seconds{source}`, `pumpgrok_breaker_state{breaker}` (0 closed, 1 half-open, 2 open), `pumpgrok_kill_switch`, `pumpgrok_ledger_seq`.
 - `var/health.json`: the `/healthz` body written atomically (tmp + `os.replace`, the helper in `ledger/store.py`, R26) every `health.file_interval_s = 10`; Hermes cron prompts and `desk_state.py` can read it without HTTP.
 
@@ -739,6 +740,7 @@ mode            = "paper"              # "paper" | "live"; default paper (D4); o
 autonomy_level  = "autonomous-paper"   # "manual-ticket" | "autonomous-paper"; config validation forces manual-ticket when the effective mode is live
 
 [live]                                  # evaluated only when the effective mode is live (section 7.2)
+enabled            = false            # D4, R21 (1): precondition 1 reads this alongside the effective mode; overlays keep it false
 min_paper_days      = 14               # D4, R21 (3); the window starts at the first source=paper event in var/ledger.sqlite (R41), never a config value
 wallet_allowlist    = []               # base58 public keys only; never private material (R21 (5))
 notional_cap_sol    = 0.0              # per-order cap; 0 < value <= 1.0 required (R21 (6)); the one SOL-denominated live key, converted to lamports at load
@@ -760,7 +762,7 @@ max_drawdown        = "drawdown_halt_fraction"   # bound to [risk].drawdown_halt
 The ONE precondition list (R21), identical to the `LiveGate` docstring in docs/design/interfaces.md:
 
 ```
-  1. mode_live: effective execution.mode == live (R30 precedence: CLI --mode > env PUMPGROK_MODE > TOML execution.mode)
+  1. mode_live: effective execution.mode == live AND [live] enabled = true (R30 precedence for the mode: CLI --mode > env PUMPGROK_MODE > TOML execution.mode; every overlay ships enabled = false)
   2. live_enable_env: env PUMPGROK_LIVE_ENABLE=1
   3. min_paper_days: live.min_paper_days >= 14 elapsed, measured ONLY on ledger events with source=paper (never replay)
   4. performance_thresholds: on the same source=paper events: closed_trades >= 50, profit_factor >= 1.2, max_drawdown <= drawdown_halt_fraction
