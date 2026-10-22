@@ -20,6 +20,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+from pumpgrok.replay.clock import WallClock
 
 MIN_PAPER_DAYS = 14
 MIN_CLOSED_TRADES = 50
@@ -60,10 +63,7 @@ class LiveGate:
         mode_live = self._mode == "live"
         env_enabled = self._environ.get("PUMPGROK_LIVE_ENABLE", "").strip() == "1"
         days_met, days_reason, perf_met, perf_reason = _paper_window(self._root)
-        if mode_live:
-            mode_reason = "effective mode is live"
-        else:
-            mode_reason = "effective mode is {0}".format(self._mode)
+        mode_reason = "effective mode is live" if mode_live else f"effective mode is {self._mode}"
         rows: tuple[tuple[bool, str], ...] = (
             (mode_live, mode_reason),
             (
@@ -121,7 +121,7 @@ def _read_gate_rows(ledger: Path) -> list[tuple[str, str, str, str]] | None:
     if not ledger.exists():
         return None
     try:
-        uri = "file:{0}?mode=ro".format(ledger.resolve().as_posix())
+        uri = f"file:{ledger.resolve().as_posix()}?mode=ro"
         db = sqlite3.connect(uri, uri=True)
         try:
             return list(
@@ -138,10 +138,10 @@ def _read_gate_rows(ledger: Path) -> list[tuple[str, str, str, str]] | None:
 def _paper_days(paper: list[tuple[str, str, str]]) -> tuple[bool, str]:
     """Precondition 3: elapsed UTC days since the first source=paper event."""
     first_day = str(paper[0][0])[:10]
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    today = datetime.fromtimestamp(WallClock().now(), UTC).strftime("%Y-%m-%d")
     span = datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(first_day, "%Y-%m-%d")
     days = max(0, span.days)
-    reason = "{0} of {1} days on source=paper events".format(days, MIN_PAPER_DAYS)
+    reason = f"{days} of {MIN_PAPER_DAYS} days on source=paper events"
     return (days >= MIN_PAPER_DAYS, reason)
 
 
@@ -167,15 +167,15 @@ def _paper_perf(paper: list[tuple[str, str, str]]) -> tuple[bool, str]:
         and profit_factor >= MIN_PROFIT_FACTOR
         and drawdown <= MAX_DRAWDOWN_FRACTION
     )
-    reason = "closed {0}, pf {1:.2f}, dd {2:.1f} % on source=paper events".format(
-        closed, profit_factor, drawdown * 100
+    reason = (
+        f"closed {closed}, pf {profit_factor:.2f}, dd {drawdown * 100:.1f} % on source=paper events"
     )
     return (met, reason)
 
 
 def _fold_perf_row(
     type: str,
-    payload: dict,
+    payload: dict[str, Any],
     *,
     closed: int,
     gains: int,
@@ -197,12 +197,11 @@ def refusal_lines(preconditions: Sequence[Precondition]) -> list[str]:
     """The stderr block for a refused live start: one [x]/[ ] line per precondition."""
     unmet = [item for item in preconditions if not item.met]
     lines = [
-        "LIVE GATE: refusing to start in mode=live. {0} of {1} preconditions unmet:".format(
-            len(unmet), len(preconditions)
-        )
+        f"LIVE GATE: refusing to start in mode=live. {len(unmet)} of "
+        f"{len(preconditions)} preconditions unmet:"
     ]
     for item in preconditions:
         mark = "x" if item.met else " "
-        lines.append("  [{0}] {1} {2} {3}".format(mark, item.number, item.id, item.reason))
+        lines.append(f"  [{mark}] {item.number} {item.id} {item.reason}")
     lines.append("Fix every unmet line or run in mode=paper. No transaction was attempted.")
     return lines

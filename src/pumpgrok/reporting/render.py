@@ -13,9 +13,11 @@ LAMPORTS_PER_SOL = 1_000_000_000
 
 def sol(lamports: int) -> str:
     """Render an integer lamport amount as SOL with 9 decimals (render time only)."""
-    sign = "-" if lamports < 0 else ""
+    neg = "-" if lamports < 0 else ""
     rest = abs(int(lamports))
-    return "{0}{1}.{2:09d}".format(sign, rest // LAMPORTS_PER_SOL, rest % LAMPORTS_PER_SOL)
+    return _SOL_TEMPLATE.format(
+        neg=neg, whole=rest // LAMPORTS_PER_SOL, frac=rest % LAMPORTS_PER_SOL
+    )
 
 
 def assert_ascii(body: str) -> str:
@@ -23,7 +25,7 @@ def assert_ascii(body: str) -> str:
     try:
         body.encode("ascii")
     except UnicodeEncodeError as exc:
-        raise ValueError("report is not ASCII-only: {0}".format(exc)) from exc
+        raise ValueError(_NON_ASCII_MESSAGE.format(detail=exc)) from exc
     return body
 
 
@@ -148,6 +150,13 @@ _PER_DAY_HEADER = (
 )
 _PER_DAY_ROW = "{line}\n"
 _PER_DAY_EMPTY = "## Per day\nno per-day rows\n"
+_SOL_TEMPLATE = "{neg}{whole}.{frac:09d}"
+_NON_ASCII_MESSAGE = "report is not ASCII-only: {detail}"
+_SIGNED_PCT_TEMPLATE = "{value:+.2f}"
+_DAILY_TITLE = "# PumpGrok paper report - daily - {day} (UTC)\n"
+_MODE_LINE = (
+    "Mode: {mode} | Autonomy: {autonomy} | Ledger: {ledger} seq {seq} | Equity: {equity} SOL\n"
+)
 
 
 def _equity_pct(model: ReportModel) -> str:
@@ -155,15 +164,19 @@ def _equity_pct(model: ReportModel) -> str:
         return "n/a"
     pct = (model.equity_end_lamports - model.equity_start_lamports) * 100.0
     pct /= model.equity_start_lamports
-    return "{0:+.2f}".format(pct)
+    return _SIGNED_PCT_TEMPLATE.format(value=pct)
 
 
 def render_daily(model: ReportModel) -> str:
     """Render the daily markdown document (paper-engine.md 8.3)."""
     parts = [
-        "# PumpGrok paper report - daily - {0} (UTC)\n".format(model.day),
-        "Mode: {0} | Autonomy: {1} | Ledger: {2} seq {3} | Equity: {4} SOL\n".format(
-            model.mode, model.autonomy, model.ledger_id, model.seq, sol(model.equity_end_lamports)
+        _DAILY_TITLE.format(day=model.day),
+        _MODE_LINE.format(
+            mode=model.mode,
+            autonomy=model.autonomy,
+            ledger=model.ledger_id,
+            seq=model.seq,
+            equity=sol(model.equity_end_lamports),
         ),
         "\n",
         _SUMMARY_TEMPLATE.format(

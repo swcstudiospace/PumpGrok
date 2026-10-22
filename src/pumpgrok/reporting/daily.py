@@ -25,6 +25,16 @@ from pumpgrok.ledger.views import (
 )
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
 
+_RO_URI_TEMPLATE = "file:{path}?mode=ro"
+_DAY_START_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}T00:00:00Z"
+_SIGNED_PCT_TEMPLATE = "{value:+.2f}"
+_PCT_TEMPLATE = "{value:.2f}"
+_RISK_EVENT_TEMPLATE = "{etype} {ts} {cid}"
+_APPROVAL_TEMPLATE = "ApprovalRecorded kind={kind} by={approved_by}"
+_FROZEN_MTM_TEMPLATE = "frozen mtm positions: {count}"
+_LAST_MTM_TEMPLATE = "last mtm: {ts}"
+_MTM_POINTS_TEMPLATE = "mtm points: {count}"
+
 
 def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     """Read every tracked event without creating files.
@@ -35,7 +45,7 @@ def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     """
     if not ledger_path.exists():
         return []
-    uri = "file:{0}?mode=ro".format(ledger_path.resolve().as_posix())
+    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
     db = sqlite3.connect(uri, uri=True)
     try:
         rows = db.execute(
@@ -80,7 +90,7 @@ def day_next(day: str) -> str:
     if month > 12:
         month = 1
         year += 1
-    return "{0:04d}-{1:02d}-{2:02d}T00:00:00Z".format(year, month, dom)
+    return _DAY_START_TEMPLATE.format(year=year, month=month, dom=dom)
 
 
 def _in_window(ts: str, start: str, end: str) -> bool:
@@ -115,7 +125,7 @@ class DailyReport:
             payload = event["payload"]
             pnl = int(payload.get("realized_pnl_lamports", 0))
             basis = int(payload.get("cost_basis_lamports", 0))
-            pct = "{0:+.2f}".format(pnl * 100.0 / basis) if basis else "n/a"
+            pct = _SIGNED_PCT_TEMPLATE.format(value=pnl * 100.0 / basis) if basis else "n/a"
             closed_rows.append(
                 TradeRow(
                     ticket=str(payload.get("ticket_id", "")),
@@ -161,8 +171,8 @@ class DailyReport:
             verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
 
         risk_events = tuple(
-            "{0} {1} {2}".format(
-                event["type"], event.get("ts_utc", ""), event.get("correlation_id", "")
+            _RISK_EVENT_TEMPLATE.format(
+                etype=event["type"], ts=event.get("ts_utc", ""), cid=event.get("correlation_id", "")
             )
             for event in window
             if event["type"]
@@ -177,8 +187,9 @@ class DailyReport:
             )
         )
         approvals = tuple(
-            "ApprovalRecorded kind={0} by={1}".format(
-                event["payload"].get("kind", ""), event["payload"].get("approved_by", "")
+            _APPROVAL_TEMPLATE.format(
+                kind=event["payload"].get("kind", ""),
+                approved_by=event["payload"].get("approved_by", ""),
             )
             for event in window
             if event["type"] == "ApprovalRecorded"
@@ -186,7 +197,7 @@ class DailyReport:
 
         frozen = [m for m in position_rows if m.mtm_frozen]
         unverified = tuple(
-            ["frozen mtm positions: {0}".format(len(frozen))] if frozen else []
+            [_FROZEN_MTM_TEMPLATE.format(count=len(frozen))] if frozen else []
         ) + tuple(
             [
                 "ledger_inconsistent day"
@@ -197,7 +208,10 @@ class DailyReport:
 
         mtm_ts = [str(e.get("ts_utc", "")) for e in events if e["type"] == "MarkToMarket"]
         freshness = (
-            ("last mtm: {0}".format(mtm_ts[-1]), "mtm points: {0}".format(len(mtm_ts)))
+            (
+                _LAST_MTM_TEMPLATE.format(ts=mtm_ts[-1]),
+                _MTM_POINTS_TEMPLATE.format(count=len(mtm_ts)),
+            )
             if mtm_ts
             else ()
         )
@@ -229,7 +243,7 @@ class DailyReport:
             unrealized_lamports=unrealized_pnl_lamports(state) if events else 0,
             fees_venue_lamports=fees,
             fees_network_lamports=0,
-            max_drawdown_pct="{0:.2f}".format(dd * 100),
+            max_drawdown_pct=_PCT_TEMPLATE.format(value=dd * 100),
             daily_loss_pct="0.00",
             trade_rows=tuple(closed_rows),
             position_rows=position_rows,

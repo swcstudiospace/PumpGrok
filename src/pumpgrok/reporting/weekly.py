@@ -15,6 +15,13 @@ from pumpgrok.execution.live.live_gate import LiveGate
 from pumpgrok.reporting.daily import DailyReport, day_next, read_events_readonly
 from pumpgrok.reporting.render import ReportModel
 
+_YMD_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}"
+_PER_DAY_TEMPLATE = (
+    "{day} | fills {fills} | closed {closed} | rejected {rejected} | events {events}"
+)
+_GATE_LINE_TEMPLATE = "{number} {gate_id} | {status} | {reason}"
+_WEEK_RANGE_TEMPLATE = "{first} to {last}"
+
 
 def _iso_monday(day: str) -> str:
     """Rewind a YYYY-MM-DD date to its Monday (pure calendar math)."""
@@ -50,7 +57,7 @@ def _iso_monday(day: str) -> str:
 
     back = (weekday(year, month, dom) + 6) % 7
     y, m, d = shift(year, month, dom, -back)
-    return "{0:04d}-{1:02d}-{2:02d}".format(y, m, d)
+    return _YMD_TEMPLATE.format(year=y, month=m, dom=d)
 
 
 class WeeklyReport:
@@ -89,8 +96,12 @@ class WeeklyReport:
             day_closed = sum(1 for e in day_events if e["type"] == "PositionClosed")
             day_rejected = sum(1 for e in day_events if e["type"] == "OrderRejected")
             per_day.append(
-                "{0} | fills {1} | closed {2} | rejected {3} | events {4}".format(
-                    single, day_fills, day_closed, day_rejected, len(day_events)
+                _PER_DAY_TEMPLATE.format(
+                    day=single,
+                    fills=day_fills,
+                    closed=day_closed,
+                    rejected=day_rejected,
+                    events=len(day_events),
                 )
             )
 
@@ -98,15 +109,18 @@ class WeeklyReport:
         gate_root = root if root is not None else Path(os.environ.get("PUMPGROK_ROOT", "."))
         gate = LiveGate(mode="live", environ=dict(os.environ), root=gate_root)
         gate_lines = tuple(
-            "{0} {1} | {2} | {3}".format(
-                item.number, item.id, "OK" if item.met else "unmet", item.reason
+            _GATE_LINE_TEMPLATE.format(
+                number=item.number,
+                gate_id=item.id,
+                status="OK" if item.met else "unmet",
+                reason=item.reason,
             )
             for item in gate.evaluate()
         )
 
         return ReportModel(
             period="weekly",
-            day="{0} to {1}".format(days[0], days[-1]),
+            day=_WEEK_RANGE_TEMPLATE.format(first=days[0], last=days[-1]),
             mode=base.mode,
             autonomy=base.autonomy,
             ledger_id=base.ledger_id,

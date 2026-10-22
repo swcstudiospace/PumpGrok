@@ -1017,7 +1017,12 @@ def _doctor_verb(_args: argparse.Namespace, settings: Settings) -> int:
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "confirm":
         return _live_confirm(args, settings)
-    return _not_implemented("live {0}".format(args.cmd))
+    return _not_implemented(f"live {args.cmd}")
+
+
+def _utc_now() -> datetime:
+    """Current wall time for CLI verbs (replay paths inject FixtureClock instead)."""
+    return datetime.fromtimestamp(WallClock().now(), UTC)
 
 
 def _jsonable(value: Any) -> Any:
@@ -1043,15 +1048,13 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
     try:
         cap_sol = Decimal(str(args.notional_cap))
     except InvalidOperation as exc:
-        raise UsageError(
-            "bad --notional-cap {0!r}: want decimal SOL".format(args.notional_cap)
-        ) from exc
+        raise UsageError(f"bad --notional-cap {args.notional_cap!r}: want decimal SOL") from exc
     if not (Decimal("0") < cap_sol <= Decimal("1.0")):
-        raise UsageError("bad --notional-cap {0!r}: want 0 < cap <= 1.0".format(args.notional_cap))
+        raise UsageError(f"bad --notional-cap {args.notional_cap!r}: want 0 < cap <= 1.0")
     try:
         expires = datetime.fromisoformat(str(args.expires).replace("Z", "+00:00"))
     except ValueError as exc:
-        raise UsageError("bad --expires {0!r}: want ISO-8601 UTC".format(args.expires)) from exc
+        raise UsageError(f"bad --expires {args.expires!r}: want ISO-8601 UTC") from exc
     key = os.environ.get("PUMPGROK_CONFIRMATION_KEY", "")
     if not key:
         _say(sys.stderr, "live confirm refused: PUMPGROK_CONFIRMATION_KEY is not set")
@@ -1061,7 +1064,7 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
         canonical_json(_jsonable(settings.model_dump(mode="json"))).encode("utf-8")
     ).hexdigest()
     cap_lamports = int((cap_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
-    confirmed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    confirmed_at = _utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
     body = {
         "ledger_id": _ledger_id_or_none(),
         "config_hash": config_hash,
@@ -1078,7 +1081,7 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
     signature = hmac.new(
         key.encode("utf-8"), canonical_json(body).encode("utf-8"), hashlib.sha256
     ).digest()
-    record = dict(body)
+    record: dict[str, Any] = dict(body)
     record["signature"] = base64.b64encode(signature).decode("ascii")
     target = Path.cwd() / "var" / "live_confirmation.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1096,7 +1099,7 @@ def _ledger_id_or_none() -> str:
     if not ledger.exists():
         return "none"
     try:
-        uri = "file:{0}?mode=ro".format(ledger.resolve().as_posix())
+        uri = f"file:{ledger.resolve().as_posix()}?mode=ro"
         db = sqlite3.connect(uri, uri=True)
         try:
             row = db.execute("SELECT value FROM meta WHERE key = 'ledger_id'").fetchone()
@@ -1111,16 +1114,16 @@ def _append_live_approval(by: str, cap_lamports: int, signature: str) -> None:
     """Append ApprovalRecorded(kind=live_gate) with the confirmation signature."""
     store = LedgerStore(PAPER_LEDGER_PATH)
     try:
-        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = _utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
         store.append(
             ts_utc=now,
             source="manual",
             correlation_id="desk",
-            idempotency_key="live-confirm-{0}".format(signature[:16]),
+            idempotency_key=f"live-confirm-{signature[:16]}",
             type="ApprovalRecorded",
             payload={
                 "source": "manual",
-                "id": "apr-live-{0}".format(signature[:16]),
+                "id": f"apr-live-{signature[:16]}",
                 "kind": "live_gate",
                 "approved_by": by,
                 "at": now,
@@ -1143,10 +1146,10 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
     ledger = Path.cwd() / "var" / "ledger.sqlite"
     mode = settings.effective_mode
     if args.daily:
-        day = str(args.day or datetime.now(UTC).strftime("%Y-%m-%d"))
+        day = str(args.day or _utc_now().strftime("%Y-%m-%d"))
         body = render_daily(DailyReport.build(ledger, day, mode=mode))
     else:
-        week = str(args.week or datetime.now(UTC).strftime("%Y-%m-%d"))
+        week = str(args.week or _utc_now().strftime("%Y-%m-%d"))
         body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd()))
     if args.out:
         target = Path(str(args.out))
