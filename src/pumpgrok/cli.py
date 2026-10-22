@@ -75,6 +75,7 @@ from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.killswitch import SEAT_RE, KillSwitch
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import build_operator_registry
 

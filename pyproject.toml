@@ -33,8 +33,6 @@ module-root = "src"
 
 [dependency-groups]
 dev = [
-    # root tools/ oracle kept until Phase 5 per R53 (tests/test_tools_cli.py needs it)
-    "requests>=2.32,<3",
     "ruff>=0.17.1,<0.18",
     "mypy>=2.4.0,<3",
     "pytest>=9.1.1,<10",

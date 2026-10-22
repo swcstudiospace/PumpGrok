@@ -1,7 +1,7 @@
 """Characterization: Jupiter Swap V2 quote (STRUCT-002, R44).
 
-Pins ``tools/market/jupiter.py`` against ``tools/jupiter_quote.py``
-(root oracle, kept byte-identical per R53).
+Pins ``tools/market/jupiter.py`` against the retired ``jupiter_quote``
+root oracle (kept byte-identical per R53).
 
 Divergences from the oracle (deliberate, per R54 and 02-RESEARCH.md Pitfall 1):
 the port targets ``https://api.jup.ag/swap/v2/order`` (the oracle pins the
@@ -11,9 +11,9 @@ v1 ``priceImpactPct`` decimal ratio, and takes an injected ``httpx`` client
 instead of monkeypatched ``requests.get``. The quote is informational only
 (R38): this module cannot execute, build or submit.
 
-Ports 3 root unittest cases (R55): ``test_quote_url_is_current_lite_swap_api``
-(``tests/test_tools_cli.py:33``), ``test_get_quote_calls_configured_url``
-(``:41``) and ``test_main_exits_nonzero_when_quote_fails`` (``:73``). The
+Ports 3 root unittest cases (R55): ``test_quote_url_is_current_lite_swap_api``,
+``test_get_quote_calls_configured_url`` and ``test_main_exits_nonzero_when_quote_fails``
+(root-oracle classes retired in 05-08). The
 ported module exposes no ``main()`` (CLI verbs land in a later plan), so the
 non-zero-exit contract is pinned via its exact predicate: an ``ok: False``
 result.

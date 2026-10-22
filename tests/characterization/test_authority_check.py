@@ -1,7 +1,7 @@
 """Characterization: mint authority check (STRUCT-002).
 
-Pins ``tools/onchain/authorities.py`` against ``tools/authority_check.py``
-(root oracle, kept byte-identical per R53).
+Pins ``tools/onchain/authorities.py`` against the retired ``authority_check``
+root oracle (kept byte-identical per R53).
 
 Divergence from the oracle (deliberate, see 02-RESEARCH.md Pitfall 5):
 the output drops the ``rpc`` URL echo -- the endpoint URL must never leave
@@ -10,7 +10,7 @@ the client boundary (T-02-01). Method (``getAccountInfo``), params
 identical to ``check_mint``.
 
 Ports 1 root unittest case (R55): ``test_authority_main_exits_nonzero_on_error``
-(``tests/test_tools_cli.py:107``). The ported modules expose no ``main()``
+(root-oracle class retired in 05-08). The ported modules expose no ``main()``
 (CLI verbs land in a later plan), so the non-zero-exit contract is pinned via
 its exact predicate: an ``ok: False`` result.
 """

@@ -1,7 +1,7 @@
 """Characterization: priority-fee estimate (STRUCT-002).
 
-Pins ``tools/onchain/priority_fee.py`` against ``tools/priority_fee.py``
-(root oracle, kept byte-identical per R53).
+Pins ``tools/onchain/priority_fee.py`` against the retired ``priority_fee``
+root oracle (kept byte-identical per R53).
 
 Divergence from the oracle (deliberate, decided per MIGRATION_MAP row 77):
 ``recommended_lamports_per_cu`` is kept as an explicit documented alias for
@@ -10,7 +10,7 @@ dropped. The ``rpc`` URL echo is dropped (T-02-01); percentile math and the
 ``note`` string are byte-identical.
 
 Ports 1 root unittest case (R55): ``test_priority_fee_main_exits_nonzero_on_error``
-(``tests/test_tools_cli.py:131``). The ported modules expose no ``main()``
+(root-oracle class retired in 05-08). The ported modules expose no ``main()``
 (CLI verbs land in a later plan), so the non-zero-exit contract is pinned via
 its exact predicate: an ``ok: False`` result.
 """

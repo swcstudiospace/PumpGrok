@@ -9,8 +9,8 @@ Adaptations from the oracle (deliberate):
 
 - The vendor appends records directly; the desk derives the same three
   shapes from the hash-chained ledger through one ``export_seq`` cursor, so
-  ``tools/pipeline_evidence.py`` and the vendor dashboard keep reading them
-  (paper-engine 3.6, MIGRATION_MAP 3.1). Rotation (``rotate_if_needed``) is
+  ``pumpgrok scout pipeline --candidates`` and the vendor dashboard keep
+  reading them (paper-engine 3.6, MIGRATION_MAP 3.1). Rotation
   not ported: the cursor resume replaces it, and the journal is sharded by
   UTC day instead.
 - ``mode`` stamps the R21 source vocabulary (``paper``) rather than the

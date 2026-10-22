@@ -2,9 +2,10 @@
 
 The runner advances a FixtureClock through every fixture event, folds the
 ticks into one engine decision, and appends one JournalNote (source=replay)
-through LedgerStore.append_batch. These tests assert engine semantics, not
-skip-only output: the fail-closed decision and its reason, the event count,
-the virtual clock stamp, and the hash-chained ledger row.
+through LedgerStore.append_batch; the CLI seat-cycle tick then emits the
+day-keyed DailyRollover for the fixture day (D6). These tests assert engine
+semantics, not skip-only output: the fail-closed decision and its reason, the
+event count, the virtual clock stamp, and the hash-chained ledger rows.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pumpgrok.ledger.store import GENESIS_PREV_HASH, LedgerStore
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.replay.runner import run_replay
+from pumpgrok.supervisor.scheduler import rollover_key
 
 SMOKE = Path(__file__).resolve().parent / "fixtures" / "replay" / "smoke"
 
@@ -66,6 +68,16 @@ def _rows(path: Path, sql: str) -> list[tuple[object, ...]]:
 def _verdict(path: Path) -> dict[str, object]:
     (row,) = _rows(path, "SELECT correlation_id, payload_json FROM events WHERE type='JournalNote'")
     return {"correlation_id": row[0], "payload": json.loads(str(row[1]))}
+
+
+def _replay_ledger_contract(path: Path) -> None:
+    """CLI replay ledgers hold exactly the verdict row plus the D6 rollover row."""
+    rows = _rows(path, "SELECT type, idempotency_key, payload_json FROM events ORDER BY seq")
+    assert [row[0] for row in rows] == ["JournalNote", "DailyRollover"]
+    payload = json.loads(str(rows[1][2]))
+    day = str(load_dataset(SMOKE).events[0]["ts_utc"])[:10]
+    assert payload["day_utc"] == day
+    assert rows[1][1] == rollover_key(day)
 
 
 def test_runner_folds_fixture_events_into_one_fail_closed_verdict(tmp_path: Path) -> None:
@@ -141,7 +153,7 @@ def test_killswitch_env_passes_settings_validation(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PUMPGROK_KILLSWITCH", "1")
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
-    assert _rows(_ledger(tmp_path), "SELECT COUNT(*) FROM events") == [(1,)]
+    _replay_ledger_contract(_ledger(tmp_path))
 
 
 def test_second_run_recreates_the_replay_ledger(
@@ -151,7 +163,7 @@ def test_second_run_recreates_the_replay_ledger(
     argv = ["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]
     assert main(argv) == 0
     assert main(argv) == 0
-    assert _rows(_ledger(tmp_path), "SELECT COUNT(*) FROM events") == [(1,)]
+    _replay_ledger_contract(_ledger(tmp_path))
 
 
 def test_run_without_replay_exits_5_and_creates_no_ledger(
@@ -184,7 +196,8 @@ def test_live_is_refused_with_exit_3_before_other_work(
     assert main(["run", "--mode", "live", "--once", "--replay", str(SMOKE)]) == 3
     err = capsys.readouterr().err
     assert "[ ] 8 adapter_registered" in err
-    assert "[ ] 1 " not in err  # mode_live is met in live mode
+    # R21/D4: precondition 1 needs [live] enabled=true; the CLI flag alone leaves it unmet.
+    assert "[ ] 1 mode_live effective mode is live but [live] enabled is not true" in err
     assert "No transaction was attempted" in err
     assert not (tmp_path / "var").exists()
 

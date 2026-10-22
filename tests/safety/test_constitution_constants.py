@@ -9,7 +9,8 @@ posts ``FLOOR HALTED <U+2013> DAILY LOSS LIMIT``, rule 3 reports
   without importing the desk, then compares exact bytes;
 - asserts the ticket core ``SOL-\\d{8}-\\d{3}`` is byte-identical in every
   home (``core/approvals.py``, ``ledger/tickets.py``,
-  ``tools/desk_state.py``, ``src/pumpgrok/cli.py``);
+  ``src/pumpgrok/cli.py``; the retired ``desk_state`` root oracle carried
+  the same pattern until its 05-08 deletion);
 - asserts the approval grammar ``approve <ticket> <mint> <size>
   <slippage>`` is documented and enforced token-for-token in
   ``core/approvals.py`` while rule line 28 names the same four fields;
@@ -112,7 +113,6 @@ def test_constants_match_rule_file_bytes() -> None:
     for home in (
         REPO_ROOT / "src" / "pumpgrok" / "core" / "approvals.py",
         REPO_ROOT / "src" / "pumpgrok" / "ledger" / "tickets.py",
-        REPO_ROOT / "tools" / "desk_state.py",
         REPO_ROOT / "src" / "pumpgrok" / "cli.py",
     ):
         assert home.is_file(), f"ticket home missing: {home}"
@@ -133,7 +133,7 @@ def test_constants_match_rule_file_bytes() -> None:
 def test_floor_constant_has_a_single_home() -> None:
     """INV-S-09: only risk/engine.py defines FLOOR_HALTED_DAILY."""
     definers: list[str] = []
-    for root in (REPO_ROOT / "src", REPO_ROOT / "tools"):
+    for root in (path for path in (REPO_ROOT / "src", REPO_ROOT / "tools") if path.exists()):
         for path in sorted(root.rglob("*.py")):
             if "__pycache__" in path.parts:
                 continue

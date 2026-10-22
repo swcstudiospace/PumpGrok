@@ -1,7 +1,7 @@
 """Characterization: top-holder snapshot (STRUCT-002).
 
-Pins ``tools/onchain/holders.py`` against ``tools/holder_check.py``
-(root oracle, kept byte-identical per R53).
+Pins ``tools/onchain/holders.py`` against the retired ``holder_check``
+root oracle (kept byte-identical per R53).
 
 Divergence from the oracle (deliberate): the output drops the ``rpc`` URL
 echo -- the endpoint URL must never leave the client boundary (T-02-01).
@@ -9,7 +9,7 @@ Method (``getTokenLargestAccounts``), the concentration math and the
 sampled-only ``note`` string are byte-identical to ``holder_snapshot``.
 
 Ports 1 root unittest case (R55): ``test_holder_main_exits_nonzero_on_error``
-(``tests/test_tools_cli.py:119``). The ported modules expose no ``main()``
+(root-oracle class retired in 05-08). The ported modules expose no ``main()``
 (CLI verbs land in a later plan), so the non-zero-exit contract is pinned via
 its exact predicate: an ``ok: False`` result.
 """

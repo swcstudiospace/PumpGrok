@@ -6,38 +6,33 @@ append from the supervisor or a CLI process goes through
 the transaction; a CLI ``pumpgrok killswitch set`` interleaved with
 supervisor appends still verifies CONSISTENT. Every HaltSet row is
 mirrored to ``$PUMPGROK_DESK/desk.md`` (``Halt: true`` plus the
-``FLOOR HALTED`` line, exactly as ``tools/desk_state.py`` formats it)
-through tmp-file plus fsync plus os.replace, so readers never see a
-partial file and ``desk_state.py status`` reports halt true.
+``FLOOR HALTED`` line, the same contract the retired ``desk_state`` root
+oracle formatted) through tmp-file plus fsync plus os.replace, so readers
+never see a partial file and the ``Halt: true`` flag reads back true.
 
 Harness: FixtureClock plus seeded IdFactory; no wall clock, no network.
-The desk_state check loads tools/desk_state.py from its file path, the
-same way tests/test_tools_cli.py loads root tools.
+The Halt-flag read goes through ``desk_bus.HALT_RE``, the port's
+machine-readable contract for the mirror.
 """
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-from types import ModuleType
 
-from pumpgrok.ledger.desk_bus import mirror_halt, mirror_killswitch
+from pumpgrok.ledger.desk_bus import HALT_RE, mirror_halt, mirror_killswitch
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 
 BASE = 1767225600.0
 DAY = "2026-01-01"
 CID = "01JAAAAAAAAAAAAAAAAAAAAAAAAA"
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _desk_state() -> ModuleType:
-    path = REPO_ROOT / "tools" / "desk_state.py"
-    spec = importlib.util.spec_from_file_location("desk_state_mirror", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _halt_flag(desk_dir: Path) -> bool:
+    """Read back the machine-readable Halt flag from the mirrored desk.md."""
+    body = (desk_dir / "desk.md").read_text(encoding="utf-8")
+    match = HALT_RE.search(body)
+    return bool(match) and str(match.group(1)).strip().lower() in {"true", "yes", "1"}
 
 
 def _halt_row(clock: FixtureClock, key: str, reason: str) -> dict:
@@ -92,8 +87,7 @@ def test_halt_mirrors_to_desk_md_and_cli_append_is_serialised(
         body = mirror_path.read_text(encoding="utf-8")
         assert "Halt: true" in body
         assert "FLOOR HALTED" in body
-        status = _desk_state().status_payload(desk_dir)
-        assert status["halt"] is True
+        assert _halt_flag(desk_dir) is True
         # A CLI killswitch set while the supervisor runs: serialised appends.
         clock.advance_to(BASE + 30.0)
         cli.append(**_kill_row(clock, "kill-file-1"))
@@ -109,7 +103,7 @@ def test_halt_mirrors_to_desk_md_and_cli_append_is_serialised(
         keys = [row["idempotency_key"] for row in supervisor.read(limit=None)]
         assert len(set(keys)) == len(keys)
         # The kill-switch mirror keeps the halt flag set for the cron gate.
-        assert _desk_state().status_payload(desk_dir)["halt"] is True
+        assert _halt_flag(desk_dir) is True
         assert "KILL SWITCH" in mirror_path.read_text(encoding="utf-8")
     finally:
         supervisor.close()
