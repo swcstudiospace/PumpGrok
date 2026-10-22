@@ -252,15 +252,19 @@ class LiveSettings(BaseModel):
 
 
 class HealthSettings(BaseModel):
-    """Health server bind port (INV-C-11).
+    """Health server bind host and port (INV-C-11).
 
-    Default 0 (disabled: never bind a socket under test or --once/--replay).
-    The container sets PUMPGROK_HEALTH__PORT=8080 via compose (plan 07);
-    --once/--replay forces 0 through health_port() regardless of this value.
+    Port default 0 (disabled: never bind a socket under test or --once/--replay).
+    The container sets PUMPGROK_HEALTH__PORT=8080 and PUMPGROK_HEALTH__HOST=0.0.0.0
+    via compose (plan 07); --once/--replay forces 0 through health_port()
+    regardless of this value. Host defaults to loopback: direct host runs never
+    expose /healthz and /metrics to the LAN unless the operator opts into
+    0.0.0.0 explicitly.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    host: str = Field(default="127.0.0.1", min_length=1)
     port: int = 0
 
 

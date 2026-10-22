@@ -59,3 +59,24 @@ def test_health_settings_are_frozen() -> None:
     settings = Settings()
     with pytest.raises(Exception):
         settings.health.port = 8080  # type: ignore[misc]
+
+
+def test_serve_host_defaults_to_loopback(clean_env: None) -> None:
+    assert load_settings().health.host == "127.0.0.1"
+
+
+def test_serve_host_env_name_is_allowed() -> None:
+    assert "PUMPGROK_HEALTH__HOST" in allowed_env_names()
+
+
+def test_serve_host_env_override(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUMPGROK_HEALTH__HOST", "0.0.0.0")
+    assert load_settings().health.host == "0.0.0.0"
+
+
+def test_serve_replay_binds_loopback_by_default() -> None:
+    import inspect
+
+    from pumpgrok.supervisor.scheduler import serve_replay
+
+    assert inspect.signature(serve_replay).parameters["host"].default == "127.0.0.1"

@@ -738,15 +738,18 @@ async def serve_replay(
     *,
     seed: int,
     port: int,
+    host: str = "127.0.0.1",
     ledger_path: str | Path | None = None,
     health_path: str | Path | None = None,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
-    Listens on all container interfaces: Docker forwards published ports to the
-    container IP, never to its loopback, so a 127.0.0.1 in-container bind is
-    unreachable from the host. LAN safety comes from the compose file, which
-    publishes 127.0.0.1:8080 only; there are no unauthenticated write routes.
+    Binds ``host`` (loopback by default, so direct host runs never expose the
+    read-only endpoints to the LAN). The container sets the host to 0.0.0.0
+    through explicit configuration (PUMPGROK_HEALTH__HOST via compose) because
+    Docker forwards published ports to the container IP, never to its loopback.
+    LAN safety for the container comes from the compose file, which publishes
+    127.0.0.1:8080 only; there are no unauthenticated write routes.
     SIGINT/SIGTERM stop the loop and the server closes before the store does.
     Returns 0.
     """
@@ -763,8 +766,8 @@ async def serve_replay(
         supervisor.ready,
         get_metrics=metrics.exposition,
     )
-    bound = await server.start("0.0.0.0", port)
-    log.info("serve listening on 0.0.0.0:%d (ledger_source=replay)", bound)
+    bound = await server.start(host, port)
+    log.info("serve listening on %s:%d (ledger_source=replay)", host, bound)
     install_signal_handlers(supervisor.request_stop)
     try:
         return await supervisor.serve_forever()

@@ -19,9 +19,10 @@
 # host ./var/ directory writable by the container user before the first `up`;
 # see docs/runbooks/start_stop.md. Do not paper over this with a compose user
 # mapping, which changes the security posture.
-# Port split: the serve process listens on all container interfaces because
-# Docker forwards published ports to the container IP, never to its loopback;
-# LAN safety comes from publishing the host loopback only (127.0.0.1:8080).
+# Port split: the serve process binds PUMPGROK_HEALTH__HOST (0.0.0.0 in this
+# container) because Docker forwards published ports to the container IP, never
+# to its loopback; LAN safety comes from publishing the host loopback only
+# (127.0.0.1:8080).
 services:
   pumpgrok:
     build: .
@@ -33,6 +34,7 @@ services:
         required: false          # optional operator PUMPGROK_* values; never baked into the image
     environment:
       PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+      PUMPGROK_HEALTH__HOST: "0.0.0.0"
       PUMPGROK_HEALTH__PORT: "8080"
     volumes:
       - ./var:/app/var
