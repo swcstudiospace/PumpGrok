@@ -947,42 +947,48 @@ class RiskEngine:
             raise ValueError(f"halt clear needs a halt_clear approval, got {approval.kind!r}")
         if not self._fold().halt.active:
             raise ValueError("no active halt to clear")
+        if self._store.by_key(f"consumed|{approval.id}") is not None:
+            raise ValueError(f"halt_clear approval {approval.id} is already consumed")
         ts_utc = self._now_ts()
-        self._store.append(
-            ts_utc=ts_utc,
-            source=source,
-            correlation_id=correlation_id,
-            idempotency_key=f"halt-clear|{ts_utc[:10]}",
-            type="HaltCleared",
-            payload={
-                "source": source,
-                "reason": reason,
-                "cleared_by": by,
-                "approval_id": approval.id,
-                "note": reason,
-            },
-        )
-        self._store.append(
-            ts_utc=ts_utc,
-            source=source,
-            correlation_id=correlation_id,
-            idempotency_key=f"consumed|{approval.id}",
-            type="ApprovalRecorded",
-            payload={
-                "source": source,
-                "id": approval.id,
-                "kind": approval.kind,
-                "approved_by": by,
-                "at": approval.at.isoformat(),
-                "ticket_id": approval.ticket_id or "",
-                "mint": approval.mint or "",
-                "size_lamports": approval.size_lamports or 0,
-                "token_units": approval.token_units or 0,
-                "max_slippage_bps": approval.max_slippage_bps or 0,
-                "exit_rule_id": approval.exit_rule_id or "",
-                "raw_message": reason,
-                "consumed": True,
-            },
+        self._store.append_batch(
+            [
+                {
+                    "ts_utc": ts_utc,
+                    "source": source,
+                    "correlation_id": correlation_id,
+                    "idempotency_key": f"halt-clear|{approval.id}",
+                    "type": "HaltCleared",
+                    "payload": {
+                        "source": source,
+                        "reason": reason,
+                        "cleared_by": by,
+                        "approval_id": approval.id,
+                        "note": reason,
+                    },
+                },
+                {
+                    "ts_utc": ts_utc,
+                    "source": source,
+                    "correlation_id": correlation_id,
+                    "idempotency_key": f"consumed|{approval.id}",
+                    "type": "ApprovalRecorded",
+                    "payload": {
+                        "source": source,
+                        "id": approval.id,
+                        "kind": approval.kind,
+                        "approved_by": by,
+                        "at": approval.at.isoformat(),
+                        "ticket_id": approval.ticket_id or "",
+                        "mint": approval.mint or "",
+                        "size_lamports": approval.size_lamports or 0,
+                        "token_units": approval.token_units or 0,
+                        "max_slippage_bps": approval.max_slippage_bps or 0,
+                        "exit_rule_id": approval.exit_rule_id or "",
+                        "raw_message": reason,
+                        "consumed": True,
+                    },
+                },
+            ]
         )
 
     def plan_flatten(self, *, correlation_id: str = "desk") -> list[FlattenOrder]:

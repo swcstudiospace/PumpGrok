@@ -394,3 +394,62 @@ async def test_halt_status_reports_breaker(tmp_path: Path) -> None:
         assert out.halted is True
     finally:
         store.close()
+
+
+def _halt(store: LedgerStore, clock: FixtureClock, reason: str, key: str) -> None:
+    """Latch a halt the way the engine does: one HaltSet row per reason."""
+    store.append(
+        ts_utc=format_ts_utc(clock.now()),
+        source="paper",
+        correlation_id="t",
+        idempotency_key=key,
+        type="HaltSet",
+        payload={
+            "source": "paper",
+            "reason": reason,
+            "detail": reason,
+            "equity_lamports": 9_400_000_000,
+            "day_start_equity_lamports": EQUITY,
+            "set_by": "risk_engine",
+        },
+    )
+
+
+def test_halt_clear_twice_same_day_with_distinct_approvals(tmp_path: Path) -> None:
+    """CR-03: two halt/clear cycles on one UTC day both clear without crashing.
+
+    The clear row is keyed per approval (not per day), and both rows land in
+    one atomic batch. Reusing a consumed approval refuses with ValueError
+    instead of a ledger traceback.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    try:
+        engine = _engine(store, clock)
+        _halt(store, clock, "daily_loss", "halt-a")
+        assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "halted"
+        first = _human_approval(clock, ids, "halt_clear")
+        engine.request_halt_clear(first, "reviewed")
+        assert engine.check(_buy(clock, ids), seat="bot-04-sniper").passed is True
+        _halt(store, clock, "drawdown", "halt-b")
+        assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "halted"
+        second = _human_approval(clock, ids, "halt_clear")
+        engine.request_halt_clear(second, "reviewed again")
+        assert engine.check(_buy(clock, ids), seat="bot-04-sniper").passed is True
+        cleared = store.read(types=["HaltCleared"], limit=None)
+        assert [row["idempotency_key"] for row in cleared] == [
+            f"halt-clear|{first.id}",
+            f"halt-clear|{second.id}",
+        ]
+        consumed = [
+            row
+            for row in store.read(types=["ApprovalRecorded"], limit=None)
+            if row["payload"].get("consumed") is True
+        ]
+        assert {row["payload"]["id"] for row in consumed} == {first.id, second.id}
+        _halt(store, clock, "daily_loss", "halt-c")
+        with pytest.raises(ValueError, match="already consumed"):
+            engine.request_halt_clear(first, "reuse")
+    finally:
+        store.close()
