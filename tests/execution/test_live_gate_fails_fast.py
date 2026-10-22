@@ -240,7 +240,10 @@ def test_live_confirm_writes_hmac_record_without_changing_mode(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("PUMPGROK_CONFIRMATION_KEY", "operator-secret-for-tests")
+    monkeypatch.setenv(
+        "PUMPGROK_CONFIRMATION_KEY",
+        "operator-secret-for-tests",  # pragma: allowlist secret: test placeholder, not a credential
+    )
     monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
     code = main(
         [

@@ -68,7 +68,8 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_key_bearing_url_value_is_refused() -> None:
-    problems = find_key_bearing_env({"PUMPGROK_RPC__ENDPOINTS": "https://host/path?api-key=abc123"})
+    name = "PUMPGROK_RPC__ENDPOINTS"
+    problems = find_key_bearing_env({name: "https://host/path?api-key=abc123"})
     assert problems != [] and all("abc123" not in p for p in problems)
 
 
@@ -98,8 +99,11 @@ def test_execution_env_spelling_is_refused(
 
 
 def test_secret_like_env_name_is_refused(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PUMPGROK_DATA_PRIVATE_KEY", "abc")
-    assert refuse_forbidden_env({"PUMPGROK_DATA_PRIVATE_KEY": "abc"}) != []
+    name = (
+        "PUMPGROK_DATA_PRIVATE_KEY"  # pragma: allowlist secret: test placeholder, not a credential
+    )
+    monkeypatch.setenv(name, "abc")
+    assert refuse_forbidden_env({name: "abc"}) != []
 
 
 def test_declared_names_pass_the_unknown_check() -> None:
@@ -110,16 +114,24 @@ def test_declared_names_pass_the_unknown_check() -> None:
 
 
 def test_api_key_never_appears_in_repr(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PUMPGROK_GROK__API_KEY", "xai-test-secret-value-0123456789")
+    key = "xai-test-secret-value"  # pragma: allowlist secret: test placeholder, not a credential
+    monkeypatch.setenv(
+        "PUMPGROK_GROK__API_KEY",  # pragma: allowlist secret: test placeholder, not a credential
+        key,
+    )
     settings = load_settings()
-    assert "xai-test-secret-value-0123456789" not in repr(settings)
-    assert "xai-test-secret-value-0123456789" not in repr(settings.grok)
-    assert settings.grok.api_key.get_secret_value() == "xai-test-secret-value-0123456789"
+    assert key not in repr(settings)
+    assert key not in repr(settings.grok)
+    assert settings.grok.api_key.get_secret_value() == key
 
 
 def test_rpc_key_never_appears_in_repr(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PUMPGROK_RPC__API_KEY", "rpc-test-secret-value-0123456789")
-    assert "rpc-test-secret-value-0123456789" not in repr(load_settings())
+    key = "rpc-test-secret-value"  # pragma: allowlist secret: test placeholder, not a credential
+    monkeypatch.setenv(
+        "PUMPGROK_RPC__API_KEY",  # pragma: allowlist secret: test placeholder, not a credential
+        key,
+    )
+    assert key not in repr(load_settings())
 
 
 # --- risk budget: the nine keys -------------------------------------------------
