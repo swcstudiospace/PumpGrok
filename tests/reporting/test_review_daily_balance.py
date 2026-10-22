@@ -186,3 +186,36 @@ def test_absent_initial_equity_meta_falls_back_to_risk_budget(tmp_path: Path) ->
     model = DailyReport.build(ledger, DAY1)
     assert model.equity_start_lamports == budget_equity
     assert model.equity_end_lamports == budget_equity + BUY_CASH + MARK_LAMPORTS
+
+
+def test_fractional_midnight_fill_belongs_to_the_day_it_starts(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.sqlite"
+    store = LedgerStore(ledger)
+    try:
+        store.set_meta("initial_equity_lamports", str(INITIAL))
+        _append(
+            store,
+            "FillRecorded",
+            _fill("buy", 100_000_000, -100_001_000, 1_000, 0),
+            "2026-10-19T23:59:59.999999Z",
+        )
+        _append(
+            store,
+            "FillRecorded",
+            _fill("buy", 100_000_000, -100_001_000, 1_000, 0),
+            DAY2 + "T00:00:00.000000Z",
+        )
+        _append(
+            store,
+            "FillRecorded",
+            _fill("buy", 100_000_000, -100_001_000, 1_000, 0),
+            DAY2 + "T00:00:00.500000Z",
+        )
+    finally:
+        store.close()
+    previous = DailyReport.build(ledger, "2026-10-19")
+    current = DailyReport.build(ledger, DAY2)
+    assert previous.trades == 1
+    assert previous.fees_venue_lamports == 1_000
+    assert current.trades == 2
+    assert current.fees_venue_lamports == 2_000

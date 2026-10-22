@@ -24,11 +24,15 @@ RISK also has "risk".
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
+from defusedxml import ElementTree as ET
+
+# defusedxml does not re-export Element. The loader only reads parsed trees, so Any suffices.
+Element = Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROMPTS_DIR = REPO_ROOT / "prompts"
@@ -79,7 +83,7 @@ class CoreSection:
     text: str
 
 
-def _attr(el: ET.Element, key: str, path: Path) -> str:
+def _attr(el: Element, key: str, path: Path) -> str:
     value = el.get(key)
     if value is None or not value.strip():
         raise PromptError(f"{path.name}: <{el.tag}> is missing attribute '{key}'")
@@ -90,7 +94,7 @@ def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
     if not path.exists():
         raise PromptError(f"{path}: shared directives not found")
     # Repo-owned prompt sources reviewed under G-1/G-3, not untrusted input.
-    root = ET.parse(path).getroot()  # noqa: S314
+    root = ET.parse(path).getroot()
     if root.tag != "core-directives":
         raise PromptError(f"{path.name}: root must be <core-directives>")
     sections: dict[str, CoreSection] = {}
@@ -107,7 +111,7 @@ def load_core(path: Path = CORE_PATH) -> dict[str, CoreSection]:
     return sections
 
 
-def _seat_id(root: ET.Element, path: Path) -> str:
+def _seat_id(root: Element, path: Path) -> str:
     seat = _attr(root, "id", path)
     if not SEAT_RE.match(seat):
         raise PromptError(f"{path.name}: id {seat!r} does not match {SEAT_RE.pattern}")
@@ -116,21 +120,21 @@ def _seat_id(root: ET.Element, path: Path) -> str:
     return seat
 
 
-def _writes_to_exchange(root: ET.Element, path: Path) -> bool:
+def _writes_to_exchange(root: Element, path: Path) -> bool:
     writes = _attr(root, "writes_to_exchange", path)
     if writes not in ("true", "false"):
         raise PromptError(f"{path.name}: writes_to_exchange must be 'true' or 'false'")
     return writes == "true"
 
 
-def _channel(root: ET.Element, path: Path) -> str:
+def _channel(root: Element, path: Path) -> str:
     channel = _attr(root, "seat", path)
     if channel not in CHANNELS:
         raise PromptError(f"{path.name}: seat {channel!r} must be one of {CHANNELS}")
     return channel
 
 
-def _skills(root: ET.Element, path: Path) -> tuple[str, ...]:
+def _skills(root: Element, path: Path) -> tuple[str, ...]:
     skills: list[str] = []
     for el in root.findall("skills/skill"):
         if not el.text:
@@ -146,7 +150,7 @@ def _skills(root: ET.Element, path: Path) -> tuple[str, ...]:
     return tuple(skills)
 
 
-def _tools_contract(root: ET.Element, seat: str, path: Path) -> str:
+def _tools_contract(root: Element, seat: str, path: Path) -> str:
     tools_el = root.find("tools")
     if tools_el is None:
         raise PromptError(f"{path.name}: missing <tools contract=.../>")
@@ -161,7 +165,7 @@ def _tools_contract(root: ET.Element, seat: str, path: Path) -> str:
     return contract
 
 
-def _body_parts(root: ET.Element, path: Path) -> tuple[tuple[str, str], ...]:
+def _body_parts(root: Element, path: Path) -> tuple[tuple[str, str], ...]:
     parts: list[tuple[str, str]] = []
     body = root.find("body")
     if body is None:
@@ -179,7 +183,7 @@ def _body_parts(root: ET.Element, path: Path) -> tuple[tuple[str, str], ...]:
 
 
 def load_seat(path: Path) -> SeatSource:
-    root = ET.parse(path).getroot()  # noqa: S314 - repo-owned prompt source, see load_core
+    root = ET.parse(path).getroot()
     if root.tag != "seat-prompt":
         raise PromptError(f"{path.name}: root must be <seat-prompt>")
     seat = _seat_id(root, path)

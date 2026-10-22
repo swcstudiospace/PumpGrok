@@ -14,6 +14,8 @@ from typing import Annotated
 from pydantic import Field
 
 from pumpgrok.core.tool import RetryPolicy, ToolMeta
+from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock
 
 MINT_RE = r"^[1-9A-HJ-NP-Za-km-z]{32,44}$"
@@ -42,3 +44,19 @@ def meta_now(source: str, correlation_id: str | None, clock: Clock) -> ToolMeta:
         freshness_s=0.0,
         correlation_id=correlation_id or "none",
     )
+
+
+def fold_current_state(store: LedgerStore, clock: Clock) -> LedgerState:
+    """Current ledger state: genesis from meta, then every event (same fold as the engine).
+
+    Read tools use this instead of the newest snapshot, which can lag the
+    ledger and never carried an ``equity_lamports`` key.
+    """
+    meta_equity = store.get_meta("initial_equity_lamports")
+    initial = int(meta_equity) if meta_equity is not None else 0
+    source = store.get_meta("source") or "paper"
+    day_utc = utcnow(clock).strftime("%Y-%m-%d")
+    state = initial_state(source=source, initial_equity_lamports=initial, day_utc=day_utc)
+    for event in store.read(limit=None):
+        state = reduce(state, event)
+    return state

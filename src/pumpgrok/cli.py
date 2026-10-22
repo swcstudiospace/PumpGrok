@@ -585,9 +585,6 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     return EXIT_OK
 
 
-_APPROVAL_REASONS = frozenset({"approval_missing", "approval_mismatch", "approval_unknown"})
-
-
 def _mint_approval_id() -> str:
     """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29).
 
@@ -600,109 +597,31 @@ def _mint_approval_id() -> str:
     return f"apr-{IdFactory(WallClock(), make_rng(seed)).ulid()}"
 
 
-def _paper_outcome(verb: str, body: dict[str, Any]) -> int:
-    """Map a place result to the CLI contract: fills exit 0, refusals exit 1."""
-    status = body.get("status")
-    if status in ("filled", "partial"):
-        _say(sys.stdout, json.dumps(body))
-        return EXIT_OK
-    reason = str(body.get("reason") or "order_rejected")
-    if reason in _APPROVAL_REASONS:
-        # R63: no paper trade without a valid approval; fail closed
-        # with the established CLI envelope and write nothing.
-        _say(
-            sys.stdout,
-            json.dumps(
-                {
-                    "ok": False,
-                    "code": "approval_unknown",
-                    "message": f"refused: no valid approval_id for `{verb}` (R63)",
-                }
-            ),
-        )
-        _say(sys.stderr, f"refused: no valid approval_id for `{verb}` (R63)")
-        return EXIT_CONFIG
-    if status == "unknown":
-        return _tool_error(verb, "order_unknown", reason)
-    return _tool_error(verb, "order_rejected", reason)
-
-
-async def _paper_trade(
-    verb: str,
-    tools: list[Tool],
-    *,
-    ticket: str,
-    mint: str,
-    side: str,
-    lamports: int,
-    slippage_bps: int,
-    approval_id: str,
-    seed: int,
-) -> int:
-    """Simulate then place one paper order; a fresh decision_id per call (R23)."""
-    simulate_tool, place_tool = tools
-    sim_fields: dict[str, Any] = {
-        "ticket_id": ticket,
-        "mint": mint,
-        "side": side,
-        "size_lamports": lamports,
-        "slippage_bps": slippage_bps,
-    }
-    try:
-        sim_in = simulate_tool.spec.input_model(**sim_fields)
-    except ValidationError as exc:
-        msg = f"bad simulate input: {exc.errors()[0]['msg']}"
-        return _tool_error(verb, "invalid_arguments", msg)
-    try:
-        _sim_out = await simulate_tool(sim_in)
-    except PumpgrokError as exc:
-        return _tool_error(verb, exc.code, exc.message)
-    # Place is idempotent on (ticket, side, decision), so a retry never
-    # double-fills.
-    decision_id = IdFactory(WallClock(), make_rng(seed)).ulid()
-    place_fields: dict[str, Any] = {
-        "ticket_id": ticket,
-        "mint": mint,
-        "side": side,
-        "decision_id": decision_id,
-        "size_lamports": lamports,
-        "max_slippage_bps": slippage_bps,
-        "approval_id": approval_id,
-    }
-    try:
-        place_in = place_tool.spec.input_model(**place_fields)
-    except ValidationError as exc:
-        msg = f"bad place input: {exc.errors()[0]['msg']}"
-        return _tool_error(verb, "invalid_arguments", msg)
-    try:
-        out = await place_tool(place_in)
-    except PumpgrokError as exc:
-        return _tool_error(verb, exc.code, exc.message)
-    return _paper_outcome(verb, out.model_dump(mode="json"))
+_TRADE_UNAVAILABLE = (
+    "trade commands need a verified curve price source; no paper fills run from the CLI "
+    "until the Phase 4 curve reader is verified"
+)
 
 
 def _paper(args: argparse.Namespace, settings: Settings) -> int:
+    """Paper trade: seat authorization first, then refuse with code ``unavailable``.
+
+    The forbidden-owner guard and the registry grant check (``find``) run before
+    the refusal, so forbidden and operator seats keep their existing codes. Only a
+    seat allowed to trade reaches the refusal. No tool is invoked and nothing is
+    written: no curve price source is bound on the CLI and the RPC curve layout is
+    ASSUMED.
+    """
     verb = f"paper {args.cmd}"
     refused = _refuse_forbidden_seat(args.seat, verb)
     if refused is not None:
         return refused
-    lamports = size_sol_to_lamports(args.size_sol)
-    if lamports > settings.risk.paper_equity_lamports:
+    if size_sol_to_lamports(args.size_sol) > settings.risk.paper_equity_lamports:
         _say(sys.stderr, "usage error: --size-sol exceeds paper equity")
         return EXIT_CONFIG
 
-    async def use(tools: list[Tool]) -> int:
-        return await _paper_trade(
-            verb,
-            tools,
-            ticket=args.ticket,
-            mint=args.mint,
-            side=args.cmd,
-            lamports=lamports,
-            slippage_bps=args.slippage_bps,
-            approval_id=args.approval_id,
-            seed=settings.replay.seed,
-        )
+    async def use(_tools: list[Tool]) -> int:
+        return _tool_error(verb, "unavailable", _TRADE_UNAVAILABLE)
 
     return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 

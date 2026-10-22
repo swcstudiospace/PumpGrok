@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from pumpgrok.execution.live.live_gate import LiveGate
-from pumpgrok.reporting.daily import DailyReport, day_next, read_events_readonly
+from pumpgrok.reporting.daily import DailyReport, day_next, day_start, read_events_readonly
 from pumpgrok.reporting.render import ReportModel
 
 _YMD_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}"
@@ -78,7 +78,7 @@ class WeeklyReport:
         for _ in range(6):
             cursor = day_next(cursor)[:10]
             days.append(cursor)
-        week_start = monday + "T00:00:00Z"
+        week_start = day_start(monday)
         week_end = day_next(days[-1])
 
         events = read_events_readonly(ledger_path)
@@ -89,7 +89,7 @@ class WeeklyReport:
 
         per_day: list[str] = []
         for single in days:
-            start = single + "T00:00:00Z"
+            start = day_start(single)
             end = day_next(single)
             day_events = [e for e in week_events if start <= str(e.get("ts_utc", "")) < end]
             day_fills = sum(1 for e in day_events if e["type"] == "FillRecorded")

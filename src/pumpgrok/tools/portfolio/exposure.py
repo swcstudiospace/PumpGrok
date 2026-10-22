@@ -1,7 +1,7 @@
-"""portfolio.exposure: current exposure from ledger snapshots (TOOL-005).
+"""portfolio.exposure: current exposure from the folded ledger (TOOL-005).
 
-Reads the latest snapshot for equity/cash and counts open positions from
-``PositionOpened``/``PositionClosed`` events. Phase 3 has no mark engine, so
+Equity and cash come from the current ledger fold through the shared views;
+open positions are counted from ``PositionOpened``/``PositionClosed`` events.
 per-token exposure comes from open-position cost basis; curve marks land in
 Phase 4. An empty ledger yields zeros, never an exception.
 """
@@ -18,7 +18,8 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.tools._common import MintStr, meta_now
+from pumpgrok.ledger.views import cash_lamports, equity_lamports
+from pumpgrok.tools._common import MintStr, fold_current_state, meta_now
 
 __all__ = [
     "EXPOSURE_SPEC",
@@ -67,11 +68,10 @@ def _today_utc(clock: Clock) -> str:
 
 
 async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
-    """Fold snapshots and position events into the exposure view."""
-    snapshot = store.latest_snapshot()
-    state = snapshot["state"] if snapshot else {}
-    equity = int(state.get("equity_lamports", 0))
-    cash = int(state.get("cash_lamports", 0))
+    """Fold the ledger into the exposure view."""
+    state = fold_current_state(store, clock)
+    equity = equity_lamports(state)
+    cash = cash_lamports(state)
     per_token: dict[str, int] = {}
     trades_today = 0
     today = _today_utc(clock)

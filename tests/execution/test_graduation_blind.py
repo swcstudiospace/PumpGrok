@@ -137,7 +137,7 @@ async def test_graduation_close_uses_last_pre_graduation_sell_out(tmp_path: Path
     assert closed is not None
     fees = FeeModel()
     gross = sell_out(S0, T0, units)
-    expected = gross - fees.venue_fee(gross)
+    expected = gross - fees.venue_fee(gross) - fees.network_cost()
     body = json.loads(str(closed["payload_json"]))
     assert body["reason"] == "graduated"
     assert body["proceeds_lamports"] == expected
@@ -170,8 +170,8 @@ async def test_blind_timeout_closes_at_last_good(tmp_path: Path) -> None:
     assert closed is not None
     body = json.loads(str(closed["payload_json"]))
     assert body["reason"] == "blind_flatten"
-    assert body["proceeds_lamports"] == last_good
-    assert adapter.frozen_mark(MINT) == last_good
+    assert body["proceeds_lamports"] == last_good - FeeModel().network_cost()
+    assert adapter.frozen_mark(MINT) == last_good - FeeModel().network_cost()
     kinds = [e["type"] for e in adapter._store.read(limit=None)]
     assert "Escalation" in kinds
 

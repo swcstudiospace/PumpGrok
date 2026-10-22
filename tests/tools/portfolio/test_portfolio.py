@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
@@ -20,7 +21,7 @@ from pumpgrok.core.errors import PermissionDenied
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.tools import build_registry
 from pumpgrok.tools.portfolio.exposure import (
     EXPOSURE_SPEC,
@@ -189,3 +190,54 @@ async def test_pnl_empty_ledger_is_zeros(tmp_path: Path) -> None:
     assert out.win_rate is None
     assert out.profit_factor is None
     store.close()
+
+
+def _funded_then_spent(store: LedgerStore, clock: FixtureClock, spent: int) -> None:
+    """Fund 1 SOL, then spend ``spent`` lamports on a buy with no open position."""
+    store.set_meta("initial_equity_lamports", "1000000000")
+    store.set_meta("source", "paper")
+    store.append(
+        ts_utc=format_ts_utc(clock.now()),
+        source="paper",
+        correlation_id="t",
+        idempotency_key="review-r3-f16-spend",
+        type="FillRecorded",
+        payload={
+            "source": "paper",
+            "order_id": "o-f16",
+            "decision_id": "d-f16",
+            "side": "buy",
+            "mint": "So11111111111111111111111111111111111111112",
+            "filled_lamports": spent,
+            "filled_units": 10,
+            "filled_fraction": "1",
+            "price_avg": "1",
+            "venue_fee_lamports": 0,
+            "network_cost_lamports": 0,
+            "cash_delta_lamports": -spent,
+        },
+    )
+
+
+async def test_exposure_reports_funded_equity_after_loss(tmp_path: Path) -> None:
+    """Review finding 16: exposure reads current equity from the ledger, not a snapshot key."""
+    store = _store(tmp_path)
+    clock = FixtureClock(start=START)
+    _funded_then_spent(store, clock, 300_000_000)
+    out = await build_exposure_tool(store, clock)(ExposureIn())
+    store.close()
+    assert out.equity_lamports == 700_000_000
+    assert out.cash_lamports == 700_000_000
+
+
+async def test_pnl_reports_current_drawdown_and_daily_loss(tmp_path: Path) -> None:
+    """Review finding 16: pnl ratios come from the folded balance, not hardcoded zeros."""
+    store = _store(tmp_path)
+    clock = FixtureClock(start=START)
+    _funded_then_spent(store, clock, 300_000_000)
+    out = await build_pnl_tool(store, clock)(PnlIn(window="all"))
+    store.close()
+    assert out.day_start_equity_lamports == 1_000_000_000
+    assert out.peak_equity_lamports == 1_000_000_000
+    assert out.drawdown_fraction == Decimal("0.3")
+    assert out.daily_loss_fraction == Decimal("0.3")

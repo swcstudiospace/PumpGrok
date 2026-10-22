@@ -227,6 +227,61 @@ def test_breaker_set_rebuild_survives_restart(tmp_path: Path) -> None:
         store.close()
 
 
+def test_restart_keeps_a_same_day_retrip_open(tmp_path: Path) -> None:
+    """Review finding 15: trip, reset and re-trip on one UTC day all persist.
+
+    Each transition gets its own occurrence key, so the second trip is not
+    dropped as a duplicate of the first. A restart then still sees the breaker
+    open, and the second reset closes it again.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        for n in range(3):
+            _reject_row(store, clock, "tx_dropped", n)
+        made = BreakerSet(store, clock)
+        made.refresh(
+            ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="t", equity_now=EQUITY
+        )
+        assert made.open_breakers() == ["exec_errors"]
+        clock.advance_to(START + 901.0)
+        assert made.admit_probe("exec_errors") is True
+        made.resolve_probe(
+            "exec_errors",
+            True,
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
+            correlation_id="t",
+        )
+        assert made.by_name("exec_errors").state == "closed"
+
+        for n in range(3, 6):
+            _reject_row(store, clock, "tx_dropped", n)
+        made.refresh(
+            ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="t", equity_now=EQUITY
+        )
+        assert made.open_breakers() == ["exec_errors"]
+        assert len(store.read(types=["BreakerTripped"], limit=None)) == 2
+        restart_clock = FixtureClock(start=clock.now())
+        restarted = BreakerSet.rebuild(store, restart_clock)
+        assert restarted.open_breakers() == ["exec_errors"]
+
+        restart_clock.advance_to(restart_clock.now() + 901.0)
+        assert restarted.admit_probe("exec_errors") is True
+        restarted.resolve_probe(
+            "exec_errors",
+            True,
+            ts_utc=format_ts_utc(restart_clock.now()),
+            source="paper",
+            correlation_id="t",
+        )
+        assert len(store.read(types=["BreakerReset"], limit=None)) == 2
+        closed_again = BreakerSet.rebuild(store, FixtureClock(start=restart_clock.now()))
+        assert closed_again.open_breakers() == []
+    finally:
+        store.close()
+
+
 def test_engine_probe_flow(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)

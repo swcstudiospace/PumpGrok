@@ -65,14 +65,18 @@ EXEC_ERRORS_WINDOW_S = 600.0
 EXEC_ERRORS_COOLDOWN_S = 900.0
 
 
-def breaker_trip_key(breaker: str, day_utc: str) -> str:
-    """Idempotency per (breaker, utc_day): one trip per breaker per day (R24)."""
-    return hashlib.sha256(f"BreakerTripped|{breaker}|{day_utc}".encode()).hexdigest()
+def breaker_trip_key(breaker: str, occurrence: int) -> str:
+    """Idempotency per (breaker, occurrence): the n-th trip of a breaker in the ledger.
+
+    A trip, reset and trip again on one UTC day are three transitions, so each
+    gets its own key and a restart still sees the latest open state (R24).
+    """
+    return hashlib.sha256(f"BreakerTripped|{breaker}|{occurrence}".encode()).hexdigest()
 
 
-def breaker_reset_key(breaker: str, day_utc: str) -> str:
-    """Idempotency per (breaker, utc_day) for resets."""
-    return hashlib.sha256(f"BreakerReset|{breaker}|{day_utc}".encode()).hexdigest()
+def breaker_reset_key(breaker: str, occurrence: int) -> str:
+    """Idempotency per (breaker, occurrence) for the n-th reset of a breaker."""
+    return hashlib.sha256(f"BreakerReset|{breaker}|{occurrence}".encode()).hexdigest()
 
 
 class Breaker:
@@ -492,6 +496,15 @@ class BreakerSet:
             breaker.consecutive_failures = breaker.threshold
         return made
 
+    def _occurrence(self, event_type: str, name: str) -> int:
+        """1-based index of the next ``event_type`` row for ``name`` in the ledger."""
+        count = 0
+        for event in self._store.read(types=[event_type], limit=None):
+            payload = event.get("payload")
+            if isinstance(payload, dict) and str(payload.get("breaker", "")) == name:
+                count += 1
+        return count + 1
+
     def _append_trip(self, name: str, ts_utc: str, source: str, correlation_id: str) -> None:
         breaker = self.by_name(name)
         with _SuppressIntegrity():
@@ -499,7 +512,7 @@ class BreakerSet:
                 ts_utc=ts_utc,
                 source=source,
                 correlation_id=correlation_id,
-                idempotency_key=breaker_trip_key(name, ts_utc[:10]),
+                idempotency_key=breaker_trip_key(name, self._occurrence("BreakerTripped", name)),
                 type="BreakerTripped",
                 payload={
                     "source": source,
@@ -523,7 +536,7 @@ class BreakerSet:
                 ts_utc=ts_utc,
                 source=source,
                 correlation_id=correlation_id,
-                idempotency_key=breaker_reset_key(name, ts_utc[:10]),
+                idempotency_key=breaker_reset_key(name, self._occurrence("BreakerReset", name)),
                 type="BreakerReset",
                 payload={
                     "source": source,

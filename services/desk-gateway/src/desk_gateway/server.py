@@ -47,15 +47,15 @@ from pumpgrok.contracts.projection import (
 )
 from pumpgrok.core.binding_key import load_or_create_binding_key
 from pumpgrok.core.bot import BotManifest
-from pumpgrok.core.errors import NotYetImplemented, PumpgrokError
+from pumpgrok.core.errors import NotYetImplemented, OrderRejectedError, PumpgrokError
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
-from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.execution.not_yet_implemented import NotYetImplementedAdapter
+from pumpgrok.execution import build_adapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, WallClock
+from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools import build_registry, register_read_tools
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
@@ -131,8 +131,25 @@ def build_gateway_registry(
     client = http_client if http_client is not None else httpx.AsyncClient()
     rpc = RpcClient(rpc_endpoints(), client, active_clock, secrets.SystemRandom())
     store = LedgerStore(data_dir / "ledger.sqlite")
-    adapter = NotYetImplementedAdapter()
-    budget = RiskBudget()
+    settings = Settings(mode="paper")
+    budget = settings.risk
+    engine = RiskEngine(
+        store=store,
+        budget=budget,
+        ids=IdFactory(active_clock, secrets.SystemRandom()),
+        clock=active_clock,
+        limits=settings.limits,
+        mode="paper",
+        killswitch_path=data_dir / "KILLSWITCH",
+    )
+    adapter = build_adapter(
+        settings,
+        store=store,
+        risk=engine,
+        ids=IdFactory(active_clock, secrets.SystemRandom()),
+        clock=active_clock,
+        rng=secrets.SystemRandom(),
+    )
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
@@ -458,6 +475,8 @@ class _Handler(BaseHTTPRequestHandler):
                     return await tool_obj(payload), None
                 except PumpgrokError as exc:
                     return None, _error_result(exc.code, exc.message)
+                except OrderRejectedError as exc:
+                    return None, _error_result(exc.reason, exc.detail)
 
         future = asyncio.run_coroutine_threadsafe(_dispatch(), state["owner_loop"])
         try:

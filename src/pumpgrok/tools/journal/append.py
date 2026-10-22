@@ -11,6 +11,7 @@ locked Q4 divergence). Appends are idempotent over
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
 import os
@@ -140,11 +141,14 @@ def _export_line(journal_dir: Path, day: datetime, seq: int, line: str) -> Path:
     A retry whose earlier export was lost finds no such line and writes it; a
     retry that finds it writes nothing. A trailing fragment from an interrupted
     write is cut back to the last newline first, so the new record is whole.
+    The exclusive ``flock`` covers the read, the duplicate check and the write,
+    so overlapping retries (threads or processes) cannot both append ``seq``.
     Blocking file I/O.
     """
     journal_dir.mkdir(parents=True, exist_ok=True)
     journal_path = _journal_file(journal_dir, day)
     with open(journal_path, "a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)  # released when the handle closes
         handle.seek(0)
         data = handle.read()
         complete = data[: data.rfind(b"\n") + 1]

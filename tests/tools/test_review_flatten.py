@@ -113,7 +113,11 @@ async def test_flatten_request_closes_the_open_position(tmp_path: Path) -> None:
     _open(store, clock, MINT_A, 100)
     adapter = _adapter(store, clock)
     tool = build_kill_switch_tool(
-        store, clock, tmp_path / "KILLSWITCH", close_position=adapter.close_position
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=adapter.close_position,
+        barrier=InflightBarrier(),
     )
 
     out = await tool(KillSwitchIn(action="flatten_request", reason="close everything"))
@@ -132,7 +136,11 @@ async def test_flatten_request_with_no_positions_closes_nothing(tmp_path: Path) 
     store = _store(tmp_path)
     adapter = _adapter(store, clock)
     tool = build_kill_switch_tool(
-        store, clock, tmp_path / "KILLSWITCH", close_position=adapter.close_position
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=adapter.close_position,
+        barrier=InflightBarrier(),
     )
 
     out = await tool(KillSwitchIn(action="flatten_request", reason="nothing open"))
@@ -204,9 +212,23 @@ async def test_not_closed_adapter_status_is_reported_not_flattened(tmp_path: Pat
         clock,
         tmp_path / "KILLSWITCH",
         close_position=no_mark_close,
+        barrier=InflightBarrier(),
     )
     store.close()
     assert out["flatten_status"] == "completed"
     assert out["flatten_outcomes"] == [
         {"mint": MINT_A, "ticket_id": TICKET, "status": "not_flattened", "detail": "status=no_mark"}
     ]
+
+
+def test_closer_without_in_flight_barrier_is_refused_at_wiring(tmp_path: Path) -> None:
+    """A closer with no barrier would flatten without waiting for live orders: refuse it."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+
+    async def closer(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+        return {"status": "closed", "mint": mint}
+
+    with pytest.raises(ValueError, match="in-flight barrier"):
+        build_kill_switch_tool(store, clock, tmp_path / "KILLSWITCH", close_position=closer)
+    store.close()

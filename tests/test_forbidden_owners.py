@@ -90,19 +90,18 @@ def test_forbidden_seats_refused_on_state(
     assert "refused" in capsys.readouterr().err
 
 
-def test_allowed_seat_rejected_without_valid_approval(
+def test_allowed_seat_refused_unavailable_on_paper(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Phase 3 plan 03-07 (TOOL-011, R63): the desk seat resolves through the
-    # registry, where the chief manifest holds no exec.simulate grant, so the
-    # trade is refused with a JSON permission_denied envelope and exit 1.
-    # No OrderPlaced row is written.
-    code = _paper_verb(tmp_path, monkeypatch, "buy", "desk")
+    # bot-04-sniper is not a forbidden owner and holds exec.simulate and exec.place, so the
+    # seat guard passes and the trade is refused as unavailable (exit 1). Operator seats
+    # (desk) keep permission_denied; see tests/test_tools_cli.py. No OrderPlaced is written.
+    code = _paper_verb(tmp_path, monkeypatch, "buy", "bot-04-sniper")
     assert code == EXIT_CONFIG
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["ok"] is False
-    assert payload["code"] == "permission_denied"
+    assert payload["code"] == "unavailable"
 
 
 def test_bad_ticket_is_usage_error(

@@ -120,6 +120,9 @@ _RECHECK_STEPS: frozenset[str] = frozenset(
         "kill_switch",
         "halted",
         "breaker_open",
+        "max_open_positions",
+        "already_open",
+        "creator_already_open",
         "max_trade_fraction",
         "max_token_fraction",
         "daily_loss_halt",
@@ -543,8 +546,11 @@ class RiskEngine:
         ``blind_flatten`` or ``graduated`` sell; those sells skip steps 2-4
         and 9-19. ``creator`` is the candidate mint's creator for the
         ``creator_already_open`` step (the sniper knows it off-ledger; the
-        ledger scan is the fallback). ``stage="CONFIRMING"`` re-runs only
-        the stop and limit steps before a fill.
+        ledger scan is the fallback). ``stage="CONFIRMING"`` re-runs the stop
+        steps and the position-limit steps (``max_open_positions``,
+        ``already_open``, ``creator_already_open``) so a buy that raced another
+        fill is refused at the fill, and a sell refuses with ``no_position`` when
+        its holding has closed.
         """
         order_hash = order_hash_for(order)
         cache_key = self._cache_key(order, order_hash=order_hash, stage=stage)
@@ -649,6 +655,12 @@ class RiskEngine:
                 if self._skip(step, ctx):
                     continue
                 getattr(self, f"_step_{step}")(ctx)
+            if stage == "CONFIRMING" and not is_buy:
+                # A sell sized at ACCEPTED must still find its holding at the fill: a
+                # flatten or another exit may have closed it while this order slept.
+                held = state.positions.get(order.mint)
+                if held is None or held.token_units <= 0:
+                    raise _Fail("no_position", f"mint={order.mint} holding closed before fill")
             if ctx.is_buy and not ctx.is_exit_sell and half_all:
                 if owned:
                     ctx.probe = True

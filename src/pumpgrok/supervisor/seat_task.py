@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -379,13 +380,19 @@ class SeatTask:
             self.not_before = now + self._policy.backoff_s(self._rng, now)
             return
         if self._observe_only.is_latched(self.seat_id):
-            # Already latched: the rising edge escalated and relayed once. A seat
-            # that keeps failing must not append a row per cycle.
+            # Already latched: the escalation and relay fired once on the rising
+            # edge and must not repeat. EXIT still owes its protective halt, so
+            # retry it on every failed cycle until it lands (day-keyed, idempotent).
+            if self.seat_id == "bot-06-exit":
+                self._append_exit_halt(ctx)
             return
         # seq is contiguous from 1 (hash chain), so the row count is the head seq.
         self._observe_only.latch(
             self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=self._store.count()
         )
+        if self.seat_id == "bot-06-exit":
+            # Halt first: a failed escalation write must not leave EXIT unhalted.
+            self._append_exit_halt(ctx)
         append_escalation(
             self._store,
             self._clock,
@@ -395,8 +402,6 @@ class SeatTask:
             source=self._source,
             correlation_id=self._correlation_id,
         )
-        if self.seat_id == "bot-06-exit":
-            self._append_exit_halt(ctx)
         await self._relay(KIND_RESTART_EXHAUSTED, f"{self.seat_id} restart budget exhausted")
 
     def _append_exit_halt(self, ctx: SeatContext) -> None:
@@ -419,6 +424,9 @@ class SeatTask:
                     "set_by": "risk_engine",
                 },
             )
+        except sqlite3.IntegrityError:
+            # Day-keyed row already recorded: the retry is a no-op by design.
+            log.debug("exit halt already recorded for %s", ts_utc[:10])
         except Exception as exc:
             log.warning("exit halt append failed: %s", exc)
 

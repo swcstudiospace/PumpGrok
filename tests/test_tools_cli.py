@@ -51,6 +51,18 @@ def _trade_flags(seat: str, side: str = "buy", approval: str | None = _TRADE_APP
     return [*flags, "--seat", seat]
 
 
+def _ledger_kinds(tmp_path: Path) -> list[str]:
+    """Event types in the paper ledger under ``tmp_path``; empty when no ledger exists."""
+    path = tmp_path / "var" / "ledger.sqlite"
+    if not path.is_file():
+        return []
+    store = LedgerStore(str(path))
+    try:
+        return [str(event["type"]) for event in store.read(limit=10000)]
+    finally:
+        store.close()
+
+
 @pytest.fixture(autouse=True)
 def _03_07_clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip PUMPGROK_* and secret-shaped names so CLI tests set what they need."""
@@ -96,24 +108,25 @@ class TestPaperRegistryPath:
         assert "Traceback" not in captured.err
 
     @pytest.mark.parametrize("side", ["buy", "sell"])
-    def test_paper_writer_seat_reaches_approval_gate(
+    def test_paper_writer_seat_refused_unavailable(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
         side: str,
     ) -> None:
-        # bot-04-sniper holds exec.place, so find() succeeds and the unknown
-        # approval_id fails closed with exit 1 (R63: the approval record is
-        # the control, not the --seat string filter).
+        # bot-04-sniper holds exec.simulate and exec.place, so the seat guard passes and
+        # the trade is refused as unavailable (exit 1). The approval gate is no longer
+        # reachable from the CLI; no ledger event is written.
         monkeypatch.chdir(tmp_path)
         code = main(_trade_flags("bot-04-sniper", side=side))
         assert code == 1
         captured = capsys.readouterr()
         payload = json.loads(captured.out)
         assert payload["ok"] is False
-        assert payload["code"] == "approval_unknown"
-        assert "no valid approval_id" in captured.err
+        assert payload["code"] == "unavailable"
+        assert "verified curve price source" in payload["message"]
+        assert _ledger_kinds(tmp_path) == []
 
     def test_paper_rejections_write_no_order_placed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -146,7 +159,7 @@ class _ScriptedCurves:
 
 
 class TestPaperFillPath:
-    """Task 3: sniper buy/sell with a valid approval fill (exit 0, was 1)."""
+    """Task 3: sniper buy/sell refused as unavailable; the CLI cannot fill (exit 1)."""
 
     def _fill_flags(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, side: str, size_sol: str
@@ -204,41 +217,24 @@ class TestPaperFillPath:
             seat,
         ]
 
-    def test_sniper_buy_then_sell_fill_exit_0(
+    def test_sniper_buy_then_sell_refused_unavailable_no_fill(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
+        # Same buy-then-sell flow as the former fill test: both legs are refused as
+        # unavailable (exit 1) and no FillRecorded or OrderPlaced is written.
         monkeypatch.chdir(tmp_path)
-        buy = self._fill_flags(tmp_path, monkeypatch, side="buy", size_sol="0.2")
-        assert main(buy) == 0
-        assert json.loads(capsys.readouterr().out)["status"] == "filled"
-        mark_store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
-        try:
-            now = format_ts_utc(WallClock().now())
-            mark_store.append(
-                ts_utc=now,
-                source="paper",
-                correlation_id="t",
-                idempotency_key=f"mtm|{_TRADE_MINT}|{now}",
-                type="MarkToMarket",
-                payload={
-                    "source": "paper",
-                    "ts_source": now,
-                    "cash_lamports": 9_800_000_000,
-                    "equity_lamports": 10_000_000_000,
-                    "unrealized_lamports": 0,
-                    "prices_json": json.dumps(
-                        {_TRADE_MINT: {"mtm_lamports": 200_000_000, "spot": "0"}}
-                    ),
-                },
-            )
-        finally:
-            mark_store.close()
-        sell = self._fill_flags(tmp_path, monkeypatch, side="sell", size_sol="0.1")
-        assert main(sell) == 0
-        assert json.loads(capsys.readouterr().out)["status"] == "filled"
+        for side, size_sol in (("buy", "0.2"), ("sell", "0.1")):
+            flags = self._fill_flags(tmp_path, monkeypatch, side=side, size_sol=size_sol)
+            assert main(flags) == 1
+            payload = json.loads(capsys.readouterr().out)
+            assert payload["ok"] is False
+            assert payload["code"] == "unavailable"
+        kinds = _ledger_kinds(tmp_path)
+        assert "FillRecorded" not in kinds
+        assert "OrderPlaced" not in kinds
 
 
 class TestOperatorVerbs:

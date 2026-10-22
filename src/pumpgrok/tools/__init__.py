@@ -14,14 +14,13 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
 import pumpgrok.execution
 from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
 from pumpgrok.core.binding_key import load_or_create_binding_key
-from pumpgrok.core.errors import NotYetImplemented
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
@@ -31,6 +30,7 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.killswitch import InflightBarrier
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -53,7 +53,9 @@ from pumpgrok.tools.market.ohlcv import build_ohlcv_tool
 from pumpgrok.tools.market.price import build_price_tool
 from pumpgrok.tools.market.trades import build_trades_tool
 from pumpgrok.tools.notify.alert import build_alert_tool
-from pumpgrok.tools.notify.notifier import Notifier
+from pumpgrok.tools.notify.notifier import HttpxNotifier
+from pumpgrok.tools.notify.telegram import TelegramSender
+from pumpgrok.tools.notify.webhook import WebhookSender
 from pumpgrok.tools.onchain.authorities_tool import build_authorities_tool
 from pumpgrok.tools.onchain.deployer_history import build_deployer_history_tool
 from pumpgrok.tools.onchain.large_transfers import build_large_transfers_tool
@@ -88,16 +90,6 @@ async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
     """Permitting limits checker: the PaperAdapter enforces approvals itself."""
     del request, bot_id
     return True
-
-
-class _NeverSendNotifier(Notifier):
-    """Registration-only notifier: the Phase 3 CLI never calls notify.alert."""
-
-    async def send_telegram(self, chat_id: str, text: str) -> None:
-        raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
-
-    async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
-        raise NotYetImplemented("notify.alert needs the Phase 4 supervisor relay")
 
 
 def build_registry(
@@ -172,6 +164,7 @@ def _register_ledger_and_risk(
     budget: RiskBudget,
     *,
     close_position: ClosePosition,
+    barrier: InflightBarrier,
 ) -> None:
     """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
     kill_switch_file = data_dir / "KILLSWITCH"
@@ -183,7 +176,13 @@ def _register_ledger_and_risk(
     reg.register(build_drawdown_tool(store, budget, clock))
     reg.register(build_halt_status_tool(store, kill_switch_file, clock, "paper"))
     reg.register(
-        build_kill_switch_tool(store, clock, kill_switch_file, close_position=close_position)
+        build_kill_switch_tool(
+            store,
+            clock,
+            kill_switch_file,
+            close_position=close_position,
+            barrier=barrier,
+        )
     )
     reg.register(build_journal_append_tool(store, clock, data_dir / "journal"))
     reg.register(build_render_report_tool(store, clock, data_dir / "reports"))
@@ -198,14 +197,17 @@ def _register_desk(
     settings: Settings,
     data_dir: Path,
     repo_root: Path,
+    client: httpx.AsyncClient,
 ) -> None:
     """Alert, brief, docs, memory, ownership, receipt, event and doctor tools."""
-    reg.register(
-        build_alert_tool(
-            _NeverSendNotifier(allowlist=(), clock=clock, alert_file=data_dir / "alerts.jsonl"),
-            clock,
-        )
+    notifier = HttpxNotifier(
+        telegram=TelegramSender(client),
+        webhook=WebhookSender(client, clock),
+        allowlist=tuple(settings.notify.allowlist),
+        clock=clock,
+        alert_file=data_dir / "alerts.jsonl",
     )
+    reg.register(build_alert_tool(notifier, clock))
     reg.register(build_brief_tool(store, bank, clock, None, "paper"))
     reg.register(build_docs_search_tool(repo_root, clock))
     reg.register(build_memory_retain_tool(bank, clock))
@@ -324,7 +326,13 @@ def build_operator_registry(
         clock=active_clock,
     )
     _register_ledger_and_risk(
-        reg, store, active_clock, data_dir, budget, close_position=adapter.close_position
+        reg,
+        store,
+        active_clock,
+        data_dir,
+        budget,
+        close_position=adapter.close_position,
+        barrier=adapter.inflight_barrier,
     )
     _register_desk(
         reg,
@@ -334,6 +342,7 @@ def build_operator_registry(
         settings=settings,
         data_dir=data_dir,
         repo_root=repo_root,
+        client=client,
     )
     manifests = load_bot_manifests(repo_root / "contracts" / "tool-rosters")
     return reg, manifests, client

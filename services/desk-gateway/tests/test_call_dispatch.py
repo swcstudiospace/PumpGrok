@@ -1,9 +1,11 @@
 """tools/call dispatches through the registry with MCP error envelopes.
 
 The JSON-RPC method surface (initialize / notifications / tools/*) lives
-here too: unknown methods answer -32601, and Phase 3 unbuilt backends
-answer ``isError:true`` with code ``not_yet_implemented`` (correct, not
-hidden). No stack or path ever leaks into an envelope.
+here too: unknown methods answer -32601. Backends still unbuilt (the
+notify.alert sinks) answer ``isError:true`` with code ``not_yet_implemented``
+(correct, not hidden). ``exec_quote`` is served by the shared paper adapter
+and, with no curve source bound, fails closed with ``no_reserves``. No stack
+or path ever leaks into an envelope.
 """
 
 from __future__ import annotations
@@ -45,7 +47,7 @@ def test_notification_initialized_has_no_body(gateway):  # type: ignore[no-untyp
     assert status == HTTP_ACCEPTED, body
 
 
-def test_quote_returns_not_yet_implemented(gateway):  # type: ignore[no-untyped-def]
+def test_quote_returns_no_reserves(gateway):  # type: ignore[no-untyped-def]
     base_url, tokens, _contracts, _reg, _manifests = gateway
     status, body = _call(
         base_url,
@@ -57,7 +59,8 @@ def test_quote_returns_not_yet_implemented(gateway):  # type: ignore[no-untyped-
     assert status == HTTP_OK, body
     result = body["result"]
     assert result["isError"] is True
-    assert result["code"] == "not_yet_implemented"
+    assert result["code"] == "no_reserves"
+    assert result["code"] != "not_yet_implemented"
 
 
 def test_brief_dispatch_succeeds(gateway):  # type: ignore[no-untyped-def]

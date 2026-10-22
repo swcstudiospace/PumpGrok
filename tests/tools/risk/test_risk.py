@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
@@ -17,7 +18,7 @@ from pydantic import ValidationError
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.tools.risk.check_limits import (
     CHECK_LIMITS_SPEC,
     R34_RULE_IDS,
@@ -129,3 +130,45 @@ async def test_halt_status_combined_view(tmp_path: Path) -> None:
     assert out.halted is False
     assert out.effective_mode == "paper"
     store.close()
+
+
+def _funded_then_spent(store: LedgerStore, clock: FixtureClock, spent: int) -> None:
+    """Fund 1 SOL, then spend ``spent`` lamports on a buy with no open position."""
+    store.set_meta("initial_equity_lamports", "1000000000")
+    store.set_meta("source", "paper")
+    store.append(
+        ts_utc=format_ts_utc(clock.now()),
+        source="paper",
+        correlation_id="t",
+        idempotency_key="review-r3-f16-spend",
+        type="FillRecorded",
+        payload={
+            "source": "paper",
+            "order_id": "o-f16",
+            "decision_id": "d-f16",
+            "side": "buy",
+            "mint": MINT,
+            "filled_lamports": spent,
+            "filled_units": 10,
+            "filled_fraction": "1",
+            "price_avg": "1",
+            "venue_fee_lamports": 0,
+            "network_cost_lamports": 0,
+            "cash_delta_lamports": -spent,
+        },
+    )
+
+
+async def test_drawdown_reports_loss_on_funded_ledger(tmp_path: Path) -> None:
+    """Review finding 16: a funded ledger with a loss shows that loss, not zero."""
+    store = _store(tmp_path)
+    clock = FixtureClock(start=START)
+    _funded_then_spent(store, clock, 300_000_000)
+    tool = build_drawdown_tool(store, RiskBudget(), clock)
+    out = await tool(DrawdownIn(window_hours=24))
+    store.close()
+    assert out.peak_equity_lamports == 1_000_000_000
+    assert out.current_equity_lamports == 700_000_000
+    assert out.drawdown_fraction == Decimal("0.3")
+    assert out.loss_velocity_lamports_per_h == 12_500_000
+    assert out.halted is True

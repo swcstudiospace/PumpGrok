@@ -1,15 +1,15 @@
 """portfolio.pnl: realised and unrealised PnL for a window (TOOL-005).
 
 Folds ``FillRecorded`` fees and ``PositionClosed`` realised PnL from the
-ledger. Marks (unrealised, drawdown) need the Phase 4 mark engine, so they
-are zero until snapshots carry them; day-start and peak equity come from the
-latest snapshot when present. An empty ledger yields zeros, never an
-exception.
+ledger for the window. Balance ratios (daily loss, drawdown) and day-start and
+peak equity come from the current ledger fold through the shared views.
+Unrealised PnL needs the Phase 4 mark engine and stays zero. An empty ledger
+yields zeros, never an exception.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -19,7 +19,8 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.tools._common import meta_now
+from pumpgrok.ledger.views import daily_pnl_fraction, drawdown_fraction, equity_lamports
+from pumpgrok.tools._common import fold_current_state, meta_now
 
 __all__ = [
     "PNL_SPEC",
@@ -68,9 +69,22 @@ PNL_SPEC = ToolSpec(
 )
 
 
+def _window_start(window: Literal["day", "week", "all"], as_of: datetime) -> datetime | None:
+    """UTC start of the calendar day or ISO week (Monday) holding ``as_of``; None for all."""
+    if window == "all":
+        return None
+    day = as_of.date()
+    first = day if window == "day" else day - timedelta(days=day.weekday())
+    return datetime(first.year, first.month, first.day, tzinfo=UTC)
+
+
 async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
     """Fold fills and closes into the window summary."""
     as_of = inp.as_of or datetime.fromtimestamp(clock.now(), UTC)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=UTC)
+    as_of = as_of.astimezone(UTC)
+    start = _window_start(inp.window, as_of)
     realised = 0
     fees = 0
     trades = 0
@@ -79,6 +93,9 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
     gross_profit = 0
     gross_loss = 0
     for event in store.read(limit=None):
+        ts = datetime.fromisoformat(event["ts_utc"])
+        if ts > as_of or (start is not None and ts < start):
+            continue
         payload = event["payload"]
         if event["type"] == "FillRecorded":
             trades += 1
@@ -93,21 +110,21 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
                 gross_profit += pnl
             elif pnl < 0:
                 gross_loss += -pnl
-    snapshot = store.latest_snapshot()
-    state = snapshot["state"] if snapshot else {}
-    day_start = int(state.get("day_start_equity_lamports", state.get("equity_lamports", 0)))
-    peak = int(state.get("peak_equity_lamports", day_start))
-    _ = as_of  # Window slicing over event days is Phase 4; the fold covers the ledger.
+    state = fold_current_state(store, clock)
+    day_start = int(state.day_start_equity_lamports)
+    peak = max(int(state.peak_equity_lamports), equity_lamports(state))
+    daily_loss = max(-daily_pnl_fraction(state), Decimal("0"))
+    drawdown = max(drawdown_fraction(state), Decimal("0"))
     ambient = ambient_correlation()
     return PnlOut.model_validate(
         {
             "realised_lamports": realised,
             "unrealised_lamports": 0,
             "fees_lamports": fees,
-            "daily_loss_fraction": Decimal("0"),
+            "daily_loss_fraction": daily_loss,
             "day_start_equity_lamports": day_start,
             "peak_equity_lamports": peak,
-            "drawdown_fraction": Decimal("0"),
+            "drawdown_fraction": drawdown,
             "trades": trades,
             "closed_trades": closed,
             "win_rate": (Decimal(wins) / Decimal(closed) if closed else None),

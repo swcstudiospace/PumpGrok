@@ -1,8 +1,9 @@
 """risk.drawdown: drawdown from peak equity and loss velocity (TOOL-005).
 
-Folds ledger snapshots inside the window. Phase 3 has no mark engine, so an
-empty snapshot history yields zeros; ``halted`` compares the drawdown
-against the injected budget fraction.
+Folds the current ledger state (every event, not a stale snapshot) and reads
+equity and drawdown through the shared ``ledger.views``. An empty ledger
+yields zeros; ``halted`` compares the drawdown against the injected budget
+fraction.
 """
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.tools._common import meta_now
+from pumpgrok.ledger.views import drawdown_fraction, equity_lamports
+from pumpgrok.tools._common import fold_current_state, meta_now
 
 __all__ = [
     "DRAWDOWN_SPEC",
@@ -62,13 +64,12 @@ DRAWDOWN_SPEC = ToolSpec(
 async def run_drawdown(
     inp: DrawdownIn, store: LedgerStore, budget: RiskBudget, clock: Clock
 ) -> dict[str, Any]:
-    """Scan snapshots in the window; empty history yields zeros."""
-    snapshots = store.read_snapshots()
-    equities = [int(s["state"].get("equity_lamports", 0)) for s in snapshots]
-    peak = max(equities) if equities else 0
-    current = equities[-1] if equities else 0
-    drawdown = (Decimal(peak - current) / Decimal(peak)) if peak > 0 else Decimal("0")
-    loss_velocity = (peak - current) // inp.window_hours if equities else 0
+    """Current equity against the folded peak; an empty ledger yields zeros."""
+    state = fold_current_state(store, clock)
+    current = equity_lamports(state)
+    peak = max(int(state.peak_equity_lamports), current)
+    drawdown = max(drawdown_fraction(state), Decimal("0"))
+    loss_velocity = max(peak - current, 0) // inp.window_hours
     ambient = ambient_correlation()
     return DrawdownOut.model_validate(
         {

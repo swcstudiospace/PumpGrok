@@ -120,14 +120,58 @@ class _Readings:
     liq: dict[str, Any] | None
 
 
-def resolve_thresholds(override: dict[str, float] | None) -> SafetyThresholds:
-    """Merge a caller override over config defaults; unknown keys are refused."""
+# Direction of each threshold: a higher value is stricter for the fields below
+# (a score or liquidity floor, or a required lock period). Every other field is a
+# limit that a lower value makes stricter (a tax, concentration or share ceiling).
+_HIGHER_IS_STRICTER: frozenset[str] = frozenset(
+    {
+        "liquidity_multiple_min",
+        "liquidity_multiple_recommended",
+        "lp_lock_min_days",
+        "kill_below_score",
+        "conditional_below_score",
+    }
+)
+_LOWER_IS_STRICTER: frozenset[str] = frozenset(
+    {
+        "transfer_tax_hard_fail_pct",
+        "transfer_tax_warn_pct",
+        "top10_concentration_warn_pct",
+        "top10_concentration_fail_pct",
+        "creator_share_veto",
+        "top5_share_veto",
+    }
+)
+
+
+def _stricter(key: str, configured: float, requested: float) -> float:
+    """The stricter of the configured and requested value for ``key``."""
+    if key in _HIGHER_IS_STRICTER:
+        return max(configured, requested)
+    return min(configured, requested)
+
+
+def resolve_thresholds(
+    override: dict[str, float] | None, base: SafetyThresholds | None = None
+) -> SafetyThresholds:
+    """Effective thresholds: caller overrides can tighten ``base``, never loosen it.
+
+    Each field the caller names takes the stricter of its configured value and the
+    caller's value; an unnamed field keeps the configured value. With no ``base``
+    there is no configured value to compare against, so the caller's values stand.
+    Unknown keys are refused.
+    """
     if not override:
-        return SafetyThresholds()
+        return base if base is not None else SafetyThresholds()
     unknown = sorted(set(override) - set(_KNOWN_THRESHOLD_KEYS))
     if unknown:
         raise DataStale(f"safety.score_report unknown threshold keys: {unknown}")
-    return SafetyThresholds(**override)
+    if base is None:
+        return SafetyThresholds(**override)
+    merged = base.model_dump()
+    for key, requested in override.items():
+        merged[key] = _stricter(key, merged[key], requested)
+    return SafetyThresholds(**merged)
 
 
 def _blind(check_id: CheckId, weight: Decimal, reason: str) -> CheckResult:
@@ -368,7 +412,7 @@ async def run_score_report(
     thresholds: SafetyThresholds | None = None,
 ) -> dict[str, Any]:
     """Compose the readers and return a validated ``ScoreReportOut`` payload."""
-    active = thresholds if thresholds is not None else resolve_thresholds(inp.thresholds)
+    active = resolve_thresholds(inp.thresholds, thresholds)
     wanted: set[str] = set(inp.checks) if inp.checks is not None else set(CHECK_IDS)
     unknown = sorted(wanted - set(CHECK_IDS))
     if unknown:

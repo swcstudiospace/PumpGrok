@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pumpgrok.contracts import projection
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
+from pumpgrok.tools.desk.brief import BRIEF_SPEC, BriefIn
 from pumpgrok.tools.exec.place import PlaceIn
 from pumpgrok.tools.market.price import PriceIn
 from registry_harness import ROSTERS_DIR
@@ -65,3 +66,15 @@ def test_exec_place_does_not_require_rollback_plan_it_rejects() -> None:
             "approval_id": APPROVAL,
         }
     )
+
+
+def test_desk_brief_advertises_implementation_schema_with_required_task_id() -> None:
+    # The roster's desk.brief schema has no task_id requirement and no
+    # correlation_id; BriefIn (what tools/call validates) has both.
+    schema = _entries_by_name("bot-00-chief")["desk_brief"]["inputSchema"]
+    assert schema == BRIEF_SPEC.input_json_schema()
+    assert schema["required"] == ["task_id"]
+    assert "correlation_id" in schema["properties"]
+    assert schema["additionalProperties"] is False
+    # A payload built from the advertised required fields dispatches cleanly.
+    BriefIn.model_validate({"task_id": "t-1"})

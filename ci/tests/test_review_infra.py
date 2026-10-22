@@ -10,11 +10,16 @@ roster contracts land where the loaders resolve them in the installed layout, an
 
 from __future__ import annotations
 
+import ast
 import re
+import shlex
+import sys
 import tomllib
 from pathlib import Path, PurePosixPath
 
 import yaml
+
+from pumpgrok.cli import build_parser
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATES_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "gates.yml"
@@ -23,6 +28,10 @@ DOCKERFILE = REPO_ROOT / "Dockerfile"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 GATES_DIR = REPO_ROOT / "ci" / "gates"
 ROSTER_SOURCE = REPO_ROOT / "contracts" / "tool-rosters"
+PRE_COMMIT = REPO_ROOT / ".pre-commit-config.yaml"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+CONFTEST = REPO_ROOT / "tests" / "conftest.py"
+BREAKER_RUNBOOK = REPO_ROOT / "docs" / "runbooks" / "breaker_reset.md"
 
 # The image's builder venv (UV_PROJECT_ENVIRONMENT) and its site-packages, for python:3.12-slim.
 INSTALLED_SITE = PurePosixPath("/opt/venv/lib/python3.12/site-packages")
@@ -296,3 +305,92 @@ def test_runtime_stage_is_non_root_and_only_var_is_writable() -> None:
     text = "\n".join(_dockerfile_lines())
     assert re.search(r"^USER pumpgrok$", text, re.MULTILINE)
     assert "chown pumpgrok:pumpgrok /app/var" in text
+
+
+# --- pre-commit hook environment and runbook commands -----------------------------------------
+
+
+def _hook(hook_id: str) -> dict:
+    config = yaml.safe_load(PRE_COMMIT.read_text(encoding="utf-8"))
+    hooks = [h for repo in config["repos"] for h in repo["hooks"] if h["id"] == hook_id]
+    assert len(hooks) == 1, f"expected exactly one {hook_id!r} hook, found {len(hooks)}"
+    return hooks[0]
+
+
+def test_gate_self_test_hook_runs_pytest_in_locked_project_env() -> None:
+    # Product tests collected under ci/tests import pumpgrok and its dependencies. An isolated
+    # hook env with only pytest and pyyaml cannot collect them, so the hook must use the locked
+    # project environment, and --locked must fail rather than rewrite uv.lock during a commit.
+    hook = _hook("gate-self-test")
+    entry = hook["entry"].split()
+    assert entry[:3] == ["uv", "run", "--locked"], entry
+    assert entry[entry.index("-m") + 1] == "pytest", entry
+    assert "ci/tests" in entry
+    assert hook["language"] == "system", "language: python would build an isolated env"
+    assert "additional_dependencies" not in hook, "deps must come from the lock, not the hook"
+
+
+def _declared_project_distributions() -> set[str]:
+    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    specs = list(project["project"]["dependencies"])
+    for group in project.get("dependency-groups", {}).values():
+        specs.extend(s for s in group if isinstance(s, str))
+    names = set()
+    for spec in specs:
+        name = re.split(r"[<>=!~\[ ;]", spec, maxsplit=1)[0].strip().lower()
+        names.add(name.replace("_", "-"))
+    return names
+
+
+def _third_party_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    top: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            top |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            top.add(node.module.split(".")[0])
+    tests_dir = REPO_ROOT / "tests"
+    local = {p.stem for p in tests_dir.iterdir()} | {"pumpgrok"}
+    return {m for m in top if m not in sys.stdlib_module_names and m not in local}
+
+
+def test_conftest_third_party_imports_are_declared_project_dependencies() -> None:
+    # tests/conftest.py is loaded by every product test the invariant matrix collects. Each
+    # third-party module it imports must be a declared project dependency, which is what the
+    # locked environment installs for the gate-self-test hook.
+    third_party = _third_party_imports(CONFTEST)
+    assert {"httpx", "websockets"} <= third_party, "import scan missed known conftest imports"
+    declared = _declared_project_distributions()
+    missing = sorted(m for m in third_party if m not in declared)
+    assert missing == [], f"conftest imports not declared in pyproject: {missing}"
+
+
+def _runbook_pumpgrok_commands() -> list[str]:
+    text = BREAKER_RUNBOOK.read_text(encoding="utf-8")
+    block = re.search(r"```bash\n(.*?)```", text, re.S)
+    assert block, "breaker runbook has no bash quick-start block"
+    return [ln.strip() for ln in block.group(1).splitlines() if ln.strip().startswith("pumpgrok ")]
+
+
+def test_breaker_runbook_quick_start_commands_parse_as_written() -> None:
+    # Each quick-start command must be accepted by the real CLI parser as written. A verb that
+    # requires --seat (state status) is valid only with the seat supplied.
+
+    commands = _runbook_pumpgrok_commands()
+    assert commands, "no pumpgrok commands in the breaker runbook quick start"
+    for command in commands:
+        argv = shlex.split(command)[1:]
+        try:
+            build_parser().parse_args(argv)
+        except (SystemExit, Exception) as exc:  # argparse or UsageError: name the failing command
+            raise AssertionError(f"runbook command rejected: {command!r}: {exc}") from exc
+
+
+def test_breaker_runbook_state_status_is_given_a_seat_the_parser_accepts() -> None:
+
+    status = [c for c in _runbook_pumpgrok_commands() if c.startswith("pumpgrok state status")]
+    assert len(status) == 1, status
+    argv = shlex.split(status[0])[1:]
+    ns = build_parser().parse_args(argv)
+    assert ns.seat == "desk"

@@ -305,9 +305,12 @@ class Supervisor:
         return self._degraded
 
     def running_tasks(self) -> list[asyncio.Task[Any]]:
-        """Live seat tasks, excluding the caller (shutdown drain owns it)."""
-        current = asyncio.current_task()
-        return [t for t in asyncio.all_tasks() if t is not current and not t.done()]
+        """Live seat cycle tasks this supervisor started.
+
+        Scoped to the supervisor's own seats: a caller awaiting the service (for
+        example ``serve_replay`` run as a task) is never drained or cancelled.
+        """
+        return [task for task in self._inflight.values() if not task.done()]
 
     def request_stop(self, source: str) -> None:
         """Idempotent stop: a second signal logs and never forces."""
@@ -398,6 +401,7 @@ class Supervisor:
         for seat in ROSTER:
             task = self.tasks[seat]
             child = asyncio.ensure_future(task.run_guarded(self._seat_context(seat)))
+            self._inflight[seat] = child
             try:
                 outcomes[seat] = await child
             except asyncio.CancelledError:

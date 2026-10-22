@@ -748,6 +748,97 @@ def test_confirming_recheck_rejects_inflight(tmp_path: Path) -> None:
         store.close()
 
 
+def test_confirming_refuses_buy_once_the_last_slot_is_taken(tmp_path: Path) -> None:
+    """Review finding 13: two buys both pass ACCEPTED with one slot left.
+
+    The first fills before the second confirms, so the second is refused at
+    CONFIRMING with ``max_open_positions`` instead of leaving four positions.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        _append(
+            store,
+            clock,
+            "PositionOpened",
+            _position_payload(clock, MINT_A, CREATOR_1, 1_000_000, 1_000_000),
+        )
+        _append(
+            store,
+            clock,
+            "PositionOpened",
+            _position_payload(clock, MINT_B, CREATOR_2, 1_000_000, 1_000_000),
+        )
+        _append(store, clock, "MarkToMarket", _mtm_payload({MINT_A: 1_000_000, MINT_B: 1_000_000}))
+        engine = _engine(store, clock)
+        first = _buy(clock, ids, mint=MINT_C)
+        second = _buy(clock, ids, mint=MINT_D)
+        assert engine.check(first, seat="bot-04-sniper").passed is True
+        assert engine.check(second, seat="bot-04-sniper").passed is True
+        assert engine.check(first, seat="bot-04-sniper", stage="CONFIRMING").passed is True
+        _append(
+            store,
+            clock,
+            "PositionOpened",
+            _position_payload(clock, MINT_C, "Creator3333333333333333333333333333333333", 1, 1),
+        )
+        late = engine.check(second, seat="bot-04-sniper", stage="CONFIRMING")
+        assert late.passed is False
+        assert late.reason == "max_open_positions"
+    finally:
+        store.close()
+
+
+def test_confirming_refuses_exit_sell_once_its_holding_is_closed(tmp_path: Path) -> None:
+    """Review finding 7: a flatten closes the holding while an exit sell confirms.
+
+    The exit sell must not sell the same tokens again: at CONFIRMING with no
+    open holding it is refused with ``no_position``.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        _append(
+            store,
+            clock,
+            "PositionOpened",
+            _position_payload(clock, MINT_A, CREATOR_1, 3_000_000, 1_000_000),
+        )
+        _append(store, clock, "MarkToMarket", _mtm_payload({MINT_A: 1_000_000}))
+        approval_id = f"apr-{ids.ulid()}"
+        _append(
+            store,
+            clock,
+            "ApprovalRecorded",
+            _approval_payload(
+                clock, approval_id, "exit_rule", TICKET, MINT_A, units=3_000_000, rule="stop_loss"
+            ),
+        )
+        engine = _engine(store, clock, autonomy="manual-ticket")
+        order = _sell(clock, ids, approval_id=approval_id)
+        assert engine.check(order, seat="bot-06-exit", exit_reason="exit_rule").passed is True
+        _append(
+            store,
+            clock,
+            "PositionClosed",
+            {
+                "source": "paper",
+                "mint": MINT_A,
+                "price_exit": "0.00001",
+                "proceeds_lamports": 3_000_000,
+                "realized_pnl_lamports": 0,
+                "reason": "kill_flatten",
+            },
+        )
+        late = engine.check(order, seat="bot-06-exit", exit_reason="exit_rule", stage="CONFIRMING")
+        assert late.passed is False
+        assert late.reason == "no_position"
+    finally:
+        store.close()
+
+
 def test_repeat_check_returns_identical_decision(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)

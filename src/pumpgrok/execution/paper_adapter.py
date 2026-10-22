@@ -45,9 +45,10 @@ from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.latency import P_DROP, draw_latency
 from pumpgrok.ledger.reducer import PositionView, initial_state, reduce
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS, RiskEngine, order_hash_for
+from pumpgrok.risk.killswitch import InflightBarrier
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
@@ -104,6 +105,29 @@ def _rejection_from_row(
     return OrderRejectedError(reason, detail, stage=stage, fees_lamports=fees_lamports)
 
 
+class _InflightOrders:
+    """Orders between ACCEPTED and settlement; each key is mirrored into the barrier.
+
+    The barrier is shared with the kill-switch flatten, which waits for it to
+    drain. The set keeps the adapter's own membership test (``cancel``).
+    """
+
+    def __init__(self) -> None:
+        self.barrier = InflightBarrier()
+        self._keys: set[str] = set()
+
+    def add(self, key: str) -> None:
+        self._keys.add(key)
+        self.barrier.register(key)
+
+    def discard(self, key: str) -> None:
+        self._keys.discard(key)
+        self.barrier.done(key)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._keys
+
+
 class PaperAdapter(ExecutionAdapter):
     """Paper fills from curve reserves with risk in process (R24)."""
 
@@ -138,11 +162,17 @@ class PaperAdapter(ExecutionAdapter):
         self._source = source
         self._curve_origin = curve_origin
         self._p_drop = p_drop
-        self._inflight: set[str] = set()
+        self._inflight = _InflightOrders()
         self._cancelled: set[str] = set()
         self._last_price_ts: dict[str, float] = {}
         self._last_reserves: dict[str, tuple[int, int]] = {}
         self._frozen_marks: dict[str, int] = {}
+        self._active_places: set[str] = set()
+
+    @property
+    def inflight_barrier(self) -> InflightBarrier:
+        """The barrier the kill-switch flatten waits on; orders are in it while in flight."""
+        return self._inflight.barrier
 
     # -- read-only helpers -------------------------------------------------
 
@@ -324,10 +354,23 @@ class PaperAdapter(ExecutionAdapter):
         """Place one order; its breaker probe is released on every final outcome.
 
         A fill resolves the probe as success; a refusal, confirmation timeout or
-        cancel resolves it as failure. Orders without a probe are untouched.
+        cancel resolves it as failure. A concurrent repeat of an in-flight
+        decision leaves the probe to its owner. Orders without a probe are
+        untouched.
         """
         ledger_source = source if source is not None else self._source
         order_hash = order_hash_for(request)
+        key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
+        if key in self._active_places:
+            return await self._place_order(
+                request,
+                seat=seat,
+                exit_reason=exit_reason,
+                creator=creator,
+                source=source,
+                correlation_id=correlation_id,
+            )
+        self._active_places.add(key)
         try:
             fill = await self._place_order(
                 request,
@@ -342,6 +385,8 @@ class PaperAdapter(ExecutionAdapter):
                 order_hash, False, source=ledger_source, correlation_id=correlation_id
             )
             raise
+        finally:
+            self._active_places.discard(key)
         self._risk.release_order_probes(
             order_hash, True, source=ledger_source, correlation_id=correlation_id
         )
@@ -449,10 +494,11 @@ class PaperAdapter(ExecutionAdapter):
         seat: str | None,
         exit_reason: str | None,
         creator: str | None,
-    ) -> tuple[CurveSnapshot, float]:
+    ) -> tuple[CurveSnapshot, float, int | None]:
         """Latency sleep, cancel check, curve re-read, stop re-check, drop draw.
 
-        Returns the CONFIRMING reserves with the virtual latency. Any refusal
+        Returns the CONFIRMING reserves, the virtual latency, and the trade size
+        cap that CONFIRMING recomputed (None for sells). Any refusal
         discards the in-flight order and raises ``OrderRejectedError``; the
         caller compares the confirm-out against the decision threshold. When
         the latency sleep outlasts ``confirm_timeout_s`` the outcome is
@@ -554,7 +600,7 @@ class PaperAdapter(ExecutionAdapter):
                 source=ledger_source,
                 correlation_id=correlation_id,
             )
-        return (curve1, latency_s)
+        return (curve1, latency_s, recheck.size_lamports)
 
     async def _place_buy(
         self,
@@ -611,7 +657,7 @@ class PaperAdapter(ExecutionAdapter):
             raise OrderRejectedError(
                 "in_flight", "prior attempt recorded no outcome", stage="ACCEPTED"
             ) from exc
-        curve1, latency_s = await self._await_confirmation(
+        curve1, latency_s, cap_now = await self._await_confirmation(
             request,
             order_id=order_id,
             forbid_complete=True,
@@ -621,6 +667,15 @@ class PaperAdapter(ExecutionAdapter):
             exit_reason=exit_reason,
             creator=creator,
         )
+        if cap_now is not None and cap_now < filled:
+            # CONFIRMING recomputed a smaller trade cap during the wait: fill only
+            # up to it, priced at the decision reserves with a threshold to match.
+            filled = cap_now
+            fraction = Decimal(filled) / Decimal(size)
+            venue_fee = self._fees.venue_fee(filled)
+            x_net = filled - venue_fee
+            out0 = buy_out(curve0.s_lamports, curve0.t_units, x_net)
+            threshold = out0 * (10_000 - slippage_bps) // 10_000
         out1 = buy_out(curve1.s_lamports, curve1.t_units, x_net)
         if out1 < threshold:
             self._inflight.discard(order_id)
@@ -813,7 +868,7 @@ class PaperAdapter(ExecutionAdapter):
             raise OrderRejectedError(
                 "in_flight", "prior attempt recorded no outcome", stage="ACCEPTED"
             ) from exc
-        curve1, latency_s = await self._await_confirmation(
+        curve1, latency_s, _ = await self._await_confirmation(
             request,
             order_id=order_id,
             forbid_complete=False,
@@ -823,6 +878,23 @@ class PaperAdapter(ExecutionAdapter):
             exit_reason=exit_reason,
             creator=creator,
         )
+        state = self._fold_state()
+        pos = state.positions.get(request.mint)
+        held = pos.token_units if pos is not None and pos.token_units > 0 else 0
+        if filled_units > held:
+            # A concurrent exit committed first, or the holding was flattened: this
+            # exit no longer fits the holding, so it is refused rather than clipped.
+            self._inflight.discard(order_id)
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "no_position",
+                f"mint={request.mint} exit of {filled_units} exceeds holding {held} at CONFIRMING",
+                stage="CONFIRMING",
+                order_id=order_id,
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
         gross1 = sell_out(curve1.s_lamports, curve1.t_units, filled_units)
         out1 = gross1 - self._fees.venue_fee(gross1)
         if out1 < threshold:
@@ -846,8 +918,6 @@ class PaperAdapter(ExecutionAdapter):
         price_avg = Decimal(gross1) / Decimal(filled_units)
         slipped = (out0 - out1) * 10_000 // out0 if out1 < out0 and out0 else 0
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
-        state = self._fold_state()
-        pos = state.positions.get(request.mint)
         closes = pos is not None and pos.token_units > 0 and filled_units >= pos.token_units
         rows: list[dict[str, Any]] = [
             {
@@ -1242,13 +1312,17 @@ class PaperAdapter(ExecutionAdapter):
         """Force-close the open position at the last pre-graduation sell_out.
 
         Returns the PositionClosed row, or None when no position is open.
-        Appends an Escalation(kind=graduated) and freezes the mark.
+        Appends an Escalation(kind=graduated) and freezes the mark. The close
+        books the venue fee and network cost, as a normal sell does.
         """
+        state = self._fold_state()
+        pos = state.positions.get(mint)
+        if pos is None or pos.token_units <= 0:
+            return None
         return await self._force_close(
             mint,
             reason="graduated",
-            last_s=last_s,
-            last_t=last_t,
+            valued=self._curve_exit(last_s, last_t, pos.token_units),
             source=source,
             correlation_id=correlation_id,
         )
@@ -1276,18 +1350,13 @@ class PaperAdapter(ExecutionAdapter):
             return None
         if self._clock.now() - last_ts <= float(self._limits.blind_max_s):
             return None
-        last = self._last_reserves.get(mint)
-        if pos.last_mtm_lamports > 0:
-            last_good = int(pos.last_mtm_lamports)
-        elif last is not None:
-            last_good = sell_out(last[0], last[1], pos.token_units)
-            last_good -= self._fees.venue_fee(last_good)
-        else:
+        valued = self._last_good_value(mint, pos)
+        if valued is None:
             return None
         return await self._force_close(
             mint,
             reason="blind_flatten",
-            last_good_lamports=last_good,
+            valued=valued,
             source=source,
             correlation_id=correlation_id,
         )
@@ -1357,30 +1426,38 @@ class PaperAdapter(ExecutionAdapter):
         ticket_id: str,
         reason: str,
     ) -> dict[str, Any]:
-        """Close the open position in ``mint`` at its liquidation value (RISK-004).
+        """Close the open position in ``mint`` at its net liquidation value (RISK-004).
 
         Reuses the forced-close path: one sell ``FillRecorded`` and one
         ``PositionClosed`` carrying ``reason``. The value comes from the live
         curve; with no usable curve it falls back to the last ledger mark, then
-        the last-good reserves. Returns ``status="closed"`` after writing, or
-        ``status="no_position"`` (nothing written) when no position is open.
-        ``status="no_mark"`` (nothing written) means the position is open but no
-        value can be derived; the caller must retry or escalate. Never raises for
-        a missing position; only an unsupported ``reason`` raises ``ValueError``.
+        the last-good reserves. The sell books the venue fee and network cost, so
+        cash moves by the value and reported fees agree. Returns
+        ``status="closed"`` after writing. ``status="no_position"`` means no
+        position is open; ``status="no_mark"`` means one is open but no value can
+        be derived; ``status="ledger_inconsistent"`` means the ledger failed
+        verification. The last three write nothing and never raise. Only an
+        unsupported ``reason`` raises ``ValueError``.
         """
         if reason not in SYSTEM_EXIT_REASONS:
             raise ValueError(f"unsupported close reason: {reason}")
+        try:
+            self._store.verify()
+        except LedgerInconsistent:
+            return {"status": "ledger_inconsistent", "mint": mint}
+        curve = await self._read_curve(mint)
         state = self._fold_state()
         pos = state.positions.get(mint)
         if pos is None or pos.token_units <= 0:
             return {"status": "no_position", "mint": mint}
-        value = await self._liquidation_value(mint, pos)
-        if value is None:
+        valued = self._live_value(mint, pos, curve)
+        if valued is None:
             return {"status": "no_mark", "mint": mint}
+        proceeds = valued[0]
         row = await self._force_close(
             mint,
             reason=reason,  # type: ignore[arg-type]
-            last_good_lamports=value,
+            valued=valued,
             source=None,
             correlation_id=ticket_id,
             ticket_id=ticket_id,
@@ -1391,33 +1468,51 @@ class PaperAdapter(ExecutionAdapter):
             "status": "closed",
             "mint": mint,
             "reason": reason,
-            "proceeds_lamports": value,
-            "realized_pnl_lamports": value - int(pos.cost_basis_lamports),
+            "proceeds_lamports": proceeds,
+            "realized_pnl_lamports": proceeds - int(pos.cost_basis_lamports),
             "seq": int(row["seq"]),
         }
 
-    async def _liquidation_value(self, mint: str, pos: PositionView) -> int | None:
-        """Net liquidation value of ``pos`` now; None when no value is derivable."""
-        curve = await self._read_curve(mint)
-        if curve is not None and not curve.complete:
-            gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
-            return gross - self._fees.venue_fee(gross)
+    def _curve_exit(self, s_lamports: int, t_units: int, units: int) -> tuple[int, int, int]:
+        """``(proceeds, venue_fee, network_cost)`` for selling ``units`` on this curve.
+
+        Same arithmetic as a normal sell: proceeds are gross less venue fee less
+        network cost, so cash moves by the proceeds and fees are reported.
+        """
+        gross = sell_out(s_lamports, t_units, units)
+        venue = self._fees.venue_fee(gross)
+        network = self._fees.network_cost()
+        return gross - venue - network, venue, network
+
+    def _last_good_value(self, mint: str, pos: PositionView) -> tuple[int, int, int] | None:
+        """Last ledger mark, else the last-good reserves; never reads a live price.
+
+        A ledger mark is already net of the venue fee, so only the network cost is
+        taken off it. Its venue fee is therefore not reported separately (cash is
+        still correct); the reserves path reports both fees.
+        """
         if pos.last_mtm_lamports > 0:
-            return int(pos.last_mtm_lamports)
+            network = self._fees.network_cost()
+            return int(pos.last_mtm_lamports) - network, 0, network
         last = self._last_reserves.get(mint)
         if last is not None:
-            gross = sell_out(last[0], last[1], pos.token_units)
-            return gross - self._fees.venue_fee(gross)
+            return self._curve_exit(last[0], last[1], pos.token_units)
         return None
+
+    def _live_value(
+        self, mint: str, pos: PositionView, curve: CurveSnapshot | None
+    ) -> tuple[int, int, int] | None:
+        """Value of a full exit: the live curve when usable, else the last-good value."""
+        if curve is not None and not curve.complete:
+            return self._curve_exit(curve.s_lamports, curve.t_units, pos.token_units)
+        return self._last_good_value(mint, pos)
 
     async def _force_close(
         self,
         mint: str,
         *,
         reason: Literal["graduated", "blind_flatten", "kill_flatten", "rug_alert"],
-        last_s: int = 0,
-        last_t: int = 0,
-        last_good_lamports: int = 0,
+        valued: tuple[int, int, int],
         source: str | None,
         correlation_id: str,
         ticket_id: str = "",
@@ -1427,13 +1522,7 @@ class PaperAdapter(ExecutionAdapter):
         pos = state.positions.get(mint)
         if pos is None or pos.token_units <= 0:
             return None
-        venue_fee = 0
-        if reason == "graduated":
-            gross = sell_out(last_s, last_t, pos.token_units)
-            venue_fee = self._fees.venue_fee(gross)
-            proceeds = gross - venue_fee
-        else:
-            proceeds = last_good_lamports
+        proceeds, venue_fee, network_cost = valued
         realized = proceeds - int(pos.cost_basis_lamports)
         basis = int(pos.cost_basis_lamports)
         pnl_pct = Decimal(realized) / Decimal(basis) if basis else Decimal("0")
@@ -1462,7 +1551,7 @@ class PaperAdapter(ExecutionAdapter):
                     "filled_fraction": "1",
                     "price_avg": price_exit,
                     "venue_fee_lamports": venue_fee,
-                    "network_cost_lamports": 0,
+                    "network_cost_lamports": network_cost,
                     "cash_delta_lamports": proceeds,
                     "venue_tx_ref": venue_tx_ref,
                     "route": "curve",

@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -178,5 +180,95 @@ async def test_escalates_again_only_after_a_resume_clears_the_latch(tmp_path: Pa
         assert latch.is_latched(SEAT)
         assert len(store.read(types=["Escalation"], limit=None)) == 2
         assert len(notifier.sent) == 2
+    finally:
+        store.close()
+
+
+# -- round 3 finding 2: EXIT retries its protective halt -------------------------
+
+EXIT = "bot-06-exit"
+
+
+def _fail_once(monkeypatch: pytest.MonkeyPatch, store: LedgerStore, row_type: str) -> None:
+    """Make the first ``row_type`` append raise, then behave normally."""
+    real_append = store.append
+    armed = [True]
+
+    def _append(**kwargs: Any) -> dict[str, Any]:
+        if armed[0] and kwargs.get("type") == row_type:
+            armed[0] = False
+            raise RuntimeError(f"ledger write failed for {row_type}")
+        return real_append(**kwargs)
+
+    monkeypatch.setattr(store, "append", _append)
+
+
+def _exit_task(latch: ObserveOnly, clock: FixtureClock, store: LedgerStore) -> SeatTask:
+    return SeatTask(
+        EXIT,
+        15.0,
+        _boom,
+        clock=clock,
+        rng=make_rng(11),
+        store=store,
+        observe_only=latch,
+        policy=RestartPolicy(capacity=0),
+    )
+
+
+async def test_exit_halt_retried_after_its_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed HaltSet write must be retried on the next failed EXIT cycle."""
+    clock = FixtureClock(start=1_000.0)
+    store = _store(tmp_path)
+    try:
+        _fail_once(monkeypatch, store, "HaltSet")
+        latch = ObserveOnly()
+        task = _exit_task(latch, clock, store)
+        assert await task.run_guarded(_ctx(store, clock, EXIT)) == "crash"
+        assert latch.is_latched(EXIT)
+        assert store.read(types=["HaltSet"], limit=None) == []
+
+        clock.advance_to(clock.now() + 15.0)
+        assert await task.run_guarded(_ctx(store, clock, EXIT)) == "crash"
+        halts = store.read(types=["HaltSet"], limit=None)
+        assert len(halts) == 1
+        assert halts[0]["payload"]["reason"] == "manual"
+        assert len(store.read(types=["Escalation"], limit=None)) == 1
+    finally:
+        store.close()
+
+
+async def test_exit_halt_written_even_when_escalation_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The protective halt must not depend on the escalation row landing first."""
+    clock = FixtureClock(start=1_000.0)
+    store = _store(tmp_path)
+    try:
+        _fail_once(monkeypatch, store, "Escalation")
+        latch = ObserveOnly()
+        task = _exit_task(latch, clock, store)
+        with pytest.raises(RuntimeError, match="ledger write failed for Escalation"):
+            await task.run_guarded(_ctx(store, clock, EXIT))
+        assert latch.is_latched(EXIT)
+        assert len(store.read(types=["HaltSet"], limit=None)) == 1
+    finally:
+        store.close()
+
+
+async def test_exit_halt_not_duplicated_on_repeated_failures(tmp_path: Path) -> None:
+    """Retrying while latched is idempotent: one HaltSet per UTC day."""
+    clock = FixtureClock(start=1_000.0)
+    store = _store(tmp_path)
+    try:
+        latch = ObserveOnly()
+        task = _exit_task(latch, clock, store)
+        for _ in range(4):
+            assert await task.run_guarded(_ctx(store, clock, EXIT)) == "crash"
+            clock.advance_to(clock.now() + 15.0)
+        assert len(store.read(types=["HaltSet"], limit=None)) == 1
+        assert len(store.read(types=["Escalation"], limit=None)) == 1
     finally:
         store.close()

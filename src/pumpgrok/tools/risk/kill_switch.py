@@ -240,10 +240,12 @@ async def run_kill_switch(
                 status="unavailable",
                 detail="no position closer is wired; nothing closed",
             )
+        elif barrier is None:
+            raise ValueError("a flatten closer needs the adapter's in-flight barrier")
         else:
             result = await execute_flatten(
                 lambda: _flatten_intents(store),
-                barrier=barrier if barrier is not None else InflightBarrier(),
+                barrier=barrier,
                 close_position=close_position,
                 barrier_timeout_s=barrier_timeout_s,
             )
@@ -321,7 +323,13 @@ def build_kill_switch_tool(
     close_position: ClosePosition | None = None,
     barrier: InflightBarrier | None = None,
 ) -> Tool:
-    """Bind ``risk.kill_switch`` to one store, clock, file path and position closer."""
+    """Bind ``risk.kill_switch`` to one store, clock, file path and position closer.
+
+    A position closer must come with the adapter's in-flight barrier: without it
+    a flatten would not wait for live orders. The refusal happens here, at wiring.
+    """
+    if close_position is not None and barrier is None:
+        raise ValueError("a flatten closer needs the adapter's in-flight barrier")
 
     @tool(KILL_SWITCH_SPEC)
     async def _kill_switch(payload: KillSwitchIn) -> dict[str, Any]:

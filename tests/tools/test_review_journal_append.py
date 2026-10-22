@@ -8,12 +8,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.tools.journal import append as append_mod
 from pumpgrok.tools.journal.append import (
     JournalAppendIn,
     journal_append_key,
@@ -128,3 +135,50 @@ async def test_retry_replaces_a_partial_fragment_with_a_whole_line(tmp_path: Pat
     records = _read_records(path)
     assert [r["seq"] for r in records] == [first["seq"]]
     assert _read_bytes(path).endswith(b"\n")
+
+
+def _slow_has_seq(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Widen the read-check window so two overlapping exports both observe 'missing'."""
+    real_has_seq = append_mod._has_seq
+
+    def _slow(data: bytes, seq: int) -> bool:
+        found = real_has_seq(data, seq)
+        time.sleep(0.2)
+        return found
+
+    monkeypatch.setattr(append_mod, "_has_seq", _slow)
+
+
+def test_overlapping_exports_write_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _slow_has_seq(monkeypatch)
+    line = json.dumps({"seq": 1, "kind": "journal_note", "payload": {}})
+    day = datetime(2026, 1, 1, tzinfo=UTC)
+    workers = [
+        threading.Thread(target=append_mod._export_line, args=(tmp_path, day, 1, line))
+        for _ in range(2)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    assert [r["seq"] for r in _read_records(tmp_path / "2026-01-01.jsonl")] == [1]
+
+
+async def test_concurrent_retries_after_lost_export_write_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = LedgerStore(tmp_path / "ledger.sqlite")
+    clock = FixtureClock(start=START)
+    journal_dir = tmp_path / "journal"
+    first = await run_journal_append(_note("note"), store, clock, journal_dir)
+    path = Path(first["journal_path"])
+    _remove(path)  # the first export was lost; two overlapping retries follow
+    _slow_has_seq(monkeypatch)
+    outs = await asyncio.gather(
+        run_journal_append(_note("note"), store, clock, journal_dir),
+        run_journal_append(_note("note"), store, clock, journal_dir),
+    )
+    assert {o["seq"] for o in outs} == {first["seq"]}
+    assert [r["seq"] for r in _read_records(path)] == [first["seq"]]

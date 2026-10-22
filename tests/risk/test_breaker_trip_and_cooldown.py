@@ -176,7 +176,7 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
         trips = store.read(types=["BreakerTripped"], limit=None)
         assert len(trips) == 1
         assert trips[0]["payload"]["breaker"] == breaker
-        assert trips[0]["idempotency_key"] == breaker_trip_key(breaker, "2026-10-21")
+        assert trips[0]["idempotency_key"] == breaker_trip_key(breaker, 1)
         refused = engine.check(_buy(clock, ids), seat="bot-04-sniper")
         assert refused.passed is False
         assert refused.reason == "breaker_open"
@@ -200,7 +200,9 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
             correlation_id="test",
         )
         assert engine._breakers.by_name(breaker).state == "open"
-        assert len(store.read(types=["BreakerTripped"], limit=None)) == 1
+        # A failed probe re-opens with a fresh cooldown; that re-open is a trip row,
+        # so a restart after it cannot shorten the cooldown (R24).
+        assert len(store.read(types=["BreakerTripped"], limit=None)) == 2
         clock.advance_to(clock.now() + _cooldown(breaker) + 1.0)
         post = engine.check(_buy(clock, ids), seat="bot-04-sniper")
         assert post.passed is True

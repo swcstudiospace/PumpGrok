@@ -100,7 +100,7 @@ async def test_graduation_closes_at_last_curve_price(tmp_path: Path) -> None:
         payload = closed[0]["payload"]
         assert payload["reason"] == "graduated"
         gross = sell_out(S0, T0, UNITS)
-        proceeds = gross - fees.venue_fee(gross)
+        proceeds = gross - fees.venue_fee(gross) - fees.network_cost()
         assert payload["proceeds_lamports"] == proceeds
         assert payload["price_exit"] == str(Decimal(proceeds) / Decimal(UNITS))
         escalations = store.read(types=["Escalation"], limit=None)

@@ -6,11 +6,11 @@ What to do when a risk breaker opens. There is no manual reset verb: breakers re
 
 ```bash
 pumpgrok doctor
-pumpgrok state status
+pumpgrok state status --seat desk
 pumpgrok killswitch status
 ```
 
-`doctor` shows which breaker tripped and why. `state status` shows desk posture while the breaker is open. `killswitch status` confirms whether the halt flag is also set.
+`doctor` shows which breaker tripped and why. `state status --seat desk` (the operator seat; it resolves to `bot-00-chief`, which holds the `risk.halt_status` grant) shows desk posture while the breaker is open. `killswitch status` confirms whether the halt flag is also set.
 
 ## What a breaker trip means
 

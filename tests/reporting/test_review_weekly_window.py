@@ -149,3 +149,27 @@ def test_per_day_table_keeps_each_day_in_the_week(tmp_path: Path) -> None:
     assert "2026-10-19 | fills 1 | closed 0 | rejected 0 | events 2" in body
     assert "2026-10-20 | fills 1 | closed 1 | rejected 0 | events 2" in body
     assert "2026-10-25 | fills 0 | closed 0 | rejected 0 | events 0" in body
+
+
+def test_fractional_monday_midnight_fill_belongs_to_its_week(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.sqlite"
+    store = LedgerStore(ledger)
+    try:
+        store.set_meta("initial_equity_lamports", str(INITIAL))
+        for ts in ("2026-10-18T23:59:59.999999Z", MON + "T00:00:00.500000Z"):
+            store.append(
+                ts_utc=ts,
+                source="paper",
+                correlation_id=CID,
+                idempotency_key=f"fill-{ts}",
+                type="FillRecorded",
+                payload=_fill("buy", 100_000_000, -100_001_000, 1_000, 0),
+            )
+    finally:
+        store.close()
+    week = WeeklyReport.build(ledger, MON, root=tmp_path)
+    previous = WeeklyReport.build(ledger, "2026-10-12", root=tmp_path)
+    assert week.trades == 1
+    assert previous.trades == 1
+    body = render_weekly(week)
+    assert "2026-10-19 | fills 1 |" in body

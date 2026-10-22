@@ -25,8 +25,10 @@ repos:
 
       - id: gate-self-test
         name: "Gate self-test (ci/tests)"
-        entry: python3 -m pytest ci/tests -q
-        language: python
-        additional_dependencies: ["pytest", "pyyaml"]
+        # Product tests under the matrix import pumpgrok, httpx and websockets (tests/conftest.py),
+        # so collection needs the locked project environment. --locked fails instead of rewriting
+        # uv.lock from inside a commit hook.
+        entry: uv run --locked python -m pytest ci/tests -q
+        language: system
         files: ^ci/(gates|tests)/
         pass_filenames: false

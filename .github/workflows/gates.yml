@@ -55,7 +55,12 @@ jobs:
       - name: Install gate dependencies
         run: pip install pyyaml
 
+      # One-time waiver for PR 6, decided by the repository owner in session (ask: gates,
+      # "One-time override for PR 6"). G-1 and G-2 attribute a change to one seat, which a
+      # human integration change across seats cannot satisfy. Only PR number 6 is waived; the
+      # other gates stay enforced. Remove this waiver after PR 6 merges.
       - name: Determine the acting bot
+        if: github.event.pull_request.number != 6
         id: bot
         run: |
           # Convention: the branch name starts with the seat id, e.g.
@@ -73,9 +78,11 @@ jobs:
           echo "Acting bot: $BOT"
 
       - name: G-1 — Manifest self-check
+        if: github.event.pull_request.number != 6
         run: python3 ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
+        if: github.event.pull_request.number != 6
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -85,6 +92,7 @@ jobs:
             --base "origin/$BASE_REF"
 
       - name: Locate the verification receipt
+        if: github.event.pull_request.number != 6
         id: receipt
         env:
           BOT: ${{ steps.bot.outputs.bot }}
@@ -136,6 +144,7 @@ jobs:
           echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
 
       - name: G-2 — Verification receipt
+        if: github.event.pull_request.number != 6
         env:
           RECEIPT: ${{ steps.receipt.outputs.path }}
           BOT: ${{ steps.bot.outputs.bot }}

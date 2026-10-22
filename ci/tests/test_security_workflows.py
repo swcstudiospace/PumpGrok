@@ -124,8 +124,13 @@ class TestGatesWorkflow:
         assert "bot-0[0-6]" not in bot_step["run"]
 
     def test_gate_self_test_job_runs_the_gate_suite(self, gates):
-        runs = " ".join(s["run"] for s in gates["jobs"]["gate-self-test"]["steps"] if "run" in s)
-        assert "python3 -m pytest ci/tests/" in runs
+        # Behaviour, not wording: some step runs pytest over ci/tests/, and the project is
+        # installed in an earlier step, so the suite's owning test modules can import pumpgrok.
+        runs = [s.get("run", "") for s in gates["jobs"]["gate-self-test"]["steps"]]
+        suite = [i for i, run in enumerate(runs) if "pytest ci/tests/" in run]
+        install = [i for i, run in enumerate(runs) if "uv sync" in run]
+        assert suite, "gate-self-test must run pytest over ci/tests/"
+        assert install and install[0] < suite[0], "install the project before the gate suite"
 
     def test_g7_runs_without_a_bot_argument(self, gates):
         run = _step(gates, "G-7")["run"]

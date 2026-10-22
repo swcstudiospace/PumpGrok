@@ -9,6 +9,7 @@ still visible instead of failing open on a truncated window.
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -169,7 +170,8 @@ async def test_exposure_includes_trade_after_1000th_event(tmp_path: Path) -> Non
 async def test_pnl_includes_trade_after_1000th_event(tmp_path: Path) -> None:
     store = _build_store(tmp_path)
     try:
-        out = await run_pnl(PnlIn(window="day"), store, FixtureClock(start=START))
+        as_of = datetime(2026, 1, 1, 12, tzinfo=UTC)
+        out = await run_pnl(PnlIn(window="day", as_of=as_of), store, FixtureClock(start=START))
         assert out["trades"] >= 1
         assert out["fees_lamports"] == 10
         assert out["realised_lamports"] == 1000

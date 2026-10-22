@@ -22,7 +22,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-import pumpgrok.cli as cli_mod
 from pumpgrok.cli import main
 from pumpgrok.config.settings import load_settings
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
@@ -139,20 +138,6 @@ def _ticket_and_approval(
     return ticket_id, approval_id
 
 
-_real_registry = build_operator_registry
-
-
-def _patch_curves(monkeypatch: pytest.MonkeyPatch, curves: ScriptedCurves) -> None:
-    """Inject scripted curves plus p_drop=0.0 into the CLI registry build."""
-
-    def _with_curves(**kwargs):  # type: ignore[no-untyped-def]
-        kwargs.setdefault("price_source", curves)
-        kwargs.setdefault("p_drop", 0.0)
-        return _real_registry(**kwargs)
-
-    monkeypatch.setattr(cli_mod, "build_operator_registry", _with_curves)
-
-
 def _run(argv: list[str]) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
@@ -160,24 +145,16 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
-def _mark(store: LedgerStore, mint: str) -> None:
-    """Seed one fresh MarkToMarket row (production: the journal-seat cadence)."""
-    now = format_ts_utc(WallClock().now())
-    store.append(
-        ts_utc=now,
-        source="paper",
-        correlation_id="t",
-        idempotency_key=f"mtm|{mint}|{now}",
-        type="MarkToMarket",
-        payload={
-            "source": "paper",
-            "ts_source": now,
-            "cash_lamports": 9_800_000_000,
-            "equity_lamports": 10_000_000_000,
-            "unrealized_lamports": 0,
-            "prices_json": json.dumps({mint: {"mtm_lamports": 200_000_000, "spot": "0"}}),
-        },
-    )
+def _ledger_kinds(tmp_path: Path) -> list[str]:
+    """Event types in the paper ledger under ``tmp_path``; empty when no ledger exists."""
+    path = tmp_path / "var" / "ledger.sqlite"
+    if not path.is_file():
+        return []
+    store = LedgerStore(str(path))
+    try:
+        return [str(event["type"]) for event in store.read(limit=10000)]
+    finally:
+        store.close()
 
 
 class TestExecBackendCoverage:
@@ -354,41 +331,47 @@ class TestServedVerbCoverage:
             seat,
         ]
 
-    def test_paper_buy_fills_exit_0(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_paper_buy_refused_unavailable_no_fill(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The CLI cannot price a fill: the buy is refused as unavailable (exit 1) and no
+        # FillRecorded or OrderPlaced is written (formerly a runtime fill, exit 0).
         monkeypatch.chdir(tmp_path)
-        _patch_curves(monkeypatch, ScriptedCurves([_snap(), _snap(), _snap()]))
         store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
         try:
             flags = self._buy_flags(store, side="buy", size_sol="0.2")
         finally:
             store.close()
         code, out, err = _run(flags)
-        assert code == 0
-        assert json.loads(out)["status"] == "filled"
+        assert code == 1
+        payload = json.loads(out)
+        assert payload["ok"] is False
+        assert payload["code"] == "unavailable"
         assert "Traceback" not in err
-        assert (tmp_path / "var" / "ledger.sqlite").is_file()
+        kinds = _ledger_kinds(tmp_path)
+        assert "FillRecorded" not in kinds
+        assert "OrderPlaced" not in kinds
 
-    def test_paper_sell_fills_after_buy_exit_0(
+    def test_paper_sell_after_buy_refused_unavailable_no_fill(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Both legs are refused as unavailable (exit 1); no FillRecorded or OrderPlaced is
+        # written (formerly a buy then a sell, both exit 0).
         monkeypatch.chdir(tmp_path)
-        _patch_curves(monkeypatch, ScriptedCurves([_snap(), _snap(), _snap(), _snap(), _snap()]))
-        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
-        try:
-            buy_flags = self._buy_flags(store, side="buy", size_sol="0.2")
-        finally:
-            store.close()
-        assert _run(buy_flags)[0] == 0
-        store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
-        try:
-            _mark(store, MINT)
-            sell_flags = self._buy_flags(store, side="sell", size_sol="0.1")
-        finally:
-            store.close()
-        code, out, err = _run(sell_flags)
-        assert code == 0
-        assert json.loads(out)["status"] == "filled"
-        assert "Traceback" not in err
+        for side in ("buy", "sell"):
+            store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
+            try:
+                flags = self._buy_flags(store, side=side, size_sol="0.2")
+            finally:
+                store.close()
+            code, out, err = _run(flags)
+            assert code == 1
+            payload = json.loads(out)
+            assert payload["code"] == "unavailable"
+            assert "Traceback" not in err
+        kinds = _ledger_kinds(tmp_path)
+        assert "FillRecorded" not in kinds
+        assert "OrderPlaced" not in kinds
 
     def test_state_halt_clear_cycle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)

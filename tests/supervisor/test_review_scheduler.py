@@ -29,6 +29,7 @@ from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.supervisor import scheduler
+from pumpgrok.supervisor.lifecycle import shutdown
 from pumpgrok.supervisor.scheduler import (
     ROSTER,
     DegradedState,
@@ -314,5 +315,34 @@ async def test_stop_writes_snapshot_export_and_stopped_health(
         assert snapshot is not None
         assert snapshot["state"]["meta"]["status"] == "stopped"
         assert store.get_meta(EXPORT_SEQ_KEY) is not None
+    finally:
+        store.close()
+
+
+# -- round 3 finding 4: shutdown drains only the supervisor's own seat tasks ----
+
+
+async def test_shutdown_never_cancels_a_caller_outside_the_supervisor(tmp_path: Path) -> None:
+    """A task awaiting the service (for example serve_replay) must survive shutdown."""
+    store = _store(tmp_path)
+    try:
+        supervisor = Supervisor(store=store, clock=WallClock(), rng=make_rng(7), cycles=_cycles())
+
+        async def _caller() -> str:
+            await asyncio.sleep(0.3)
+            return "returned"
+
+        caller = asyncio.ensure_future(_caller())
+        await asyncio.sleep(0)
+        code = await shutdown(
+            supervisor,
+            store=store,
+            health_path=str(tmp_path / "health.json"),
+            journal_dir=str(tmp_path / "journal"),
+            trades_path=str(tmp_path / "trades.jsonl"),
+            grace_s=0.05,
+        )
+        assert code == 0
+        assert await caller == "returned"
     finally:
         store.close()

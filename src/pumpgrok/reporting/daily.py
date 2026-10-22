@@ -27,7 +27,6 @@ from pumpgrok.ledger.views import (
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
 
 _RO_URI_TEMPLATE = "file:{path}?mode=ro"
-_DAY_START_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}T00:00:00Z"
 _SIGNED_PCT_TEMPLATE = "{value:+.2f}"
 _PCT_TEMPLATE = "{value:.2f}"
 _RISK_EVENT_TEMPLATE = "{etype} {ts} {cid}"
@@ -103,6 +102,15 @@ def read_initial_equity_readonly(ledger_path: Path) -> int:
     return int(row[0])
 
 
+def day_start(day: str) -> str:
+    """UTC instant at which a YYYY-MM-DD day starts, in the ledger ``ts_utc`` form.
+
+    Uses the six-digit fraction that ``format_ts_utc`` always writes, so string
+    comparison of a fractional event against this boundary is correct at midnight.
+    """
+    return day + "T00:00:00.000000Z"
+
+
 def day_next(day: str) -> str:
     """Next UTC day for a YYYY-MM-DD string (pure calendar math, no tz db)."""
     year, month, dom = (int(part) for part in day.split("-"))
@@ -115,7 +123,7 @@ def day_next(day: str) -> str:
     if month > 12:
         month = 1
         year += 1
-    return _DAY_START_TEMPLATE.format(year=year, month=month, dom=dom)
+    return day_start(f"{year:04d}-{month:02d}-{dom:02d}")
 
 
 def _in_window(ts: str, start: str, end: str) -> bool:
@@ -273,7 +281,7 @@ class DailyReport:
     ) -> ReportModel:
         last = day if last_day is None else last_day
         events = read_events_readonly(ledger_path)
-        start = day + "T00:00:00Z"
+        start = day_start(day)
         end = day_next(last)
         window = [e for e in events if _in_window(str(e.get("ts_utc", "")), start, end)]
         genesis = initial_state(

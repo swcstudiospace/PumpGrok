@@ -1,7 +1,8 @@
 """SOL-YYYYMMDD-NNN ticket allocation over JournalNote rows (R29, R33).
 
 Tickets are ``JournalNote`` rows with ``note_kind=ticket``; NNN is one plus
-the day's ticket count. Allocation goes through ``append_batch`` — the single
+the highest NNN already stored for the day, so explicit tickets never collide with
+automatic ones. Allocation goes through ``append_batch`` — the single
 atomic path — with the deterministic ``ticket:<id>`` idempotency key, so two
 concurrent allocators cannot take the same number: the loser sees a UNIQUE
 violation, recounts, and takes the next number.
@@ -9,6 +10,7 @@ violation, recounts, and takes the next number.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from typing import Any
@@ -35,6 +37,25 @@ def day_ticket_count(store: LedgerStore, compact_day: str) -> int:
     return int(row[0])
 
 
+def day_max_ticket_number(store: LedgerStore, compact_day: str) -> int:
+    """Highest NNN among the day's stored ticket ids; 0 when the day has none."""
+    prefix = f"SOL-{compact_day}-"
+    rows = store._db.execute(
+        "SELECT payload_json FROM events WHERE type = 'JournalNote' AND payload_json LIKE ?;",
+        (f"%{prefix}%",),
+    ).fetchall()
+    highest = 0
+    for (payload_json,) in rows:
+        payload = json.loads(payload_json)
+        if payload.get("note_kind") != "ticket":
+            continue
+        refs = payload.get("refs") or []
+        ticket_id = str(refs[0]) if refs else ""
+        if ticket_id.startswith(prefix) and TICKET_RE.fullmatch(ticket_id):
+            highest = max(highest, int(ticket_id[len(prefix) :]))
+    return highest
+
+
 def allocate_ticket(
     store: LedgerStore,
     *,
@@ -50,7 +71,7 @@ def allocate_ticket(
     """
     compact_day = ts_utc[:10].replace("-", "")
     for _ in range(MAX_ATTEMPTS):
-        ticket_id = f"SOL-{compact_day}-{day_ticket_count(store, compact_day) + 1:03d}"
+        ticket_id = f"SOL-{compact_day}-{day_max_ticket_number(store, compact_day) + 1:03d}"
         row: dict[str, Any] = {
             "ts_utc": ts_utc,
             "source": source,
