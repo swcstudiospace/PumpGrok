@@ -351,3 +351,64 @@ def test_no_signing_symbols_outside_live_package() -> None:
             if isinstance(node, ast.Attribute) and node.attr in ("sign", "send_transaction"):
                 offenders.append(f"{path}:{node.lineno}")
     assert offenders == []
+
+
+def test_live_flag_requires_both_sources(tmp_path: Path, monkeypatch) -> None:
+    """INV-C-04: TOML live alone never gates live; env-only stays paper."""
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / "operator.toml"
+    config.write_text('[execution]\nmode = "live"\n', encoding="utf-8")
+    monkeypatch.setenv("PUMPGROK_CONFIG", str(config))
+    monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
+    settings = load_settings()
+    assert settings.effective_mode == "live"
+    assert settings.live.enabled is False
+    gate = LiveGate(
+        mode=settings.effective_mode,
+        environ={},
+        root=tmp_path,
+        live_enabled=settings.live.enabled,
+    )
+    by_id = {item.id: item for item in gate.evaluate()}
+    assert by_id["mode_live"].met is False
+    assert "[live] enabled" in by_id["mode_live"].reason
+    monkeypatch.delenv("PUMPGROK_CONFIG")
+    monkeypatch.setenv("PUMPGROK_LIVE_ENABLE", "1")
+    assert load_settings().effective_mode == "paper"
+
+
+def test_adapter_precondition_always_unmet_in_this_release(tmp_path: Path) -> None:
+    """INV-C-03: precondition (8) is structurally unmet; nothing ships."""
+    gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
+    by_id = {item.id: item for item in gate.evaluate()}
+    assert by_id["adapter_registered"].met is False
+
+
+def test_live_gate_refuses_replay_source(tmp_path: Path) -> None:
+    """INV-C-09: the gate refuses any ledger containing source=replay rows."""
+    var = tmp_path / "var"
+    var.mkdir()
+    store = LedgerStore(var / "ledger.sqlite")
+    try:
+        _append(
+            store,
+            1,
+            "PositionClosed",
+            {
+                "envelope_source": "replay",
+                "source": "replay",
+                "mint": MINT,
+                "price_exit": "0.00005800",
+                "proceeds_lamports": 203000000,
+                "realized_pnl_lamports": 3000000,
+                "reason": "take_profit",
+            },
+            "2026-08-01T10:00:00Z",
+        )
+    finally:
+        store.close()
+    gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
+    by_id = {item.id: item for item in gate.evaluate()}
+    assert by_id["min_paper_days"].met is False
+    assert "replay ledger" in by_id["min_paper_days"].reason
+    assert by_id["performance_thresholds"].met is False
