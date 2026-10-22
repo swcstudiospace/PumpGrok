@@ -133,6 +133,9 @@ CLI_WRAPPER_RE = re.compile(r"^(?:uv\s+run\s+)?(?:pumpgrok\s+)?")
 # their own. Outside quotes a backslash escapes the next character. Inside single quotes nothing is
 # special. Inside double quotes a backslash escapes only $ ` " \ and newline. An option is an
 # unquoted --by or --reason word, so option-looking text inside quotes is value text.
+# A command is ineligible for any approval when it has an unescaped $ or backtick outside single
+# quotes, an unquoted newline (a second command), an unquoted # that starts a word (a comment that
+# hides quotes from this reader), or an unterminated quote. See shell_hazards.
 _SHELL_BLANKS = " \t"
 _SHELL_OPERATORS = ";&|<>()\n"
 _OPTION_NAMES = ("--by", "--reason")
@@ -146,13 +149,20 @@ class _Word(NamedTuple):
     is_option: bool
 
 
-def _scan_shell(text: str) -> tuple[list[_Word], list[int], bool]:
-    """Split text into shell words.
+class _Scan(NamedTuple):
+    words: list[_Word]
+    expansions: list[int]  # unescaped $ or backtick outside single quotes
+    newlines: list[int]  # unquoted newlines, including escaped ones
+    comments: list[int]  # unquoted # that starts a word
+    unterminated: bool
 
-    Returns (words, offsets of unescaped $ or backtick outside single quotes, unterminated quote).
-    """
+
+def _scan_shell(text: str) -> _Scan:
+    """Split text into shell words and record the offset of every hazard."""
     words: list[_Word] = []
     expansions: list[int] = []
+    newlines: list[int] = []
+    comments: list[int] = []
     unterminated = False
     i, n = 0, len(text)
     while i < n:
@@ -160,14 +170,20 @@ def _scan_shell(text: str) -> tuple[list[_Word], list[int], bool]:
             i += 1
             continue
         if text[i] in _SHELL_OPERATORS:
+            if text[i] == "\n":
+                newlines.append(i)
             words.append(_Word(i, i + 1, True, False))
             i += 1
             continue
+        if text[i] == "#":
+            comments.append(i)
         start, quoted = i, False
         while i < n and text[i] not in _SHELL_BLANKS and text[i] not in _SHELL_OPERATORS:
             ch = text[i]
             if ch == "\\":
                 quoted = True
+                if i + 1 < n and text[i + 1] == "\n":
+                    newlines.append(i + 1)
                 i += 2
             elif ch == "'":
                 quoted = True
@@ -198,7 +214,7 @@ def _scan_shell(text: str) -> tuple[list[_Word], list[int], bool]:
         end = min(i, n)
         is_option = not quoted and text[start:end] in _OPTION_NAMES
         words.append(_Word(start, end, False, is_option))
-    return words, expansions, unterminated
+    return _Scan(words, expansions, newlines, comments, unterminated)
 
 
 def _provenance_start(words: list[_Word]) -> int | None:
@@ -215,20 +231,31 @@ def _provenance_start(words: list[_Word]) -> int | None:
 
 
 def operation_key(text: str) -> str:
-    words, _expansions, unterminated = _scan_shell(text)
-    cut = None if unterminated else _provenance_start(words)
+    scan = _scan_shell(text)
+    cut = None if scan.unterminated else _provenance_start(scan.words)
     base = text if cut is None else text[:cut]
     return CLI_WRAPPER_RE.sub("", " ".join(base.split()), count=1)
 
 
-def shell_expansion(cmd: str) -> bool:
-    """True when the command has an unescaped $ or backtick outside single quotes, anywhere.
-
-    The shell evaluates such text before the command runs, so its literal text does not show what
-    will execute. Fail closed: no approval can cover it, even one naming the same text.
-    """
-    _words, expansions, _unterminated = _scan_shell(cmd)
-    return bool(expansions)
+def shell_hazards(cmd: str) -> list[str]:
+    """Reasons the command cannot be approved as one line; an empty list means it can."""
+    scan = _scan_shell(cmd)
+    reasons: list[str] = []
+    if scan.expansions:
+        reasons.append(
+            "shell expansion ($ or backtick) outside single quotes is evaluated before the "
+            "command runs; refused even with an approval naming this text"
+        )
+    if scan.newlines:
+        reasons.append("an unquoted newline starts a second command; one approved command is one line")
+    if scan.comments:
+        reasons.append(
+            "an unquoted # that starts a word is a shell comment, which hides the rest of the "
+            "line from review"
+        )
+    if scan.unterminated:
+        reasons.append("an unterminated quote; the command does not read as one shell command")
+    return reasons
 
 
 def group_actions(hits: list) -> list[dict]:
@@ -250,7 +277,7 @@ def approval_satisfies(approval, action: dict) -> bool:
         return False
     if any(not approval.get(f) for f in REQUIRED_APPROVAL_FIELDS):
         return False
-    if shell_expansion(action["cmd"]):
+    if shell_hazards(action["cmd"]):
         return False
     key = operation_key(action["cmd"])
     if not key or operation_key(approval["operation"]) != key:
@@ -296,11 +323,12 @@ def approval_problems(actions: list[dict], approvals: list) -> list[str]:
         if idx is None:
             trade = "trade" in action["categories"]
             cats = "/".join(action["categories"])
-            if shell_expansion(action["cmd"]):
+            hazards = shell_hazards(action["cmd"])
+            if hazards:
                 problems.append(
-                    f"[{action['index']}] ({cats}) {action['cmd']}: shell expansion ($ or "
-                    "backtick) outside single quotes is evaluated before the command runs; "
-                    "refused even with an approval naming this text (G-6)"
+                    f"[{action['index']}] ({cats}) {action['cmd']}: "
+                    + "; ".join(hazards)
+                    + " (G-6)"
                 )
                 continue
             note = (

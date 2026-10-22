@@ -359,3 +359,63 @@ class TestExpansionAnywhereInCommand:
         cmd = "git reset --hard '$(echo HEAD)'"
         r = _run(tmp_path, [cmd], [_approval(cmd)])
         assert r.returncode == 0, r.stderr
+
+
+class TestCommentAndNewlineHazards:
+    MULTI_LINE = (
+        "uv run pumpgrok killswitch clear --by human:op --reason #'\n"
+        "rm -rf var/ledger\n"
+        "#'"
+    )
+
+    def test_multi_line_comment_reproduction_is_refused_with_approval_for_killswitch(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [self.MULTI_LINE],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "comment" in r.stderr
+
+    def test_multi_line_comment_reproduction_is_refused_with_exact_approval(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [self.MULTI_LINE],
+            [_approval(self.MULTI_LINE, "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+
+    def test_single_line_comment_reproduction_is_refused(self, tmp_path):
+        cmd = "uv run pumpgrok killswitch clear --by human:op --reason #' then rm -rf var/ledger then #'"
+        r = _run(tmp_path, [cmd], [_approval("killswitch clear", "max_notional_sol=0.2")])
+        assert r.returncode == 1
+        assert "comment" in r.stderr
+
+    def test_unquoted_newline_is_refused_even_with_exact_approval(self, tmp_path):
+        cmd = "git reset --hard HEAD\nrm -rf var/ledger"
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 1
+        assert "newline" in r.stderr
+
+    def test_escaped_newline_outside_quotes_is_refused(self, tmp_path):
+        cmd = "git reset --hard HEAD\\\nrm -rf var/ledger"
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 1
+        assert "newline" in r.stderr
+
+    def test_hash_inside_double_quoted_reason_still_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "use #3"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_hash_inside_a_word_is_not_a_comment(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard --reason a#b"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 0, r.stderr
+        assert "comment" not in r.stderr
