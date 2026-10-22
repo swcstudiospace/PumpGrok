@@ -179,3 +179,44 @@ def test_one_shot_still_exits_zero_without_binding(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
+
+
+def test_serve_snapshot_and_body_reflect_kill_switch(tmp_path: Path) -> None:
+    """WR-04: an engaged kill switch trips the gauge and the health body together."""
+    from pumpgrok.replay.clock import format_ts_utc
+
+    clock = FixtureClock(start=1_700_000_000.0)
+    supervisor, metrics, store = build_serve_replay(
+        SMOKE,
+        _settings_kwargs()["filter"],
+        seed=20260101,
+        clock=clock,
+        ledger_path=tmp_path / "ledger.sqlite",
+    )
+    try:
+        assert supervisor.health_status()["kill_switch"] is False
+        assert "pumpgrok_kill_switch 0.0" in metrics.exposition().decode("utf-8")
+        store.append(
+            ts_utc=format_ts_utc(clock.now()),
+            source="replay",
+            correlation_id="desk",
+            idempotency_key="killswitch|test|set",
+            type="KillSwitchSet",
+            payload={"source": "replay", "origin": "tool", "reason": "test trip"},
+        )
+        body = supervisor.health_status()
+        assert body["kill_switch"] is True
+        assert body["status"] == "degraded"
+        assert "pumpgrok_kill_switch 1.0" in metrics.exposition().decode("utf-8")
+        store.append(
+            ts_utc=format_ts_utc(clock.now()),
+            source="replay",
+            correlation_id="desk",
+            idempotency_key="killswitch|test|cleared",
+            type="KillSwitchCleared",
+            payload={"source": "replay", "cleared_by": "human:tester"},
+        )
+        assert supervisor.health_status()["kill_switch"] is False
+        assert "pumpgrok_kill_switch 0.0" in metrics.exposition().decode("utf-8")
+    finally:
+        store.close()

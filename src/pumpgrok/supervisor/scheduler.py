@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import hashlib
 import logging
+import os
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -38,6 +39,7 @@ from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import REPLAY_ROOT, llm_request_for, run_replay
 from pumpgrok.risk.engine import RiskEngine, utc_day
+from pumpgrok.risk.killswitch import env_engaged
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.health import (
     HEALTH_FILE_INTERVAL_S,
@@ -99,6 +101,29 @@ def rollover_key(day_utc: str) -> str:
     day never appends a second rollover row.
     """
     return hashlib.sha256(f"DailyRollover|{day_utc}".encode()).hexdigest()
+
+
+def kill_switch_engaged(store: LedgerStore) -> bool:
+    """Shared kill-switch latch for the health body and the metrics gauge.
+
+    True when a ``KillSwitchSet`` row has no later ``KillSwitchCleared``, or
+    when ``PUMPGROK_KILLSWITCH`` engages in this process (fail-closed, same
+    fold as ``run_halt_status``). File and alert-command sources are enforced
+    at decision time by the risk engine; unreadable ledgers report engaged
+    rather than all-clear. ``health_status`` and the serve ``_snapshot`` both
+    read this so the body and the gauge can never disagree.
+    """
+    try:
+        engaged = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
+        for event in store.read(limit=None):
+            event_type = event.get("type")
+            if event_type == "KillSwitchSet":
+                engaged = True
+            elif event_type == "KillSwitchCleared":
+                engaged = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
+        return engaged
+    except Exception:
+        return True
 
 
 class LedgerUnavailable(Exception):
@@ -431,6 +456,10 @@ class Supervisor:
             }
         return freshness
 
+    def kill_switch_engaged(self) -> bool:
+        """Current kill-switch latch over this supervisor's store (fail-closed)."""
+        return kill_switch_engaged(self._store)
+
     def health_status(self) -> dict[str, Any]:
         """Current /healthz body."""
         return build_status(
@@ -438,7 +467,7 @@ class Supervisor:
             autonomy_level=self.autonomy_level(),
             ledger_status="CONSISTENT",
             ledger_source=self._source,
-            kill_switch=False,
+            kill_switch=self.kill_switch_engaged(),
             seats=self.seat_freshness(),
             uptime_s=self._clock.now() - self._started_at,
         )
@@ -715,7 +744,7 @@ def build_serve_replay(
                 seq = store.count()
             except Exception:
                 seq = 0
-            return {"ledger_seq": seq, "kill_switch": False}
+            return {"ledger_seq": seq, "kill_switch": kill_switch_engaged(store)}
 
         metrics = Metrics(snapshot=_snapshot)
         supervisor = Supervisor(
