@@ -133,3 +133,18 @@ def test_missing_llm_record_fails_the_run(tmp_path: Path) -> None:
     )
     with pytest.raises(ReplayMissingRecord, match="no recorded LLM outcome"):
         run_replay(dataset, FilterSettings(), ledger_path=tmp_path / "miss.sqlite")
+
+
+def test_verify_failure_removes_the_created_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-07: an append/verify failure removes the just-created ledger file."""
+    from pumpgrok.ledger.store import LedgerInconsistent
+
+    target = tmp_path / "bad.sqlite"
+    monkeypatch.setattr(LedgerStore, "verify", lambda self: False)
+    with pytest.raises(LedgerInconsistent, match="replay ledger failed verification"):
+        run_replay(SMOKE, FilterSettings(), ledger_path=target)
+    assert not target.exists()
+    assert not Path(str(target) + "-wal").exists()
+    assert not Path(str(target) + "-shm").exists()

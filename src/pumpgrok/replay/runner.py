@@ -11,6 +11,7 @@ stale prices as fresh.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import sqlite3
@@ -123,8 +124,9 @@ def run_replay(
         target = REPLAY_ROOT / source.name / "ledger.sqlite"
     else:
         target = Path(ledger_path)
-    # Created only after every pre-append check passes, so a failed run
-    # (corrupt fixture, stale gap, missing LLM record) leaves no file.
+    # Pre-append checks (manifest, gap, LLM record) run before any file is
+    # created, and an append/verify failure removes the just-created ledger,
+    # so a failed run leaves no file behind.
 
     with bind_correlation(cycle), bind_seat(CYCLE_SEAT):
         for stamp in stamps:
@@ -175,6 +177,13 @@ def run_replay(
             )
             if not store.verify():
                 raise LedgerInconsistent("replay ledger failed verification")
+        except Exception:
+            # A failed append/verify must not leave a file that file-existence
+            # checks mistake for a successful replay output: drop the
+            # just-created ledger (sqlite plus -wal/-shm) and re-raise.
+            with contextlib.suppress(OSError):
+                recreate_ledger_db(target)
+            raise
         finally:
             store.close()
         events_hash = ledger_events_hash(target)
