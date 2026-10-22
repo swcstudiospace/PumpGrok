@@ -25,7 +25,7 @@ from pumpgrok.config.settings import load_settings
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
-from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate
+from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate, Precondition
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -74,6 +74,58 @@ def test_live_mode_with_paper_overlay_still_runs_gate(tmp_path: Path, monkeypatc
     code = main(["run", "--mode", "live", "--once"])
     assert code == 3
     assert "LIVE GATE" in capsys.readouterr().err
+
+
+def test_precondition_1_requires_live_enabled_flag(tmp_path: Path) -> None:
+    """Row 1 needs effective mode live AND [live] enabled = true (R21, D4)."""
+    gate = LiveGate(
+        mode="live",
+        environ={"PUMPGROK_LIVE_ENABLE": "1"},
+        root=tmp_path,
+        live_enabled=False,
+    )
+    by_id = {item.id: item for item in gate.evaluate()}
+    assert by_id["mode_live"].met is False
+    assert "[live] enabled" in by_id["mode_live"].reason
+
+
+def test_precondition_1_met_when_mode_live_and_enabled(tmp_path: Path) -> None:
+    """Row 1 holds with mode live plus the flag; later rows still fail fast."""
+    gate = LiveGate(
+        mode="live",
+        environ={"PUMPGROK_LIVE_ENABLE": "1"},
+        root=tmp_path,
+        live_enabled=True,
+    )
+    by_id = {item.id: item for item in gate.evaluate()}
+    assert by_id["mode_live"].met is True
+    assert by_id["live_enable_env"].met is True
+
+
+@pytest.mark.parametrize("target", PRECONDITION_IDS)
+def test_live_gate_fails_fast_per_precondition(
+    tmp_path: Path, monkeypatch, capsys, target: str
+) -> None:
+    """Each precondition fails independently with exactly its own id on stderr.
+
+    Rows 5-9 are hard-coded False, so input-only variation cannot isolate
+    them; patching the evaluator to return all rows met except the target is
+    the approved proof. Row 8 stays structurally unmet (no live adapter
+    ships) and row 9 reads halt/kill/breaker state where readable.
+    """
+    monkeypatch.chdir(tmp_path)
+    rows = tuple(
+        Precondition(number=index, id=name, met=(name != target), reason="patched")
+        for index, name in enumerate(PRECONDITION_IDS, start=1)
+    )
+    monkeypatch.setattr(LiveGate, "evaluate", lambda self: rows)
+    code = main(["run", "--mode", "live", "--once"])
+    assert code == 3
+    err = capsys.readouterr().err
+    assert err.startswith("LIVE GATE: refusing to start in mode=live.")
+    unmet = [line for line in err.splitlines() if line.startswith("  [ ]")]
+    assert len(unmet) == 1
+    assert f" {target} " in unmet[0]
 
 
 def test_paper_mode_never_evaluates_gate(tmp_path: Path, monkeypatch) -> None:
