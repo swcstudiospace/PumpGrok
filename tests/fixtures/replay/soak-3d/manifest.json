@@ -1,0 +1,15 @@
+{
+  "dataset": "soak-3d",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-03T23:59:00.000Z",
+  "seed_hint": 20260101,
+  "sources": {
+    "rest": "synthesised",
+    "pumpportal": "synthesised"
+  },
+  "sha256": {
+    "events.jsonl": "18ac3097d5330ee5aa74b904fe8e8113c76ec04367d8fb6fcf9ae58c261f44de",
+    "llm.jsonl": "3595626baeebf4768aae09e2bfb4a944fca0ea34caf701a6dea03558fca5898e"
+  },
+  "notes": "Synthesised CI soak dataset (not recorded from live feeds). Two derived 44-char base58 mints, three UTC days of 60 s ticks (two midnight boundaries), one complete=true graduation mid-day-2, one creator with two launches, one recorded LLM ok outcome."
+}

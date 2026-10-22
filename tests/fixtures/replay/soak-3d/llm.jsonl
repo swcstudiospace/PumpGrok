@@ -1,0 +1,1 @@
+{"request_hash": "ebcb1276b5943c7c386b665e9eb6616a6cefbd4d3851a49ed3b07bd26a932d77", "outcome": "ok", "latency_s": 1.9, "response": {"model": "grok-replay", "verdict": "skip", "note": "synthesised soak-3d outcome"}}
