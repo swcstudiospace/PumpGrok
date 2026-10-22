@@ -1,8 +1,8 @@
 """JSONL journal export resumed from meta.export_seq (paper-engine.md 3.6, R21).
 
 Two targets share one cursor: the canonical per-day journal (one line per
-ledger event) and the vendor-shape ``trades.jsonl`` that
-``tools/pipeline_evidence.py`` and the vendor dashboard keep reading. The
+ledger event) and the vendor-shape ``trades.jsonl`` that the ``pumpgrok scout
+pipeline --candidates`` reader and the vendor dashboard keep reading. The
 hash-chained sqlite rows stay the single source of truth; export is derived.
 """
 
@@ -69,7 +69,7 @@ def _buy_line(event: dict[str, Any]) -> dict[str, Any]:
         "size_sol": round(int(payload.get("filled_lamports", 0)) / LAMPORTS_PER_SOL, 6),
         "entry_price": float(payload.get("price_avg", "0")) / 1000.0,
         "tx_hash": DRY_RUN_TX,
-        # Bare tx_hash keeps tools/pipeline_evidence.py --candidates matching;
+        # Bare tx_hash keeps pumpgrok scout pipeline --candidates matching;
         # the unique paper ref rides alongside per paper-engine 964.
         "venue_tx_ref": str(payload.get("venue_tx_ref", "")),
     }

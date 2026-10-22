@@ -1,6 +1,6 @@
 """Top-holder concentration snapshot over :class:`RpcClient` (STRUCT-002).
 
-Verbatim port of ``tools/holder_check.py`` ``holder_snapshot``, including the
+Verbatim port of the retired ``holder_check`` root oracle ``holder_snapshot``, including the
 sampled-only disclosure ``note`` byte-identical. Uses
 ``getTokenLargestAccounts`` on public RPC (R47).
 """

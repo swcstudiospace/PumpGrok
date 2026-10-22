@@ -24,7 +24,7 @@ Confirm the following exist:
 - `SETUP.md` (this file)
 - `agents/` (8 role files + README)
 - `skills/` (skill library)
-- `tools/` (Python helpers)
+- `src/pumpgrok/` (operator CLI and tool registry)
 - `rules/pumpgrok-team.mdc`
 - `scripts/check.sh`
 
@@ -123,16 +123,17 @@ Post this as the first message in the group:
 
 ## 7. Tools layer (optional but recommended)
 
-The `tools/` directory contains Python helpers that skills prefer over pure browser automation:
+The operator CLI lives in this repository (`src/pumpgrok/`); skills prefer its
+verbs over pure browser automation:
 
 ```bash
 cd /workspace/pumpgrok
-pip install requests   # only dependency for most tools
-python tools/ticket_helper.py --help
-python tools/authority_check.py --help
+uv sync
+uv run pumpgrok ticket next --help
+uv run pumpgrok tools onchain.authorities --help
 ```
 
-No API key is required. The tools work on public endpoints.  
+No API key is required. The reads work on public endpoints.
 A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability and can be passed with `--rpc`.
 
 ---
@@ -146,10 +147,10 @@ cd /workspace/pumpgrok/vendor/grokbot-pumpfun
 make install                  # creates .venv and installs requirements
 cp config.example.yaml config.yaml
 # Keep mode: dry-run. Do not set mode: live. Do not add wallet keys.
-python /workspace/pumpgrok/tools/pipeline_evidence.py --help
+uv run --project /workspace/pumpgrok pumpgrok scout pipeline --candidates --help
 ```
 
-This step is optional. Engagement stays **research**. No keys. `tools/pipeline_evidence.py` is the desk bridge: it reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. Pipeline verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
+This step is optional. Engagement stays **research**. No keys. `pumpgrok scout pipeline --candidates` is the desk bridge: it reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. Pipeline verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
 
 
 ## 9. Approvals & security
@@ -203,8 +204,8 @@ In the Trading Floor run:
 
 Optional tool checks:
 ```bash
-python /workspace/pumpgrok/tools/ticket_helper.py
-python /workspace/pumpgrok/tools/priority_fee.py
+pumpgrok ticket next
+pumpgrok tools onchain.priority_fee --help
 ```
 
 ---

@@ -228,8 +228,24 @@ else
   done
 fi
 
-if command -v python3 >/dev/null 2>&1; then
-  PUMPGROK_ROOT="${ROOT}" PUMPGROK_DESK="${DESK}" python3 "${ROOT}/tools/desk_state.py" ensure
+# Create the shared file-bus tree (mirrors the retired desk_state.py ensure:
+# eight children plus the seeded desk.md and risk-limits.md).
+for child in proposals briefs leads research journal incidents positions watch; do
+  mkdir -p "${DESK}/${child}"
+done
+if [[ ! -f "${DESK}/desk.md" ]]; then
+  cat > "${DESK}/desk.md" <<EOF
+# PumpGrok Desk Record
+Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Engagement: research
+Halt: false
+Throwaway wallet: not yet connected
+Daily loss limit: 5 %
+Notes: Cron state machine installed. Research only.
+EOF
+fi
+if [[ ! -f "${DESK}/risk-limits.md" ]]; then
+  printf '# Risk limits\n\nStatus: interview pending\nDefault paper size: TBD\n' > "${DESK}/risk-limits.md"
 fi
 
 echo

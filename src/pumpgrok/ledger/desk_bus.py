@@ -1,6 +1,6 @@
 """Atomic desk.md mirrors for halt and kill-switch rows (paper-engine.md 3.6, R26).
 
-Same visible contract as ``tools/desk_state.py`` (``Halt: true`` plus the
+Same visible contract as the retired ``desk_state`` root oracle (``Halt: true`` plus the
 ``FLOOR HALTED`` line the Hermes cron gate scans for), but every write goes
 through tmp-file plus fsync plus ``os.replace`` instead of an in-place write.
 """

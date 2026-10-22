@@ -230,7 +230,7 @@ uv run pip-audit -r /tmp/pumpgrok-req.txt --strict
 
 ### Solana JSON-RPC
 
-- `getRecentPrioritizationFees`: optional `addresses` array (max 128, base58). Result: array of `{slot, prioritizationFee}` with fee in micro-lamports per compute unit; the node caches up to 150 blocks. Omit params for an unfiltered list. The repo calls it with `[[]]` at `tools/priority_fee.py:45`; verify that an empty array means unfiltered on the chosen provider. Observed live on `api.mainnet.solana.com`: HTTP 200 with a list of `{prioritizationFee, slot}`. Source: `https://solana.com/docs/rpc/http/getrecentprioritizationfees`. Confidence: HIGH.
+- `getRecentPrioritizationFees`: optional `addresses` array (max 128, base58). Result: array of `{slot, prioritizationFee}` with fee in micro-lamports per compute unit; the node caches up to 150 blocks. Omit params for an unfiltered list. The port calls it with `[[]]` at `src/pumpgrok/tools/onchain/priority_fee.py:23`; verify that an empty array means unfiltered on the chosen provider. Observed live on `api.mainnet.solana.com`: HTTP 200 with a list of `{prioritizationFee, slot}`. Source: `https://solana.com/docs/rpc/http/getrecentprioritizationfees`. Confidence: HIGH.
 - `getTokenLargestAccounts(mint, {commitment})`: returns up to 20 token accounts; `value[]` items `{address, amount (raw string), decimals, uiAmount (deprecated), uiAmountString}`. Observed live on public mainnet: HTTP 429 `Too many requests for a specific RPC call`. Source: `https://solana.com/docs/rpc/http/gettokenlargestaccounts`. Confidence: HIGH for shape; the public endpoint cannot be used for it. Requires a paid provider.
 - `getAccountInfo` with `{"encoding":"jsonParsed"}`: observed live on mainnet for the wSOL mint address: HTTP 200 with `value.data.parsed` (`type: "mint"`, `decimals`, `supply`, `mintAuthority`, `freezeAuthority`), `program: "spl-token"`, `space: 82`. Parsed data exists only for programs the node knows; handle base64 `data` as the fallback. Source: `https://solana.com/docs/rpc/http/getaccountinfo`. Confidence: HIGH.
 - Public endpoint limits (`https://solana.com/docs/references/clusters`): 100 requests per 10 s per IP; 40 per single RPC; 40 concurrent connections; 100 MB per 30 s; HTTP 403 means blocked, 429 means slow down and honour `Retry-After`. "Not intended for production applications."
@@ -335,7 +335,7 @@ uv run pip-audit -r /tmp/pumpgrok-req.txt --strict
 **Repository references**
 - `docs/FOUNDATION_STACK.md` sections 1, 3.1, 3.2, 3.3, 7 (M-1 through M-10, U-1 through U-9)
 - `docs/TOOL_CATALOG.md` (market.price, market.ohlcv, onchain tools, exec.simulate, jupiter_quote)
-- `vendor/grokbot-pumpfun/src/monitor.py:63,133,219,238,256`, `vendor/grokbot-pumpfun/src/analyzer.py:84,86,134`, `tools/priority_fee.py:45`
+- `vendor/grokbot-pumpfun/src/monitor.py:63,133,219,238,256`, `vendor/grokbot-pumpfun/src/analyzer.py:84,86,134`, `src/pumpgrok/tools/onchain/priority_fee.py:23`
 
 ---
 *Stack research for: pumpgrok desk v2 (Solana memecoin paper-trading desk, Python 3.12)*

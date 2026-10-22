@@ -33,5 +33,5 @@ pumpgrok run --mode paper --replay tests/fixtures/replay/<dataset>
 - Missing human approval for a rule change: the old rule stands.
 
 ## References
-- Tools: `pumpgrok run --mode paper --replay`, `exec.simulate`, `tools/pipeline_evidence.py`
+- Tools: `pumpgrok run --mode paper --replay`, `exec.simulate`, `pumpgrok scout pipeline --candidates`
 - Companion skills: `desk-trade-lifecycle` (ticket path), `position-monitoring` (exit rules)

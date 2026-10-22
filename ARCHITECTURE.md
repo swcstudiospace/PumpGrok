@@ -11,7 +11,7 @@ PumpGrok turns a host agent runtime into an eight-role Solana memecoin trading d
 | `agents/*.md` | Role profiles and standing instructions, including the Global Security Constitution | Executable workers |
 | `skills/*/SKILL.md` | Named procedures the host loads by frontmatter `name` | A framework or SDK |
 | `rules/pumpgrok-team.mdc` | Always-applied constitution (`alwaysApply: true`) | Runtime enforcement code |
-| `tools/*.py` | Fail-closed JSON CLIs | Signers, senders, or wallets |
+| `src/pumpgrok/tools/*` | Fail-closed tool registry (JSON via guarded `pumpgrok` verbs) | Signers, senders, or wallets |
 | `vendor/grokbot-pumpfun/` | Vendored third-party screening engine (dry-run default; pinned upstream commit) | Part of the instruction pack; it never signs or sends |
 | Plugin manifests | How Cursor / Claude Code / Grok Build / Grok Bot discover the pack | A deployable service |
 
@@ -23,11 +23,11 @@ External systems named in skills or tools:
 
 | System | How PumpGrok uses it |
 |--------|----------------------|
-| Jupiter Swap API `https://api.jup.ag/swap/v2/order` | `tools/jupiter_quote.py` quote-only GET via `x-api-key`; never swap/send |
-| Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `authority_check.py` (`getAccountInfo`), `priority_fee.py` (`getRecentPrioritizationFees`), `holder_check.py` (`getTokenLargestAccounts`) |
+| Jupiter Swap API `https://api.jup.ag/swap/v2/order` | `market.price` quote-only read via the operator registry; never swap/send |
+| Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
 | Optional `--rpc` URL | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
-| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Called only by operator-run processes of the vendored `vendor/grokbot-pumpfun` engine (see `skills/grokbot-pipeline`); never by `tools/*.py` |
+| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Called only by operator-run processes of the vendored `vendor/grokbot-pumpfun` engine (see `skills/grokbot-pipeline`); never by the read-only tool registry |
 
 No database, message bus, or secrets manager is referenced. Tools take no API keys. There are no `os.environ` / `.env` readers in the instruction pack's own files; the vendored `vendor/grokbot-pumpfun` component keeps its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
 
@@ -42,7 +42,7 @@ flowchart LR
   Web[Browser sites]
   Vendor[Vendor engine dry-run]
   Jsonl[JSONL trades.jsonl]
-  Bridge[pipeline_evidence.py]
+  Bridge[scout pipeline]
 
   Human --> Host
   Host --> Pack
@@ -62,7 +62,7 @@ Nothing in this repo is started as a service.
 | Runtime | How it is started | Responsibility |
 |---------|-------------------|----------------|
 | Host agent | Operator opens the repo / installs the plugin | Loads agents, skills, and rules; talks on the Trading Floor; may invoke tools |
-| `python tools/*.py` | One-shot CLI from the repo root | Structured reads / paper journal appends |
+| `pumpgrok <verb>` | One-shot CLI from the repo root (`uv run pumpgrok ...`) | Structured reads / paper journal appends |
 | `./scripts/check.sh` | One-shot from the repo root | Offline lint of instruction files |
 | Vendor engine dry-run screen | Operator-run process from `vendor/grokbot-pumpfun`, procedure in `skills/grokbot-pipeline` | Appends screening-evidence JSONL only; signs nothing, sends nothing (`mode: live` is an upstream stub) |
 | Human wallet (throwaway, outside this repo) | Screen hand-off only (`tool-connections`) | Actual signing; never handled by PumpGrok files |
@@ -77,13 +77,13 @@ Dependency direction observed in the tree: **rules constrain agents; agents name
 plugin manifests  -->  agents/  skills/  rules/
 rules/pumpgrok-team.mdc  -->  agents/*  (roles + hard constraints)
 agents/*.md  -->  skills/*  (frontmatter skills: lists)
-skills/*  -->  tools/*.py  (documented CLI, not Python imports)
-tools/*.py  -->  Jupiter / Solana RPC / local trading-desk files
-tools/pipeline_evidence.py  -->  vendor JSONL (read only; no Python import of vendor)
+skills/*  -->  `pumpgrok` verbs  (documented CLI, not Python imports)
+tool registry  -->  Jupiter / Solana RPC / ledger files
+`pumpgrok scout pipeline`  -->  vendor JSONL via the export cursor (read only; no Python import of vendor)
 scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 ```
 
-**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The files are vendored in-tree (regular files, not a git submodule or gitlink) and pinned to commit `409e74c905faa0e9de42e918efe2c604f206856e`; see `vendor/grokbot-pumpfun/PUMPGROK.md`. The desk reaches the engine through operator-run dry-run processes (procedure in `skills/grokbot-pipeline`) and the JSON evidence bridge `tools/pipeline_evidence.py`, which reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component. Pipeline verdicts are never RISK clearance or human approval. SNIPER and EXIT remain the only exchange writers.
+**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The files are vendored in-tree (regular files, not a git submodule or gitlink) and pinned to commit `409e74c905faa0e9de42e918efe2c604f206856e`; see `vendor/grokbot-pumpfun/PUMPGROK.md`. The desk reaches the engine through operator-run dry-run processes (procedure in `skills/grokbot-pipeline`) and the JSON evidence bridge `pumpgrok scout pipeline --candidates`, which reads the exported `trades.jsonl` and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component. Pipeline verdicts are never RISK clearance or human approval. SNIPER and EXIT remain the only exchange writers.
 
 ### Agents (`agents/`)
 
@@ -112,19 +112,19 @@ Each directory has one `SKILL.md` whose frontmatter `name` must match the direct
 
 `desk-operating-model` is the constitution. `desk-trade-lifecycle` is the ticket procedure. `risk-audit` and `jupiter-routing` are the critical domain skills (`rules/pumpgrok-team.mdc`).
 
-### Tools (`tools/`)
+### Tools (`src/pumpgrok/tools/`)
 
-All tools: CLI, JSON on stdout, fail closed (`ok: false` + error), no private keys, no signing, no sends.
+All tools: registry-resolved, JSON on stdout, fail closed (`ok: false` + error), no private keys, no signing, no sends. Operator verbs call them through guarded seats; `pumpgrok tools <id> --help` prints one input schema.
 
-| Script | Outbound call or write | CLI (as implemented) |
-|--------|------------------------|----------------------|
-| `jupiter_quote.py` | GET Jupiter `/v6/quote` | `--input-mint` `--output-mint` `--amount` `--slippage-bps` |
-| `authority_check.py` | RPC `getAccountInfo` jsonParsed | `--mint` `--rpc` |
-| `priority_fee.py` | RPC `getRecentPrioritizationFees` | `--rpc` `--percentile` `--multiplier` |
-| `holder_check.py` | RPC `getTokenLargestAccounts` | `--mint` `--rpc` `--limit` |
-| `ticket_helper.py` | Local proposal files | subcommands `next`, `create --mint [--size] [--slippage]`, `list` |
-| `paper_sim.py` | Append journal markdown | `--desk` `--action` `--ticket` `--mint` `--size-usd` `--price` `--slippage-bps` `--reason` `--note` |
-| `pipeline_evidence.py` | Read vendor JSONL (`vendor/grokbot-pumpfun/logs/trades.jsonl`); no Python import of vendor | `--log` plus fail-closed JSON and a PIPELINE-EVIDENCE block |
+| Tool id | Outbound call or write | Port module |
+|--------|------------------------|------|
+| `market.price` | GET Jupiter order API | `tools/market/price.py` |
+| `onchain.authorities` | RPC `getAccountInfo` jsonParsed | `tools/onchain/authorities.py` |
+| `onchain.priority_fee` | RPC `getRecentPrioritizationFees` | `tools/onchain/priority_fee.py` |
+| `onchain.top_holders` | RPC `getTokenLargestAccounts` | `tools/onchain/top_holders.py` |
+| `journal.append` | Append ledger rows | `tools/journal/append.py` |
+| `exec.simulate` / `exec.place` | Paper fills only | `tools/exec/simulate.py`, `tools/exec/place.py` |
+| `pumpgrok scout pipeline --candidates` | Read exported `trades.jsonl`; no Python import of vendor | `ledger/export.py` cursor |
 
 ### Plugin manifests
 
@@ -144,7 +144,7 @@ Stages in `skills/desk-trade-lifecycle/SKILL.md` (strict order):
 1. Lead (SCOUT) — LEAD block with mint + source + UTC
 2. Audit (RISK) — fail-closed 10-check list; verdict CLEAR, CONDITIONAL, or KILL
 3. Context (optional WHALE + SHILL)
-4. Ticket creation (CHIEF) — `tools/ticket_helper.py`
+4. Ticket creation (CHIEF) — `pumpgrok ticket next|create|list`
 5. Human approval — message must contain ticket ID + mint + size + max slippage; analysis is not approval
 6. Single buy (SNIPER) — Jupiter quote + priority fee; send once
 7. Monitor (RUG) — alerts only
@@ -229,15 +229,15 @@ Do not put seed phrases, private keys, or live RPC credentials in git. Connectio
 |--------|-----------------|---------------|
 | New role constraint | `rules/pumpgrok-team.mdc` + matching standing instructions in every `agents/*.md` | Do not encode veto/approval in Python |
 | New procedure | `skills/<name>/SKILL.md` with matching `name`, then add it to the relevant agent `skills:` list | Do not put strategy or return claims in skills (`rules` forbid it) |
-| New structured read | `tools/*.py` JSON CLI, fail closed, no signing | Do not add send/swap/sign paths |
+| New structured read | Registry tool under `src/pumpgrok/tools/*`, fail closed, no signing | Do not add send/swap/sign paths |
 | Host packaging | The matching `plugin.json` / marketplace file | Do not invent a Bot-creation API |
 | Bootstrap steps | `SETUP.md` and `skills/pumpgrok-setup/SKILL.md` | Keep engagement at research in setup |
 | Lint rules | `scripts/check.sh` | Keep it offline |
 
-Keep tools read/prepare-only. Keep RISK KILL non-overridable. Keep SNIPER/EXIT as the only exchange writers.
+Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep SNIPER/EXIT as the only exchange writers.
 
 ## Unknowns
 
 - Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
-- `jupiter-routing` and `tools/README.md` show `priority_fee.py --rpc/--percentile/--multiplier` (default 1.2); the retired fee-cap flag is removed.
+- `jupiter-routing` shows `priority_fee --rpc/--percentile/--multiplier` (default 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.

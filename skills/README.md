@@ -33,7 +33,7 @@ Thirty-five portable skills that define how the PumpGrok desk operates.
 | solana-market-data | Price, liquidity, volume | SCOUT, WHALE, SNIPER, RUG, SIGNAL |
 | solana-api-reference | Compact endpoint reference | SNIPER |
 | solana-rpc-and-wallet | Safe wallet and RPC patterns | SNIPER, EXIT |
-| grokbot-pipeline | Dry-run screening engine output as desk evidence via the `tools/pipeline_evidence.py` bridge | everyone |
+| grokbot-pipeline | Dry-run screening engine output as desk evidence via the `pumpgrok scout pipeline --candidates` bridge | everyone |
 | browser-ops | CAPTCHA / session hygiene | SHILL |
 | hermes-cron-desk | File-bus cron state machine and profile isolation | CHIEF, SCOUT, RISK, RUG, JOURNAL |
 
@@ -56,5 +56,5 @@ Thirty-five portable skills that define how the PumpGrok desk operates.
 ## Conventions
 - Every skill has YAML frontmatter (`name`, `description`)
 - Bodies stay focused on purpose, procedure, output schema, and NEVER lists
-- Tools under `/workspace/pumpgrok/tools/` are preferred over pure browser when available
+- Registry tools (`pumpgrok tools <id> --help` for schemas) are preferred over pure browser when available
 - No strategy content, no return claims, no emoji

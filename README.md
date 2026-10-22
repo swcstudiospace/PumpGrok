@@ -11,20 +11,19 @@ Version 1.0.0.
 - Eight specialist roles: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL (`agents/`)
 - 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
-- Read-only CLI helpers for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence (`tools/pipeline_evidence.py`)
+- Read-only operator CLI (`pumpgrok`) for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
-The desk starts in **research** mode. **paper** logs simulated fills via `tools/paper_sim.py`. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
+The desk starts in **research** mode. **paper** logs simulated fills via `pumpgrok paper`. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
 
 ## Requirements
 
 - A host that can load `agents/`, `skills/`, and `rules/` (Grok Bot, Cursor, Claude Code, or Grok Build)
-- Python 3 (used by `scripts/check.sh` and `tools/`)
-- `requests` for most tools (`pip install requests`)
-- Optional: a private Solana RPC URL passed as `--rpc` (tools default to `https://api.mainnet-beta.solana.com`)
+- Python 3.12 via `uv` (`uv sync` installs the locked deps; `scripts/check.sh` is stdlib only)
+- Optional: a private Solana RPC URL passed as `--rpc` (reads default to `https://api.mainnet-beta.solana.com`)
 
-No lockfile or version pin is in this repository. No API keys are required for the public endpoints the tools call.
+A committed `uv.lock` pins every dependency. No API keys are required for the public endpoints the reads call.
 
 ## Setup and usage
 
@@ -38,26 +37,19 @@ From this repository:
 
 Exit 0 means the instruction tree looks healthy.
 
-Optional tools:
+Optional reads (schemas print without keys or spends):
 
 ```bash
-pip install requests
-
-python tools/jupiter_quote.py \
-  --input-mint So11111111111111111111111111111111111111112 \
-  --output-mint <TOKEN_MINT> \
-  --amount 100000000 \
-  --slippage-bps 100
-
-python tools/authority_check.py --mint <TOKEN_MINT>
-python tools/priority_fee.py --multiplier 1.2
-python tools/ticket_helper.py next
-python tools/holder_check.py --mint <TOKEN_MINT> --limit 20
-python tools/paper_sim.py --action buy --ticket SOL-20260827-001 \
-  --mint <TOKEN_MINT> --size-usd 25 --price 0.000012 --slippage-bps 80
+uv run pumpgrok tools market.price --help
+uv run pumpgrok tools onchain.authorities --help
+uv run pumpgrok tools onchain.priority_fee --help
+uv run pumpgrok ticket next
+uv run pumpgrok tools market.holders_snapshot --help
+uv run pumpgrok paper buy --help
+uv run pumpgrok scout pipeline --candidates --help
 ```
 
-Working files for a live desk belong under `/workspace/trading-desk/` (created by setup), not inside this repo. `tools/ticket_helper.py` falls back to `./trading-desk/proposals` when `/workspace` is absent.
+Working files for a live desk belong under `/workspace/trading-desk/` (created by setup), not inside this repo. Allocate and list tickets with `pumpgrok ticket next|create|list`, never loose files.
 
 Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from the plugin manifests. On runtimes without persistent Bots, `rules/pumpgrok-team.mdc` says to use subagents or role-labelled passes.
 
@@ -68,7 +60,7 @@ Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from t
 | `agents/` | Eight specialist Bot definitions plus standing instructions |
 | `skills/` | Twenty-three `SKILL.md` procedures |
 | `rules/` | Always-applied desk constitution (`pumpgrok-team.mdc`) |
-| `tools/` | Read/prepare-only Python CLIs (JSON on stdout; never sign or send), including the JSONL desk bridge `tools/pipeline_evidence.py` |
+| `src/pumpgrok/` | Operator CLI and tool registry (JSON on stdout; never sign or send) |
 | `scripts/` | `check.sh` repository linter |
 | `vendor/grokbot-pumpfun/` | In-tree vendored screening pipeline (regular files, not a git submodule or gitlink; pin `409e74c905faa0e9de42e918efe2c604f206856e`); notes in `vendor/grokbot-pumpfun/PUMPGROK.md`; desk-facing procedure in `skills/grokbot-pipeline` |
 | `plugin.json` | Root agent-plugins manifest |
@@ -82,7 +74,7 @@ Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from t
 - [SETUP.md](SETUP.md) — bootstrap procedure
 - [LICENSE](LICENSE) — GNU Affero General Public License v3.0
 
-Subdirectory READMEs: [agents/README.md](agents/README.md), [skills/README.md](skills/README.md), [rules/README.md](rules/README.md), [tools/README.md](tools/README.md), [scripts/README.md](scripts/README.md).
+Subdirectory READMEs: [agents/README.md](agents/README.md), [skills/README.md](skills/README.md), [rules/README.md](rules/README.md), [scripts/README.md](scripts/README.md).
 
 ## Ownership and license
 

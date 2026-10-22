@@ -43,5 +43,5 @@ Hand-off: CHIEF plus RISK
 - Social-only velocity with no holder evidence: not smart-money evidence.
 
 ## References
-- Tools: `tools/holder_check.py`; port: `src/pumpgrok/tools/onchain/holders.py`
+- Tools: `onchain.top_holders` (operator registry); port: `src/pumpgrok/tools/onchain/`
 - Handoff: CHIEF plus RISK; companion skill: `risk-audit` (the gate this informs)

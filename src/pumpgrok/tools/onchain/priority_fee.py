@@ -1,6 +1,6 @@
 """Prioritization-fee estimate over :class:`RpcClient` (STRUCT-002).
 
-Port of ``tools/priority_fee.py`` ``estimate_priority_fee``: percentile math
+Port of the retired ``priority_fee`` root oracle ``estimate_priority_fee``: percentile math
 is unchanged. ``recommended_lamports_per_cu`` is kept as an explicit alias
 for ``recommended_micro_lamports`` (decision per MIGRATION_MAP row 77: keep
 documented, never silently carried, never silently dropped).

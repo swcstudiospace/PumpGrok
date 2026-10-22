@@ -37,10 +37,9 @@ $PUMPGROK_DESK/
   watch/           RUG
 ```
 Ticket IDs are unique across every folder. Briefs and proposals reuse the lead ID.
-3. Commands:
+3. Commands (pre-flight first, then the ticket verbs):
 ```bash
-python "$PUMPGROK_ROOT/tools/desk_state.py" status
-python "$PUMPGROK_ROOT/tools/desk_state.py" pending-leads
+pumpgrok state status --seat <role>
 pumpgrok ticket next
 pumpgrok ticket create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
 ```
@@ -53,6 +52,6 @@ pumpgrok ticket create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
 - Cron attempting SNIPER/EXIT or an engagement change: refused by the job and by the CLI.
 
 ## References
-- State tool: `tools/desk_state.py` (status, pending-leads)
+- State tool: `pumpgrok state status --seat <role>` (ledger halt state); `pumpgrok ticket list` (pending tickets)
 - CLI pre-flight: `pumpgrok state status`
 - Jobs: `hermes/cron/jobs.yaml`; prompts: `hermes/cron/prompts/`

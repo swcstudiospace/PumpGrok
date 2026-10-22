@@ -44,5 +44,5 @@ UTC Timestamp: <ISO>
 - Flood of weak leads: prefer fewer, better-evidenced leads over volume.
 
 ## References
-- Tools: `tools/pipeline_evidence.py` (vendored pipeline candidates)
+- Tools: `pumpgrok scout pipeline --candidates` (vendored pipeline candidates)
 - Handoff: RISK via `risk-audit`; schema: LEAD block above

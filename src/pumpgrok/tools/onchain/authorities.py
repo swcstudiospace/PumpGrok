@@ -1,6 +1,6 @@
 """Mint authority check over :class:`RpcClient` (STRUCT-002).
 
-Port of ``tools/authority_check.py`` ``check_mint``. Output keys are
+Port of the retired ``authority_check`` root oracle ``check_mint``. Output keys are
 byte-identical to the oracle except the ``rpc`` URL echo is dropped: the
 endpoint URL must never leave the client boundary (T-02-01).
 """

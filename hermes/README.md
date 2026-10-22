@@ -16,8 +16,8 @@ This path reuses the existing box. It does not require a Desktop-class VPS.
 | `scripts/hermes-bootstrap.sh` | Create 8 isolated HERMES_HOME trees |
 | `scripts/hermes-install-cron.sh` | Register scout/risk/chief/rug jobs including scout-pipeline |
 | `scripts/hermes-verify-isolation.sh` | Isolation and file-bus checks |
-| `tools/desk_state.py` | Disk status for the state machine |
-| `tools/pipeline_evidence.py` | Vendor JSONL to PIPELINE-EVIDENCE for scout-pipeline |
+| `src/pumpgrok/ledger/desk_bus.py` | Atomic desk.md mirror for halt and kill-switch rows |
+| `pumpgrok scout pipeline` | Vendor JSONL to PIPELINE-EVIDENCE for scout-pipeline |
 | `skills/hermes-cron-desk/` | Skill the cron jobs load |
 
 ## Isolation model
@@ -90,7 +90,7 @@ The grokbot-pumpfun engine is retired (pin 409e74c in docs/VENDOR_PIN.md).
 Hermes cron never starts it, and never starts it in live mode.
 
 The `scout-pipeline` job (every 60m, owner scout, deliver `bot-chat:chief`)
-reads the archived dry-run JSONL log through `tools/pipeline_evidence.py`
+reads the archived dry-run JSONL log through `pumpgrok scout pipeline`
 and writes leads under `$PUMPGROK_DESK/leads/`.
 A missing log is normal when no dry-run archive is present. `tx_hash: dry_run`
 is not a fill. SNIPER and EXIT remain the only exchange writers after exact
@@ -101,7 +101,7 @@ human approval.
 ```bash
 cd /path/to/PumpGrok
 chmod +x scripts/hermes-bootstrap.sh scripts/hermes-install-cron.sh \
-         scripts/hermes-verify-isolation.sh tools/desk_state.py tools/ticket_helper.py
+         scripts/hermes-verify-isolation.sh
 
 ./scripts/hermes-bootstrap.sh --desk "$HOME/trading-desk" --copy-provider-env
 # edit ~/.hermes/profiles/chief/.env with a NEW Telegram token
@@ -141,7 +141,7 @@ hermes gateway restart            # or however this box already runs it
 Smoke:
 
 ```bash
-PUMPGROK_DESK="$HOME/trading-desk" python3 tools/desk_state.py status
+cd /path/to/PumpGrok && uv run pumpgrok state status --seat chief
 hermes -p scout cron list
 hermes -p scout cron run scout-pipeline
 ```
@@ -160,12 +160,10 @@ hermes -p scout cron run scout-pipeline
 ## Operator commands
 
 ```bash
-python3 tools/desk_state.py status
-python3 tools/desk_state.py pending-leads
-python3 tools/desk_state.py pending-tickets
-python3 tools/desk_state.py open-positions
-python3 tools/desk_state.py halt --reason "daily loss limit"
-python3 tools/ticket_helper.py next
-python3 tools/ticket_helper.py create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
-python3 tools/pipeline_evidence.py --candidates --block --limit 5
+pumpgrok state status --seat chief
+pumpgrok ticket list
+pumpgrok killswitch set --reason "daily loss limit"
+pumpgrok ticket next
+pumpgrok ticket create --mint <MINT> --ticket <LEAD-ID> --status PENDING_HUMAN
+pumpgrok scout pipeline --candidates --limit 5
 ```

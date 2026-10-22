@@ -71,7 +71,7 @@ Decision Tree:
 - Otherwise → structured brief to RISK + CHIEF.
 
 GrokBot pipeline:
-- Consume `tools/pipeline_evidence.py --candidates --block` as a candidate pool, not a second executor.
+- Consume `pumpgrok scout pipeline --candidates --limit 5` as a candidate pool, not a second executor.
 - Prefer type=buy dry_run hits as leads. High-score skips are negative context only; do not flood the desk with every skip.
 - Include the PIPELINE-EVIDENCE block in the LEAD body. Source may be the JSONL ts.
 - Pipeline total score is not clearance. Checker approve is not RISK CLEAR.

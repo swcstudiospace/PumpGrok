@@ -31,7 +31,7 @@ FORBIDDEN_KEYS='PRIVATE_KEY|SECRET_KEY|SEED|MNEMONIC|PHANTOM|WALLET_SECRET'
 
 [[ -f "${ROOT}/hermes/profiles.yaml" ]] || err "missing hermes/profiles.yaml"
 [[ -f "${ROOT}/hermes/cron/jobs.yaml" ]] || err "missing hermes/cron/jobs.yaml"
-[[ -f "${ROOT}/tools/desk_state.py" ]] || err "missing tools/desk_state.py"
+[[ -f "${ROOT}/src/pumpgrok/ledger/desk_bus.py" ]] || err "missing src/pumpgrok/ledger/desk_bus.py"
 [[ -f "${ROOT}/skills/hermes-cron-desk/SKILL.md" ]] || err "missing hermes-cron-desk skill"
 
 for prompt in scout-discover scout-pipeline risk-audit chief-pickup rug-watch chief-journal; do
@@ -103,12 +103,20 @@ for role in "${FORBIDDEN_ROLES[@]}"; do
   fi
 done
 
-if command -v python3 >/dev/null 2>&1; then
-  if ! PUMPGROK_ROOT="${ROOT}" PUMPGROK_DESK="${DESK}" python3 "${ROOT}/tools/desk_state.py" status >/tmp/pumpgrok-desk-status.json; then
-    err "desk_state.py status failed"
+if command -v uv >/dev/null 2>&1; then
+  STATUS_TMP="$(mktemp -d)"
+  # Settings refuses unknown PUMPGROK_* names (PUMPGROK_ROOT/_DESK belonged
+  # to the retired oracle), so scrub them before invoking the port CLI.
+  if (
+    cd "${STATUS_TMP}"
+    for name in $(env | cut -d= -f1 | grep '^PUMPGROK_' || true); do unset "$name"; done
+    uv run --project "${ROOT}" pumpgrok state status --seat chief >/tmp/pumpgrok-desk-status.json
+  ); then
+    ok "pumpgrok state status"
   else
-    ok "desk_state.py status"
+    err "pumpgrok state status failed"
   fi
+  rm -rf "${STATUS_TMP}"
 fi
 
 if command -v hermes >/dev/null 2>&1; then
