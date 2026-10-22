@@ -1,0 +1,150 @@
+"""Regression tests for check_rollback.py: approvals must name the destructive action (G-6)."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+GATES = Path(__file__).resolve().parents[1] / "gates"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load(name: str):
+    spec = importlib.util.spec_from_file_location(name, GATES / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def rollback_gate():
+    return _load("check_rollback")
+
+
+def _approval(operation: str, blast_radius: str = "max_notional_sol=0.2") -> dict:
+    return {
+        "operation": operation,
+        "approved_by": "human:operator",
+        "at": "2026-10-21T00:00:00Z",
+        "blast_radius": blast_radius,
+    }
+
+
+def _run(tmp_path: Path, commands: list[str], approvals: list) -> subprocess.CompletedProcess:
+    receipt = {
+        "commands": [{"cmd": cmd, "exit_code": 0} for cmd in commands],
+        "approvals": approvals,
+    }
+    path = tmp_path / "receipt.json"
+    path.write_text(json.dumps(receipt))
+    return subprocess.run(
+        [sys.executable, str(GATES / "check_rollback.py"), "--receipt", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+    )
+
+
+class TestApprovalNamesTheAction:
+    def test_unrelated_approval_does_not_authorize_destructive_command(self, tmp_path):
+        r = _run(tmp_path, ["git reset --hard HEAD~1"], [_approval("cache cleanup")])
+        assert r.returncode == 1
+        assert "no approval whose operation names this command" in r.stderr
+
+    def test_approval_naming_the_same_command_authorizes_it(self, tmp_path):
+        r = _run(tmp_path, ["git reset --hard HEAD~1"], [_approval("git reset --hard HEAD~1")])
+        assert r.returncode == 0, r.stderr
+
+    def test_approval_naming_only_the_verb_does_not_authorize(self, tmp_path):
+        r = _run(tmp_path, ["git reset --hard HEAD~1"], [_approval("git reset --hard")])
+        assert r.returncode == 1
+
+    def test_approval_for_a_different_target_does_not_authorize(self, tmp_path):
+        r = _run(tmp_path, ["rm -rf var/replay"], [_approval("rm -rf var/cache")])
+        assert r.returncode == 1
+        assert "rm -rf var/replay" in r.stderr
+
+    @pytest.mark.parametrize("operation", ["rm -rf var/rep", "rm -rf var", "rm -rf"])
+    def test_approval_naming_only_a_prefix_of_the_target_does_not_authorize(
+        self, tmp_path, operation
+    ):
+        r = _run(tmp_path, ["rm -rf var/replay"], [_approval(operation)])
+        assert r.returncode == 1
+
+    def test_chained_command_is_not_authorized_by_approval_of_its_first_part(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["rm -rf var/replay; rm -rf /"],
+            [_approval("rm -rf var/replay")],
+        )
+        assert r.returncode == 1
+
+    def test_trade_approval_for_another_operation_does_not_authorize_trade(self, tmp_path):
+        # A complete approval with a notional blast radius, but for a different action.
+        r = _run(
+            tmp_path,
+            ["uv run pumpgrok killswitch clear --by human:op --reason ok"],
+            [_approval("cache cleanup", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "max_notional_sol=<float>" in r.stderr
+
+    def test_approval_for_the_trade_authorizes_it(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["uv run pumpgrok killswitch clear --by human:op --reason ok"],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+
+class TestOneApprovalPerAction:
+    def test_one_statement_matching_three_patterns_needs_one_approval(self, rollback_gate):
+        cmd = 'sqlite3 var/ledger.sqlite "DELETE FROM events;"'
+        destructive, problems = rollback_gate.check_destructive(
+            [{"cmd": cmd, "exit_code": 0}], [_approval(cmd)]
+        )
+        assert len(destructive) == 1  # one command is one action ...
+        assert len(destructive[0]["descs"]) == 3  # ... though three patterns matched it
+        assert problems == []  # ... with one approval
+
+    def test_one_statement_with_one_approval_passes_end_to_end(self, tmp_path):
+        cmd = 'sqlite3 var/ledger.sqlite "DELETE FROM events;"'
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 0, r.stderr
+
+    def test_two_actions_need_two_approvals(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["rm -rf var/a", "git reset --hard"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+        assert "rm -rf var/a" in r.stderr
+
+    def test_two_actions_with_two_approvals_pass(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["rm -rf var/a", "git reset --hard"],
+            [_approval("rm -rf var/a"), _approval("git reset --hard")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_one_approval_cannot_cover_two_identical_commands(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard", "git reset --hard"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+
+    def test_non_object_approval_is_refused_not_crashed(self, tmp_path):
+        r = _run(tmp_path, ["git reset --hard HEAD"], ["git reset --hard HEAD"])
+        assert r.returncode == 1
+        assert "approvals[0]" in r.stderr

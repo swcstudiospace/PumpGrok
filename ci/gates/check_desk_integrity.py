@@ -51,7 +51,7 @@ LIVE_TOOL_PREFIX = "exec.live"
 SEAT_RE = re.compile(r"^bot-0[0-9]-[a-z-]+$")
 APP_RE = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-PLACEHOLDER_RE = re.compile(r"\{\{[A-Z_:]+\}\}")
+PLACEHOLDER_RE = re.compile(r"\{\{[^{}\r\n]+\}\}")
 
 KINDS = {"read", "write"}
 GATES = {"g5", "g6"}
@@ -180,6 +180,14 @@ def check_tool(tool: object, index: int) -> list[str]:
     if not isinstance(required, list):
         problems.append(f"{label} input.required must be a list")
         required = []
+    properties = schema.get("properties")
+    declared = properties if isinstance(properties, dict) else {}
+    for field in required:
+        if not isinstance(field, str) or field not in declared:
+            problems.append(
+                f"{label} requires {field!r} but input.properties does not declare it — "
+                "additionalProperties: false would reject every call"
+            )
     problems.extend(_gate_field_problems(label, gates, required))
     return problems
 
@@ -287,9 +295,10 @@ def check_pack(path: Path) -> list[str]:
         problems.append(f"{n} tool(s) — a pack holds {PACK_MIN_TOOLS} to {PACK_MAX_TOOLS}")
 
     if app:
+        prefix = app.replace("-", "_") + "_"
         for name in _names(tools):
-            if not name.startswith(f"{app}_"):
-                problems.append(f"tool '{name}' is not prefixed '{app}_'")
+            if not name.startswith(prefix):
+                problems.append(f"tool '{name}' is not prefixed '{prefix}'")
 
     seen: set[str] = set()
     for name in _names(tools):

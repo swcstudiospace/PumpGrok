@@ -53,9 +53,15 @@ def _match(pattern: str, path: str) -> bool:
         return path == prefix or path.startswith(prefix + "/")
 
     if "**/" in pattern:
-        # '**/*.rs' matches 'a/b/c.rs' and 'c.rs': the tail must match some path suffix.
-        tail = pattern.split("**/", 1)[1]
-        parts = path.split("/")
+        # 'mine/**/*.py' keeps its 'mine/' anchor: the head must be a whole directory prefix, so
+        # 'other/private.py' never matches. '**/*.rs' has an empty head and matches at any depth.
+        # The tail must match some suffix of the remainder: 'a/b/c.rs' and 'c.rs' both match.
+        head, tail = pattern.split("**/", 1)
+        if head and not head.endswith("/"):
+            return False
+        if not path.startswith(head):
+            return False
+        parts = path[len(head) :].split("/")
         return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
 
     if "/" not in pattern:
@@ -79,9 +85,11 @@ def resolve_owner(path: str, manifest: dict) -> tuple[str | None, bool]:
 
 
 def changed_files(base: str) -> list[str]:
+    # --no-renames: with rename detection, --name-only lists only a rename's destination, so the
+    # source owner would never be checked. Both sides of a move must reach classify_files.
     try:
         out = subprocess.run(
-            ["git", "diff", "--name-only", f"{base}...HEAD"],
+            ["git", "diff", "--name-only", "--no-renames", f"{base}...HEAD"],
             capture_output=True,
             text=True,
             check=True,

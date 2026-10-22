@@ -120,8 +120,50 @@ def check_plan(plan: str | None) -> list[str]:
     return problems
 
 
-def approval_problems(approvals: list, destructive_count: int) -> list[str]:
-    """Each destructive op needs its own complete approval record."""
+# An approval counts for a command only when its operation names that exact command. Two
+# things are ignored: the pumpgrok CLI wrapper ("uv run pumpgrok ...") and trailing --by/--reason
+# provenance flags, which the CLI records itself. Everything else must match, so a chained
+# command ("a; b"), a prefix of the target ("rm -rf var/rep") or the bare verb ("rm -rf") never
+# authorizes the full command.
+CLI_WRAPPER_RE = re.compile(r"^(?:uv\s+run\s+)?(?:pumpgrok\s+)?")
+PROVENANCE_SUFFIX_RE = re.compile(r"(?:\s+--(?:by|reason)\s+\S+)+$")
+
+
+def operation_key(text: str) -> str:
+    key = " ".join(str(text).split())
+    key = CLI_WRAPPER_RE.sub("", key, count=1)
+    return PROVENANCE_SUFFIX_RE.sub("", key, count=1)
+
+
+def group_actions(hits: list) -> list[dict]:
+    """One destructive action per command, however many patterns it matched."""
+    actions: dict[int, dict] = {}
+    for idx, cmd, category, desc in hits:
+        action = actions.setdefault(
+            idx, {"index": idx, "cmd": cmd, "categories": [], "descs": []}
+        )
+        if category not in action["categories"]:
+            action["categories"].append(category)
+        action["descs"].append(desc)
+    return [actions[idx] for idx in sorted(actions)]
+
+
+def approval_satisfies(approval, action: dict) -> bool:
+    """A complete approval whose operation names this action (and, for trades, its notional)."""
+    if not isinstance(approval, dict):
+        return False
+    if any(not approval.get(f) for f in REQUIRED_APPROVAL_FIELDS):
+        return False
+    key = operation_key(action["cmd"])
+    if not key or operation_key(approval["operation"]) != key:
+        return False
+    if "trade" in action["categories"]:
+        return bool(TRADE_BLAST_RADIUS_RE.match(str(approval["blast_radius"])))
+    return True
+
+
+def approval_problems(actions: list[dict], approvals: list) -> list[str]:
+    """Each destructive action needs its own complete approval that names it (G-6)."""
     if not approvals:
         return [
             "destructive operations with NO approvals recorded.\n"
@@ -129,46 +171,60 @@ def approval_problems(approvals: list, destructive_count: int) -> list[str]:
         ]
     problems: list[str] = []
     for i, ap_rec in enumerate(approvals):
+        if not isinstance(ap_rec, dict):
+            problems.append(
+                f"approvals[{i}] is not an object - an approval records what was "
+                "approved, by whom, when, and the blast radius"
+            )
+            continue
         missing = [f for f in REQUIRED_APPROVAL_FIELDS if not ap_rec.get(f)]
         if missing:
             problems.append(
                 f"approvals[{i}] is missing {missing} — an approval records what was "
                 "approved, by whom, when, and the blast radius"
             )
-    if len(approvals) < destructive_count:
-        problems.append(
-            f"{destructive_count} destructive operation(s) but only {len(approvals)} "
-            "approval(s) — each needs its own"
+    # Greedy assignment is exact here: commands with equal text have equal categories, and an
+    # approval names exactly one command text, so eligibility sets never overlap across actions.
+    used: set[int] = set()
+    for action in actions:
+        idx = next(
+            (
+                i
+                for i, ap in enumerate(approvals)
+                if i not in used and approval_satisfies(ap, action)
+            ),
+            None,
         )
+        if idx is None:
+            trade = "trade" in action["categories"]
+            cats = "/".join(action["categories"])
+            note = (
+                " and whose blast_radius is 'max_notional_sol=<float>' - the notional "
+                "the human approved (G-6)"
+                if trade
+                else " (G-6)"
+            )
+            problems.append(
+                f"[{action['index']}] ({cats}) {action['cmd']}: no approval whose "
+                f"operation names this command{note}"
+            )
+        else:
+            used.add(idx)
     return problems
 
 
-def trade_approval_problems(destructive: list, approvals: list) -> list[str]:
-    """A trade op needs an approval naming the human-accepted max notional."""
-    trade_hits = [hit for hit in destructive if hit[2] == "trade"]
-    if trade_hits and not any(
-        isinstance(a, dict) and TRADE_BLAST_RADIUS_RE.match(str(a.get("blast_radius") or ""))
-        for a in approvals
-    ):
-        return [
-            f"{len(trade_hits)} trade operation(s) need an approval whose blast "
-            "radius is 'max_notional_sol=<float>' — the notional the human "
-            "approved (G-6)"
-        ]
-    return []
-
-
-def check_destructive(commands: list, approvals: list) -> tuple[list, list[str]]:
-    """G-6: match destructive ops and verify each one is approved."""
-    destructive = find_matches(commands, DESTRUCTIVE_PATTERNS)
-    if destructive:
-        print(f"G-6 — {len(destructive)} destructive operation(s) detected:")
-        for idx, cmd, category, desc in destructive:
-            print(f"    [{idx}] ({category}) {cmd}")
-            print(f"         {desc}")
-    problems = approval_problems(approvals, len(destructive)) if destructive else []
-    problems.extend(trade_approval_problems(destructive, approvals))
-    return destructive, problems
+def check_destructive(commands: list, approvals: list) -> tuple[list[dict], list[str]]:
+    """G-6: group matches into actions and verify each action has its own approval."""
+    actions = group_actions(find_matches(commands, DESTRUCTIVE_PATTERNS))
+    if actions:
+        print(f"G-6 — {len(actions)} destructive operation(s) detected:")
+        for action in actions:
+            cats = "/".join(action["categories"])
+            print(f"    [{action['index']}] ({cats}) {action['cmd']}")
+            for desc in dict.fromkeys(action["descs"]):
+                print(f"         {desc}")
+    problems = approval_problems(actions, approvals) if actions else []
+    return actions, problems
 
 
 def check_deployments(commands: list, receipt: dict) -> tuple[list, list[str]]:
