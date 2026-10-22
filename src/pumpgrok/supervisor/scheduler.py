@@ -15,6 +15,7 @@ adapter, writing ``var/replay/<dataset>/ledger.sqlite`` with no network.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -29,12 +30,12 @@ from pumpgrok.engine.pipeline import decide_replay
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.json import bind_seat
-from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
+from pumpgrok.replay.clock import FixtureClock, format_ts_utc, parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import REPLAY_ROOT, llm_request_for, run_replay
-from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.engine import RiskEngine, utc_day
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.health import (
     HEALTH_FILE_INTERVAL_S,
@@ -84,6 +85,15 @@ LEDGER_BUFFER_CAP = 1000
 def cycle_timeout_s(cadence_s: float) -> float:
     """Cycle timeout: max(30 s, 4 x cadence), counted as a crash."""
     return max(30.0, 4.0 * cadence_s)
+
+
+def rollover_key(day_utc: str) -> str:
+    """Idempotency per UTC day: one ``DailyRollover`` per day (D6).
+
+    Same domain-separated shape as ``risk.engine.halt_key`` so a replayed
+    day never appends a second rollover row.
+    """
+    return hashlib.sha256(f"DailyRollover|{day_utc}".encode()).hexdigest()
 
 
 class LedgerUnavailable(Exception):
@@ -244,6 +254,7 @@ class Supervisor:
         self._relay_cursor = 0
         self._started_at = clock.now()
         self._last_health_write = 0.0
+        self._last_rollover_day: str | None = None
 
     @property
     def clock(self) -> Clock:
@@ -336,6 +347,7 @@ class Supervisor:
         self._relay_cursor = await relay_tail(
             self._store, self._notifier, self._clock, self._relay_cursor
         )
+        self._emit_rollover(now)
         healthy_interval = now - self._last_health_write >= HEALTH_FILE_INTERVAL_S
         if self._health_path is not None and healthy_interval:
             self._last_health_write = now
@@ -343,6 +355,45 @@ class Supervisor:
                 write_health_json(str(self._health_path), self.health_status())
             except OSError as exc:
                 log.warning("health.json write failed: %s", exc)
+
+    def _emit_rollover(self, now: float) -> None:
+        """Append one ``DailyRollover`` per UTC day, including the first day seen.
+
+        Emitted here, outside the seat cycles: ``run_once_replay`` narrows its
+        read-only assertion to allow exactly these day-keyed rows (5.2
+        conflict), so seat cycles stay read-only while the ledger still
+        records one rollover per UTC day (D6).
+        """
+        day = utc_day(now)
+        if self._last_rollover_day == day:
+            return
+        try:
+            self._store.append(
+                ts_utc=format_ts_utc(now),
+                source=self._source,
+                correlation_id=self._correlation_id,
+                idempotency_key=rollover_key(day),
+                type="DailyRollover",
+                payload={
+                    "source": self._source,
+                    "day_utc": day,
+                    "day_start_equity_lamports": self._day_start_equity(),
+                    "prior_day_json": "",
+                    "open_positions": [],
+                },
+            )
+        except Exception as exc:
+            log.warning("daily rollover append failed: %s", exc)
+            return
+        self._last_rollover_day = day
+
+    def _day_start_equity(self) -> int:
+        """Day-start equity for the rollover row; 0 when the ledger is fresh."""
+        try:
+            meta = self._store.get_meta("initial_equity_lamports")
+            return int(meta) if meta is not None else 0
+        except Exception:
+            return 0
 
     def _sync_risk_latch(self) -> None:
         """Mirror the latch set into RiskEngine so buys refuse desk-wide."""
@@ -572,7 +623,21 @@ def run_once_replay(
                 continue
             raise RuntimeError(f"seat {seat} cycle crashed")
         if after != before:
-            raise RuntimeError(f"replay seat cycles must be read-only: {before} -> {after}")
+            # 5.2 conflict resolved here (not in the seat cycles): seat cycles
+            # stay read-only, but `_end_of_tick` emits the day-keyed
+            # DailyRollover for the fixture day. Only those rows may appear.
+            extra = store.read(limit=None)[before:]
+            for row in extra:
+                payload = row.get("payload") or {}
+                day = str(payload.get("day_utc", ""))
+                if row.get("type") != "DailyRollover" or not day:
+                    raise RuntimeError(
+                        f"replay seat cycles must be read-only: {before} -> {after}"
+                    )
+                if row.get("idempotency_key") != rollover_key(day):
+                    raise RuntimeError(
+                        f"replay seat cycles must be read-only: {before} -> {after}"
+                    )
         if not supervisor.ready():
             raise RuntimeError("supervisor not ready after full cycle")
     finally:

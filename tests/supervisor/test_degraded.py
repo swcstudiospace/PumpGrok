@@ -31,6 +31,7 @@ from pumpgrok.supervisor.scheduler import (
     LEDGER_BUFFER_CAP,
     DegradedState,
     LedgerUnavailable,
+    rollover_key,
     run_once_replay,
 )
 from pumpgrok.supervisor.seat_task import CLOCK_SKEW_S, ClockSkew, append_escalation
@@ -160,12 +161,15 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
     try:
         assert store.verify() is True
         rows = store.read(limit=None)
-        assert len(rows) == 1
+        assert len(rows) == 2
         assert rows[0]["type"] == "JournalNote"
         assert "engine decision=skip reason=data_unavailable" in str(rows[0]["payload"]["text"])
+        rollover = rows[1]
+        assert rollover["type"] == "DailyRollover"
+        assert rollover["payload"]["day_utc"] == "2026-01-01"
+        assert rollover["idempotency_key"] == rollover_key("2026-01-01")
     finally:
         store.close()
-
 
 def test_smoke_cycle_cli_exits_0_with_no_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
@@ -176,7 +180,9 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
     assert ledger.is_file()
     store = LedgerStore(str(ledger))
     try:
-        assert store.count() == 1
+        assert store.count() == 2
+        rows = store.read(limit=None)
+        assert [row["type"] for row in rows] == ["JournalNote", "DailyRollover"]
     finally:
         store.close()
     captured = capsys.readouterr()

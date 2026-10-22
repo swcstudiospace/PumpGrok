@@ -111,6 +111,19 @@ class FixtureClock:
             timer.fire()
         self._now = ts
 
+    def jump(self, delta_s: float) -> None:
+        """Move virtual time by `delta_s` without reading any host clock.
+
+        Replay/diagnostic only (INV-R-22 skew tests): a negative delta models
+        an NTP step or a stale clock source. Forward jumps fire due timers
+        exactly like `advance_to`; backward jumps only move `_now` (pending
+        timers keep their `when` and fire on the next forward advance).
+        """
+        if delta_s >= 0:
+            self.advance_to(self._now + delta_s)
+            return
+        self._now += delta_s
+
     def _schedule(self, delay: float, fire: Callable[[], None]) -> _Timer:
         if delay < 0:
             raise ValueError("delay must be non-negative")
