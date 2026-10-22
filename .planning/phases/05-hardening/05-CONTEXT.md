@@ -43,6 +43,21 @@ OBS-001/002 and SEC-001/002 are Phase 1; consumed here, not rebuilt.
 - Nine runbooks (OBS-004), not seven. Harness is `tests/harness/faults.py` (FOUND-012), not `tests/fault_injection.py`.
 - SAFETY INV-R-20 test moves `tests/ledger/` to `tests/degradation/`; its section 6 row is updated.
 - Upgrade plan 9.2 deletes `tools/README.md` in batch 2.3; Phase 5 deletes what remains.
+
+### Recorded decisions (non-interactive run; recommended option of 05-RESEARCH.md D1-D11)
+- D1: `docker compose up -d pumpgrok` serves a long-running `pumpgrok run --mode paper --serve` that replays a recorded dataset in a loop and serves `/healthz` and `/metrics`; health body labelled `ledger_source=replay`; INV-C-11 amended so `--serve` binds `PUMPGROK_HEALTH_PORT`; Phase 1 criterion 4 amended to pass explicit one-shot args (`docker compose run --rm pumpgrok run --mode paper --once --replay ...`). Restart policy `unless-stopped` only with `--serve` (D9).
+- D2: implement all owning-test files named in SAFETY_INVARIANTS.md section 6; no narrowing of `test_invariant_matrix_tests_exist`.
+- D3: census keeps the literal command, adds `--hidden`, excludes `.planning/**` as historical; `tests/test_tools_cli.py` is migrated; AGENTS.md GSD block is not hand-edited (edit `.planning/research/STACK.md` and regenerate if needed).
+- D4: adopt code precondition ids from `live_gate.py:32-41` and update the matrix; amend R21 so precondition 1 reads `[live] enabled`.
+- D5: runbooks document `pumpgrok killswitch flatten --reason <text>`; no new `--flatten` flag.
+- D6: DailyRollover emitted once per UTC day including the first day (three in soak-3d).
+- D7: add a `push` trigger to `security-pr.yml`; list no check pre-emptively; SEC-005 evidence is the first main-branch run or a SECURITY.md expiry row for checks that genuinely fail; if `gh` cannot authenticate, report the criterion as blocked rather than faking it.
+- D8: keep fail-closed curve-layout behaviour; record REVIEW; no live RPC probe.
+- D9: see D1.
+- D10: keep `ubuntu-latest`; the guard in `ci/tests/test_security_workflows.py` stays.
+- D11: add nightly `schedule:` to `ci.yml` for `pytest -q -m slow tests/soak` with `PUMPGROK_REQUIRE_SOAK=1`.
+- Dependency gate: `prometheus-client` is SUS in the legitimacy audit. The plan MUST keep a `checkpoint:human-verify` task before `uv add`; execution halts there and is NOT approved by the orchestrator.
+- Tooling: uv 0.13.4 is the pinned tooling version (R49 V-2); install it before locking.
 </decisions>
 
 <code_context>
