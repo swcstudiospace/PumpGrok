@@ -110,12 +110,18 @@ def check_text(name: str, text: str) -> list[str]:
             violations.append(f"{name}: {line!r}: curl is never allowed in runbooks")
             continue
         if first == "pumpgrok":
-            if len(tokens) < 2 or tokens[1].startswith("-") or tokens[1] not in KNOWN_PUMPGROK_VERBS:
+            if (
+                len(tokens) < 2
+                or tokens[1].startswith("-")
+                or tokens[1] not in KNOWN_PUMPGROK_VERBS
+            ):
                 violations.append(f"{name}: {line!r}: unknown pumpgrok verb")
             continue
         if first == "docker":
             if len(tokens) < 3 or tokens[1] != "compose" or tokens[2] not in DOCKER_LIFECYCLE_VERBS:
-                violations.append(f"{name}: {line!r}: docker is allowed only as docker compose <lifecycle>")
+                violations.append(
+                    f"{name}: {line!r}: docker is allowed only as docker compose <lifecycle>"
+                )
             continue
         if first == "uv":
             if name not in DEV_LOOP_FILES:
@@ -127,8 +133,10 @@ def check_text(name: str, text: str) -> list[str]:
             continue
         if first == "bash" and len(tokens) > 1 and tokens[1].startswith("scripts/"):
             continue
-        if first == "python3" and len(tokens) > 1 and (
-            tokens[1].startswith("ci/gates/") or tokens[1].startswith("scripts/")
+        if (
+            first == "python3"
+            and len(tokens) > 1
+            and (tokens[1].startswith("ci/gates/") or tokens[1].startswith("scripts/"))
         ):
             continue
         if first in {"cp", "sed", "awk", "ed", "vi", "vim", "nano", "emacs"}:

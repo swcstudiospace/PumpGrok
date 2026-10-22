@@ -146,9 +146,12 @@ Seam command run this session: `node /root/.agents/gsd-core/bin/gsd-tools.cjs qu
 # Source: prometheus_client public API (training knowledge, not verified in this session) [ASSUMED]
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 
+
 def build_registry() -> CollectorRegistry:
     registry = CollectorRegistry(auto_describe=True)
-    Counter("pumpgrok_bot_crashes", "Seat crashes", ["seat"], registry=registry)  # exposed as ..._total
+    Counter(
+        "pumpgrok_bot_crashes", "Seat crashes", ["seat"], registry=registry
+    )  # exposed as ..._total
     # ... remaining families
     return registry
 ```

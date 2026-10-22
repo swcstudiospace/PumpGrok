@@ -145,6 +145,7 @@ SEAT: ContextVar[str | None] = ContextVar("pumpgrok_seat", default=None)
 TICKET: ContextVar[str | None] = ContextVar("pumpgrok_ticket", default=None)
 PROMOTED_FIELDS = frozenset({"event", "correlation_id", "seat", "ticket_id", "mint", "duration_ms"})
 
+
 @contextmanager
 def bind_seat(seat: str) -> Iterator[None]:
     token = SEAT.set(seat)
@@ -328,6 +329,7 @@ async def tick_once(self) -> dict[str, str]:
         child = asyncio.ensure_future(task.run_guarded(self._seat_context(seat)))
         ...
 
+
 async def serve_forever(self) -> int:
     """Tick until stop; shutdown owns snapshot/export/health instead."""
     while not self._stop.is_set():
@@ -463,8 +465,14 @@ class FaultInjector:
     ...
     """
 
-    def __init__(self, mode: FaultMode, *, at_index: int = 0, stale_by_s: float = 3600.0, retry_after_s: float = 1.0) -> None:
-        ...
+    def __init__(
+        self,
+        mode: FaultMode,
+        *,
+        at_index: int = 0,
+        stale_by_s: float = 3600.0,
+        retry_after_s: float = 1.0,
+    ) -> None: ...
 
     def apply(self, events: Iterable[dict[str, Any]]) -> Iterator[dict[str, Any]]:
         for index, event in enumerate(events):
@@ -489,6 +497,7 @@ class FaultInjector:
 # tests/supervisor/test_degraded.py:38-44 (verbatim, abridged)
 SMOKE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
 
+
 def _store(tmp_path: Path) -> LedgerStore:
     path = tmp_path / "ledger.sqlite"
     recreate_ledger_db(path)
@@ -509,6 +518,7 @@ def _store(tmp_path: Path) -> LedgerStore:
 ```python
 # tests/replay/test_runner_determinism.py:20, 38-42 (verbatim)
 SMOKE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
+
 
 def test_two_seeded_runs_produce_identical_hashes(tmp_path: Path) -> None:
     first = run_replay(SMOKE, FilterSettings(), ledger_path=tmp_path / "a.sqlite")
@@ -532,8 +542,10 @@ BASE_EPOCH = 1767225600.0  # 2026-01-01T00:00:00Z
 STEP_S = 15.0
 COUNT = 41
 
+
 def _lines(records: list[dict[str, Any]]) -> bytes:
     return ("".join(json.dumps(record) + "\n" for record in records)).encode("utf-8")
+
 
 def main() -> None:
     out_dir = Path(__file__).resolve().parent
@@ -554,6 +566,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
 BYPASS_SNIPPETS = ["|| true", "|| exit 0", "2>/dev/null", "--exit-zero", "--dry-run"]
+
 
 def _load_yaml(name: str) -> dict:
     return yaml.safe_load((WORKFLOWS / name).read_text())
@@ -644,7 +657,17 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 # The only module allowed to read wall time or sleep on a real loop (paper-engine 4.1).
 CLOCK_ALLOWLIST = frozenset({"replay/clock.py"})
 ...
-_CLOCK_PRIMITIVES = frozenset({"asyncio.sleep", "asyncio.timeout", "asyncio.wait_for", "time.time", "time.monotonic", "datetime.now", ...})
+_CLOCK_PRIMITIVES = frozenset(
+    {
+        "asyncio.sleep",
+        "asyncio.timeout",
+        "asyncio.wait_for",
+        "time.time",
+        "time.monotonic",
+        "datetime.now",
+        ...,
+    }
+)
 ```
 
 - Add a test in the same file: no module under `src/pumpgrok/core/` or `src/pumpgrok/risk/` imports `prometheus_client` (AST `Import`/`ImportFrom`, using `_scan_file` at `:78` as the template).
