@@ -25,8 +25,9 @@ WORKDIR /app
 # Read-only replay input for the default CMD (research Pitfall 5). Only this fixture is copied.
 COPY tests/fixtures/replay/smoke /app/tests/fixtures/replay/smoke
 USER pumpgrok
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PUMPGROK_HEALTH__PORT', '8080') + '/healthz', timeout=4)"]
+# No image-level HEALTHCHECK: the default command is the one-shot replay cycle,
+# which never binds a port. Liveness for the serve path lives in
+# docker-compose.yml (the /healthz probe on 127.0.0.1:8080).
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["pumpgrok"]
 # One skip-only replay cycle, then exit 0 (R50). Ledger output goes to /app/var, the only
