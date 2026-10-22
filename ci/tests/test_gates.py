@@ -974,3 +974,141 @@ class TestEveryGateIsWired:
                 modules.add(node.module.split(".")[0])
         allowed = set(sys.stdlib_module_names) | {"yaml"}
         assert modules <= allowed, sorted(modules - allowed)
+
+
+# ---------------------------------------------------------------------------
+# INV-S-05 trading secret shapes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("rule", "parts"),
+    [
+        ("solana_base58_key", ["KEY = ", "5", "A" * 87]),
+        ("solana_json_keypair", ["[", ", ".join(str(i % 256) for i in range(64)), "]"]),
+        (
+            "helius_url_key",
+            [
+                "rpc = 'https://mainnet.helius-rpc.com/?",
+                "api-",
+                "key=",
+                "A1b2C3d4E5f6G7h8I9j0K",
+                "'",
+            ],
+        ),
+        (
+            "quicknode_url",
+            ["url = 'https://x-y", ".solana-mainnet.quiknode.pro/", "Q" * 24, "'"],
+        ),
+        ("telegram_bot_token", ["ID = ", "123456789", ":", "A" * 35]),
+        ("xai_key", ['K = "xai-', "k" * 32, '"']),
+    ],
+)
+def test_g3_trading_patterns(secrets_gate, rule, parts) -> None:
+    """INV-S-05: each trading regex fires on its synthetic fixture."""
+    assert rule in _rules(secrets_gate, "".join(parts))
+
+
+# ---------------------------------------------------------------------------
+# Invariant-matrix meta-test (OBS-005, D2)
+# ---------------------------------------------------------------------------
+
+MATRIX = REPO_ROOT / "docs" / "SAFETY_INVARIANTS.md"
+
+
+def _matrix_spans(line: str) -> list:
+    """Backtick spans of one matrix row (code-span pipes stay intact)."""
+    spans: list = []
+    i = 0
+    while True:
+        start = line.find("`", i)
+        if start < 0:
+            break
+        end = line.find("`", start + 1)
+        if end < 0:
+            break
+        spans.append(line[start + 1 : end])
+        i = end + 1
+    return spans
+
+
+def _matrix_refs() -> tuple:
+    """Parse section 6 rows into (invariant, path, name) owning-test refs."""
+    refs: list = []
+    ids: list = []
+    in_matrix = False
+    for line in MATRIX.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## 6. Test matrix"):
+            in_matrix = True
+            continue
+        if in_matrix and line.startswith("## "):
+            break
+        if not in_matrix:
+            continue
+        if not line.startswith("| INV-") and not line.startswith("| (meta)"):
+            continue
+        cells = line.split("|")
+        inv = cells[1].strip() if len(cells) > 1 else line
+        ids.append(inv)
+        current: str | None = None
+        row_refs = 0
+        for span in _matrix_spans(line):
+            if "::" not in span:
+                continue
+            path, _, name = span.partition("::")
+            path, name = path.strip(), name.strip()
+            if not path:
+                assert current is not None, f"continuation ref without path in row {inv}"
+                path = current
+            else:
+                current = path
+            if not name:
+                raise AssertionError(f"empty test name in row {inv}")
+            refs.append((inv, path, name))
+            row_refs += 1
+        if row_refs == 0:
+            raise AssertionError(f"matrix row parsed zero test refs: {inv}")
+    return refs, ids
+
+
+def _collect_node_ids(paths: list) -> set:
+    """Node ids collected by pytest for the referenced files (CI only)."""
+    existing = sorted({p for p in paths if (REPO_ROOT / p).is_file()})
+    assert existing, "no referenced test files exist"
+    proc = subprocess.run(
+        # addopts already carries -q; passing -q again (-qq) would collapse
+        # the listing to per-file counts, so override addopts here.
+        [sys.executable, "-m", "pytest", "--collect-only", "-q",
+         "-o", "addopts=--strict-markers", *existing],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+    )
+    nodes: set = set()
+    for line in proc.stdout.splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        if "::" in token:
+            nodes.add(token)
+    return nodes
+
+
+def test_invariant_matrix_tests_exist() -> None:
+    """Every matrix row owns a collected pytest node (OBS-005)."""
+    refs, _ids = _matrix_refs()
+    invariants = sorted({inv for inv, _, _ in refs if inv.startswith("INV-")})
+    assert len(invariants) == 63, f"matrix invariant count changed: {len(invariants)}"
+    nodes = _collect_node_ids(sorted({path for _, path, _ in refs}))
+    missing: list = []
+    for inv, path, name in refs:
+        if "[" in name:
+            prefix = f"{path}::{name.split('[', maxsplit=1)[0]}"
+            if not any(node.startswith(prefix) for node in nodes):
+                missing.append(f"{inv} {path}::{name}")
+        else:
+            hit = f"{path}::{name}" in nodes or any(
+                node.startswith(f"{path}::{name}[") for node in nodes
+            )
+            if not hit:
+                missing.append(f"{inv} {path}::{name}")
+    assert missing == [], "uncollected owning tests:\n" + "\n".join(missing)
