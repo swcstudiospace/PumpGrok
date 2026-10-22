@@ -96,7 +96,11 @@ def _approve(
 ) -> str:
     approval_id = f"apr-{ids.ulid()}"
     record = parse_human_phrase(
-        phrase, kind=kind, by=by, approval_id=approval_id, at=datetime.fromtimestamp(clock.now(), UTC)
+        phrase,
+        kind=kind,
+        by=by,
+        approval_id=approval_id,
+        at=datetime.fromtimestamp(clock.now(), UTC),
     )
     record_human_approval(
         store, record, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
@@ -195,7 +199,9 @@ def test_exit_rule_approval_authorises_manual_ticket_sell(tmp_path: Path) -> Non
         record_human_approval(
             store, record, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
         )
-        decision = engine.check(_sell(clock, ids, approval_id), seat="bot-06-exit", exit_reason="exit_rule")
+        decision = engine.check(
+            _sell(clock, ids, approval_id), seat="bot-06-exit", exit_reason="exit_rule"
+        )
         assert decision.passed is True
     finally:
         store.close()
@@ -208,7 +214,9 @@ def test_autonomous_paper_still_checks_limits(tmp_path: Path) -> None:
     try:
         ids = IdFactory(clock, make_rng(41))
         engine = _engine(store, clock, autonomy="autonomous-paper")
-        tiny = engine.check(_buy(clock, ids, f"apr-{ids.ulid()}", size=5_000_000), seat="bot-04-sniper")
+        tiny = engine.check(
+            _buy(clock, ids, f"apr-{ids.ulid()}", size=5_000_000), seat="bot-04-sniper"
+        )
         assert tiny.passed is False
         assert tiny.reason == "size_too_small"
         assert tiny.approval is not None
@@ -224,7 +232,14 @@ def test_autonomy_level_switch_is_human_only_and_journaled(tmp_path: Path) -> No
     try:
         assert read_autonomy(store) == "manual-ticket"
         ts = format_ts_utc(clock.now())
-        rows = autonomy_rows("autonomous-paper", "human:alice", previous="manual-ticket", ts_utc=ts, source="paper", correlation_id="test")
+        rows = autonomy_rows(
+            "autonomous-paper",
+            "human:alice",
+            previous="manual-ticket",
+            ts_utc=ts,
+            source="paper",
+            correlation_id="test",
+        )
         assert [row["type"] for row in rows] == ["ConfigChanged", "JournalNote"]
         assert rows[0]["payload"]["keys_changed"] == ["autonomy_level"]
         assert rows[1]["payload"]["note_kind"] == "note"
@@ -253,8 +268,14 @@ async def test_consumed_approval_demands_fresh_approval(tmp_path: Path) -> None:
         engine = _engine(store, clock)
         snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
         adapter = PaperAdapter(
-            store=store, risk=engine, ids=ids, clock=clock, rng=make_rng(41),
-            budget=RiskBudget(), price_source=_ScriptedCurves([snap, snap]), p_drop=0.0,
+            store=store,
+            risk=engine,
+            ids=ids,
+            clock=clock,
+            rng=make_rng(41),
+            budget=RiskBudget(),
+            price_source=_ScriptedCurves([snap, snap]),
+            p_drop=0.0,
         )
         approval_id = _approve(store, clock, ids, f"approve {TICKET} {MINT} 0.2 100")
 
@@ -268,12 +289,16 @@ async def test_consumed_approval_demands_fresh_approval(tmp_path: Path) -> None:
             return await task
 
         first = await drive(
-            adapter.place(_buy(clock, ids, approval_id), seat="bot-04-sniper", correlation_id="test")
+            adapter.place(
+                _buy(clock, ids, approval_id), seat="bot-04-sniper", correlation_id="test"
+            )
         )
         assert first.status.value == "filled"
         with pytest.raises(OrderRejectedError) as excinfo:
             await drive(
-                adapter.place(_buy(clock, ids, approval_id), seat="bot-04-sniper", correlation_id="test")
+                adapter.place(
+                    _buy(clock, ids, approval_id), seat="bot-04-sniper", correlation_id="test"
+                )
             )
         assert excinfo.value.reason == "approval_missing"
     finally:

@@ -189,7 +189,10 @@ def _mtm_payload(prices: dict[str, int]) -> dict[str, Any]:
         "equity_lamports": EQUITY,
         "unrealized_lamports": 0,
         "prices_json": json.dumps(
-            {m: {"mtm_lamports": v, "spot": "0.00001", "source": "curve"} for m, v in prices.items()}
+            {
+                m: {"mtm_lamports": v, "spot": "0.00001", "source": "curve"}
+                for m, v in prices.items()
+            }
         ),
     }
 
@@ -215,7 +218,9 @@ def _seed(rule: str, store: LedgerStore, clock: FixtureClock, ids: IdFactory) ->
             _append(store, clock, "FillRecorded", _fill_payload(clock, ids, side="buy"))
     elif rule == "max_open_positions":
         for mint in (MINT_A, MINT_B, MINT_C):
-            _append(store, clock, "PositionOpened", _position_payload(mint, CREATOR_1, 1_000, 1_000))
+            _append(
+                store, clock, "PositionOpened", _position_payload(mint, CREATOR_1, 1_000, 1_000)
+            )
     elif rule == "already_open":
         _append(store, clock, "PositionOpened", _position_payload(MINT_A, CREATOR_1, 1_000, 1_000))
     elif rule == "creator_already_open":
@@ -249,9 +254,7 @@ def _seed(rule: str, store: LedgerStore, clock: FixtureClock, ids: IdFactory) ->
     return {}
 
 
-def _order_for(
-    rule: str, store: LedgerStore, clock: FixtureClock, ids: IdFactory
-) -> OrderRequest:
+def _order_for(rule: str, store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> OrderRequest:
     if rule == "already_open":
         return _buy(clock, ids, mint=MINT_A)
     if rule == "creator_already_open":
@@ -274,7 +277,10 @@ def _order_for(
             at=datetime.fromtimestamp(clock.now(), UTC),
         )
         record_human_approval(
-            store, record, ts_utc=format_ts_utc(clock.now()), source="paper",
+            store,
+            record,
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
             correlation_id="test",
         )
         return _buy(clock, ids, approval_id=approval_id)
@@ -335,7 +341,9 @@ def test_sells_always_allowed_except_ledger_and_live_gate(tmp_path: Path) -> Non
         _append(store, clock, "HaltSet", _halt_payload("manual"))
         _append(store, clock, "BreakerTripped", _breaker_payload("data_stale"))
         kill_engine = _engine(store, clock, env={"PUMPGROK_KILLSWITCH": "1"})
-        decision = kill_engine.check(_sell(clock, ids), seat="bot-02-risk", exit_reason="kill_flatten")
+        decision = kill_engine.check(
+            _sell(clock, ids), seat="bot-02-risk", exit_reason="kill_flatten"
+        )
         assert decision.passed is True
         store = _tamper(store)
         tampered_engine = _engine(store, clock, env={"PUMPGROK_KILLSWITCH": "1"})

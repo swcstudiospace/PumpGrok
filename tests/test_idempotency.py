@@ -100,7 +100,10 @@ async def test_exec_place_same_key_returns_first_fill(tmp_path: Path) -> None:
             at=datetime.fromtimestamp(clock.now(), UTC),
         )
         record_human_approval(
-            store, record, ts_utc=format_ts_utc(clock.now()), source="paper",
+            store,
+            record,
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
             correlation_id="test",
         )
 

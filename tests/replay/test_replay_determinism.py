@@ -47,9 +47,7 @@ def _tick(ts: str) -> dict[str, object]:
     }
 
 
-def _write_dataset(
-    root: Path, name: str, events: list[dict[str, object]]
-) -> Path:
+def _write_dataset(root: Path, name: str, events: list[dict[str, object]]) -> Path:
     dataset = root / name
     dataset.mkdir(parents=True)
     files = {"events.jsonl": "".join(json.dumps(event) + "\n" for event in events)}
@@ -78,9 +76,7 @@ def _journal_bytes(ledger: Path, out: Path) -> bytes:
     finally:
         store.close()
     return b"".join(
-        path.read_bytes()
-        for path in sorted(out.glob("*.jsonl"))
-        if path.name != "trades.jsonl"
+        path.read_bytes() for path in sorted(out.glob("*.jsonl")) if path.name != "trades.jsonl"
     )
 
 
@@ -118,9 +114,7 @@ def test_two_runs_identical(tmp_path: Path) -> None:
         assert {row["source"] for row in rows} == {"replay"}
     finally:
         store.close()
-    other = run_replay(
-        dataset, FilterSettings(), seed=20270101, ledger_path=tmp_path / "c.sqlite"
-    )
+    other = run_replay(dataset, FilterSettings(), seed=20270101, ledger_path=tmp_path / "c.sqlite")
     assert other.events_hash != first.events_hash
 
 

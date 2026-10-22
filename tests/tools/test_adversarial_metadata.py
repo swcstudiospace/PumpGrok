@@ -27,13 +27,8 @@ from pumpgrok.core.tool import parse_upstream
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.monitor import parse_create_event
 from pumpgrok.execution.paper_adapter import CurveSnapshot
-MIXED = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "http"
-    / "adversarial"
-    / "mixed.json"
-)
+
+MIXED = Path(__file__).resolve().parents[1] / "fixtures" / "http" / "adversarial" / "mixed.json"
 NOW = 1_700_000_000.0
 MINT = "So11111111111111111111111111111111111111112"
 

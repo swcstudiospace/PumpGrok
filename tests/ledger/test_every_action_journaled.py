@@ -60,47 +60,105 @@ def test_order_chain_complete_in_ledger_and_journal(tmp_path: Path) -> None:
             {"id": "seat_may_trade", "status": "pass"},
         ]
         _append(
-            store, clock, "rollover-day", "DailyRollover",
-            {"source": "paper", "day_utc": DAY,
-             "day_start_equity_lamports": 10_000_000_000,
-             "prior_day_json": "{}", "open_positions": []},
+            store,
+            clock,
+            "rollover-day",
+            "DailyRollover",
+            {
+                "source": "paper",
+                "day_utc": DAY,
+                "day_start_equity_lamports": 10_000_000_000,
+                "prior_day_json": "{}",
+                "open_positions": [],
+            },
         )
         _append(
-            store, clock, "note-signal", "JournalNote",
-            {"source": "paper", "seat": "desk", "note_kind": "signal",
-             "text": "signal: mint D passes gates", "refs": [decision_id]},
+            store,
+            clock,
+            "note-signal",
+            "JournalNote",
+            {
+                "source": "paper",
+                "seat": "desk",
+                "note_kind": "signal",
+                "text": "signal: mint D passes gates",
+                "refs": [decision_id],
+            },
         )
         _append(
-            store, clock, "note-safety", "JournalNote",
-            {"source": "paper", "seat": "desk", "note_kind": "safety_report",
-             "text": "safety: mint D not a rug", "refs": [decision_id]},
+            store,
+            clock,
+            "note-safety",
+            "JournalNote",
+            {
+                "source": "paper",
+                "seat": "desk",
+                "note_kind": "safety_report",
+                "text": "safety: mint D not a rug",
+                "refs": [decision_id],
+            },
         )
         _append(
-            store, clock, "approval-buy", "ApprovalRecorded",
-            {"source": "paper", "id": approval_id, "kind": "human_buy",
-             "approved_by": "human:alice", "at": format_ts_utc(clock.now()),
-             "ticket_id": TICKET, "mint": MINT, "size_lamports": 200_000_000,
-             "token_units": 1_000_000, "max_slippage_bps": 50,
-             "consumed": True},
+            store,
+            clock,
+            "approval-buy",
+            "ApprovalRecorded",
+            {
+                "source": "paper",
+                "id": approval_id,
+                "kind": "human_buy",
+                "approved_by": "human:alice",
+                "at": format_ts_utc(clock.now()),
+                "ticket_id": TICKET,
+                "mint": MINT,
+                "size_lamports": 200_000_000,
+                "token_units": 1_000_000,
+                "max_slippage_bps": 50,
+                "consumed": True,
+            },
         )
         _append(
-            store, clock, "order-buy", "OrderPlaced",
-            {"source": "paper", "order_id": order_id, "decision_id": decision_id,
-             "ticket_id": TICKET, "side": "buy", "mint": MINT,
-             "slippage_bps": 50, "size_lamports": 200_000_000,
-             "token_units": 1_000_000, "quote_json": "{}",
-             "approval_json": approval_id,
-             "risk_json": json.dumps({"rules": rules})},
+            store,
+            clock,
+            "order-buy",
+            "OrderPlaced",
+            {
+                "source": "paper",
+                "order_id": order_id,
+                "decision_id": decision_id,
+                "ticket_id": TICKET,
+                "side": "buy",
+                "mint": MINT,
+                "slippage_bps": 50,
+                "size_lamports": 200_000_000,
+                "token_units": 1_000_000,
+                "quote_json": "{}",
+                "approval_json": approval_id,
+                "risk_json": json.dumps({"rules": rules}),
+            },
         )
         _append(
-            store, clock, "fill-buy", "FillRecorded",
-            {"source": "paper", "order_id": order_id, "decision_id": decision_id,
-             "side": "buy", "mint": MINT, "filled_lamports": 200_000_000,
-             "filled_units": 1_000_000, "filled_fraction": "1",
-             "price_avg": "200", "venue_fee_lamports": 0,
-             "network_cost_lamports": 0, "cash_delta_lamports": -200_000_000,
-             "latency_s": "0.1", "venue_tx_ref": "",
-             "route": "curve"},
+            store,
+            clock,
+            "fill-buy",
+            "FillRecorded",
+            {
+                "source": "paper",
+                "order_id": order_id,
+                "decision_id": decision_id,
+                "side": "buy",
+                "mint": MINT,
+                "filled_lamports": 200_000_000,
+                "filled_units": 1_000_000,
+                "filled_fraction": "1",
+                "price_avg": "200",
+                "venue_fee_lamports": 0,
+                "network_cost_lamports": 0,
+                "cash_delta_lamports": -200_000_000,
+                "latency_s": "0.1",
+                "venue_tx_ref": "",
+                "route": "curve",
+            },
         )
         events = store.read(limit=None)
         assert store.verify() is True
@@ -110,30 +168,28 @@ def test_order_chain_complete_in_ledger_and_journal(tmp_path: Path) -> None:
         assert len(orders) == 1
         order = orders[0]
         assert order["correlation_id"] == CID
-        companions = [
-            event for event in events if event["correlation_id"] == CID
-        ]
+        companions = [event for event in events if event["correlation_id"] == CID]
         kinds = [event["type"] for event in companions]
         assert "OrderPlaced" in kinds
         signal = [
-            event for event in companions
-            if event["type"] == "JournalNote"
-            and event["payload"].get("note_kind") == "signal"
+            event
+            for event in companions
+            if event["type"] == "JournalNote" and event["payload"].get("note_kind") == "signal"
         ]
         safety = [
-            event for event in companions
+            event
+            for event in companions
             if event["type"] == "JournalNote"
             and event["payload"].get("note_kind") == "safety_report"
         ]
         assert len(signal) == 1
         assert len(safety) == 1
-        approvals = [
-            event for event in companions if event["type"] == "ApprovalRecorded"
-        ]
+        approvals = [event for event in companions if event["type"] == "ApprovalRecorded"]
         assert len(approvals) == 1
         assert approvals[0]["payload"]["id"] in order["payload"]["approval_json"]
         outcomes = [
-            event for event in companions
+            event
+            for event in companions
             if event["type"] in ("FillRecorded", "OrderRejected")
             and event["payload"].get("order_id") == order["payload"]["order_id"]
         ]
@@ -154,12 +210,11 @@ def test_order_chain_complete_in_ledger_and_journal(tmp_path: Path) -> None:
             for line in path.read_text(encoding="utf-8").splitlines()
             if line
         ]
-        assert {line["seq"] for line in lines} == {
-            event["seq"] for event in events
-        }
+        assert {line["seq"] for line in lines} == {event["seq"] for event in events}
         assert len(lines) == len(events)
         orphans = [
-            event for event in events
+            event
+            for event in events
             if event["type"] == "OrderPlaced"
             and not any(
                 other["type"] in ("FillRecorded", "OrderRejected")

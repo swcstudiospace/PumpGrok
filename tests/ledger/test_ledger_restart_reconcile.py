@@ -35,9 +35,7 @@ MINT = "C" * 44
 CID = "01JAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 
-def _note(
-    store: LedgerStore, clock: FixtureClock, key: str, kind: str, text: str
-) -> None:
+def _note(store: LedgerStore, clock: FixtureClock, key: str, kind: str, text: str) -> None:
     store.append(
         ts_utc=format_ts_utc(clock.now()),
         source="paper",
@@ -102,9 +100,7 @@ def test_restart_reconcile_and_tamper_detect(tmp_path: Path) -> None:
     folded = initial_state(source="paper", initial_equity_lamports=EQUITY, day_utc=DAY)
     for event in store.read(since_seq=1, limit=None):
         folded = reduce(folded, event)
-    store.write_snapshot(
-        seq=snap_seq, ts_utc=format_ts_utc(clock.now()), state=dump_state(folded)
-    )
+    store.write_snapshot(seq=snap_seq, ts_utc=format_ts_utc(clock.now()), state=dump_state(folded))
     clock.advance_to(BASE + 180.0)
     _note(store, clock, "note-review", "review", "post-fill review")
     head_seq = store.count()
@@ -119,9 +115,7 @@ def test_restart_reconcile_and_tamper_detect(tmp_path: Path) -> None:
         assert result["tail_events"] == head_seq - snap_seq
         assert result["head_seq"] == head_seq
         # Snapshot-plus-tail equals a full fold over every event.
-        genesis = initial_state(
-            source="paper", initial_equity_lamports=EQUITY, day_utc=DAY
-        )
+        genesis = initial_state(source="paper", initial_equity_lamports=EQUITY, day_utc=DAY)
         full = genesis
         for event in reopened.read(since_seq=1, limit=None):
             full = reduce(full, event)
@@ -204,9 +198,7 @@ def test_restart_reconcile_and_tamper_detect(tmp_path: Path) -> None:
         assert tampered_store.read(types=["HaltSet"], limit=None) == []
         raw = sqlite3.connect(str(db_path))
         try:
-            kept = raw.execute(
-                "SELECT payload_json FROM events WHERE seq = 2;"
-            ).fetchone()
+            kept = raw.execute("SELECT payload_json FROM events WHERE seq = 2;").fetchone()
             assert kept is not None and "mint X" in kept[0]
         finally:
             raw.close()

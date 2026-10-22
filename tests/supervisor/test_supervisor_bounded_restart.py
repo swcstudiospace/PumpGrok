@@ -146,10 +146,7 @@ async def test_observe_only_sniper_blocks_buys(tmp_path: Path) -> None:
         assert supervisor.observe_only.is_latched("bot-04-sniper")
         assert not supervisor.observe_only.is_latched("bot-00-chief")
         assert supervisor.tasks["bot-00-chief"].cycles == 6
-        kinds = [
-            event["payload"]["kind"]
-            for event in store.read(types=["Escalation"], limit=None)
-        ]
+        kinds = [event["payload"]["kind"] for event in store.read(types=["Escalation"], limit=None)]
         assert kinds == ["bot_restart_exhausted"]
         # The end-of-tick sync pushed the latch into the engine: buys refuse.
         factory = IdFactory(clock, make_rng(11))

@@ -81,9 +81,7 @@ def test_corrupt_fixture_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert main(["run", "--mode", "paper", "--once", "--replay", str(tampered)]) == 4
     assert not (tmp_path / "var" / "replay" / "tampered" / "ledger.sqlite").exists()
     # Malformed line with a matching digest: refused before any seat starts.
-    broken = _write_dataset(
-        tmp_path, "broken", {"events.jsonl": _events() + "not json\n"}
-    )
+    broken = _write_dataset(tmp_path, "broken", {"events.jsonl": _events() + "not json\n"})
     with pytest.raises(CorruptFixture):
         load_dataset(broken)
     assert main(["run", "--mode", "paper", "--once", "--replay", str(broken)]) == 4

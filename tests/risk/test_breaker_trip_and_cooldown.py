@@ -193,7 +193,10 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
         assert engine._breakers.admit_probe(breaker) is True
         assert engine._breakers.admit_probe(breaker) is False
         engine._breakers.resolve_probe(
-            breaker, False, ts_utc=format_ts_utc(clock.now()), source="paper",
+            breaker,
+            False,
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
             correlation_id="test",
         )
         assert engine._breakers.by_name(breaker).state == "open"
@@ -210,7 +213,10 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
                 continue
             assert engine._breakers.admit_probe(breaker) is True
             engine._breakers.resolve_probe(
-                breaker, True, ts_utc=format_ts_utc(clock.now()), source="paper",
+                breaker,
+                True,
+                ts_utc=format_ts_utc(clock.now()),
+                source="paper",
                 correlation_id="test",
             )
         assert engine._breakers.by_name(breaker).state == "closed"

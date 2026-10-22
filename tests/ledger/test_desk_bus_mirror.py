@@ -87,9 +87,7 @@ def test_halt_mirrors_to_desk_md_and_cli_append_is_serialised(
     cli = LedgerStore(str(db_path))
     try:
         supervisor.append(**_halt_row(clock, "halt-manual-1", "manual"))
-        mirror_path = mirror_halt(
-            desk_dir, reason="manual", ts_utc=format_ts_utc(clock.now())
-        )
+        mirror_path = mirror_halt(desk_dir, reason="manual", ts_utc=format_ts_utc(clock.now()))
         assert mirror_path == desk_dir / "desk.md"
         body = mirror_path.read_text(encoding="utf-8")
         assert "Halt: true" in body
@@ -99,9 +97,7 @@ def test_halt_mirrors_to_desk_md_and_cli_append_is_serialised(
         # A CLI killswitch set while the supervisor runs: serialised appends.
         clock.advance_to(BASE + 30.0)
         cli.append(**_kill_row(clock, "kill-file-1"))
-        mirror_killswitch(
-            desk_dir, source="file", reason="kill", ts_utc=format_ts_utc(clock.now())
-        )
+        mirror_killswitch(desk_dir, source="file", reason="kill", ts_utc=format_ts_utc(clock.now()))
         for index in range(5):
             clock.advance_to(clock.now() + 1.0)
             supervisor.append(**_halt_row(clock, f"halt-manual-{index + 2}", "manual"))

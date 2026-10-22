@@ -115,11 +115,14 @@ def test_daily_loss_halt_floor(tmp_path: Path) -> None:
         halts = store.read(types=["HaltSet"], limit=None)
         assert len(halts) == 1
         assert halts[0]["payload"]["detail"] == FLOOR_HALTED_DAILY
-        assert halts[0]["payload"]["detail"].encode() == b"FLOOR HALTED \xe2\x80\x93 DAILY LOSS LIMIT"
+        assert (
+            halts[0]["payload"]["detail"].encode() == b"FLOOR HALTED \xe2\x80\x93 DAILY LOSS LIMIT"
+        )
         assert halts[0]["idempotency_key"] == halt_key("daily_loss", DAY_ONE)
-        assert halts[0]["idempotency_key"] == hashlib.sha256(
-            b"HaltSet|daily_loss|2026-10-21"
-        ).hexdigest()
+        assert (
+            halts[0]["idempotency_key"]
+            == hashlib.sha256(b"HaltSet|daily_loss|2026-10-21").hexdigest()
+        )
         repeat = engine.check(_buy(clock, ids), seat="bot-04-sniper")
         assert repeat.reason == "halted"
         assert len(store.read(types=["HaltSet"], limit=None)) == 1

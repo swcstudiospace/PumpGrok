@@ -34,9 +34,7 @@ def _frame(mint: str, seq: int) -> dict:
 def _monitor(skips: list) -> LaunchMonitor:
     return LaunchMonitor(
         DataSettings(),
-        FilterSettings(
-            min_unique_buyers=1, min_age_seconds=0.0, require_metadata=False
-        ),
+        FilterSettings(min_unique_buyers=1, min_age_seconds=0.0, require_metadata=False),
         FixtureClock(start=NOW),
         on_skip=lambda token, reason: skips.append((token.mint, reason)),
     )

@@ -66,14 +66,25 @@ async def test_paper_fill_prices_from_curve_math(tmp_path: Path) -> None:
         fees = FeeModel()
         snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
         adapter = PaperAdapter(
-            store=store, risk=engine, ids=ids, clock=clock, rng=make_rng(51),
-            budget=RiskBudget(), fees=fees, price_source=_ScriptedCurves([snap, snap]),
+            store=store,
+            risk=engine,
+            ids=ids,
+            clock=clock,
+            rng=make_rng(51),
+            budget=RiskBudget(),
+            fees=fees,
+            price_source=_ScriptedCurves([snap, snap]),
             p_drop=0.0,
         )
         order = OrderRequest(
-            ticket_id=TICKET, mint=MINT, side="buy", decision_id=ids.ulid(),
-            size_lamports=SIZE, max_slippage_bps=100,
-            approval_id=f"apr-{ids.ulid()}", correlation_id="test",
+            ticket_id=TICKET,
+            mint=MINT,
+            side="buy",
+            decision_id=ids.ulid(),
+            size_lamports=SIZE,
+            max_slippage_bps=100,
+            approval_id=f"apr-{ids.ulid()}",
+            correlation_id="test",
         )
         task = asyncio.create_task(adapter.place(order, seat="bot-04-sniper"))
         for _ in range(400):

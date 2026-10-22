@@ -74,8 +74,14 @@ def _adapter(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> PaperAd
         env={},
     )
     return PaperAdapter(
-        store=store, risk=engine, ids=ids, clock=clock, rng=make_rng(52),
-        budget=RiskBudget(), price_source=None, p_drop=0.0,
+        store=store,
+        risk=engine,
+        ids=ids,
+        clock=clock,
+        rng=make_rng(52),
+        budget=RiskBudget(),
+        price_source=None,
+        p_drop=0.0,
     )
 
 
@@ -100,7 +106,9 @@ async def test_graduation_closes_at_last_curve_price(tmp_path: Path) -> None:
         assert payload["price_exit"] == str(Decimal(proceeds) / Decimal(UNITS))
         escalations = store.read(types=["Escalation"], limit=None)
         assert [e["payload"]["kind"] for e in escalations] == ["graduated"]
-        repeat = await adapter.close_on_graduation(MINT, last_s=S0, last_t=T0, correlation_id="test")
+        repeat = await adapter.close_on_graduation(
+            MINT, last_s=S0, last_t=T0, correlation_id="test"
+        )
         assert repeat is None
         assert len(store.read(types=["PositionClosed"], limit=None)) == 1
     finally:
@@ -122,9 +130,14 @@ async def test_buy_on_graduated_curve_rejected(tmp_path: Path) -> None:
 
         adapter._price = _Complete()  # type: ignore[assignment]
         order = OrderRequest(
-            ticket_id=TICKET, mint=MINT, side="buy", decision_id=ids.ulid(),
-            size_lamports=BASIS, max_slippage_bps=100,
-            approval_id=f"apr-{ids.ulid()}", correlation_id="test",
+            ticket_id=TICKET,
+            mint=MINT,
+            side="buy",
+            decision_id=ids.ulid(),
+            size_lamports=BASIS,
+            max_slippage_bps=100,
+            approval_id=f"apr-{ids.ulid()}",
+            correlation_id="test",
         )
         with pytest.raises(OrderRejectedError) as excinfo:
             await adapter.place(order, seat="bot-04-sniper")
