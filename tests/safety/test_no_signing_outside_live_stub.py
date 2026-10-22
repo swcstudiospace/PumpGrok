@@ -73,7 +73,8 @@ def find_violations(package_root: Path) -> list[str]:
     return found
 
 
-def test_no_signing_symbols_outside_live_stub() -> None:
+def test_no_signing_symbols_outside_quarantine() -> None:
+    """INV-S-01: no fund-moving symbols outside the refusing live stub."""
     assert find_violations(SRC) == []
 
 
