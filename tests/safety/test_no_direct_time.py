@@ -80,11 +80,11 @@ def _scan_file(path: Path, rel: str) -> list[str]:
                 found.append(f"{rel}:{node.lineno}: wall clock {resolved}")
         elif isinstance(node, ast.Call):
             resolved = _resolve(node.func, aliases)
-            if resolved in {"AsyncRetrying", "retry"} or (
-                resolved is not None and resolved.endswith((".AsyncRetrying", ".retry"))
-            ):
-                if not any(kw.arg == "sleep" for kw in node.keywords):
-                    found.append(f"{rel}:{node.lineno}: retry without sleep=")
+            if (
+                resolved in {"AsyncRetrying", "retry"}
+                or (resolved is not None and resolved.endswith((".AsyncRetrying", ".retry")))
+            ) and not any(kw.arg == "sleep" for kw in node.keywords):
+                found.append(f"{rel}:{node.lineno}: retry without sleep=")
     return found
 
 

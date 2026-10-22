@@ -113,9 +113,12 @@ def _scan_file(path: Path, rel: str, allowed_importers: set[str] | None = None) 
                 continue
             if resolved is not None and resolved.startswith("subprocess."):
                 for keyword in node.keywords:
-                    if keyword.arg == "shell" and isinstance(keyword.value, ast.Constant):
-                        if keyword.value.value is True:
-                            flag(node.lineno, "subprocess call with shell=True")
+                    if (
+                        keyword.arg == "shell"
+                        and isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value is True
+                    ):
+                        flag(node.lineno, "subprocess call with shell=True")
                 if node.args:
                     first = node.args[0]
                     if isinstance(first, ast.Starred):

@@ -23,9 +23,13 @@ def _scan_file(path: Path, rel: str) -> list[str]:
             for alias in node.names:
                 if alias.name.split(".", maxsplit=1)[0] == "uuid":
                     found.append(f"{rel}:{node.lineno}: uuid import is banned")
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            if node.module.split(".", maxsplit=1)[0] == "uuid":
-                found.append(f"{rel}:{node.lineno}: uuid import is banned")
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.level == 0
+            and node.module.split(".", maxsplit=1)[0] == "uuid"
+        ):
+            found.append(f"{rel}:{node.lineno}: uuid import is banned")
     return found
 
 
