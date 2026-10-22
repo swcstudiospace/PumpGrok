@@ -1,6 +1,6 @@
 """Regression tests for ci/gates/check_desk_integrity.py (review findings 16, 17, 19).
 
-    python3 -m pytest ci/tests/test_review_desk.py -q
+python3 -m pytest ci/tests/test_review_desk.py -q
 """
 
 from __future__ import annotations

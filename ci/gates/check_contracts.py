@@ -298,8 +298,7 @@ def _version_bump_problems(doc: dict) -> list[str]:
         return problems
     if major <= prev_major:
         problems.append(
-            "BREAKING change but major version did not increase "
-            f"({previous} -> {version})"
+            f"BREAKING change but major version did not increase ({previous} -> {version})"
         )
     return problems
 

@@ -235,8 +235,7 @@ def _forbidden(rel: str) -> list[dict]:
             "file": rel,
             "line": 0,
             "rule": "forbidden_file",
-            "desc": f"{Path(rel).name} must never be committed "
-            "(holds credentials in plain text)",
+            "desc": f"{Path(rel).name} must never be committed (holds credentials in plain text)",
             "excerpt": "",
         }
     ]
@@ -308,9 +307,13 @@ def staged_blobs() -> dict[str, str]:
     under its new path. Gitlinks (mode 160000) are submodule pointers with no file content.
     """
     raw = _git(["diff", "--cached", "--raw", "-z", "--no-renames", "--diff-filter=ACMT"])
-    parts = raw.split("\0")
+    fields = raw.split("\0")
+    # git -z ends every record with NUL, so the split leaves one trailing empty field. Anything
+    # else at the end, or an odd field count, is not the format this parser reads: fail closed.
+    if fields.pop() != "" or len(fields) % 2:
+        sys.exit("check_secrets: unexpected git diff --raw -z output")
     blobs: dict[str, str] = {}
-    for meta, path in zip(parts[0::2], parts[1::2]):
+    for meta, path in zip(fields[0::2], fields[1::2], strict=True):
         _src_mode, dst_mode, _src_sha, dst_sha, _status = meta.lstrip(":").split()
         if dst_mode != "160000":
             blobs[path] = dst_sha

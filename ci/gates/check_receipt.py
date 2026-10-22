@@ -584,6 +584,82 @@ def _tokenize(cmd: str) -> list[_Token] | None:
     return tokens
 
 
+def _short_cluster_effect(tool: str, flags: str) -> tuple[bool, bool]:
+    """(safe, takes_operand) for a cluster of short flags such as `-nie` or `-A3`."""
+    takes_operand = False
+    for idx, ch in enumerate(flags):
+        rest = flags[idx + 1 :]
+        if ch == "e" and not rest:
+            takes_operand = True
+        elif ch in "ABCm" and rest.isdigit():
+            break
+        elif ch in _SAFE_SHORT_FLAGS or (ch in "rR" and tool != "rg"):
+            continue
+        else:
+            return False, False
+    return True, takes_operand
+
+
+def _option_effect(tool: str, tok: _Token) -> tuple[bool, bool]:
+    """(safe, takes_operand) for one option word. The bare `--` is handled by the caller."""
+    if tok.value.startswith("--"):
+        if tok.value == "--regexp":
+            return True, True
+        return tok.value in _SAFE_LONG_FLAGS, False
+    return _short_cluster_effect(tool, tok.value[1:])
+
+
+def _scan_search_args(
+    tool: str, args: list[_Token]
+) -> tuple[list[_Token], list[_Token], bool] | None:
+    """Sort search arguments into -e/--regexp operands and positionals.
+
+    Returns None when any option could read a file or run a program, or when an option's
+    operand is missing.
+    """
+    operands: list[_Token] = []
+    positionals: list[_Token] = []
+    saw_e = False
+    expect_operand = False
+    after_separator = False
+    for tok in args:
+        if expect_operand:
+            operands.append(tok)
+            expect_operand = False
+            saw_e = True
+        elif after_separator or tok.value == "-" or not tok.value.startswith("-"):
+            positionals.append(tok)
+        elif tok.value == "--":
+            after_separator = True
+        else:
+            safe, expect_operand = _option_effect(tool, tok)
+            if not safe:
+                return None
+    if expect_operand:
+        return None
+    return operands, positionals, saw_e
+
+
+def _quoted_pattern_ranges(cmd: str, pattern_words: list[_Token]) -> list[tuple[int, int]]:
+    """Spans of the pattern words that are one whole quoted string with no expansion."""
+    ranges: list[tuple[int, int]] = []
+    for tok in pattern_words:
+        raw = cmd[tok.start + 1 : tok.end - 1]
+        if tok.whole_quoted and "$" not in raw and "`" not in raw:
+            ranges.append((tok.start + 1, tok.end - 1))
+    return ranges
+
+
+def _search_tool_and_args(tokens: list[_Token]) -> tuple[str, list[_Token]] | None:
+    """The search tool a command runs and the words after it, or None for any other command."""
+    names = [tok.value for tok in tokens]
+    if names[0] in _SEARCH_TOOLS:
+        return names[0], tokens[1:]
+    if names[:2] == ["git", "grep"]:
+        return "grep", tokens[2:]
+    return None
+
+
 def _search_text_ranges(cmd: str) -> list[tuple[int, int]]:
     """Half-open ranges of `cmd` that are a search PATTERN, never an option's value.
 
@@ -599,53 +675,15 @@ def _search_text_ranges(cmd: str) -> list[tuple[int, int]]:
     tokens = _tokenize(cmd)
     if not tokens:
         return []
-    names = [tok.value for tok in tokens]
-    if names[0] in _SEARCH_TOOLS:
-        tool, args = names[0], tokens[1:]
-    elif names[:2] == ["git", "grep"]:
-        tool, args = "grep", tokens[2:]
-    else:
+    found = _search_tool_and_args(tokens)
+    if found is None:
         return []
-    operands: list[_Token] = []
-    positionals: list[_Token] = []
-    saw_e = False
-    expect_operand = False
-    after_separator = False
-    for tok in args:
-        if expect_operand:
-            operands.append(tok)
-            expect_operand = False
-            saw_e = True
-        elif after_separator or tok.value == "-" or not tok.value.startswith("-"):
-            positionals.append(tok)
-        elif tok.value == "--":
-            after_separator = True
-        elif tok.value.startswith("--"):
-            if tok.value == "--regexp":
-                expect_operand = True
-            elif tok.value not in _SAFE_LONG_FLAGS:
-                return []
-        else:
-            flags = tok.value[1:]
-            for idx, ch in enumerate(flags):
-                rest = flags[idx + 1 :]
-                if ch == "e" and not rest:
-                    expect_operand = True
-                elif ch in "ABCm" and rest.isdigit():
-                    break
-                elif ch in _SAFE_SHORT_FLAGS or (ch in "rR" and tool != "rg"):
-                    continue
-                else:
-                    return []
-    if expect_operand:
+    tool, args = found
+    scanned = _scan_search_args(tool, args)
+    if scanned is None:
         return []
-    pattern_words = operands if saw_e else positionals[:1]
-    ranges: list[tuple[int, int]] = []
-    for tok in pattern_words:
-        raw = cmd[tok.start + 1 : tok.end - 1]
-        if tok.whole_quoted and "$" not in raw and "`" not in raw:
-            ranges.append((tok.start + 1, tok.end - 1))
-    return ranges
+    operands, positionals, saw_e = scanned
+    return _quoted_pattern_ranges(cmd, operands if saw_e else positionals[:1])
 
 
 def _pattern_hits(pattern: str, cmd: str) -> list[tuple[int, int]]:

@@ -282,10 +282,7 @@ class TestPosixShellWordsRound4:
     def test_option_text_inside_single_quotes_is_value_text(self, tmp_path):
         r = _run(
             tmp_path,
-            [
-                "uv run pumpgrok killswitch clear --by human:op "
-                "--reason 'reviewed --reason $(x)'"
-            ],
+            ["uv run pumpgrok killswitch clear --by human:op --reason 'reviewed --reason $(x)'"],
             [_approval("killswitch clear", "max_notional_sol=0.2")],
         )
         assert r.returncode == 0, r.stderr
@@ -362,13 +359,11 @@ class TestExpansionAnywhereInCommand:
 
 
 class TestCommentAndNewlineHazards:
-    MULTI_LINE = (
-        "uv run pumpgrok killswitch clear --by human:op --reason #'\n"
-        "rm -rf var/ledger\n"
-        "#'"
-    )
+    MULTI_LINE = "uv run pumpgrok killswitch clear --by human:op --reason #'\nrm -rf var/ledger\n#'"
 
-    def test_multi_line_comment_reproduction_is_refused_with_approval_for_killswitch(self, tmp_path):
+    def test_multi_line_comment_reproduction_is_refused_with_approval_for_killswitch(
+        self, tmp_path
+    ):
         r = _run(
             tmp_path,
             [self.MULTI_LINE],
@@ -386,7 +381,10 @@ class TestCommentAndNewlineHazards:
         assert r.returncode == 1
 
     def test_single_line_comment_reproduction_is_refused(self, tmp_path):
-        cmd = "uv run pumpgrok killswitch clear --by human:op --reason #' then rm -rf var/ledger then #'"
+        cmd = (
+            "uv run pumpgrok killswitch clear --by human:op "
+            "--reason #' then rm -rf var/ledger then #'"
+        )
         r = _run(tmp_path, [cmd], [_approval("killswitch clear", "max_notional_sol=0.2")])
         assert r.returncode == 1
         assert "comment" in r.stderr

@@ -106,9 +106,7 @@ class TestBlankSurfaceCoverage:
 class TestChangeDocMustBeInDiff:
     def test_stale_document_not_in_diff_is_refused(self, tmp_path):
         doc_path = tmp_path / "contracts" / "changes" / "old.yaml"
-        problems = gate._change_doc_in_diff_problems(
-            [EVENT], doc_path, repo_root=tmp_path
-        )
+        problems = gate._change_doc_in_diff_problems([EVENT], doc_path, repo_root=tmp_path)
         assert any("not added or updated in this diff" in p for p in problems)
 
     def test_document_added_in_diff_passes(self, tmp_path):

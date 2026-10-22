@@ -157,6 +157,59 @@ class _Scan(NamedTuple):
     unterminated: bool
 
 
+def _scan_single_quoted(text: str, i: int) -> tuple[int, bool]:
+    """Scan a single-quoted run opening at i; return (index after it, unterminated)."""
+    close = text.find("'", i + 1)
+    if close == -1:
+        return len(text), True
+    return close + 1, False
+
+
+def _scan_double_quoted(text: str, i: int, expansions: list[int]) -> tuple[int, bool]:
+    """Scan a double-quoted run opening at i; record unescaped $ and backticks in it."""
+    n = len(text)
+    i += 1
+    while i < n and text[i] != '"':
+        if text[i] == "\\" and i + 1 < n and text[i + 1] in _DOUBLE_QUOTE_ESCAPABLE:
+            i += 2
+            continue
+        if text[i] in "$`":
+            expansions.append(i)
+        i += 1
+    if i >= n:
+        return n, True
+    return i + 1, False
+
+
+def _scan_word(
+    text: str, start: int, expansions: list[int], newlines: list[int]
+) -> tuple[int, bool, bool]:
+    """Scan one word starting at start; return (end, quoted, unterminated)."""
+    n = len(text)
+    i = start
+    quoted = unterminated = False
+    while i < n and text[i] not in _SHELL_BLANKS and text[i] not in _SHELL_OPERATORS:
+        ch = text[i]
+        if ch == "\\":
+            quoted = True
+            if i + 1 < n and text[i + 1] == "\n":
+                newlines.append(i + 1)
+            i += 2
+        elif ch == "'":
+            quoted = True
+            i, bad = _scan_single_quoted(text, i)
+            unterminated = unterminated or bad
+        elif ch == '"':
+            quoted = True
+            i, bad = _scan_double_quoted(text, i, expansions)
+            unterminated = unterminated or bad
+        else:
+            if ch in "$`":
+                expansions.append(i)
+            i += 1
+    return min(i, n), quoted, unterminated
+
+
 def _scan_shell(text: str) -> _Scan:
     """Split text into shell words and record the offset of every hazard."""
     words: list[_Word] = []
@@ -168,52 +221,19 @@ def _scan_shell(text: str) -> _Scan:
     while i < n:
         if text[i] in _SHELL_BLANKS:
             i += 1
-            continue
-        if text[i] in _SHELL_OPERATORS:
+        elif text[i] in _SHELL_OPERATORS:
             if text[i] == "\n":
                 newlines.append(i)
             words.append(_Word(i, i + 1, True, False))
             i += 1
-            continue
-        if text[i] == "#":
-            comments.append(i)
-        start, quoted = i, False
-        while i < n and text[i] not in _SHELL_BLANKS and text[i] not in _SHELL_OPERATORS:
-            ch = text[i]
-            if ch == "\\":
-                quoted = True
-                if i + 1 < n and text[i + 1] == "\n":
-                    newlines.append(i + 1)
-                i += 2
-            elif ch == "'":
-                quoted = True
-                close = text.find("'", i + 1)
-                if close == -1:
-                    unterminated = True
-                    i = n
-                else:
-                    i = close + 1
-            elif ch == '"':
-                quoted = True
-                i += 1
-                while i < n and text[i] != '"':
-                    if text[i] == "\\" and i + 1 < n and text[i + 1] in _DOUBLE_QUOTE_ESCAPABLE:
-                        i += 2
-                        continue
-                    if text[i] in "$`":
-                        expansions.append(i)
-                    i += 1
-                if i >= n:
-                    unterminated = True
-                else:
-                    i += 1
-            else:
-                if ch in "$`":
-                    expansions.append(i)
-                i += 1
-        end = min(i, n)
-        is_option = not quoted and text[start:end] in _OPTION_NAMES
-        words.append(_Word(start, end, False, is_option))
+        else:
+            if text[i] == "#":
+                comments.append(i)
+            end, quoted, bad = _scan_word(text, i, expansions, newlines)
+            unterminated = unterminated or bad
+            is_option = not quoted and text[i:end] in _OPTION_NAMES
+            words.append(_Word(i, end, False, is_option))
+            i = end
     return _Scan(words, expansions, newlines, comments, unterminated)
 
 
@@ -247,7 +267,9 @@ def shell_hazards(cmd: str) -> list[str]:
             "command runs; refused even with an approval naming this text"
         )
     if scan.newlines:
-        reasons.append("an unquoted newline starts a second command; one approved command is one line")
+        reasons.append(
+            "an unquoted newline starts a second command; one approved command is one line"
+        )
     if scan.comments:
         reasons.append(
             "an unquoted # that starts a word is a shell comment, which hides the rest of the "
@@ -262,9 +284,7 @@ def group_actions(hits: list) -> list[dict]:
     """One destructive action per command, however many patterns it matched."""
     actions: dict[int, dict] = {}
     for idx, cmd, category, desc in hits:
-        action = actions.setdefault(
-            idx, {"index": idx, "cmd": cmd, "categories": [], "descs": []}
-        )
+        action = actions.setdefault(idx, {"index": idx, "cmd": cmd, "categories": [], "descs": []})
         if category not in action["categories"]:
             action["categories"].append(category)
         action["descs"].append(desc)

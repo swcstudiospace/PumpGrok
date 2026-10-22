@@ -92,9 +92,7 @@ def test_excerpt_hides_every_credential_on_the_line(gate):
 def test_cli_report_never_prints_a_full_credential(gate, tmp_path, monkeypatch, capsys):
     aws, gh = _aws_key(), _github_token()
     (tmp_path / "config.py").write_text(f'AWS = "{aws}"  GH = "{gh}"\n')
-    code, err = _run_cli(
-        gate, monkeypatch, capsys, "--root", str(tmp_path), "--files", "config.py"
-    )
+    code, err = _run_cli(gate, monkeypatch, capsys, "--root", str(tmp_path), "--files", "config.py")
     assert code == 1
     assert "aws_access_key" in err
     assert aws not in err
@@ -110,9 +108,7 @@ def test_overlapping_secrets_leave_no_fragment(gate):
 # Finding 2: --staged must scan the staged blob, not the working-tree file.
 
 
-def test_staged_credential_is_caught_after_worktree_is_cleaned(
-    gate, repo, monkeypatch, capsys
-):
+def test_staged_credential_is_caught_after_worktree_is_cleaned(gate, repo, monkeypatch, capsys):
     aws = _aws_key()
     (repo / "config.py").write_text(f'KEY = "{aws}"\n')
     _git(repo, "add", "config.py")
@@ -170,9 +166,7 @@ def test_staged_submodule_pointer_is_skipped(gate, repo, monkeypatch, capsys):
 # Finding 3: a renamed file must be scanned under its new path.
 
 
-def test_renamed_file_with_credential_is_scanned_under_new_path(
-    gate, repo, monkeypatch, capsys
-):
+def test_renamed_file_with_credential_is_scanned_under_new_path(gate, repo, monkeypatch, capsys):
     # Filler keeps similarity high so git reports the move as a rename (R), not delete plus add.
     filler = "".join(f"value_{i} = {i}\n" for i in range(30))
     (repo / "old.py").write_text(filler)

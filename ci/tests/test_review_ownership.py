@@ -77,9 +77,7 @@ def test_changed_files_reports_rename_source_and_destination(ownership, monkeypa
     assert sorted(ownership.changed_files(base)) == ["bot_a/mod.py", "bot_b/mod.py"]
 
 
-def test_rename_out_of_foreign_directory_is_flagged_as_foreign(
-    ownership, monkeypatch, rename_repo
-):
+def test_rename_out_of_foreign_directory_is_flagged_as_foreign(ownership, monkeypatch, rename_repo):
     repo, base = rename_repo
     monkeypatch.setattr(ownership, "REPO_ROOT", repo)
     manifest = {
