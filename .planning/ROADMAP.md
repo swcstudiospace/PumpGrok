@@ -11,7 +11,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] **Phase 1: Foundation** - Package, layered config, ownership, ported gates, contracts, network-blocked harness and ledger with a skip-only replay cycle (19 requirements) (completed 2026-10-21)
 - [x] **Phase 2: Restructure** - Read-only tools and vendor engine ported into `src/pumpgrok` with characterization tests, skills rewritten, CLI verbs exposed (5 requirements) (completed 2026-10-21)
 - [x] **Phase 3: Tools and Skills** - Dotted typed tool layer, least-privilege rosters, desk gateway and the 35-skill set (15 requirements) (completed 2026-10-21)
-- [ ] **Phase 4: Paper Trading and Autonomy** - Curve-faithful paper fills, risk engine, deterministic replay, supervised ten-seat loop, reports, live refusal and vendor retirement (24 requirements)
+- [x] **Phase 4: Paper Trading and Autonomy** - Curve-faithful paper fills, risk engine, deterministic replay, supervised ten-seat loop, reports, live refusal and vendor retirement (24 requirements) (completed 2026-10-22)
 - [ ] **Phase 5: Hardening** - Multi-day soak, fault injection, metrics, runbooks, go-live gate proof and security evidence (8 requirements)
 
 ## Phase Details
@@ -149,7 +149,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] 04-05-PLAN.md
 - [x] 04-06-PLAN.md
 - [x] 04-07-PLAN.md
-- [ ] 04-08-PLAN.md
+- [x] 04-08-PLAN.md
 - [x] 04-09-PLAN.md
 
 ### Phase 5: Hardening
@@ -188,5 +188,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 14/14 | Complete    | 2026-10-21 |
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
 | 3. Tools and Skills | 7/7 | Complete    | 2026-10-21 |
-| 4. Paper Trading and Autonomy | 7/9 | In Progress | - |
+| 4. Paper Trading and Autonomy | 10/10 | Complete    | 2026-10-22 |
 | 5. Hardening | 0/TBD | Not started | - |
