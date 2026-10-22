@@ -37,12 +37,12 @@ All five ROADMAP success criteria plus the checkpoint re-pass literally as writt
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| SC1 | 164+ characterization tests collected; full suite exits 0 | ✓ VERIFIED | collect-only exit 0, 244 tests (19 files); full suite exit 0, 1215 collected suite-wide (86 files), 1213 dots + 2 skips, 0 failures |
-| SC2 | Two seeded verify runs over smoke-10m give identical events.hash | ✓ VERIFIED | Both runs exit 0; both print events.hash=d6ce3e73dee25a74485666cfffcbb94e69f24e5ee1cd2ef10e968c7000e0eb6a and verify=CONSISTENT seq=1 events=41 |
-| SC3 | Killswitch replay run exits 0; OrderPlaced count is 0 | ✓ VERIFIED | PUMPGROK_KILLSWITCH=1 run exits 0 (engine decision=skip reason=data_unavailable); sqlite count query prints 0, exit 0 |
-| SC4 | Live mode exits 3 sending nothing; daily/weekly reports exit 0; daily report is ASCII-only | ✓ VERIFIED | live run exit 3, 9 unmet preconditions listed, "No transaction was attempted"; daily exit 0; weekly exit 0; non-ASCII grep prints 0 |
-| SC5 | Vendor tree gone, license present, no scoped vendor references | ✓ VERIFIED | test ! -e vendor/grokbot-pumpfun exit 0; test -f src/pumpgrok/engine/LICENSE-grokbot-pumpfun exit 0; scoped rg prints nothing (rg exit 1 = no match) |
-| CKP | paper --once --replay tests/fixtures/replay/smoke completes one ten-seat cycle with no network access | ✓ VERIFIED | Exit 0, cycle_end, engine decision=skip reason=data_unavailable; ten-seat roster bot-00..bot-09 in supervisor/scheduler.py SEAT_CADENCES; run_once_replay docstring states no network; fixture is hand-authored local JSONL |
+| SC1 | 164+ characterization tests collected; full suite exits 0 | PASS VERIFIED | collect-only exit 0, 244 tests (19 files); full suite exit 0, 1215 collected suite-wide (86 files), 1213 dots + 2 skips, 0 failures |
+| SC2 | Two seeded verify runs over smoke-10m give identical events.hash | PASS VERIFIED | Both runs exit 0; both print events.hash=d6ce3e73dee25a74485666cfffcbb94e69f24e5ee1cd2ef10e968c7000e0eb6a and verify=CONSISTENT seq=1 events=41 |
+| SC3 | Killswitch replay run exits 0; OrderPlaced count is 0 | PASS VERIFIED | PUMPGROK_KILLSWITCH=1 run exits 0 (engine decision=skip reason=data_unavailable); sqlite count query prints 0, exit 0 |
+| SC4 | Live mode exits 3 sending nothing; daily/weekly reports exit 0; daily report is ASCII-only | PASS VERIFIED | live run exit 3, 9 unmet preconditions listed, "No transaction was attempted"; daily exit 0; weekly exit 0; non-ASCII grep prints 0 |
+| SC5 | Vendor tree gone, license present, no scoped vendor references | PASS VERIFIED | test ! -e vendor/grokbot-pumpfun exit 0; test -f src/pumpgrok/engine/LICENSE-grokbot-pumpfun exit 0; scoped rg prints nothing (rg exit 1 = no match) |
+| CKP | paper --once --replay tests/fixtures/replay/smoke completes one ten-seat cycle with no network access | PASS VERIFIED | Exit 0, cycle_end, engine decision=skip reason=data_unavailable; ten-seat roster bot-00..bot-09 in supervisor/scheduler.py SEAT_CADENCES; run_once_replay docstring states no network; fixture is hand-authored local JSONL |
 
 **Score:** 6/6 criteria pass. 28/28 must-haves verified (requirements table below).
 
@@ -74,30 +74,30 @@ Phase-4 artifacts were verified substantive and wired in the prior pass and are 
 
 | Artifact | Expected | Status | Details |
 | -------- | ----------- | ------ | ------- |
-| `src/pumpgrok/tools/exec/simulate.py:125` | build_simulate_tool(adapter, clock) | ✓ VERIFIED | Signature takes adapter + clock; server.py:141 passes (adapter, active_clock) |
-| `src/pumpgrok/tools/exec/cancel.py:165` | build_cancel_tool(adapter, store, clock) | ✓ VERIFIED | Signature takes adapter + store + clock; server.py:143 passes (adapter, store, active_clock) |
-| `services/desk-gateway/src/desk_gateway/server.py:141,143` | wired registry | ✓ VERIFIED | Consistent with neighboring quote/place/positions wiring; gateway suite 45/45 green (previously 100% fixture TypeError) |
-| `tests/execution/test_live_gate_fails_fast.py:245`, `tests/characterization/test_vendor_config.py:103,117,119,129,131` | allowlisted placeholders | ✓ VERIFIED | Pragma present on every flagged line; G-3 PASS; full suite green so assertions hold |
-| `src/pumpgrok/supervisor/scheduler.py:63-74` | ten-seat roster | ✓ VERIFIED | SEAT_CADENCES bot-00-chief .. bot-09-journal (10 seats) |
-| `tests/fixtures/replay/smoke-10m/{events.jsonl,manifest.json}` | canonical fixture | ✓ VERIFIED | Both verify runs print the canonical events.hash d6ce3e73...968c7000e0eb6a |
+| `src/pumpgrok/tools/exec/simulate.py:125` | build_simulate_tool(adapter, clock) | PASS VERIFIED | Signature takes adapter + clock; server.py:141 passes (adapter, active_clock) |
+| `src/pumpgrok/tools/exec/cancel.py:165` | build_cancel_tool(adapter, store, clock) | PASS VERIFIED | Signature takes adapter + store + clock; server.py:143 passes (adapter, store, active_clock) |
+| `services/desk-gateway/src/desk_gateway/server.py:141,143` | wired registry | PASS VERIFIED | Consistent with neighboring quote/place/positions wiring; gateway suite 45/45 green (previously 100% fixture TypeError) |
+| `tests/execution/test_live_gate_fails_fast.py:245`, `tests/characterization/test_vendor_config.py:103,117,119,129,131` | allowlisted placeholders | PASS VERIFIED | Pragma present on every flagged line; G-3 PASS; full suite green so assertions hold |
+| `src/pumpgrok/supervisor/scheduler.py:63-74` | ten-seat roster | PASS VERIFIED | SEAT_CADENCES bot-00-chief .. bot-09-journal (10 seats) |
+| `tests/fixtures/replay/smoke-10m/{events.jsonl,manifest.json}` | canonical fixture | PASS VERIFIED | Both verify runs print the canonical events.hash d6ce3e73...968c7000e0eb6a |
 
 ### Key Link Verification
 
 | From | To  | Via | Status | Details |
 | ---- | --- | --- | ------ | ------- |
-| server.py build_gateway_registry | simulate/cancel tools | constructor args (adapter, [store,] clock) | ✓ WIRED | Matches builder signatures; gateway fixtures previously TypeError, now pass |
-| verify CLI | smoke-10m ledger | events.hash comparison across two runs | ✓ WIRED | Identical hash + CONSISTENT both runs |
-| killswitch env | run --replay | PUMPGROK_KILLSWITCH=1 paper run | ✓ WIRED | Exit 0, zero OrderPlaced rows |
-| live CLI | LiveGate refusal | exit 3, no transaction | ✓ WIRED | "No transaction was attempted" |
-| reports CLI | stdout | daily/weekly renders | ✓ WIRED | Exit 0 both; daily ASCII-only |
+| server.py build_gateway_registry | simulate/cancel tools | constructor args (adapter, [store,] clock) | PASS WIRED | Matches builder signatures; gateway fixtures previously TypeError, now pass |
+| verify CLI | smoke-10m ledger | events.hash comparison across two runs | PASS WIRED | Identical hash + CONSISTENT both runs |
+| killswitch env | run --replay | PUMPGROK_KILLSWITCH=1 paper run | PASS WIRED | Exit 0, zero OrderPlaced rows |
+| live CLI | LiveGate refusal | exit 3, no transaction | PASS WIRED | "No transaction was attempted" |
+| reports CLI | stdout | daily/weekly renders | PASS WIRED | Exit 0 both; daily ASCII-only |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 | -------- | ------------- | ------ | ------------------ | ------ |
-| verify smoke-10m | events.hash | ledger fold over 41 fixture events | Yes — identical across runs | ✓ FLOWING |
-| killswitch ledger.sqlite | OrderPlaced count | replay run under killswitch | Yes — real query prints 0 | ✓ FLOWING |
-| daily report | stdout bytes | curve-price-derived figures | Yes — ASCII-only, exit 0 | ✓ FLOWING |
+| verify smoke-10m | events.hash | ledger fold over 41 fixture events | Yes - identical across runs | PASS FLOWING |
+| killswitch ledger.sqlite | OrderPlaced count | replay run under killswitch | Yes - real query prints 0 | PASS FLOWING |
+| daily report | stdout bytes | curve-price-derived figures | Yes - ASCII-only, exit 0 | PASS FLOWING |
 
 ### Behavioral Spot-Checks
 
@@ -111,22 +111,22 @@ No phase-declared probe scripts. Step 7c: SKIPPED (no `scripts/*/tests/probe-*.s
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ---------- | ----------- | ------ | -------- |
-| STRUCT-004 | 04-03 | Ported vendor characterization tests, full suite green | ✓ SATISFIED | 244 characterization tests; suite 1213 passed + 2 skipped |
-| STRUCT-006 | 04-09 | Vendor tree retired after six retirement checks | ✓ SATISFIED | SC5a/b/c all hold |
-| PAPER-001 | 04-04 | PaperAdapter curve fills | ✓ SATISFIED | Suite green; reports derive from curve prices |
-| PAPER-002 | 04-01 | Hash-chained WAL ledger | ✓ SATISFIED | verify CONSISTENT; tamper path covered by suite |
-| PAPER-003 | 04-01 | Snapshots, reducer, export | ✓ SATISFIED | Suite green |
-| PAPER-004 | 04-02, 04-10 | Deterministic replay, canonical hashes | ✓ SATISFIED | SC2 identical events.hash |
-| PAPER-005 | 04-04 | Graduation / BLIND flatten | ✓ SATISFIED | Suite green |
-| PAPER-006 | 04-09 | Daily/weekly reports | ✓ SATISFIED | SC4b/c/d |
-| PAPER-007 | 04-07 | Tickets and approvals | ✓ SATISFIED | Suite green |
-| RISK-001..005 | 04-05 | Risk engine, halts, breakers | ✓ SATISFIED | Suite green |
-| RISK-003/004 | 04-06, 04-10 | Killswitch | ✓ SATISFIED | SC3a/b |
-| RISK-006 | 04-08 | Observe-only degradation | ✓ SATISFIED | Suite green |
-| AUTO-001..006 | 04-08 | Supervisor, ten seats, health | ✓ SATISFIED | CKP + roster verified |
-| SEC-004 | 04-09 | Live gate refusal | ✓ SATISFIED | SC4a exit 3, nothing sent |
-| GOLIVE-001/002 | 04-09 | Live validation + confirmation record | ✓ SATISFIED | SC4a |
-| TOOL-004/011 | 04-07 | Tool carry-overs | ✓ SATISFIED | Suite green |
+| STRUCT-004 | 04-03 | Ported vendor characterization tests, full suite green | PASS SATISFIED | 244 characterization tests; suite 1213 passed + 2 skipped |
+| STRUCT-006 | 04-09 | Vendor tree retired after six retirement checks | PASS SATISFIED | SC5a/b/c all hold |
+| PAPER-001 | 04-04 | PaperAdapter curve fills | PASS SATISFIED | Suite green; reports derive from curve prices |
+| PAPER-002 | 04-01 | Hash-chained WAL ledger | PASS SATISFIED | verify CONSISTENT; tamper path covered by suite |
+| PAPER-003 | 04-01 | Snapshots, reducer, export | PASS SATISFIED | Suite green |
+| PAPER-004 | 04-02, 04-10 | Deterministic replay, canonical hashes | PASS SATISFIED | SC2 identical events.hash |
+| PAPER-005 | 04-04 | Graduation / BLIND flatten | PASS SATISFIED | Suite green |
+| PAPER-006 | 04-09 | Daily/weekly reports | PASS SATISFIED | SC4b/c/d |
+| PAPER-007 | 04-07 | Tickets and approvals | PASS SATISFIED | Suite green |
+| RISK-001..005 | 04-05 | Risk engine, halts, breakers | PASS SATISFIED | Suite green |
+| RISK-003/004 | 04-06, 04-10 | Killswitch | PASS SATISFIED | SC3a/b |
+| RISK-006 | 04-08 | Observe-only degradation | PASS SATISFIED | Suite green |
+| AUTO-001..006 | 04-08 | Supervisor, ten seats, health | PASS SATISFIED | CKP + roster verified |
+| SEC-004 | 04-09 | Live gate refusal | PASS SATISFIED | SC4a exit 3, nothing sent |
+| GOLIVE-001/002 | 04-09 | Live validation + confirmation record | PASS SATISFIED | SC4a |
+| TOOL-004/011 | 04-07 | Tool carry-overs | PASS SATISFIED | Suite green |
 
 Orphaned requirements: none — every Phase 4 requirement in REQUIREMENTS.md traceability is claimed by at least one 04 plan (04-01..04-10 cover STRUCT/PAPER/RISK/AUTO/SEC/GOLIVE plus TOOL-004/011 carry-overs).
 
