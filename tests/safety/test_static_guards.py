@@ -220,6 +220,7 @@ def test_smuggled_wall_clock_in_scratch_copy_is_caught(tmp_path: Path) -> None:
     found = find_violations(package)
     assert any(entry.startswith("core/ids.py:") for entry in found), found
 
+
 def _imports_prometheus_client(path: Path) -> list[str]:
     """Return `rel:line` entries for prometheus_client imports in one file."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -228,9 +229,7 @@ def _imports_prometheus_client(path: Path) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "prometheus_client" or alias.name.startswith(
-                    "prometheus_client."
-                ):
+                if alias.name == "prometheus_client" or alias.name.startswith("prometheus_client."):
                     found.append(f"{rel}:{node.lineno}: imports prometheus_client")
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""

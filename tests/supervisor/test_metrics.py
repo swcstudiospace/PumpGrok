@@ -129,6 +129,7 @@ async def test_seat_run_guarded_drives_metrics_observer(tmp_path: Path) -> None:
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     clock = FixtureClock(start=10.0)
     metrics = Metrics()
+
     async def _cycle(ctx: SeatContext) -> dict[str, Any]:
         # Move virtual time synchronously (see tests/logging/test_spans.py).
         clock.advance_to(clock.now() + 1.0)
@@ -179,9 +180,7 @@ async def test_metrics_route_serves_exposition_with_content_type() -> None:
     try:
 
         def _fetch(path: str, method: str = "GET") -> tuple[int, str | None, bytes]:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{port}{path}", method=method
-            )
+            request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method)
             try:
                 with urllib.request.urlopen(request) as response:
                     return (

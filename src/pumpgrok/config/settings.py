@@ -250,6 +250,7 @@ class LiveSettings(BaseModel):
 
     enabled: bool = False
 
+
 class HealthSettings(BaseModel):
     """Health server bind port (INV-C-11).
 

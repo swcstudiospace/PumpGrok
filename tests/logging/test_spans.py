@@ -67,6 +67,7 @@ def _captured(records: list[logging.LogRecord]) -> Iterator[None]:
         logger.removeHandler(handler)
         logger.setLevel(level)
 
+
 def test_span_duration_equals_clock_delta(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
     with _captured(records):

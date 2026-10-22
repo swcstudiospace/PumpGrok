@@ -31,9 +31,7 @@ def test_health_port_env_name_is_allowed() -> None:
     assert "PUMPGROK_HEALTH__PORT" in allowed_env_names()
 
 
-def test_env_overrides_default_port(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_env_overrides_default_port(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_HEALTH__PORT", "8080")
     assert load_settings().health.port == 8080
 

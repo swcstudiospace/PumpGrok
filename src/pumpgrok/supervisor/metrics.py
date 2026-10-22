@@ -118,9 +118,7 @@ class Metrics:
         self.equity_sol = Gauge(
             EQUITY_SOL, "Equity in SOL (lamports/1e9 at scrape).", registry=self._registry
         )
-        self.drawdown_pct = Gauge(
-            DRAWDOWN_PCT, "Drawdown percent.", registry=self._registry
-        )
+        self.drawdown_pct = Gauge(DRAWDOWN_PCT, "Drawdown percent.", registry=self._registry)
         self.data_age_seconds = Gauge(
             DATA_AGE_SECONDS, "Data age seconds by source.", ["source"], registry=self._registry
         )
@@ -130,12 +128,8 @@ class Metrics:
             ["breaker"],
             registry=self._registry,
         )
-        self.kill_switch = Gauge(
-            KILL_SWITCH, "Kill switch engaged (0/1).", registry=self._registry
-        )
-        self.ledger_seq = Gauge(
-            LEDGER_SEQ, "Ledger sequence number.", registry=self._registry
-        )
+        self.kill_switch = Gauge(KILL_SWITCH, "Kill switch engaged (0/1).", registry=self._registry)
+        self.ledger_seq = Gauge(LEDGER_SEQ, "Ledger sequence number.", registry=self._registry)
         self._last_orders: dict[tuple[str, str], float] = {}
         self._known_sources: set[str] = set()
         self._known_breakers: set[str] = set()
@@ -157,9 +151,7 @@ class Metrics:
     def note_order(self, side: str, outcome: str) -> None:
         """Count one order outcome event (filled|rejected|unknown_result)."""
         self.orders_total.labels(side=side, outcome=outcome).inc()
-        self._last_orders[(side, outcome)] = (
-            self._last_orders.get((side, outcome), 0.0) + 1.0
-        )
+        self._last_orders[(side, outcome)] = self._last_orders.get((side, outcome), 0.0) + 1.0
 
     def sync_orders(self, counts: Mapping[tuple[str, str], float]) -> None:
         """Reconcile order counters from cumulative ledger reads without double-counting."""
@@ -196,9 +188,7 @@ class Metrics:
             for name in self._known_breakers - set(states):
                 self.breaker_state.remove(name)
             for name, text in states.items():
-                self.breaker_state.labels(breaker=name).set(
-                    _BREAKER_VALUE.get(str(text), 2.0)
-                )
+                self.breaker_state.labels(breaker=name).set(_BREAKER_VALUE.get(str(text), 2.0))
             self._known_breakers = set(states)
         if "orders" in state:
             self.sync_orders(dict(state["orders"]))

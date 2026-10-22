@@ -74,9 +74,7 @@ class _Span:
         self._name = name
         self._fields = fields
         self._start = 0.0
-        self._tokens: tuple[
-            contextvars.Token[str | None], contextvars.Token[int]
-        ] | None = None
+        self._tokens: tuple[contextvars.Token[str | None], contextvars.Token[int]] | None = None
 
     def _enter(self) -> _Span:
         clock = current_clock()
