@@ -93,10 +93,7 @@ def test_spans_nest_with_parent_and_depth(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
     with _captured(records), bind_clock(clock), span("outer"), span("inner"):
         pass
-    seen = [
-        (record.span, record.parent, record.depth)
-        for record in records
-    ]
+    seen = [(record.span, record.parent, record.depth) for record in records]
     assert seen == [("inner", "outer", 2), ("outer", None, 1)]
 
 

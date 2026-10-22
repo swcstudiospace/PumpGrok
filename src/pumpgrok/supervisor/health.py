@@ -143,9 +143,7 @@ class HealthServer:
                     try:
                         payload = self._get_metrics()
                     except Exception as exc:
-                        self._respond(
-                            writer, 503, {"metrics": False, "error": type(exc).__name__}
-                        )
+                        self._respond(writer, 503, {"metrics": False, "error": type(exc).__name__})
                     else:
                         self._respond_bytes(writer, 200, payload, EXPOSITION_CONTENT_TYPE)
             elif path == "/readyz":
