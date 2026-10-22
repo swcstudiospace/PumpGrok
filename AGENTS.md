@@ -403,3 +403,21 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
+
+## Rules index
+
+Read these before the first edit. Each linked file is the rule; a summary elsewhere is not a substitute.
+
+| Order | File | Read it for |
+|---|---|---|
+| 1 | [rules/pumpgrok-team.mdc](rules/pumpgrok-team.mdc) | Security constitution (verbatim in every seat file) |
+| 2 | [ownership.yaml](ownership.yaml) | Which seat owns the paths you will touch |
+| 3 | [docs/desk-operating-model.md](docs/desk-operating-model.md) | Ten seats, levels, flow of a trade |
+| 4 | [docs/cross-bot-protocol.md](docs/cross-bot-protocol.md) | Working across seats |
+| 5 | [docs/quality-gates.md](docs/quality-gates.md) | Gates G-1..G-7, how to run them |
+| 6 | [SECURITY.md](SECURITY.md) | Key custody, secrets, container posture |
+| 7 | [docs/RISK_POLICY.md](docs/RISK_POLICY.md) | Risk defaults, paper-first policy, manipulation boundary |
+| 8 | [docs/SAFETY_INVARIANTS.md](docs/SAFETY_INVARIANTS.md) | Non-negotiable invariants and their owning tests |
+| 9 | [docs/runbooks/setup.md](docs/runbooks/setup.md) | Operator path: setup, engine, start/stop, kill switch, outage, rollback, reports, go-live |
+| 10 | [docs/VENDOR_PIN.md](docs/VENDOR_PIN.md) | Vendored engine pin and desk overrides |
+| 11 | [CHANGELOG.md](CHANGELOG.md) | Release history by phase |
