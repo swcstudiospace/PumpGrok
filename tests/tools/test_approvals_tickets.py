@@ -265,6 +265,21 @@ def test_phrase_parses_token_for_token(tmp_path: Path) -> None:
         store.close()
 
 
+@pytest.mark.parametrize("size", ["Infinity", "-Infinity", "NaN", "inf", "-inf", "sNaN"])
+def test_phrase_rejects_non_finite_sizes(size: str) -> None:
+    """WR-04: non-finite SOL sizes raise ValueError, never OverflowError."""
+    clock = FixtureClock(START)
+    ids = IdFactory(clock, make_rng(3))
+    with pytest.raises(ValueError, match="finite"):
+        parse_human_phrase(
+            f"approve SOL-20260201-001 {MINT} {size} 100",
+            kind="human_buy",
+            by="human:alice",
+            approval_id=f"apr-{ids.ulid()}",
+            at=datetime.fromtimestamp(clock.now(), UTC),
+        )
+
+
 async def test_paper_buy_atomic_consume_and_order(tmp_path: Path) -> None:
     adapter, clock, _engine, ids, store = _harness(tmp_path)
     try:

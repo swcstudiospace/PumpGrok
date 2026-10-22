@@ -142,6 +142,8 @@ def _sol_to_lamports(size_sol: str) -> int:
         size = Decimal(size_sol)
     except InvalidOperation as exc:
         raise ValueError(f"bad size {size_sol!r}: want decimal SOL") from exc
+    if not size.is_finite():
+        raise ValueError(f"bad size {size_sol!r}: want a finite number")
     if size <= 0:
         raise ValueError(f"bad size {size_sol!r}: want a positive number")
     return int((size * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
