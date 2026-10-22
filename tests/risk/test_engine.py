@@ -26,6 +26,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.risk.engine import (
+    _DECISION_CACHE_MAX,
     FLOOR_HALTED_DAILY,
     STEP_IDS,
     RiskEngine,
@@ -731,5 +732,42 @@ def test_repeat_check_returns_identical_decision(tmp_path: Path) -> None:
         assert second.decision_id == first.decision_id
         assert second.order_hash == first.order_hash
         assert second.evaluated == first.evaluated
+    finally:
+        store.close()
+
+
+def test_cached_pass_does_not_survive_halt(tmp_path: Path) -> None:
+    """WR-01: a cached PASS is not replayed after a halt engages."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        engine = _engine(store, clock)
+        order = _buy(clock, ids)
+        first = engine.check(order, seat="bot-04-sniper")
+        assert first.passed is True
+        assert engine.check(order, seat="bot-04-sniper").decision_id == first.decision_id
+        _append(store, clock, "HaltSet", _halt_payload("manual"))
+        after = engine.check(order, seat="bot-04-sniper")
+        assert after.passed is False
+        assert after.reason == "halted"
+        assert after.evaluated != first.evaluated
+    finally:
+        store.close()
+
+
+def test_decision_cache_is_bounded(tmp_path: Path) -> None:
+    """WR-01: the decision cache evicts oldest entries past its cap."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        engine = _engine(store, clock)
+        order = _buy(clock, ids)
+        engine.check(order, seat="bot-04-sniper")
+        for index in range(_DECISION_CACHE_MAX + 10):
+            engine._decisions[f"old-{index}"] = engine.check(order, seat="bot-04-sniper")
+        engine.check(_buy(clock, ids), seat="bot-04-sniper")
+        assert len(engine._decisions) <= _DECISION_CACHE_MAX
     finally:
         store.close()

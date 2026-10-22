@@ -191,6 +191,10 @@ class _Fail(Exception):
         self.detail = detail
 
 
+#: Decision-cache cap: generation-keyed entries, oldest evicted past this.
+_DECISION_CACHE_MAX = 1024
+
+
 @dataclass
 class _StepCtx:
     """Mutable walk state shared by the 19 step methods."""
@@ -230,7 +234,8 @@ class RiskEngine:
 
     The kill-switch env is snapshotted at construction (read once at start,
     R22); the file and alert sources are polled on every check. Repeat checks
-    with the same ``order_hash`` (and stage) return the identical decision.
+    with the same ``order_hash`` (and stage) return the identical decision
+    while the ledger head and gate state are unchanged.
     """
 
     def __init__(
@@ -540,7 +545,7 @@ class RiskEngine:
         the stop and limit steps before a fill.
         """
         order_hash = order_hash_for(order)
-        cache_key = f"{stage}|{order_hash}|{order.approval_id or ''}"
+        cache_key = self._cache_key(order, order_hash=order_hash, stage=stage)
         cached = self._decisions.get(cache_key)
         if cached is not None:
             return cached
@@ -555,7 +560,32 @@ class RiskEngine:
             stage=stage,
         )
         self._decisions[cache_key] = decision
+        while len(self._decisions) > _DECISION_CACHE_MAX:
+            self._decisions.pop(next(iter(self._decisions)))
         return decision
+
+    def _cache_key(
+        self,
+        order: OrderRequest,
+        *,
+        order_hash: str,
+        stage: Literal["ACCEPTED", "CONFIRMING"],
+    ) -> str:
+        """Cache key with a gate generation: ledger head plus live gate state.
+
+        Any halt/kill/breaker change (a ledger append, a kill env/file/alert
+        flip, or a breaker cooldown transition) changes the key, so a cached
+        PASS never replays past an engaged gate and a cached REJECT never
+        survives a human clear.
+        """
+        kill = self._killswitch.poll()
+        return (
+            f"{stage}|{order_hash}|{order.approval_id or ''}"
+            f"|{self._store.count()}"
+            f"|{int(kill.active)}|{kill.source}|{kill.reason}"
+            f"|{','.join(sorted(self._breakers.open_breakers()))}"
+            f"|{','.join(sorted(self._breakers.half_open_breakers()))}"
+        )
 
     def _skip(self, step: str, ctx: _StepCtx) -> bool:
         if ctx.stage == "CONFIRMING" and step not in _RECHECK_STEPS:
