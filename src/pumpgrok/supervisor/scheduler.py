@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import hashlib
 import logging
+import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -388,6 +389,11 @@ class Supervisor:
                     "open_positions": [],
                 },
             )
+        except sqlite3.IntegrityError:
+            # Same-day restart: the row already exists; latch the day and stay
+            # quiet instead of retrying the doomed insert on every tick.
+            self._last_rollover_day = day
+            return
         except Exception as exc:
             log.warning("daily rollover append failed: %s", exc)
             return

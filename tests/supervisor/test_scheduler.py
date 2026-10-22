@@ -14,6 +14,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -192,3 +194,35 @@ async def test_health_json_rewrites_atomically(tmp_path: Path) -> None:
 
     assert json.loads(target.read_text(encoding="utf-8"))["autonomy_level"] == "autonomous-paper"
     assert SEAT_CADENCES["bot-02-risk"] == 5.0
+
+
+def test_same_day_restart_latches_rollover_quietly(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """WR-03: a same-day restart latches the day instead of retrying the insert."""
+    import logging
+
+    from pumpgrok.risk.engine import utc_day
+
+    clock = FixtureClock(start=1_700_000_000.0)
+    store = _store(tmp_path)
+    try:
+        cycles = dict.fromkeys(ROSTER, _ok_cycle)
+        first = Supervisor(store=store, clock=clock, rng=make_rng(7), cycles=cycles)
+        first._emit_rollover(clock.now())
+        day = utc_day(clock.now())
+        assert first._last_rollover_day == day
+        # Simulate a supervisor restart: in-memory latch resets, the row persists.
+        restarted = Supervisor(store=store, clock=clock, rng=make_rng(7), cycles=cycles)
+        assert restarted._last_rollover_day is None
+        with caplog.at_level(logging.WARNING, logger="pumpgrok.supervisor.scheduler"):
+            restarted._emit_rollover(clock.now())
+            restarted._emit_rollover(clock.now())
+        rollovers = [
+            row for row in store.read(limit=None) if row["type"] == "DailyRollover"
+        ]
+        assert len(rollovers) == 1
+        assert restarted._last_rollover_day == day
+        assert "daily rollover append failed" not in caplog.text
+    finally:
+        store.close()
