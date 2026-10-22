@@ -75,7 +75,8 @@ _WALLET_UI_RE = re.compile(
     re.IGNORECASE,
 )
 _REFUSAL_RE = re.compile(
-    r"\b(never|refuse[sd]?|stop|hand to human|hand the screen|escalate[sd]?|BLIND|cannot|do not|don't)\b",
+    r"\b(never|refuse[sd]?|stop|hand to human|hand the screen|escalate[sd]?|BLIND|cannot|"
+    r"do not|don't)\b",
     re.IGNORECASE,
 )
 
@@ -220,5 +221,6 @@ def test_browser_ops_skill_has_no_posting_or_wallet_procedure() -> None:
             wallet = _WALLET_UI_RE.search(line)
             if wallet is not None:
                 assert _REFUSAL_RE.search(line) is not None, (
-                    f"{path.name}:{lineno} wallet-UI text without refusal framing: {wallet.group(0)!r}"
+                    f"{path.name}:{lineno} wallet-UI text without refusal framing: "
+                    f"{wallet.group(0)!r}"
                 )

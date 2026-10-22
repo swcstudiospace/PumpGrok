@@ -34,10 +34,17 @@ from pumpgrok.tools.notify.notifier import Notifier
 PLANTED_B58 = "5" + "H" * 85  # pragma: allowlist secret
 PLANTED_KEYPAIR = "[" + ",".join(["1"] * 64) + "]"  # pragma: allowlist secret
 PLANTED_PHRASE = (  # pragma: allowlist secret
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"  # pragma: allowlist secret
+    "abandon abandon abandon abandon abandon abandon "  # pragma: allowlist secret
+    "abandon abandon abandon abandon abandon about"  # pragma: allowlist secret
 )
-PLANTED_HELIUS = "https://mainnet.helius-rpc.com/?api-key=AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret
-PLANTED_QUICKNODE = "https://abc123def456.solana-mainnet.quiknode.pro/ABCDEFGHIJ1234567890/"  # pragma: allowlist secret
+PLANTED_HELIUS = (  # pragma: allowlist secret
+    "https://mainnet.helius-rpc.com/?api-key="  # pragma: allowlist secret
+    "AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret
+)
+PLANTED_QUICKNODE = (  # pragma: allowlist secret
+    "https://abc123def456.solana-mainnet.quiknode.pro/"  # pragma: allowlist secret
+    "ABCDEFGHIJ1234567890/"  # pragma: allowlist secret
+)
 PLANTED_TELEGRAM = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"  # pragma: allowlist secret
 PLANTED_XAI = "xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"  # pragma: allowlist secret
 PLANTED_AUTH = "Bearer xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"  # pragma: allowlist secret
@@ -128,7 +135,6 @@ async def test_log_redaction(
         log.exception("trade failed")
     lines = [line for line in buffer.getvalue().splitlines() if line]
     assert len(lines) == 2
-    captured = "\n".join(lines)
     first = json.loads(lines[0])
     assert first["msg"].startswith("gate refused with key xai-")
     assert "123456789:" not in first["msg"]

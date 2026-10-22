@@ -66,7 +66,7 @@ def _hostile() -> dict[str, Any]:
             "txType": "create",
             "mint": MINT,
             "timestamp": NOW * 1000,
-            "symbol": "SоL",  # Cyrillic o
+            "symbol": "S\u043eL",  # Cyrillic o
         },
     }
 
