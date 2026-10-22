@@ -453,3 +453,40 @@ def test_halt_clear_twice_same_day_with_distinct_approvals(tmp_path: Path) -> No
             engine.request_halt_clear(first, "reuse")
     finally:
         store.close()
+
+
+def test_kill_clear_same_reason_after_reengage_refuses(tmp_path: Path) -> None:
+    """CR-04: a second clear for the same reason/day refuses, never false-succeeds.
+
+    A prior clear for the same reason today plus a re-engaged switch used to
+    swallow the duplicate ``KillSwitchCleared`` write, burn the approval, and
+    still report ``{"ok": true}``. Now the duplicate clear key is an explicit
+    ``ClearRefused``, the approval stays unconsumed, and a distinct reason
+    still clears.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    killswitch = tmp_path / "KILLSWITCH"
+    try:
+        ks = KillSwitch(clock, store=store, killswitch_path=killswitch, env={})
+        killswitch.write_text("cause one", encoding="utf-8")
+        ks.observe(ts_utc=format_ts_utc(START))
+        killswitch.unlink()
+        first = _human_approval(clock, ids, "killswitch_clear")
+        ks.request_clear(first, "all clear", ts_utc=format_ts_utc(START))
+        assert ks.poll().active is False
+        killswitch.write_text("cause two", encoding="utf-8")
+        ks.observe(ts_utc=format_ts_utc(START))
+        killswitch.unlink()
+        assert ks.poll().active is True
+        second = _human_approval(clock, ids, "killswitch_clear")
+        with pytest.raises(ClearRefused, match="already cleared"):
+            ks.request_clear(second, "all clear", ts_utc=format_ts_utc(START))
+        assert ks.poll().active is True
+        assert store.by_key(f"consumed|{second.id}") is None
+        assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 1
+        ks.request_clear(second, "all clear take two", ts_utc=format_ts_utc(START))
+        assert ks.poll().active is False
+    finally:
+        store.close()

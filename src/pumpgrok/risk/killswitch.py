@@ -210,6 +210,8 @@ class KillSwitch:
 
         Human-only: ``cleared_by`` must start with ``human:`` and must not
         match a seat id (the G-2 rule). Refused while any live source persists.
+        Both rows land in one atomic batch: a duplicate clear key is an
+        explicit refusal ("already cleared, re-poll"), never a false success.
         """
         by = approval.approved_by
         if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
@@ -256,9 +258,11 @@ class KillSwitch:
                 "consumed": True,
             },
         }
-        with _SuppressIntegrity():
-            self._store.append(**cleared)
-            self._store.append(**consumed)
+        if self._store.by_key(str(cleared["idempotency_key"])) is not None:
+            raise ClearRefused(f"kill switch already cleared for {reason!r}: re-poll state")
+        if self._store.by_key(str(consumed["idempotency_key"])) is not None:
+            raise ClearRefused(f"killswitch_clear approval {approval.id} is already consumed")
+        self._store.append_batch([cleared, consumed])
         return cleared
 
     def _latest_set(self) -> dict[str, Any] | None:
