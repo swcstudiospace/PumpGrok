@@ -523,7 +523,12 @@ def _settings_kwargs(mode: str | None) -> dict[str, str]:
 
 
 def _run(args: argparse.Namespace, settings: Settings) -> int:
-    gate = LiveGate(mode=settings.effective_mode, environ=os.environ, root=Path.cwd())
+    gate = LiveGate(
+        mode=settings.effective_mode,
+        environ=os.environ,
+        root=Path.cwd(),
+        live_enabled=settings.live.enabled,
+    )
     if settings.effective_mode == "live":
         preconditions = gate.evaluate()
         if any(not item.met for item in preconditions):

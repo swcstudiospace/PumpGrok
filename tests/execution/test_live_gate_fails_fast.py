@@ -57,7 +57,7 @@ def test_live_run_exits_3_with_nine_ordered_lines(tmp_path: Path, monkeypatch, c
     code = main(["run", "--mode", "live", "--once"])
     assert code == 3
     err = capsys.readouterr().err
-    assert err.startswith("LIVE GATE: refusing to start in mode=live. 8 of 9")
+    assert err.startswith("LIVE GATE: refusing to start in mode=live. 9 of 9")
     marked = [line for line in err.splitlines() if line.startswith("  [")]
     assert len(marked) == 9
     ids = []

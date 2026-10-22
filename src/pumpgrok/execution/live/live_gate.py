@@ -4,12 +4,16 @@
 unmet one. `LiveGate.check()` returns the ids of the unmet ones, in order. The CLI runs the
 gate whenever the effective mode is live and exits 3 before any other work.
 
+Precondition 1 requires both effective mode live AND `[live] enabled = true`
+(R21 amendment, D4); every overlay ships `enabled = false`, so an explicit
+operator edit is needed before row 1 can hold.
+
 Fail closed: this release has no wallet allowlist or notional cap setting, no
 confirmation verifier, no adapter implementation and no readable halt, kill-switch or
 breaker state. Preconditions 5 to 9 therefore report unmet with the reason naming what
-is missing. Precondition 8 is always unmet by design. Preconditions 3 and 4 are
-computed on ledger events with source=paper only; any source=replay row refuses the
-metrics (F-B1, R21).
+is missing. Precondition 8 is always unmet by design (no live adapter ships).
+Preconditions 3 and 4 are computed on ledger events with source=paper only;
+any source=replay row refuses the metrics (F-B1, R21).
 """
 
 from __future__ import annotations
@@ -51,21 +55,36 @@ class Precondition:
 
 
 class LiveGate:
-    """Evaluates R21 against the effective mode, the environment and the working directory."""
+    """Evaluates R21 against the effective mode, [live] enabled, the environment and the root."""
 
-    def __init__(self, *, mode: str, environ: Mapping[str, str], root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        mode: str,
+        environ: Mapping[str, str],
+        root: Path,
+        live_enabled: bool = False,
+    ) -> None:
         self._mode = mode
         self._environ = environ
         self._root = root
+        self._live_enabled = live_enabled
 
     def evaluate(self) -> tuple[Precondition, ...]:
         confirmation = self._root / "var" / "live_confirmation.json"
         mode_live = self._mode == "live"
+        live_flag = self._live_enabled is True
+        row1_met = mode_live and live_flag
+        if row1_met:
+            mode_reason = "effective mode is live and [live] enabled is true"
+        elif mode_live:
+            mode_reason = "effective mode is live but [live] enabled is not true"
+        else:
+            mode_reason = f"effective mode is {self._mode}"
         env_enabled = self._environ.get("PUMPGROK_LIVE_ENABLE", "").strip() == "1"
         days_met, days_reason, perf_met, perf_reason = _paper_window(self._root)
-        mode_reason = "effective mode is live" if mode_live else f"effective mode is {self._mode}"
         rows: tuple[tuple[bool, str], ...] = (
-            (mode_live, mode_reason),
+            (row1_met, mode_reason),
             (
                 env_enabled,
                 "PUMPGROK_LIVE_ENABLE=1" if env_enabled else "PUMPGROK_LIVE_ENABLE is not 1",
