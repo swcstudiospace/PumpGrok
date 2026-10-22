@@ -25,7 +25,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_telegram_env_name_matches_sender_constant() -> None:
-    assert TELEGRAM_ENV_VAR == "PUMPGROK_TELEGRAM_TOKEN"
+    assert TELEGRAM_ENV_VAR == "PUMPGROK_TELEGRAM_TOKEN"  # pragma: allowlist secret: env var name
     assert TELEGRAM_ENV_VAR in settings_module.allowed_env_names()
 
 
