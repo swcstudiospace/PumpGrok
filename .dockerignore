@@ -18,7 +18,7 @@ var
 issues
 agents
 ci
-contracts
+contracts/*
 docs
 hermes
 prompts
@@ -38,3 +38,4 @@ tests/fixtures/*
 !tests/fixtures/replay
 tests/fixtures/replay/*
 !tests/fixtures/replay/smoke
+!contracts/tool-rosters

@@ -2,8 +2,8 @@
 
 Nothing here runs docker or GitHub Actions. It parses the YAML and the Dockerfile and checks
 that the files agree with the repository they describe: referenced paths exist, the trusted
-overlay cannot silently fail, every command the Dockerfile invokes is installed by it, and the
-pins match.
+overlay cannot silently fail, every command the Dockerfile invokes is installed by it, the
+roster contracts land where the loaders resolve them in the installed layout, and the pins match.
 
     python3 -m pytest ci/tests/test_review_infra.py -v
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 import tomllib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -22,6 +22,11 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 GATES_DIR = REPO_ROOT / "ci" / "gates"
+ROSTER_SOURCE = REPO_ROOT / "contracts" / "tool-rosters"
+
+# The image's builder venv (UV_PROJECT_ENVIRONMENT) and its site-packages, for python:3.12-slim.
+INSTALLED_SITE = PurePosixPath("/opt/venv/lib/python3.12/site-packages")
+ROSTER_DEST = "/opt/venv/lib/python3.12/contracts/tool-rosters"
 
 _GATE_CALL = re.compile(r"python3\s+(ci/gates/[\w./-]+\.py)")
 _OVERLAY = 'git checkout "origin/$BASE_REF" -- ci/gates/'
@@ -108,7 +113,7 @@ def test_overlay_takes_gates_from_base_ref_only() -> None:
         assert 'git checkout "origin/$BASE_REF" -- ci/gates/' in run, job_id
 
 
-# --- Dockerfile ------------------------------------------------------------------------------
+# --- Dockerfile and .dockerignore ------------------------------------------------------------
 
 
 def _dockerfile_lines() -> list[str]:
@@ -119,20 +124,127 @@ def _instructions(keyword: str) -> list[str]:
     return [ln.strip() for ln in _dockerfile_lines() if ln.strip().startswith(keyword + " ")]
 
 
-def test_dockerfile_copy_sources_exist_and_are_not_excluded() -> None:
-    ignore = [
+def _dockerignore_rules() -> list[str]:
+    return [
         ln.strip()
         for ln in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
         if ln.strip() and not ln.strip().startswith("#")
     ]
+
+
+def _docker_pattern(pattern: str) -> re.Pattern[str]:
+    out: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+            continue
+        c = pattern[i]
+        out.append("[^/]*" if c == "*" else "[^/]" if c == "?" else re.escape(c))
+        i += 1
+    return re.compile("".join(out))
+
+
+def _docker_excluded(path: str, rules: list[str]) -> bool:
+    """Docker semantics: a rule matches a path or any of its parent directories; last match wins."""
+    parts = path.split("/")
+    candidates = ["/".join(parts[:n]) for n in range(1, len(parts) + 1)]
+    excluded = False
+    for rule in rules:
+        negated = rule.startswith("!")
+        rx = _docker_pattern(rule[1:] if negated else rule)
+        if any(rx.fullmatch(c) for c in candidates):
+            excluded = not negated
+    return excluded
+
+
+def test_dockerfile_copy_sources_exist_and_are_not_excluded() -> None:
+    rules = _dockerignore_rules()
+    sources: list[str] = []
     for line in _instructions("COPY"):
         if line.startswith("COPY --from="):
             continue
-        parts = line.split()[1:-1]
-        for src in parts:
-            assert (REPO_ROOT / src).exists(), f"COPY source missing from repo: {src}"
-            top = src.split("/")[0]
-            assert top not in ignore, f"COPY source {src!r} is excluded by .dockerignore"
+        sources.extend(line.split()[1:-1])
+    assert sources, "no build-context COPY sources found"
+    for src in sources:
+        assert (REPO_ROOT / src).exists(), f"COPY source missing from repo: {src}"
+        assert not _docker_excluded(src, rules), f"COPY source {src!r} is excluded by .dockerignore"
+
+
+def test_dockerignore_ships_only_roster_files_from_contracts() -> None:
+    rules = _dockerignore_rules()
+    assert _docker_excluded("contracts/changes/x.yaml", rules)
+    assert _docker_excluded("contracts/events/x.yaml", rules)
+    for f in ROSTER_SOURCE.iterdir():
+        if f.is_file():
+            assert not _docker_excluded(f"contracts/tool-rosters/{f.name}", rules), (
+                f"roster file {f.name} is excluded from the build context"
+            )
+
+
+def _loader_resolved_roster_paths() -> dict[str, PurePosixPath]:
+    """Where each loader resolves the rosters for an installed (non-editable) pumpgrok package.
+
+    The index into parents[] is read from the loader source, so a change to either loader's
+    path expression is caught here instead of silently drifting from the image layout.
+    """
+    cli_src = (REPO_ROOT / "src" / "pumpgrok" / "cli.py").read_text(encoding="utf-8")
+    proj_src = (REPO_ROOT / "src" / "pumpgrok" / "contracts" / "projection.py").read_text(
+        encoding="utf-8"
+    )
+    tools_src = (REPO_ROOT / "src" / "pumpgrok" / "tools" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    cli_idx = re.search(r"def _repo_root\(\).*?parents\[(\d+)\]", cli_src, re.S)
+    proj_idx = re.search(
+        r'def default_contracts_dir\(\).*?parents\[(\d+)\]\s*/\s*"contracts"\s*/\s*"tool-rosters"',
+        proj_src,
+        re.S,
+    )
+    assert cli_idx, "cli._repo_root() changed; update the loader-resolution check"
+    assert proj_idx, "projection.default_contracts_dir() changed; update the check"
+    assert 'repo_root / "contracts" / "tool-rosters"' in tools_src, "registry roster path changed"
+
+    cli_file = INSTALLED_SITE / "pumpgrok" / "cli.py"
+    proj_file = INSTALLED_SITE / "pumpgrok" / "contracts" / "projection.py"
+    return {
+        "cli._repo_root": cli_file.parents[int(cli_idx.group(1))] / "contracts" / "tool-rosters",
+        "projection.default_contracts_dir": proj_file.parents[int(proj_idx.group(1))]
+        / "contracts"
+        / "tool-rosters",
+    }
+
+
+def test_roster_copy_destination_equals_loader_resolved_path() -> None:
+    resolved = _loader_resolved_roster_paths()
+    assert {str(p) for p in resolved.values()} == {ROSTER_DEST}, resolved
+    copies = [ln for ln in _instructions("COPY") if ln.split()[-1] == ROSTER_DEST]
+    assert len(copies) == 1, f"expected one COPY into {ROSTER_DEST}, found {copies}"
+    assert copies[0].split()[1] == "contracts/tool-rosters"
+
+
+def test_roster_source_directory_exists_with_core_and_bot_manifests() -> None:
+    assert ROSTER_SOURCE.is_dir()
+    assert (ROSTER_SOURCE / "_core.yaml").is_file()
+    assert any(ROSTER_SOURCE.glob("bot-*.yaml"))
+
+
+def test_roster_copy_is_built_after_install_and_made_readable() -> None:
+    lines = [ln.strip() for ln in _dockerfile_lines()]
+    sync_i = next(i for i, ln in enumerate(lines) if ln.startswith("RUN uv sync"))
+    copy_i = next(i for i, ln in enumerate(lines) if ln.startswith("COPY contracts/tool-rosters "))
+    runtime_i = next(
+        i for i, ln in enumerate(lines) if ln.startswith("FROM python") and "AS runtime" in ln
+    )
+    chmod_i = None
+    for i, ln in enumerate(lines):
+        m = re.fullmatch(r"RUN chmod -R a\+rX (\S+)", ln)
+        if m and ROSTER_DEST.startswith(m.group(1) + "/"):
+            chmod_i = i
+    assert chmod_i is not None, "no chmod -R a+rX covers the roster destination"
+    # After uv sync (which would not touch it), before the runtime stage copies /opt/venv.
+    assert sync_i < copy_i < chmod_i < runtime_i
 
 
 def test_dockerfile_uv_pin_matches_ci_and_is_copied_from_pinned_image() -> None:

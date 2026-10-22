@@ -1,9 +1,15 @@
 """risk.kill_switch: set the global kill switch or request a flatten (TOOL-005).
 
 Actions ``set`` and ``flatten_request`` only: ``clear`` is not a tool action
-(R22) — it is the human CLI, and it fails input validation here. A set
+(R22) - it is the human CLI, and it fails input validation here. A set
 appends a ``KillSwitchSet`` ledger event with a minute-derived idempotency
 key, so repeats within the minute replay instead of duplicating.
+
+A ``flatten_request`` (RISK-004) runs :func:`execute_flatten` after the set
+is recorded: it waits for the in-flight barrier to go idle, then closes every
+open position with reason ``kill_flatten`` through the injected async
+``close_position``. If the barrier does not clear within its bound, nothing
+is closed and the response reports ``blocked``.
 """
 
 from __future__ import annotations
@@ -13,28 +19,43 @@ import contextlib
 import hashlib
 import os
 import sqlite3
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.risk.killswitch import env_engaged, kill_file_text
+from pumpgrok.risk.killswitch import InflightBarrier, env_engaged, kill_file_text
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
+    "FLATTEN_BARRIER_TIMEOUT_S",
     "KILL_SWITCH_SPEC",
+    "FlattenIntent",
+    "FlattenOutcome",
+    "FlattenResult",
     "KillSwitchIn",
     "KillSwitchOut",
     "build_kill_switch_tool",
+    "execute_flatten",
     "kill_switch_key",
     "run_kill_switch",
 ]
+
+#: Bound on the in-flight barrier wait before a flatten refuses (RISK-004).
+FLATTEN_BARRIER_TIMEOUT_S = 30.0
+
+#: ``async close_position(*, mint, ticket_id, reason) -> dict``. The paper
+#: adapter returns ``{"status": "closed", ...}`` only when the sell and the
+#: ``PositionClosed`` row are written; any other status is not flattened.
+ClosePosition = Callable[..., Awaitable[Mapping[str, Any]]]
 
 
 class KillSwitchIn(ToolInput):
@@ -45,33 +66,57 @@ class KillSwitchIn(ToolInput):
 
 
 class FlattenIntent(BaseModel):
-    """One ``kill_flatten`` sell a flatten request calls for: one per open position."""
+    """One open position a flatten must close with reason ``kill_flatten``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     mint: str
     ticket_id: str
     token_units: int
-    side: Literal["sell"] = "sell"
-    exit_reason: Literal["kill_flatten"] = "kill_flatten"
+
+
+class FlattenOutcome(BaseModel):
+    """Per-position result: ``closed``, or ``not_flattened`` with the adapter status."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mint: str
+    ticket_id: str
+    status: Literal["closed", "not_flattened"]
+    detail: str = ""
+
+
+class FlattenResult(BaseModel):
+    """Flatten run: ``completed`` after the barrier cleared, ``blocked`` if it did not."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: Literal["completed", "blocked", "unavailable"]
+    detail: str = ""
+    outcomes: list[FlattenOutcome] = Field(default_factory=list)
 
 
 class KillSwitchOut(ToolOutput):
-    """Combined switch view: env, file and ledger causes."""
+    """Combined switch view: env, file and ledger causes, plus flatten status."""
 
     active: bool
     since: datetime | None = None
     source: Literal["env", "file", "command", "none"]
     flatten_requested: bool = False
     reason: str | None = None
-    flatten_intents: list[FlattenIntent] = Field(default_factory=list)
+    flatten_status: Literal["not_requested", "completed", "blocked", "unavailable"] = (
+        "not_requested"
+    )
+    flatten_detail: str = ""
+    flatten_outcomes: list[FlattenOutcome] = Field(default_factory=list)
 
 
 KILL_SWITCH_SPEC = ToolSpec(
     name="risk.kill_switch",
     description=(
         "Set the global kill switch or request a flatten of every open paper "
-        "position. Clear is the human CLI, never this tool."
+        "position. A flatten waits for in-flight orders, then sells each open "
+        "position with reason kill_flatten. Clear is the human CLI, never this tool."
     ),
     input_model=KillSwitchIn,
     output_model=KillSwitchOut,
@@ -90,17 +135,79 @@ def kill_switch_key(action: str, reason: str, clock: Clock) -> str:
     return digest[:32]
 
 
+async def execute_flatten(
+    intents: Callable[[], Sequence[FlattenIntent]],
+    *,
+    barrier: InflightBarrier,
+    close_position: ClosePosition,
+    barrier_timeout_s: float = FLATTEN_BARRIER_TIMEOUT_S,
+) -> FlattenResult:
+    """Wait for in-flight orders to settle, then close each open position.
+
+    ``intents`` is called only after the barrier is idle, so the positions it
+    lists include any order that filled while the barrier drained. If the
+    barrier does not clear within ``barrier_timeout_s``, nothing is closed and
+    the result is ``blocked`` (fail closed). Otherwise ``close_position`` runs
+    once per intent with ``reason="kill_flatten"``. A position counts as closed
+    only when the adapter returns status ``closed``; a refusal or a
+    ``PumpgrokError`` marks that position ``not_flattened`` and the remaining
+    positions still close.
+    """
+    cleared = await asyncio.to_thread(barrier.wait_empty, barrier_timeout_s)
+    if not cleared:
+        return FlattenResult(
+            status="blocked",
+            detail=f"in-flight orders did not clear within {barrier_timeout_s:g}s; nothing closed",
+        )
+    outcomes: list[FlattenOutcome] = []
+    for intent in intents():
+        try:
+            result = await close_position(
+                mint=intent.mint, ticket_id=intent.ticket_id, reason="kill_flatten"
+            )
+        except PumpgrokError as exc:
+            outcomes.append(
+                FlattenOutcome(
+                    mint=intent.mint,
+                    ticket_id=intent.ticket_id,
+                    status="not_flattened",
+                    detail=exc.message,
+                )
+            )
+            continue
+        adapter_status = str(result.get("status", ""))
+        if adapter_status == "closed":
+            outcomes.append(
+                FlattenOutcome(mint=intent.mint, ticket_id=intent.ticket_id, status="closed")
+            )
+        else:
+            outcomes.append(
+                FlattenOutcome(
+                    mint=intent.mint,
+                    ticket_id=intent.ticket_id,
+                    status="not_flattened",
+                    detail=f"status={adapter_status}",
+                )
+            )
+    return FlattenResult(status="completed", outcomes=outcomes)
+
+
 async def run_kill_switch(
     inp: KillSwitchIn,
     store: LedgerStore,
     clock: Clock,
     killswitch_path: Path | None = None,
+    *,
+    close_position: ClosePosition | None = None,
+    barrier: InflightBarrier | None = None,
+    barrier_timeout_s: float = FLATTEN_BARRIER_TIMEOUT_S,
 ) -> dict[str, Any]:
-    """Append the set event (idempotent per minute), write the file, report the view.
+    """Append the set event (idempotent per minute), write the file, run any flatten.
 
     The file write makes the engagement survive restarts: the engine polls
     the file source on every check (design 5.4). Clear stays CLI-only, so
-    this tool accepts ``set`` and ``flatten_request`` only.
+    this tool accepts ``set`` and ``flatten_request`` only. A flatten with no
+    ``close_position`` wired reports ``unavailable`` and closes nothing.
     """
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
@@ -126,8 +233,21 @@ async def run_kill_switch(
     if killswitch_path is not None:
         text = kill_file_text(inp.reason, flatten)
         await asyncio.to_thread(killswitch_path.write_text, text, encoding="utf-8")
-    intents = tuple(_flatten_intents(store)) if flatten else ()
-    return _status(store, killswitch_path, correlation, clock, intents)
+    result: FlattenResult | None = None
+    if flatten:
+        if close_position is None:
+            result = FlattenResult(
+                status="unavailable",
+                detail="no position closer is wired; nothing closed",
+            )
+        else:
+            result = await execute_flatten(
+                lambda: _flatten_intents(store),
+                barrier=barrier if barrier is not None else InflightBarrier(),
+                close_position=close_position,
+                barrier_timeout_s=barrier_timeout_s,
+            )
+    return _status(store, killswitch_path, correlation, clock, result)
 
 
 def _status(
@@ -135,7 +255,7 @@ def _status(
     killswitch_path: Path | None,
     correlation: str,
     clock: Clock,
-    flatten_intents: tuple[FlattenIntent, ...] = (),
+    flatten: FlattenResult | None = None,
 ) -> dict[str, Any]:
     """Fold env, file and ledger causes into one view."""
     env_set = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
@@ -172,15 +292,17 @@ def _status(
             "since": since,
             "source": source,
             "flatten_requested": flatten_requested,
-            "flatten_intents": list(flatten_intents),
             "reason": reason,
+            "flatten_status": flatten.status if flatten is not None else "not_requested",
+            "flatten_detail": flatten.detail if flatten is not None else "",
+            "flatten_outcomes": [o.model_dump() for o in flatten.outcomes] if flatten else [],
             "meta": meta_now("killswitch", correlation, clock),
         }
     ).model_dump()
 
 
 def _flatten_intents(store: LedgerStore) -> list[FlattenIntent]:
-    """One sell intent per position still holding units, folded from the ledger."""
+    """One intent per position still holding units, folded from the ledger."""
     state = initial_state(source="paper", initial_equity_lamports=0, day_utc="")
     for event in store.read(limit=None):
         state = reduce(state, event)
@@ -192,12 +314,24 @@ def _flatten_intents(store: LedgerStore) -> list[FlattenIntent]:
 
 
 def build_kill_switch_tool(
-    store: LedgerStore, clock: Clock, killswitch_path: Path | None = None
+    store: LedgerStore,
+    clock: Clock,
+    killswitch_path: Path | None = None,
+    *,
+    close_position: ClosePosition | None = None,
+    barrier: InflightBarrier | None = None,
 ) -> Tool:
-    """Bind ``risk.kill_switch`` to one store, clock and file path."""
+    """Bind ``risk.kill_switch`` to one store, clock, file path and position closer."""
 
     @tool(KILL_SWITCH_SPEC)
     async def _kill_switch(payload: KillSwitchIn) -> dict[str, Any]:
-        return await run_kill_switch(payload, store, clock, killswitch_path)
+        return await run_kill_switch(
+            payload,
+            store,
+            clock,
+            killswitch_path,
+            close_position=close_position,
+            barrier=barrier,
+        )
 
     return _kill_switch

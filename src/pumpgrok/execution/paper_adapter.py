@@ -47,7 +47,7 @@ from pumpgrok.execution.latency import P_DROP, draw_latency
 from pumpgrok.ledger.reducer import PositionView, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
-from pumpgrok.risk.engine import RiskEngine, order_hash_for
+from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS, RiskEngine, order_hash_for
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
@@ -1350,16 +1350,77 @@ class PaperAdapter(ExecutionAdapter):
         """Frozen liquidation value after a graduated/blind_flatten close."""
         return self._frozen_marks.get(mint)
 
+    async def close_position(
+        self,
+        *,
+        mint: str,
+        ticket_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """Close the open position in ``mint`` at its liquidation value (RISK-004).
+
+        Reuses the forced-close path: one sell ``FillRecorded`` and one
+        ``PositionClosed`` carrying ``reason``. The value comes from the live
+        curve; with no usable curve it falls back to the last ledger mark, then
+        the last-good reserves. Returns ``status="closed"`` after writing, or
+        ``status="no_position"`` (nothing written) when no position is open.
+        ``status="no_mark"`` (nothing written) means the position is open but no
+        value can be derived; the caller must retry or escalate. Never raises for
+        a missing position; only an unsupported ``reason`` raises ``ValueError``.
+        """
+        if reason not in SYSTEM_EXIT_REASONS:
+            raise ValueError(f"unsupported close reason: {reason}")
+        state = self._fold_state()
+        pos = state.positions.get(mint)
+        if pos is None or pos.token_units <= 0:
+            return {"status": "no_position", "mint": mint}
+        value = await self._liquidation_value(mint, pos)
+        if value is None:
+            return {"status": "no_mark", "mint": mint}
+        row = await self._force_close(
+            mint,
+            reason=reason,  # type: ignore[arg-type]
+            last_good_lamports=value,
+            source=None,
+            correlation_id=ticket_id,
+            ticket_id=ticket_id,
+        )
+        if row is None:
+            return {"status": "no_position", "mint": mint}
+        return {
+            "status": "closed",
+            "mint": mint,
+            "reason": reason,
+            "proceeds_lamports": value,
+            "realized_pnl_lamports": value - int(pos.cost_basis_lamports),
+            "seq": int(row["seq"]),
+        }
+
+    async def _liquidation_value(self, mint: str, pos: PositionView) -> int | None:
+        """Net liquidation value of ``pos`` now; None when no value is derivable."""
+        curve = await self._read_curve(mint)
+        if curve is not None and not curve.complete:
+            gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
+            return gross - self._fees.venue_fee(gross)
+        if pos.last_mtm_lamports > 0:
+            return int(pos.last_mtm_lamports)
+        last = self._last_reserves.get(mint)
+        if last is not None:
+            gross = sell_out(last[0], last[1], pos.token_units)
+            return gross - self._fees.venue_fee(gross)
+        return None
+
     async def _force_close(
         self,
         mint: str,
         *,
-        reason: Literal["graduated", "blind_flatten"],
+        reason: Literal["graduated", "blind_flatten", "kill_flatten", "rug_alert"],
         last_s: int = 0,
         last_t: int = 0,
         last_good_lamports: int = 0,
         source: str | None,
         correlation_id: str,
+        ticket_id: str = "",
     ) -> dict[str, Any] | None:
         ledger_source = source if source is not None else self._source
         state = self._fold_state()
@@ -1437,7 +1498,8 @@ class PaperAdapter(ExecutionAdapter):
                     "source": ledger_source,
                     "kind": reason,
                     "seat": "bot-06-exit",
-                    "detail": f"{reason} mint={mint} mtm_lamports={proceeds} frozen=true",
+                    "detail": f"{reason} mint={mint} mtm_lamports={proceeds} frozen=true"
+                    + (f" ticket={ticket_id}" if ticket_id else ""),
                 },
             },
         ]

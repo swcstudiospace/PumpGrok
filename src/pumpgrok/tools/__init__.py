@@ -69,7 +69,7 @@ from pumpgrok.tools.portfolio.pnl import build_pnl_tool
 from pumpgrok.tools.risk.check_limits import build_check_limits_tool
 from pumpgrok.tools.risk.drawdown import build_drawdown_tool
 from pumpgrok.tools.risk.halt_status import build_halt_status_tool
-from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
+from pumpgrok.tools.risk.kill_switch import ClosePosition, build_kill_switch_tool
 from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
@@ -165,7 +165,13 @@ def _register_trading(
 
 
 def _register_ledger_and_risk(
-    reg: ToolRegistry, store: LedgerStore, clock: Clock, data_dir: Path, budget: RiskBudget
+    reg: ToolRegistry,
+    store: LedgerStore,
+    clock: Clock,
+    data_dir: Path,
+    budget: RiskBudget,
+    *,
+    close_position: ClosePosition,
 ) -> None:
     """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
     kill_switch_file = data_dir / "KILLSWITCH"
@@ -176,7 +182,9 @@ def _register_ledger_and_risk(
     reg.register(build_check_limits_tool(store, budget, clock))
     reg.register(build_drawdown_tool(store, budget, clock))
     reg.register(build_halt_status_tool(store, kill_switch_file, clock, "paper"))
-    reg.register(build_kill_switch_tool(store, clock, kill_switch_file))
+    reg.register(
+        build_kill_switch_tool(store, clock, kill_switch_file, close_position=close_position)
+    )
     reg.register(build_journal_append_tool(store, clock, data_dir / "journal"))
     reg.register(build_render_report_tool(store, clock, data_dir / "reports"))
 
@@ -315,7 +323,9 @@ def build_operator_registry(
         store=store,
         clock=active_clock,
     )
-    _register_ledger_and_risk(reg, store, active_clock, data_dir, budget)
+    _register_ledger_and_risk(
+        reg, store, active_clock, data_dir, budget, close_position=adapter.close_position
+    )
     _register_desk(
         reg,
         store=store,

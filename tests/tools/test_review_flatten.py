@@ -1,28 +1,40 @@
-"""Review finding 18: a flatten request must produce a sell intent per open position.
+"""RISK-004 / review finding 18: a flatten request closes every open position.
 
-A ``flatten_request`` acknowledges the operator's request only if it names
-every position that must close. Closed and zero-unit positions produce no
-intent, and a plain ``set`` produces none.
+The operator's ``flatten_request`` waits for the in-flight barrier, then closes
+each open position with reason ``kill_flatten`` through the paper adapter's
+``close_position``. A barrier that never clears closes nothing.
 """
 
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
-from pumpgrok.tools.risk.kill_switch import KillSwitchIn, build_kill_switch_tool
+from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.killswitch import InflightBarrier
+from pumpgrok.tools.risk.kill_switch import (
+    KillSwitchIn,
+    build_kill_switch_tool,
+    run_kill_switch,
+)
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
+EQUITY = 10_000_000_000
 TICKET = "SOL-20260201-001"
 MINT_A = "So11111111111111111111111111111111111111112"
 MINT_B = "So22222222222222222222222222222222222222222"
-MINT_C = "So33333333333333333333333333333333333333333"
-MINT_ZERO = "So44444444444444444444444444444444444444444"
+S0 = 42_000_000_000
+T0 = 764_000_000_000_000
 
 
 @pytest.fixture(autouse=True)
@@ -30,32 +42,35 @@ def _no_env_killswitch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PUMPGROK_KILLSWITCH", raising=False)
 
 
+class _ScriptedCurves:
+    """Serve the same live curve for every mint read."""
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        return CurveSnapshot(mint=mint, s_lamports=S0, t_units=T0)
+
+
 def _store(tmp_path: Path) -> LedgerStore:
-    return LedgerStore(str(tmp_path / "ledger.sqlite"))
+    path = tmp_path / "ledger.sqlite"
+    recreate_ledger_db(path)
+    store = LedgerStore(str(path))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    store.set_meta("source", "paper")
+    return store
 
 
-def _append(store: LedgerStore, clock: FixtureClock, type: str, payload: dict[str, Any]) -> None:
+def _open(store: LedgerStore, clock: FixtureClock, mint: str, units: int) -> None:
     store.append(
         ts_utc=format_ts_utc(clock.now()),
         source="paper",
         correlation_id="test",
-        idempotency_key=f"seed-{store.count() + 1}",
-        type=type,
-        payload=payload,
-    )
-
-
-def _open(store: LedgerStore, clock: FixtureClock, mint: str, units: int) -> None:
-    _append(
-        store,
-        clock,
-        "PositionOpened",
-        {
+        idempotency_key=f"pos-{mint[-4:]}",
+        type="PositionOpened",
+        payload={
             "source": "paper",
             "mint": mint,
             "price_entry": "0.00001",
             "token_units": units,
-            "cost_basis_lamports": 1_000,
+            "cost_basis_lamports": 1_000_000,
             "opened_ts_utc": format_ts_utc(START),
             "symbol": "TST",
             "creator": "Creator1111111111111111111111111111111111",
@@ -65,62 +80,133 @@ def _open(store: LedgerStore, clock: FixtureClock, mint: str, units: int) -> Non
     )
 
 
-async def test_flatten_request_emits_sell_intent_for_every_open_position(tmp_path: Path) -> None:
+def _adapter(store: LedgerStore, clock: FixtureClock) -> PaperAdapter:
+    ids = IdFactory(clock, random.Random(7))
+    engine = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=ids,
+        clock=clock,
+        autonomy="autonomous-paper",
+        get_reserves=lambda _mint: (S0, T0),
+        env={},
+    )
+    return PaperAdapter(
+        store=store,
+        risk=engine,
+        ids=ids,
+        clock=clock,
+        rng=make_rng(7),
+        budget=RiskBudget(),
+        price_source=_ScriptedCurves(),
+        p_drop=0.0,
+    )
+
+
+def _closed_rows(store: LedgerStore) -> list[dict[str, Any]]:
+    return store.read(types=["PositionClosed"], limit=None)
+
+
+async def test_flatten_request_closes_the_open_position(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     _open(store, clock, MINT_A, 100)
-    _open(store, clock, MINT_B, 250)
-    _open(store, clock, MINT_C, 40)
-    _append(
-        store,
-        clock,
-        "PositionClosed",
-        {
-            "source": "paper",
-            "mint": MINT_C,
-            "price_exit": "0.00002",
-            "proceeds_lamports": 2_000,
-            "realized_pnl_lamports": 1_000,
-            "reason": "manual",
-        },
+    adapter = _adapter(store, clock)
+    tool = build_kill_switch_tool(
+        store, clock, tmp_path / "KILLSWITCH", close_position=adapter.close_position
     )
-    _open(store, clock, MINT_ZERO, 0)
-    tool = build_kill_switch_tool(store, clock)
 
     out = await tool(KillSwitchIn(action="flatten_request", reason="close everything"))
+
+    closed = _closed_rows(store)
     store.close()
-
-    assert out.flatten_requested is True
-    intents = {intent.mint: intent for intent in out.flatten_intents}
-    assert set(intents) == {MINT_A, MINT_B}
-    assert intents[MINT_A].token_units == 100
-    assert intents[MINT_B].token_units == 250
-    for intent in out.flatten_intents:
-        assert intent.side == "sell"
-        assert intent.ticket_id == TICKET
-        assert intent.exit_reason == "kill_flatten"
+    assert out.flatten_status == "completed"
+    assert [(o.mint, o.status) for o in out.flatten_outcomes] == [(MINT_A, "closed")]
+    assert len(closed) == 1
+    assert closed[0]["payload"]["mint"] == MINT_A
+    assert closed[0]["payload"]["reason"] == "kill_flatten"
 
 
-async def test_flatten_request_with_no_positions_emits_no_intents(tmp_path: Path) -> None:
+async def test_flatten_request_with_no_positions_closes_nothing(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
-    tool = build_kill_switch_tool(store, clock)
+    adapter = _adapter(store, clock)
+    tool = build_kill_switch_tool(
+        store, clock, tmp_path / "KILLSWITCH", close_position=adapter.close_position
+    )
 
     out = await tool(KillSwitchIn(action="flatten_request", reason="nothing open"))
+
+    closed = _closed_rows(store)
     store.close()
+    assert out.flatten_status == "completed"
+    assert out.flatten_outcomes == []
+    assert closed == []
 
-    assert out.flatten_requested is True
-    assert out.flatten_intents == []
 
-
-async def test_plain_set_emits_no_flatten_intents(tmp_path: Path) -> None:
+async def test_barrier_that_never_clears_closes_nothing(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     _open(store, clock, MINT_A, 100)
-    tool = build_kill_switch_tool(store, clock)
+    _open(store, clock, MINT_B, 50)
+    calls: list[str] = []
 
-    out = await tool(KillSwitchIn(action="set", reason="halt only"))
+    async def recording_close(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+        calls.append(mint)
+        return {"status": "closed", "mint": mint}
+
+    stuck = InflightBarrier()
+    stuck.register("order-that-never-settles")
+
+    out = await run_kill_switch(
+        KillSwitchIn(action="flatten_request", reason="barrier test"),
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=recording_close,
+        barrier=stuck,
+        barrier_timeout_s=0.05,
+    )
+
+    closed = _closed_rows(store)
     store.close()
+    assert out["flatten_status"] == "blocked"
+    assert out["flatten_outcomes"] == []
+    assert calls == []
+    assert closed == []
 
-    assert out.flatten_requested is False
-    assert out.flatten_intents == []
+
+async def test_flatten_without_a_wired_closer_reports_unavailable(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    _open(store, clock, MINT_A, 100)
+    tool = build_kill_switch_tool(store, clock, tmp_path / "KILLSWITCH")
+
+    out = await tool(KillSwitchIn(action="flatten_request", reason="no closer"))
+
+    closed = _closed_rows(store)
+    store.close()
+    assert out.flatten_status == "unavailable"
+    assert closed == []
+
+
+async def test_not_closed_adapter_status_is_reported_not_flattened(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    _open(store, clock, MINT_A, 100)
+
+    async def no_mark_close(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+        return {"status": "no_mark", "mint": mint}
+
+    out = await run_kill_switch(
+        KillSwitchIn(action="flatten_request", reason="no mark"),
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=no_mark_close,
+    )
+    store.close()
+    assert out["flatten_status"] == "completed"
+    assert out["flatten_outcomes"] == [
+        {"mint": MINT_A, "ticket_id": TICKET, "status": "not_flattened", "detail": "status=no_mark"}
+    ]

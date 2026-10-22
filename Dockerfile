@@ -11,6 +11,11 @@ WORKDIR /build
 COPY .python-version pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
+# Roster contracts are read at run time from <site root>/contracts/tool-rosters: cli._repo_root()
+# and contracts/projection.py both resolve it relative to the installed package, which lives in
+# /opt/venv/lib/python3.12/site-packages. Copy it to that site root and keep it world-readable.
+COPY contracts/tool-rosters /opt/venv/lib/python3.12/contracts/tool-rosters
+RUN chmod -R a+rX /opt/venv/lib/python3.12/contracts
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \

@@ -364,3 +364,64 @@ def _order(ids: IdFactory, mint: str) -> OrderRequest:
         approval_id=f"apr-{ids.ulid()}",
         correlation_id="test",
     )
+
+
+# -- RISK-004: kill_flatten closes through the forced-close path ---------
+
+
+async def test_close_position_kill_flatten_writes_one_sell_and_one_close(
+    tmp_path: Path,
+) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        gross = sell_out(S0, T0, UNITS)
+        proceeds = gross - FeeModel().venue_fee(gross)
+        assert result["status"] == "closed"
+        assert result["proceeds_lamports"] == proceeds
+        fills = store.read(types=["FillRecorded"], limit=None)
+        assert len(fills) == 1
+        assert fills[0]["payload"]["side"] == "sell"
+        assert fills[0]["payload"]["cash_delta_lamports"] == proceeds
+        assert fills[0]["payload"]["filled_units"] == UNITS
+        closes = store.read(types=["PositionClosed"], limit=None)
+        assert len(closes) == 1
+        assert closes[0]["payload"]["reason"] == "kill_flatten"
+        assert closes[0]["payload"]["proceeds_lamports"] == proceeds
+        assert adapter.cash_lamports() == EQUITY + proceeds
+    finally:
+        store.close()
+
+
+async def test_close_position_without_position_returns_no_position_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        before = store.count()
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        assert result == {"status": "no_position", "mint": MINT}
+        assert store.count() == before
+    finally:
+        store.close()
+
+
+async def test_close_position_without_any_value_refuses_without_writes(
+    tmp_path: Path,
+) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        adapter = _adapter(store, clock, price_source=None)
+        before = store.count()
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        assert result == {"status": "no_mark", "mint": MINT}
+        assert store.count() == before
+    finally:
+        store.close()
