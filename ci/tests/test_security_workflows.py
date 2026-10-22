@@ -321,7 +321,7 @@ class TestReceiptDirectories:
         for seat in seats:
             assert (REPO_ROOT / ".receipts" / seat / ".gitkeep").is_file(), seat
 
-    def test_no_receipt_json_is_tracked_by_git(self):
+    def test_only_gitignore_allowlisted_receipt_json_is_tracked(self):
         tracked = subprocess.run(
             ["git", "ls-files", "--", ".receipts"],
             capture_output=True,
@@ -329,4 +329,10 @@ class TestReceiptDirectories:
             check=True,
             cwd=REPO_ROOT,
         ).stdout.split()
-        assert not [path for path in tracked if path.endswith(".json")]
+        allowed = {
+            line.removeprefix("!")
+            for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if line.startswith("!.receipts/") and line.endswith(".json")
+        }
+        tracked_json = {path for path in tracked if path.endswith(".json")}
+        assert tracked_json <= allowed, sorted(tracked_json - allowed)
