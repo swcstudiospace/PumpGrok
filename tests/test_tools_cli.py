@@ -329,6 +329,20 @@ class TestOperatorVerbs:
         assert out == ""
         assert not (tmp_path / "var" / "ledger.sqlite").is_file()
 
+    def test_killswitch_clear_refused_while_file_source_live(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        desk = tmp_path / "var" / "desk"
+        desk.mkdir(parents=True)
+        (desk / "KILLSWITCH").write_text("03-07 red", encoding="utf-8")
+        code, out, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ["killswitch", "clear", "--by", "human:op", "--reason", "03-07 red"],
+        )
+        assert code == 1
+        assert json.loads(out)["code"] == "killswitch_clear_refused"
+
     def test_killswitch_status_prints_json(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
