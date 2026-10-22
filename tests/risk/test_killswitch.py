@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import sqlite3
 import sys
 import threading
 import time
@@ -532,5 +533,36 @@ async def test_status_views_agree_with_engine_on_truthy_env(
         status = _kill_switch_status(store, None, "t", clock)
         assert status["active"] is True
         assert status["source"] == "env"
+    finally:
+        store.close()
+
+
+async def test_halt_status_reports_inconsistent_on_tampered_ledger(tmp_path: Path) -> None:
+    """WR-05: a tampered ledger renders halted, never a confident false."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        store.append(
+            ts_utc=format_ts_utc(START),
+            source="paper",
+            correlation_id="t",
+            idempotency_key="note-1",
+            type="JournalNote",
+            payload={
+                "source": "paper",
+                "seat": "desk",
+                "note_kind": "note",
+                "text": "x",
+                "refs": [],
+            },
+        )
+        raw = sqlite3.connect(str(tmp_path / "ledger.sqlite"))
+        raw.execute("DROP TRIGGER events_append_only_u;")
+        raw.execute("UPDATE events SET payload_json = '{}' WHERE seq = 1;")
+        raw.commit()
+        raw.close()
+        out = await run_halt_status(HaltStatusIn(), store, None, clock)
+        assert out["halted"] is True
+        assert out["reasons"] == ["ledger_inconsistent"]
     finally:
         store.close()

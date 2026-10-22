@@ -17,7 +17,7 @@ from pydantic import Field
 from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.risk.killswitch import env_engaged
 from pumpgrok.tools._common import meta_now
 
@@ -72,7 +72,31 @@ async def run_halt_status(
     clock: Clock,
     mode: Literal["paper", "live"] = "paper",
 ) -> dict[str, Any]:
-    """Fold halt events and kill-switch causes into one view."""
+    """Fold halt events and kill-switch causes into one view.
+
+    The chain is verified first: a tampered ledger reports halted with a
+    ``ledger_inconsistent`` reason instead of a confident ``halted: false``.
+    """
+    try:
+        store.verify()
+    except LedgerInconsistent:
+        ambient = ambient_correlation()
+        return HaltStatusOut.model_validate(
+            {
+                "halted": True,
+                "reasons": ["ledger_inconsistent"],
+                "kill_switch_active": False,
+                "drawdown_halt": False,
+                "daily_loss_halt": False,
+                "breaker_open": False,
+                "effective_mode": mode,
+                "meta": meta_now(
+                    "ledger",
+                    inp.correlation_id or (str(ambient) if ambient else None),
+                    clock,
+                ),
+            }
+        ).model_dump()
     env_set = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
     file_set = await asyncio.to_thread(_killswitch_file_set, killswitch_path)
     halt_active = False
