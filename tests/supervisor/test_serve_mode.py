@@ -61,7 +61,10 @@ async def _fetch(url: str) -> tuple[int, bytes, str | None]:
 def test_serve_health_body_is_labelled_replay(tmp_path: Path) -> None:
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, _metrics, store = build_serve_replay(
-        SMOKE, _settings_kwargs()["filter"], seed=20260101, clock=clock,
+        SMOKE,
+        _settings_kwargs()["filter"],
+        seed=20260101,
+        clock=clock,
         ledger_path=tmp_path / "ledger.sqlite",
     )
     try:
@@ -75,7 +78,10 @@ def test_serve_health_body_is_labelled_replay(tmp_path: Path) -> None:
 def test_serve_tick_runs_all_ten_seats(tmp_path: Path) -> None:
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, metrics, store = build_serve_replay(
-        SMOKE, _settings_kwargs()["filter"], seed=20260101, clock=clock,
+        SMOKE,
+        _settings_kwargs()["filter"],
+        seed=20260101,
+        clock=clock,
         ledger_path=tmp_path / "ledger.sqlite",
     )
     try:
@@ -90,7 +96,10 @@ def test_serve_tick_runs_all_ten_seats(tmp_path: Path) -> None:
 def test_serve_forever_returns_zero_once_stopped(tmp_path: Path) -> None:
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, _metrics, store = build_serve_replay(
-        SMOKE, _settings_kwargs()["filter"], seed=20260101, clock=clock,
+        SMOKE,
+        _settings_kwargs()["filter"],
+        seed=20260101,
+        clock=clock,
         ledger_path=tmp_path / "ledger.sqlite",
     )
     try:
@@ -103,13 +112,18 @@ def test_serve_forever_returns_zero_once_stopped(tmp_path: Path) -> None:
 def test_serve_binds_port_and_serves_both_endpoints(tmp_path: Path) -> None:
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, metrics, store = build_serve_replay(
-        SMOKE, _settings_kwargs()["filter"], seed=20260101, clock=clock,
+        SMOKE,
+        _settings_kwargs()["filter"],
+        seed=20260101,
+        clock=clock,
         ledger_path=tmp_path / "ledger.sqlite",
     )
     try:
         asyncio.run(supervisor.tick_once())
         server = HealthServer(
-            clock, supervisor.health_status, supervisor.ready,
+            clock,
+            supervisor.health_status,
+            supervisor.ready,
             get_metrics=metrics.exposition,
         )
 

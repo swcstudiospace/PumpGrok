@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime as _datetime
 import sys
 from pathlib import Path
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SECURITY_MD = REPO_ROOT / "SECURITY.md"
 SECTION = "## Exceptions"

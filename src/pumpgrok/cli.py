@@ -568,9 +568,7 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     log.info("serve starting (dataset=%s port=%d)", dataset_name, port)
-    return asyncio.run(
-        serve_replay(source, settings.filter, seed=settings.replay.seed, port=port)
-    )
+    return asyncio.run(serve_replay(source, settings.filter, seed=settings.replay.seed, port=port))
 
 
 def _skip_cycle(source: Path, settings: Settings) -> int:

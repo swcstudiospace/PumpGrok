@@ -63,10 +63,10 @@ def probe_served_endpoints(port: int, *, timeout_s: float = 2.0) -> list[Endpoin
         except Exception as exc:
             probes.append(EndpointProbe(name=path, ok=False, detail=type(exc).__name__))
             continue
-        probes.append(
-            EndpointProbe(name=path, ok=code == 200, detail=f"HTTP {code}")
-        )
+        probes.append(EndpointProbe(name=path, ok=code == 200, detail=f"HTTP {code}"))
     return probes
+
+
 SUBSYSTEMS: tuple[tuple[str, str], ...] = (
     ("settings", "pumpgrok.config.settings"),
     ("core", "pumpgrok.core"),
@@ -112,12 +112,8 @@ def doctor_report(settings: Settings) -> list[str]:
     lines.extend(status.line() for status in statuses)
     port = settings.health.port
     if port <= 0:
-        lines.append(
-            "warn  /healthz (not served: health.port=0, only `run --serve` binds a port)"
-        )
-        lines.append(
-            "warn  /metrics (not served: health.port=0, only `run --serve` binds a port)"
-        )
+        lines.append("warn  /healthz (not served: health.port=0, only `run --serve` binds a port)")
+        lines.append("warn  /metrics (not served: health.port=0, only `run --serve` binds a port)")
     else:
         lines.extend(probe.line() for probe in probe_served_endpoints(port))
     lines.append(f"doctor: {present} present, {absent} not-yet-implemented (warnings), exit 0")

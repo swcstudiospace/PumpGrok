@@ -47,13 +47,18 @@ def _read_healthz(port: int) -> dict:
 def _run_served_probe_test(tmp_path) -> None:
     clock = FixtureClock(start=1_700_000_000.0)
     supervisor, metrics, store = build_serve_replay(
-        SMOKE, Settings(mode="paper").filter, seed=20260101, clock=clock,
+        SMOKE,
+        Settings(mode="paper").filter,
+        seed=20260101,
+        clock=clock,
         ledger_path=tmp_path / "ledger.sqlite",
     )
     try:
         asyncio.run(supervisor.tick_once())
         server = HealthServer(
-            clock, supervisor.health_status, supervisor.ready,
+            clock,
+            supervisor.health_status,
+            supervisor.ready,
             get_metrics=metrics.exposition,
         )
 
