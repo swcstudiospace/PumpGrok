@@ -584,6 +584,75 @@ Acceptance commands: section 7.1 lines 1-12 plus `uv run pytest -q -m slow tests
 Appended by bot-00-chief at each checkpoint: phase, date, PR list, receipt paths, the
 output tail of every canonical command, open REVIEW items. Empty until Phase 1 completes.
 
+### Phase 5 milestone report (2026-10-22, plan 05-08, branch `feat/grokbot-desk-merge`)
+
+Receipt: `.receipts/bot-00-chief/complete-phase-5.json` (tracked via `.gitignore`
+exception; the `*.json` ignore rule otherwise covers receipts).
+No PR opened and nothing merged: the hard constraint forbids push/merge/PR, so
+this report lands as commits on the feature branch for the orchestrator to verify.
+
+Per-criterion commands and outcomes (canonical literals, exit codes real):
+
+- 5-SC1 (soak/degradation): `uv run pytest -q tests/soak/test_soak_multiday_replay.py
+  tests/degradation/` green (plan 05-05); nightly `schedule` soak job in `ci.yml`
+  under `PUMPGROK_REQUIRE_SOAK=1` (plan 05-07).
+- 5-SC2 (metrics): `grep -rhoE` nine-family count is 9; `/metrics` served during
+  `run --mode paper --serve` with `pumpgrok_cycle_seconds` present (plan 05-07 verify).
+- 5-SC3a (runbooks): `for f in setup engine start_stop kill_switch breaker_reset
+  outage rollback reading_reports go_live; do test -f docs/runbooks/$f.md || exit 1;
+  done && ./scripts/check.sh` exit 0 (this plan).
+- 5-SC3b (changelog): `for p in 1 2 3 4 5; do grep -q "Phase $p" CHANGELOG.md ||
+  exit 1; done` exit 0 (this plan).
+- 5-SC3c (container): `docker compose up -d --build pumpgrok && docker compose ps
+  pumpgrok` healthy; host `/healthz` ok and `/metrics` 200 (plan 05-07 verify).
+- 5-SC4a (manipulation scan + live gate): `uv run pytest -q
+  tests/safety/test_no_manipulation_tools.py tests/execution/test_live_gate_fails_fast.py`
+  green; `tests/test_live_gate.py` pins the D4 precondition-1 contract (this plan).
+- 5-SC4b (live overlays): `live.enabled is false` in dev, paper and live overlays
+  (asserted in-suite; plan 05-04).
+- 5-SC5 (security workflow): BLOCKED. `gh run list --workflow security-pr.yml --branch
+  main --limit 1` is HTTP 404 (no workflow file on any branch yet) and `gh run list
+  --branch main` prints `[]`; the push trigger only lands on main after merge, which the
+  hard constraint forbids. Real evidence captured verbatim in 05-07-SUMMARY; nothing
+  invented in SECURITY.md (zero exception rows; `ci/security/check_exceptions.py` gates
+  expiry). First main-branch run remains the post-merge step.
+- 5-CP (checkpoint smoke): `uv run pumpgrok run --mode paper --once --replay
+  tests/fixtures/replay/smoke` exit 0, `engine decision=skip reason=data_unavailable`
+  (this plan).
+- 5-MS (invariant matrix): `uv run pytest -q
+  ci/tests/test_gates.py::test_invariant_matrix_tests_exist` green (63 invariants).
+- Census: the plan literal `rg -n --hidden -P ... tools/(...)` (plus `--hidden`,
+  minus `docs/**`, `vendor/**`, `.git/**`, `.planning/**`) prints nothing;
+  `test ! -d tools` exits 0 (oracle deleted: 8 modules, README, pycache, no shim).
+- Full suite: `uv run pytest -q` exit 0 — 1529 collected, 1527 passed, 2 skipped
+  (both pre-existing intentional R5 non-ports in `tests/characterization/test_vendor_risk.py`).
+
+Carry-over resolutions (this plan):
+
+- `tests/test_skip_cycle.py` 3 pre-existing failures (identical on clean base 9ce2695):
+  root cause is product evolution, not test rot. The D6 DailyRollover row (one per UTC
+  day, including the first) makes CLI replay ledgers hold exactly JournalNote +
+  DailyRollover, so `[(1,)]` expectations went stale; `test_live_is_refused...` encoded
+  the pre-D4 contract where `--mode live` alone met precondition 1. Fixed by pinning the
+  new exact contracts (rollover type/key/day, D4 reason string) — no weakening, no skips.
+- Collection anomaly: bare `uv run pytest` intermittently mis-collected in this sandbox.
+  In-repo root cause found and fixed: `tests/tools/test_money_types.py` duplicated the
+  `tests/safety/test_money_types.py` basename with no `__init__.py` anywhere, so pytest's
+  prepend import mode raised `import file mismatch` (exit 2) depending on order. Renamed to
+  `tests/tools/test_money_registry_tracer.py` (matrix references only the safety path).
+  Post-fix with-sync and `--no-sync` collects agree.
+- Pre-existing product bugs fixed under Rule 1 (undefined names at HEAD, any `--by
+  human:*` or `killswitch clear` CLI path raised NameError): `src/pumpgrok/cli.py` now
+  imports `SEAT_RE` and `KillSwitch` from `pumpgrok.risk.killswitch`; the D4-era
+  `tests/test_live_gate.py` expectations updated to the enabled-flag contract plus a
+  positive `live_enabled=True` case; `tests/desk/test_doctor_and_once.py` pins the second
+  documented doctor warning shape (`not served: health.port=0`, no network attempted).
+- `replay/runner.py` lazy ledger and `tools/notify/notifier.py` fan-out redaction
+  untouched per the 05-06 note. Health port stays `PUMPGROK_HEALTH__PORT`.
+
+Open REVIEW items: SC5 first main-branch run (post-merge); soak-3d wall-time on PR
+runners (05-07 REVIEW); no live RPC probe per D8.
+
 ### 6.7 Requirement-to-phase coverage (each id exactly once)
 
 | Phase | Ids | Count |

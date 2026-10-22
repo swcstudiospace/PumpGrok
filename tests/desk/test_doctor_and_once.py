@@ -4,8 +4,9 @@
 executes a skip-only cycle (fixture events read, one ``JournalNote``
 appended, exit 0) and ``pumpgrok doctor`` reports one line per subsystem:
 ``ok`` when the module resolves, ``warn ... not-yet-implemented`` for
-subsystems whose owning phase has not landed. Warnings never fail the
-report (exit 0).
+subsystems whose owning phase has not landed, and ``warn ... (not served:
+health.port=0, ...)`` for the served endpoints when no port is bound (no
+network is attempted). Warnings never fail the report (exit 0).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 
 
 def test_once_skip_only_cycle_and_doctor_rows(tmp_path, monkeypatch, capsys) -> None:
-    """INV-C-12: skip-only cycle exit 0; doctor rows ok or not-yet-implemented."""
+    """INV-C-12: skip-only cycle exit 0; doctor rows ok, not-yet-implemented, or not-served."""
     monkeypatch.chdir(tmp_path)
     assert main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
     out = capsys.readouterr().out
@@ -41,4 +42,6 @@ def test_once_skip_only_cycle_and_doctor_rows(tmp_path, monkeypatch, capsys) -> 
         if line.startswith(("ok", "info", "doctor:")):
             continue
         assert line.startswith("warn"), line
-        assert "not-yet-implemented" in line, line
+        # Two documented warning shapes: absent subsystems and unbound
+        # served endpoints (05-07 probes; no network attempted at port 0).
+        assert "not-yet-implemented" in line or "(not served: health.port=0" in line, line

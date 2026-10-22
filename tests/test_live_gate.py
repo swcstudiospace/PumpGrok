@@ -24,8 +24,13 @@ def test_gate_reports_nine_ids_in_order(tmp_path: Path) -> None:
     evaluated = gate.evaluate()
     assert tuple(item.id for item in evaluated) == PRECONDITION_IDS
     assert [item.number for item in evaluated] == list(range(1, 10))
-    assert evaluated[0].met is True
-    assert gate.check() == list(PRECONDITION_IDS[1:])
+    # R21/D4: row 1 needs [live] enabled=true; the mode flag alone leaves it unmet.
+    assert evaluated[0].met is False
+    assert evaluated[0].reason == "effective mode is live but [live] enabled is not true"
+    assert gate.check() == list(PRECONDITION_IDS)
+    enabled = LiveGate(mode="live", environ={}, root=tmp_path, live_enabled=True)
+    assert enabled.evaluate()[0].met is True
+    assert "mode_live" not in enabled.check()
 
 
 def test_precondition_two_is_met_only_by_exact_env_value(tmp_path: Path) -> None:
@@ -43,9 +48,9 @@ def test_paper_mode_fails_precondition_one(tmp_path: Path) -> None:
 
 def test_refusal_block_lists_each_unmet_id(tmp_path: Path) -> None:
     lines = refusal_lines(LiveGate(mode="live", environ={}, root=tmp_path).evaluate())
-    assert lines[0].startswith("LIVE GATE: refusing to start in mode=live. 8 of 9")
+    assert lines[0].startswith("LIVE GATE: refusing to start in mode=live. 9 of 9")
     assert any(line.startswith("  [ ] 8 adapter_registered ") for line in lines)
-    assert not any(line.startswith("  [ ] 1 ") for line in lines)
+    assert any(line.startswith("  [ ] 1 mode_live ") for line in lines)
 
 
 def test_adapter_stub_records_then_refuses_every_method(tmp_path: Path) -> None:

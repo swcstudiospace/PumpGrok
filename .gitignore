@@ -10,6 +10,7 @@ build/
 .env
 .receipts/**/*.json
 !.receipts/**/.gitkeep
+!.receipts/bot-00-chief/complete-phase-5.json
 var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
