@@ -67,21 +67,6 @@ def probe_served_endpoints(port: int, *, timeout_s: float = 2.0) -> list[Endpoin
     return probes
 
 
-SUBSYSTEMS: tuple[tuple[str, str], ...] = (
-    ("settings", "pumpgrok.config.settings"),
-    ("core", "pumpgrok.core"),
-    ("ledger", "pumpgrok.ledger"),
-    ("replay", "pumpgrok.replay"),
-    ("logging", "pumpgrok.logging"),
-    ("execution.live", "pumpgrok.execution.live"),
-    ("engine", "pumpgrok.engine"),
-    ("tools", "pumpgrok.tools"),
-    ("gateway", "pumpgrok.gateway"),
-    ("supervisor", "pumpgrok.supervisor"),
-    ("reports", "pumpgrok.reports"),
-)
-
-
 @dataclass(frozen=True)
 class SubsystemStatus:
     name: str
