@@ -66,5 +66,5 @@ regexes = [
   '''xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6''',  # pragma: allowlist secret: synthetic test value
   '''xai-abcdef1234567890abcdef1234567890''',  # pragma: allowlist secret: synthetic test value
   '''AbCdEfGhIjKlMnOpQrStUvWx1234''',
-  '''123456789:AAFakeSyntheticTelegramTokenValue_0''',  # pragma: allowlist secret: synthetic test value
+  '''123456789:AAFakeSyntheticTelegramTokenValue_0''',  # pragma: allowlist secret: synthetic test value  # nosemgrep: generic.secrets.security.detected-telegram-bot-api-key.detected-telegram-bot-api-key
 ]

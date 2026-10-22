@@ -25,7 +25,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-"${UV_BIN:-uv}" run --project "$ROOT" python - "$ROOT" "$MODE" <<'PY'
+read -r -a ASSEMBLE_UV_CMD <<< "${ASSEMBLE_UV:-uv}"
+"${ASSEMBLE_UV_CMD[@]}" run --project "$ROOT" python - "$ROOT" "$MODE" <<'PY'
 import difflib, sys
 from pathlib import Path
 from xml.sax.saxutils import quoteattr
