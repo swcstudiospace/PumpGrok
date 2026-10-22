@@ -35,6 +35,7 @@ from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.logging.spans import bind_clock, span
 
 _DEFAULT_PER_MINUTE = 60.0  # skeleton budget until config tools.* lands (Phase 3)
 
@@ -246,7 +247,12 @@ class ToolRegistry:
 
             async def __call__(self, payload: ToolInput, /) -> ToolOutput:
                 cid = next_span(current_correlation())
-                with bind_correlation(cid), bind_calling_seat(bot.id):
+                with (
+                    bind_correlation(cid),
+                    bind_calling_seat(bot.id),
+                    bind_clock(clock),
+                    span(spec.name),
+                ):
                     if spec.requires_approval:
                         req = OrderRequest.model_validate(
                             payload.model_dump() | {"correlation_id": str(cid)}

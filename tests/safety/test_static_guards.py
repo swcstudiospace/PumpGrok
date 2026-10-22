@@ -219,3 +219,31 @@ def test_smuggled_wall_clock_in_scratch_copy_is_caught(tmp_path: Path) -> None:
     ids.write_text(ids.read_text(encoding="utf-8") + "\nimport time\n\n_SMUGGLED = time.time()\n")
     found = find_violations(package)
     assert any(entry.startswith("core/ids.py:") for entry in found), found
+
+def _imports_prometheus_client(path: Path) -> list[str]:
+    """Return `rel:line` entries for prometheus_client imports in one file."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    rel = path.relative_to(SRC).as_posix()
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "prometheus_client" or alias.name.startswith(
+                    "prometheus_client."
+                ):
+                    found.append(f"{rel}:{node.lineno}: imports prometheus_client")
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == "prometheus_client" or module.startswith("prometheus_client."):
+                found.append(f"{rel}:{node.lineno}: imports {module}")
+    return found
+
+
+def test_no_prometheus_client_outside_supervisor() -> None:
+    """Only the supervisor writes metrics; core/ and risk/ never import the client."""
+    offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        if path.relative_to(SRC).as_posix().startswith("supervisor/"):
+            continue
+        offenders.extend(_imports_prometheus_client(path))
+    assert offenders == []
