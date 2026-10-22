@@ -140,7 +140,14 @@ class HealthServer:
                 elif self._get_metrics is None:
                     self._respond(writer, 503, {"metrics": False})
                 else:
-                    self._respond_bytes(writer, 200, self._get_metrics(), EXPOSITION_CONTENT_TYPE)
+                    try:
+                        payload = self._get_metrics()
+                    except Exception as exc:
+                        self._respond(
+                            writer, 503, {"metrics": False, "error": type(exc).__name__}
+                        )
+                    else:
+                        self._respond_bytes(writer, 200, payload, EXPOSITION_CONTENT_TYPE)
             elif path == "/readyz":
                 code = 200 if self._is_ready() else 503
                 self._respond(writer, code, {"ready": self._is_ready()})

@@ -234,3 +234,52 @@ async def test_metrics_route_without_provider_is_unavailable() -> None:
         assert await asyncio.to_thread(_fetch) == 503
     finally:
         await server.stop()
+
+
+async def test_metrics_route_snapshot_failure_is_503_with_body() -> None:
+    """WR-05: a snapshot failure is an explicit 503, never a dropped connection."""
+    import asyncio
+    import json
+    import urllib.error
+    import urllib.request
+
+    from pumpgrok.replay.clock import FixtureClock
+    from pumpgrok.supervisor.health import HealthServer
+    from pumpgrok.supervisor.metrics import Metrics
+
+    def _boom() -> dict:
+        raise RuntimeError("snapshot exploded")
+
+    metrics = Metrics(snapshot=_boom)
+    server = HealthServer(
+        FixtureClock(start=0.0),
+        lambda: {"status": "ok"},
+        lambda: True,
+        get_metrics=metrics.exposition,
+    )
+    port = await server.start("127.0.0.1", 0)
+    try:
+
+        def _fetch() -> tuple[int, str | None, bytes]:
+            request = urllib.request.Request(f"http://127.0.0.1:{port}/metrics")
+            try:
+                with urllib.request.urlopen(request) as response:
+                    return (
+                        int(response.status),
+                        response.headers.get("Content-Type"),
+                        response.read(),
+                    )
+            except urllib.error.HTTPError as exc:
+                return (
+                    int(exc.code),
+                    exc.headers.get("Content-Type"),
+                    exc.read(),
+                )
+
+        code, content_type, body = await asyncio.to_thread(_fetch)
+        assert code == 503
+        assert content_type == "application/json"
+        payload = json.loads(body.decode("utf-8"))
+        assert payload == {"metrics": False, "error": "RuntimeError"}
+    finally:
+        await server.stop()
