@@ -72,16 +72,16 @@ def test_env_example_has_only_placeholders() -> None:
         ("PUMPGROK_RISK__MAX_TRADES_PER_DAY", "20", False),
         ("WALLET_PRIVATE_KEY", "changeme", True),
         (
-            "PUMPGROK_SOME__PRIVATE_KEY",
-            "changeme",
+            "PUMPGROK_SOME__PRIVATE_KEY",  # pragma: allowlist secret: probe name
+            "changeme",  # pragma: allowlist secret: placeholder
             True,
         ),  # pragma: allowlist secret: forbidden-name probe
         ("PUMPGROK_MODE", "live", True),
         (
             "PUMPGROK_GROK__API_KEY",
-            "xai-abcdef1234567890abcdef1234567890",
+            "xai-abcdef1234567890abcdef1234567890",  # pragma: allowlist secret: synthetic
             True,
-        ),  # pragma: allowlist secret: synthetic secret shape
+        ),
     ],
 )
 def test_pair_is_classified(key: str, value: str, bad: bool) -> None:

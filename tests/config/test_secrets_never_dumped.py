@@ -39,8 +39,9 @@ def planted(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PUMPGROK_GROK__API_KEY", GROK_SECRET)
     monkeypatch.setenv("PUMPGROK_RPC__API_KEY", RPC_SECRET)
     monkeypatch.setenv(
-        "PUMPGROK_CONFIRMATION_KEY", "confirm-secret-plant-aa11"
-    )  # pragma: allowlist secret: planted no-echo value
+        "PUMPGROK_CONFIRMATION_KEY",
+        "confirm-secret-plant-aa11",  # pragma: allowlist secret: planted no-echo value
+    )
     return load_settings()
 
 

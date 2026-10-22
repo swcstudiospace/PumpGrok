@@ -28,10 +28,10 @@ CASES = [
     ("PUMPGROK_RISK__MAX_TRADE_FRACTION", "not-a-number", "risk.max_trade_fraction"),
     ("PUMPGROK_RISK__MAX_TRADE_FRACTION", "2.5", "risk.max_trade_fraction"),
     (
-        "PUMPGROK_RISK__MAX_TOKEN_FRACTION",
+        "PUMPGROK_RISK__MAX_TOKEN_FRACTION",  # pragma: allowlist secret: setting name
         "-0.1",
         "risk.max_token_fraction",
-    ),  # pragma: allowlist secret: long setting name trips entropy
+    ),
     ("PUMPGROK_RISK__DAILY_LOSS_HALT_FRACTION", "0.06", "risk.daily_loss_halt_fraction"),
     (
         "PUMPGROK_RISK__LIQUIDITY_FLOOR_MULTIPLE",
