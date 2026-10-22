@@ -28,6 +28,7 @@ from tenacity import (
 
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.tool import RetryPolicy
+from pumpgrok.logging.redaction import redact_text, redact_value
 from pumpgrok.tools.notify.allowlist import partition_destinations
 
 __all__ = [
@@ -116,6 +117,10 @@ class Notifier(abc.ABC):
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Fan out; a repeated key suppresses every sink (stdout/file too)."""
+        # INV-R-23: alert text and fields are redacted at the fan-out edge,
+        # so every sink (stdout, file, telegram, webhook) sees masked values.
+        text = redact_text(text)
+        fields = redact_value(None, fields or {})
         key = idempotency_key or alert_key(kind, ticket_id, severity, self._clock)
         if key in self._seen_keys:
             return {"delivered": [], "suppressed": True}

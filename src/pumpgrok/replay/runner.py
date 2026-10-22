@@ -123,7 +123,8 @@ def run_replay(
         target = REPLAY_ROOT / source.name / "ledger.sqlite"
     else:
         target = Path(ledger_path)
-    recreate_ledger_db(target)
+    # Created only after every pre-append check passes, so a failed run
+    # (corrupt fixture, stale gap, missing LLM record) leaves no file.
 
     with bind_correlation(cycle), bind_seat(CYCLE_SEAT):
         for stamp in stamps:
@@ -139,6 +140,7 @@ def run_replay(
         if replay_llm is not None:
             llm_outcome = replay_llm.complete(llm_request_for(source.name, list(source)), clock)
             llm_clause = f"; llm outcome={llm_outcome.outcome} latency_s={llm_outcome.latency_s}"
+        recreate_ledger_db(target)
         store = LedgerStore(target)
         try:
             stored = store.append_batch(
