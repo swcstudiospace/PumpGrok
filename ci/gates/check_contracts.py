@@ -63,9 +63,15 @@ def _match(pattern: str, path: str) -> bool:
         head, tail = pattern.split("**/", 1)
         if head and not head.endswith("/"):
             return False
-        if not path.startswith(head):
-            return False
-        parts = path[len(head) :].split("/")
+        parts = path.split("/")
+        if head:
+            head_parts = head[:-1].split("/")
+            if len(parts) <= len(head_parts) or not all(
+                fnmatch.fnmatch(seg, pat)
+                for pat, seg in zip(head_parts, parts[: len(head_parts)], strict=True)
+            ):
+                return False
+            parts = parts[len(head_parts) :]
         return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
     if "/" not in pattern:
         return fnmatch.fnmatch(Path(path).name, pattern)

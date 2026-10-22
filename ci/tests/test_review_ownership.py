@@ -128,3 +128,36 @@ def test_recursive_rule_does_not_assign_foreign_directory_path(ownership):
     }
     assert ownership.resolve_owner("other/private.py", manifest) == ("bot-risk", False)
     assert ownership.resolve_owner("mine/private.py", manifest) == ("bot-a", False)
+
+
+@pytest.mark.parametrize(
+    "pattern,path,expected",
+    [
+        ("src/*/**/*.py", "src/app/main.py", True),
+        ("src/*/**/*.py", "src/app/deep/main.py", True),
+        ("src/*/**/*.py", "src/main.py", False),
+        ("src/*/**/*.py", "other/app/main.py", False),
+        ("dir*/**/*.py", "dirA/a.py", True),
+        ("dir*/**/*.py", "dirA/x/a.py", True),
+        ("dir*/**/*.py", "other/a.py", False),
+        ("dir*/x.py", "dirA/x.py", True),
+        ("dir*/x.py", "dirA/y/x.py", False),
+    ],
+)
+def test_wildcard_directory_prefix_still_matches(ownership, pattern, path, expected):
+    assert ownership._match(pattern, path) is expected
+
+
+@pytest.mark.parametrize(
+    "pattern,path,expected",
+    [
+        ("dir*/**", "dirA/x/a.py", True),
+        ("dir*/**", "dirA/a.py", True),
+        ("dir*/**", "dirA", True),
+        ("dir*/**", "other/x/a.py", False),
+        ("mine/**", "mine/a/b.py", True),
+        ("mine/**", "minex/a.py", False),
+    ],
+)
+def test_wildcard_slash_double_star_prefix_matches(ownership, pattern, path, expected):
+    assert ownership._match(pattern, path) is expected

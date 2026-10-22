@@ -126,7 +126,11 @@ def check_plan(plan: str | None) -> list[str]:
 # command ("a; b"), a prefix of the target ("rm -rf var/rep") or the bare verb ("rm -rf") never
 # authorizes the full command.
 CLI_WRAPPER_RE = re.compile(r"^(?:uv\s+run\s+)?(?:pumpgrok\s+)?")
-PROVENANCE_SUFFIX_RE = re.compile(r"(?:\s+--(?:by|reason)\s+\S+)+$")
+# A provenance value is one shell word: a double-quoted or single-quoted string (which may hold
+# spaces) or a bare non-space token. Quoted text cannot contain its own quote, so the suffix
+# always ends at a closing quote and never swallows a following command.
+PROVENANCE_VALUE = r"""(?:"[^"]*"|'[^']*'|\S+)"""
+PROVENANCE_SUFFIX_RE = re.compile(rf"(?:\s+--(?:by|reason)\s+{PROVENANCE_VALUE})+$")
 
 
 def operation_key(text: str) -> str:

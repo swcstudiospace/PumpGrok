@@ -148,3 +148,60 @@ class TestOneApprovalPerAction:
         r = _run(tmp_path, ["git reset --hard HEAD"], ["git reset --hard HEAD"])
         assert r.returncode == 1
         assert "approvals[0]" in r.stderr
+
+
+class TestRound2UnrelatedApprovalAndQuotedReason:
+    def test_unrelated_approval_with_quoted_reason_does_not_count(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['git reset --hard --reason "cleanup"'],
+            [_approval("cache cleanup")],
+        )
+        assert r.returncode == 1
+        assert "no approval whose operation names this command" in r.stderr
+
+    def test_unquoted_reason_cannot_hide_a_second_command(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard --reason x;rm -rf var/cache"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+
+    def test_quoted_reason_cannot_hide_a_second_command(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['git reset --hard --reason "x" ; rm -rf var/cache'],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+
+    def test_double_quoted_reason_with_spaces_authorizes_the_command(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "reviewed with operator"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_single_quoted_reason_with_spaces_authorizes_the_command(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["uv run pumpgrok killswitch clear --by 'human:op' --reason 'reviewed with operator'"],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_quoted_reason_keeps_the_command_match_exact(self, rollback_gate):
+        assert (
+            rollback_gate.operation_key('uv run pumpgrok killswitch clear --reason "a b c"')
+            == "killswitch clear"
+        )
+        assert (
+            rollback_gate.operation_key('uv run pumpgrok killswitch clear --reason "a" extra')
+            != "killswitch clear"
+        )
+        assert (
+            rollback_gate.operation_key('git reset --hard --reason "x" ; rm -rf var/cache')
+            != "git reset --hard"
+        )

@@ -121,10 +121,10 @@ class TestBypassSearchText:
         [
             'grep -n -- "--no-verify" ci/gates/check_receipt.py',
             'grep -rn "|| true" ci/gates',
-            "grep -n '--skip-tests' docs/testing.md",
+            "grep -n -e '--skip-tests' docs/testing.md",
             'rg "PUMPGROK_LIVE_ENABLE=1" src',
-            'grep -c "--i-understand-the-risk" ci/gates/check_receipt.py',
-            'git grep -n "--no-gpg-sign" -- ci',
+            'grep -c -e "--i-understand-the-risk" ci/gates/check_receipt.py',
+            'git grep -n -e "--no-gpg-sign" -- ci',
         ],
     )
     def test_quoted_search_for_bypass_text_is_not_a_bypass(self, receipt_gate, cmd):
@@ -281,3 +281,61 @@ class TestEvidenceIndexIsAnInteger:
             claims=[{"claim": "tests pass", "evidence_command_index": 0}],
         )
         assert receipt_gate.check(receipt, "bot-04-sniper") == []
+
+
+# ---------------------------------------------------------------------------
+# Search options that execute or read something else never exempt their quoted value
+# ---------------------------------------------------------------------------
+
+
+class TestSearchOptionsCannotHideBypasses:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'git grep --open-files-in-pager="git commit --no-verify -m msg" needle -- README.md',
+            'git grep -O"git commit --no-verify -m msg" needle -- README.md',
+            'git grep -O "git commit --no-verify -m msg" needle -- README.md',
+            'grep -f patterns.txt "--no-verify" ci/gates/check_receipt.py',
+            'grep -nf patterns.txt -e "--no-verify" ci/gates/check_receipt.py',
+            'grep -e "--no-verify" -f patterns.txt ci/gates/check_receipt.py',
+            'grep --file=patterns.txt -e "--no-verify" ci/gates/check_receipt.py',
+            'grep --exclude-from="list.txt" -e "--no-verify" ci/gates/check_receipt.py',
+            'rg --pre="git commit --no-verify" needle src',
+            'rg --pre "git commit --no-verify" needle src',
+        ],
+    )
+    def test_option_that_executes_or_reads_hides_no_bypass(self, receipt_gate, cmd):
+        receipt = _receipt(
+            commands=[{"cmd": cmd, "exit_code": 0, "output_tail": "1:match"}],
+            claims=[{"claim": "audited", "evidence_command_index": 0}],
+        )
+        problems = receipt_gate.check(receipt, "bot-04-sniper")
+        assert any("contains a bypass" in p for p in problems), problems
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'grep -n -e "--no-verify" ci/gates/check_receipt.py',
+            'grep -n -- "--no-verify" ci/gates/check_receipt.py',
+            'grep -A3 -n -e "--no-gpg-sign" ci/gates/check_receipt.py',
+            'git grep -n -e "--no-gpg-sign" -- ci',
+            'grep -c -e "--i-understand-the-risk" ci/gates/check_receipt.py',
+            'grep -n -e "--skip-tests" -- docs/testing.md',
+            'rg -n -e "--no-verify" src',
+        ],
+    )
+    def test_plain_quoted_pattern_with_safe_options_is_not_a_bypass(self, receipt_gate, cmd):
+        receipt = _receipt(
+            commands=[{"cmd": cmd, "exit_code": 0, "output_tail": "1:match"}],
+            claims=[{"claim": "audited", "evidence_command_index": 0}],
+        )
+        problems = receipt_gate.check(receipt, "bot-04-sniper")
+        assert not any("contains a bypass" in p for p in problems), problems
+
+    def test_unsafe_option_in_the_middle_of_a_cluster_is_refused(self, receipt_gate):
+        cmd = 'grep -nf patterns.txt -e "--no-verify" ci/gates/check_receipt.py'
+        assert receipt_gate._search_text_ranges(cmd) == []
+
+    def test_long_option_with_value_is_never_exempt(self, receipt_gate):
+        cmd = 'git grep --open-files-in-pager="git commit --no-verify" needle'
+        assert receipt_gate._search_text_ranges(cmd) == []

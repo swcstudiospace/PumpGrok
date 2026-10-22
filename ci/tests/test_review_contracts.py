@@ -155,3 +155,10 @@ class TestMatchAnchoring:
     def test_leading_double_star_matches_at_any_depth(self):
         assert gate._match("**/*.rs", "a/b/c.rs") is True
         assert gate._match("**/*.rs", "c.rs") is True
+
+    def test_wildcard_directory_prefix_still_matches(self):
+        # A wildcard segment in the head must match by segment, not by literal prefix.
+        assert gate._match("src/*/**/*.py", "src/app/main.py") is True
+        assert gate._match("src/*/**/*.py", "src/app/sub/main.py") is True
+        assert gate._match("src/*/**/*.py", "lib/app/main.py") is False
+        assert gate._match("src/*/**/*.py", "src/main.py") is False

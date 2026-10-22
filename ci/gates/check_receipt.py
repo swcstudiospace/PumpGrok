@@ -19,6 +19,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -457,7 +458,39 @@ def _self_approval_problems(receipt: dict) -> list[str]:
 # bypass. Only a single simple search command qualifies. Unquoted shell syntax anywhere on the
 # line (separators, substitution, redirection, background) or an expansion inside the quotes
 # means the quoted text might be executed, so every match stays a bypass (fail closed).
-_SEARCH_TOOL_RE = re.compile(r"\s*(?:[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)")
+_SEARCH_TOOLS = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack"})
+# Options that only change how a search matches or prints; none reads another file or runs a
+# program. Any option outside these sets disqualifies the whole command from exemption.
+_SAFE_SHORT_FLAGS = frozenset("nicLlwxEFGHhvIsoqPzaybT")
+_SAFE_LONG_FLAGS = frozenset(
+    {
+        "--line-number",
+        "--ignore-case",
+        "--no-ignore-case",
+        "--count",
+        "--files-with-matches",
+        "--files-without-match",
+        "--word-regexp",
+        "--line-regexp",
+        "--extended-regexp",
+        "--fixed-strings",
+        "--basic-regexp",
+        "--perl-regexp",
+        "--with-filename",
+        "--no-filename",
+        "--invert-match",
+        "--only-matching",
+        "--quiet",
+        "--silent",
+        "--recursive",
+        "--no-messages",
+        "--null",
+        "--text",
+        "--initial-tab",
+        "--byte-offset",
+        "--null-data",
+    }
+)
 _SHELL_SYNTAX = frozenset("`$()<>;|&\n\r")
 
 
@@ -488,24 +521,130 @@ def _split_quotes(cmd: str) -> tuple[str, list[tuple[int, int]], bool]:
     return "".join(chars), spans, True
 
 
-def _search_text_ranges(cmd: str) -> list[tuple[int, int]]:
-    """Half-open index ranges of `cmd` that are text a search tool looks FOR, not shell syntax.
+class _Token(NamedTuple):
+    """One shell word: its unquoted value, its span in the command, and whether the whole word
+    is a single quoted string (the only shape an exemption may cover)."""
 
-    Only quoted arguments after the search tool name qualify, and only when the line holds no
-    unquoted shell syntax and no expansion inside the quotes. Anything else returns no ranges.
+    value: str
+    start: int
+    end: int
+    whole_quoted: bool
+
+
+def _tokenize(cmd: str) -> list[_Token] | None:
+    """Split `cmd` into shell words, removing quotes the way a POSIX shell does.
+
+    Returns None for an unterminated quote. Unquoted shell syntax that could change word
+    boundaries is refused by _SHELL_SYNTAX before this runs, so only plain words and quoted
+    strings reach here.
     """
-    blanked, spans, balanced = _split_quotes(cmd)
+    tokens: list[_Token] = []
+    i, n = 0, len(cmd)
+    while i < n:
+        if cmd[i].isspace():
+            i += 1
+            continue
+        start = i
+        quoted_first = cmd[i] in "'\""
+        value: list[str] = []
+        bare_chars = 0
+        quoted_segments = 0
+        while i < n and not cmd[i].isspace():
+            ch = cmd[i]
+            if ch == "'":
+                close = cmd.find("'", i + 1)
+                if close < 0:
+                    return None
+                value.append(cmd[i + 1 : close])
+                quoted_segments += 1
+                i = close + 1
+            elif ch == '"':
+                j = i + 1
+                buf: list[str] = []
+                while j < n and cmd[j] != '"':
+                    if cmd[j] == "\\" and j + 1 < n and cmd[j + 1] in '"\\':
+                        j += 1
+                    buf.append(cmd[j])
+                    j += 1
+                if j >= n:
+                    return None
+                value.append("".join(buf))
+                quoted_segments += 1
+                i = j + 1
+            elif ch == "\\" and i + 1 < n:
+                value.append(cmd[i + 1])
+                bare_chars += 1
+                i += 2
+            else:
+                value.append(ch)
+                bare_chars += 1
+                i += 1
+        whole = quoted_first and bare_chars == 0 and quoted_segments == 1
+        tokens.append(_Token("".join(value), start, i, whole))
+    return tokens
+
+
+def _search_text_ranges(cmd: str) -> list[tuple[int, int]]:
+    """Half-open ranges of `cmd` that are a search PATTERN, never an option's value.
+
+    Only the pattern operand of a plain search command is exempt: the first word after the
+    tool name, or the operand of -e/--regexp. Every option must be a known search-only flag.
+    Any other option (-f/--file, -O/--open-files-in-pager, --pre, --exclude-from, ...) can
+    read a file or run a program, so the whole command gets no exemption. Unquoted shell
+    syntax on the line, or an expansion inside the quotes, also exempts nothing.
+    """
+    blanked, _spans, balanced = _split_quotes(cmd)
     if not balanced or any(ch in _SHELL_SYNTAX for ch in blanked):
         return []
-    tool = _SEARCH_TOOL_RE.match(blanked)
-    if tool is None:
+    tokens = _tokenize(cmd)
+    if not tokens:
         return []
+    names = [tok.value for tok in tokens]
+    if names[0] in _SEARCH_TOOLS:
+        tool, args = names[0], tokens[1:]
+    elif names[:2] == ["git", "grep"]:
+        tool, args = "grep", tokens[2:]
+    else:
+        return []
+    operands: list[_Token] = []
+    positionals: list[_Token] = []
+    saw_e = False
+    expect_operand = False
+    after_separator = False
+    for tok in args:
+        if expect_operand:
+            operands.append(tok)
+            expect_operand = False
+            saw_e = True
+        elif after_separator or tok.value == "-" or not tok.value.startswith("-"):
+            positionals.append(tok)
+        elif tok.value == "--":
+            after_separator = True
+        elif tok.value.startswith("--"):
+            if tok.value == "--regexp":
+                expect_operand = True
+            elif tok.value not in _SAFE_LONG_FLAGS:
+                return []
+        else:
+            flags = tok.value[1:]
+            for idx, ch in enumerate(flags):
+                rest = flags[idx + 1 :]
+                if ch == "e" and not rest:
+                    expect_operand = True
+                elif ch in "ABCm" and rest.isdigit():
+                    break
+                elif ch in _SAFE_SHORT_FLAGS or (ch in "rR" and tool != "rg"):
+                    continue
+                else:
+                    return []
+    if expect_operand:
+        return []
+    pattern_words = operands if saw_e else positionals[:1]
     ranges: list[tuple[int, int]] = []
-    for open_idx, close_idx in spans:
-        content = cmd[open_idx + 1 : close_idx]
-        if open_idx < tool.end() or "$" in content or "`" in content:
-            continue
-        ranges.append((open_idx + 1, close_idx))
+    for tok in pattern_words:
+        raw = cmd[tok.start + 1 : tok.end - 1]
+        if tok.whole_quoted and "$" not in raw and "`" not in raw:
+            ranges.append((tok.start + 1, tok.end - 1))
     return ranges
 
 
