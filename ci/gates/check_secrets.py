@@ -166,19 +166,11 @@ def scan_line(path: str, lineno: int, line: str) -> list[dict]:
     if ALLOWLIST_MARKER in line:
         return []
 
-    findings = []
+    hits: list[tuple[str, str, str]] = []  # (rule, desc, secret value)
 
     for name, pattern, desc in PATTERNS:
         for m in re.finditer(pattern, line):
-            findings.append(
-                {
-                    "file": path,
-                    "line": lineno,
-                    "rule": name,
-                    "desc": desc,
-                    "excerpt": _redact(line, m.group(0)),
-                }
-            )
+            hits.append((name, desc, m.group(0)))
 
     # High-entropy value assigned to a suspiciously named variable.
     if SECRET_NAME_RE.search(line):
@@ -187,37 +179,81 @@ def scan_line(path: str, lineno: int, line: str) -> list[dict]:
             if is_placeholder(value):
                 continue
             if shannon_entropy(value) > 3.5:
-                findings.append(
-                    {
-                        "file": path,
-                        "line": lineno,
-                        "rule": "high_entropy",
-                        "desc": "high-entropy value assigned to a secret-named variable",
-                        "excerpt": _redact(line, value),
-                    }
-                )
+                desc = "high-entropy value assigned to a secret-named variable"
+                hits.append(("high_entropy", desc, value))
 
-    return findings
+    # Every flagged value on the line is masked in every excerpt. A line can carry several
+    # credentials; masking only the value a finding names would print the others.
+    secrets = [value for _, _, value in hits]
+    return [
+        {
+            "file": path,
+            "line": lineno,
+            "rule": rule,
+            "desc": desc,
+            "excerpt": _redact(line, secrets),
+        }
+        for rule, desc, _ in hits
+    ]
 
 
-def _redact(line: str, secret: str) -> str:
+def _mask(secret: str) -> str:
     keep = 4
-    masked = secret[:keep] + "*" * max(4, len(secret) - keep) if len(secret) > keep else "****"
-    return line.replace(secret, masked).strip()[:160]
+    return secret[:keep] + "*" * max(4, len(secret) - keep) if len(secret) > keep else "****"
+
+
+def _redact(line: str, secrets: list[str]) -> str:
+    # Collect every occurrence of every secret, then mask the merged spans. Overlapping secrets
+    # then leave no fragment of either behind.
+    spans: list[tuple[int, int]] = []
+    for secret in set(secrets):
+        if not secret:
+            continue
+        start = line.find(secret)
+        while start != -1:
+            spans.append((start, start + len(secret)))
+            start = line.find(secret, start + 1)
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    parts: list[str] = []
+    pos = 0
+    for start, end in merged:
+        parts.append(line[pos:start])
+        parts.append(_mask(line[start:end]))
+        pos = end
+    parts.append(line[pos:])
+    return "".join(parts).strip()[:160]
+
+
+def _forbidden(rel: str) -> list[dict]:
+    return [
+        {
+            "file": rel,
+            "line": 0,
+            "rule": "forbidden_file",
+            "desc": f"{Path(rel).name} must never be committed "
+            "(holds credentials in plain text)",
+            "excerpt": "",
+        }
+    ]
+
+
+def _scan_text(rel: str, text: str) -> list[dict]:
+    findings: list[dict] = []
+    for i, line in enumerate(text.splitlines(), start=1):
+        if len(line) > 4000:  # minified bundle
+            continue
+        findings.extend(scan_line(rel, i, line))
+    return findings
 
 
 def scan_file(path: Path, rel: str) -> list[dict]:
     if Path(rel).name in ALWAYS_FLAG_FILES:
-        return [
-            {
-                "file": rel,
-                "line": 0,
-                "rule": "forbidden_file",
-                "desc": f"{Path(rel).name} must never be committed "
-                "(holds credentials in plain text)",
-                "excerpt": "",
-            }
-        ]
+        return _forbidden(rel)
 
     if path.suffix.lower() in SKIP_EXT:
         return []
@@ -227,20 +263,28 @@ def scan_file(path: Path, rel: str) -> list[dict]:
     except (OSError, UnicodeDecodeError):
         return []
 
-    findings: list[dict] = []
-    for i, line in enumerate(text.splitlines(), start=1):
-        if len(line) > 4000:  # minified bundle
-            continue
-        findings.extend(scan_line(rel, i, line))
-    return findings
+    return _scan_text(rel, text)
 
 
-def _git_lines(args: list[str]) -> list[str]:
+def scan_blob(rel: str, blob: str) -> list[dict]:
+    """Scan the staged content of rel, which is the index object `blob`, not the worktree file."""
+    if Path(rel).name in ALWAYS_FLAG_FILES:
+        return _forbidden(rel)
+
+    if Path(rel).suffix.lower() in SKIP_EXT:
+        return []
+
+    return _scan_text(rel, _git(["cat-file", "blob", blob]))
+
+
+def _git(args: list[str]) -> str:
     try:
         out = subprocess.run(
             ["git", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
             cwd=REPO_ROOT,
         )
@@ -248,15 +292,29 @@ def _git_lines(args: list[str]) -> list[str]:
         # A failed diff must not read as "no files to scan": that would print PASS on a tree
         # that was never scanned.
         sys.exit(f"check_secrets: git {' '.join(args[:2])} failed: {exc.stderr}")
-    return [line for line in out.stdout.splitlines() if line.strip()]
+    return out.stdout
 
 
 def changed_files(base: str) -> list[str]:
-    return _git_lines(["diff", "--name-only", f"{base}...HEAD"])
+    # -z: plain output quotes non-ASCII names, and a quoted name names no file on disk.
+    raw = _git(["diff", "--name-only", "-z", f"{base}...HEAD"])
+    return [name for name in raw.split("\0") if name]
 
 
-def staged_files() -> list[str]:
-    return _git_lines(["diff", "--cached", "--name-only", "--diff-filter=ACM"])
+def staged_blobs() -> dict[str, str]:
+    """Map each staged path to the index blob that a commit would record.
+
+    --no-renames reports a rename as a delete plus an add, so the destination is scanned
+    under its new path. Gitlinks (mode 160000) are submodule pointers with no file content.
+    """
+    raw = _git(["diff", "--cached", "--raw", "-z", "--no-renames", "--diff-filter=ACMT"])
+    parts = raw.split("\0")
+    blobs: dict[str, str] = {}
+    for meta, path in zip(parts[0::2], parts[1::2]):
+        _src_mode, dst_mode, _src_sha, dst_sha, _status = meta.lstrip(":").split()
+        if dst_mode != "160000":
+            blobs[path] = dst_sha
+    return blobs
 
 
 def main() -> int:
@@ -270,10 +328,13 @@ def main() -> int:
 
     root = args.root.resolve()
 
+    staged_index: dict[str, str] | None = None
     if args.files is not None:
         targets = args.files
     elif args.staged:
-        targets = staged_files()
+        # The index is what a commit records; the working tree may hold something else.
+        staged_index = staged_blobs()
+        targets = list(staged_index)
     elif args.all:
         targets = [
             str(p.relative_to(root))
@@ -289,10 +350,13 @@ def main() -> int:
 
     findings: list[dict] = []
     for rel in targets:
+        if any(part in SKIP_DIRS for part in Path(rel).parts):
+            continue
+        if staged_index is not None:
+            findings.extend(scan_blob(rel, staged_index[rel]))
+            continue
         path = root / rel
         if not path.exists() or not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in Path(rel).parts):
             continue
         findings.extend(scan_file(path, rel))
 

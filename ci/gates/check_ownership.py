@@ -42,6 +42,16 @@ def _segments_match(pattern: str, path: str) -> bool:
     )
 
 
+def _head_matches(head_parts: list[str], parts: list[str]) -> bool:
+    """True when the leading path segments match the pattern's directory segments."""
+    if len(parts) < len(head_parts):
+        return False
+    return all(
+        fnmatch.fnmatch(seg, pat)
+        for pat, seg in zip(head_parts, parts[: len(head_parts)], strict=True)
+    )
+
+
 def _match(pattern: str, path: str) -> bool:
     """gitignore-ish glob matching.
 
@@ -49,13 +59,23 @@ def _match(pattern: str, path: str) -> bool:
     the '**' case explicitly and anchor the rest so 'web/*' does not swallow subdirectories.
     """
     if pattern.endswith("/**"):
-        prefix = pattern[:-3]
-        return path == prefix or path.startswith(prefix + "/")
+        # 'dir*/**' matches segment-wise too: 'dirA/x/a.py' yes, 'other/x/a.py' no.
+        return _head_matches(pattern[:-3].split("/"), path.split("/"))
 
     if "**/" in pattern:
-        # '**/*.rs' matches 'a/b/c.rs' and 'c.rs': the tail must match some path suffix.
-        tail = pattern.split("**/", 1)[1]
+        # 'mine/**/*.py' keeps its 'mine/' anchor: the head is matched one path segment at a
+        # time, so 'other/private.py' never matches, while wildcard heads such as 'src/*/' still
+        # work. '**/*.rs' has an empty head and matches at any depth. The tail must match some
+        # suffix of the remainder: 'a/b/c.rs' and 'c.rs' both match.
+        head, tail = pattern.split("**/", 1)
         parts = path.split("/")
+        if head:
+            if not head.endswith("/"):
+                return False
+            head_parts = head[:-1].split("/")
+            if not _head_matches(head_parts, parts):
+                return False
+            parts = parts[len(head_parts) :]
         return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
 
     if "/" not in pattern:
@@ -79,9 +99,11 @@ def resolve_owner(path: str, manifest: dict) -> tuple[str | None, bool]:
 
 
 def changed_files(base: str) -> list[str]:
+    # --no-renames: with rename detection, --name-only lists only a rename's destination, so the
+    # source owner would never be checked. Both sides of a move must reach classify_files.
     try:
         out = subprocess.run(
-            ["git", "diff", "--name-only", f"{base}...HEAD"],
+            ["git", "diff", "--name-only", "--no-renames", f"{base}...HEAD"],
             capture_output=True,
             text=True,
             check=True,

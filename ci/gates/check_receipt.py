@@ -19,6 +19,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -180,6 +181,16 @@ def _safe_normpath(path: str) -> str:
     return ("/" + joined) if is_absolute else joined
 
 
+def _requires_directory(path: str) -> bool:
+    """True when the spelling can only resolve to a directory: a trailing `/`, or a final `.`
+    component (`dir/.`). POSIX resolves both by appending `.`, which fails for a regular file,
+    so `README.md/.` is a different target from `README.md`, exactly as `README.md/` is.
+    Dropping that final `.` made an existence probe on `README.md` corroborate a search gated
+    on `README.md/.` that never ran (Greptile P1, "Unrun searches look verified").
+    """
+    return path.endswith("/") or (path != "." and path.rsplit("/", 1)[-1] == ".")
+
+
 def _normalize_path(path: str, flag: str | None = None) -> str:
     """Collapse equivalent relative spellings of the same path (`./config.yaml` vs
     `config.yaml`, or a doubled separator) so sibling-probe matching compares what the path
@@ -207,16 +218,14 @@ def _normalize_path(path: str, flag: str | None = None) -> str:
     (Greptile P1, PR #45, "Directory probes treated as different"). Pass the command's own
     flag so only `-d` gets that collapse; every other flag keeps the slash significant.
     """
-    has_trailing_slash = path.endswith("/") and path.strip() != "/"
+    requires_dir = _requires_directory(path)
     normalized = _safe_normpath(path)
     if normalized in ("", "."):
         return path
     flag_allows_collapse = flag is not None and flag.lower() in _TRAILING_SLASH_SAFE_FLAGS
-    return (
-        normalized
-        if flag_allows_collapse
-        else (normalized + "/" if has_trailing_slash else normalized)
-    )
+    if flag_allows_collapse or not requires_dir or normalized.endswith("/"):
+        return normalized
+    return normalized + "/"
 
 
 # A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
@@ -301,6 +310,20 @@ def _flag_implies(sibling_flag: str, gate_flag: str) -> bool:
     return gate_flag.lower() in _FLAG_IMPLIES.get(sibling_flag.lower(), set())
 
 
+def _exit_code_value(cmd: object) -> int | None:
+    """The command's recorded exit code as an int, or None if it is missing or not an integer.
+
+    Booleans are rejected even though Python treats them as ints (`False == 0`), and a null
+    or string result is not evidence of success or failure, so each is returned as None.
+    """
+    if not isinstance(cmd, dict):
+        return None
+    value = cmd.get("exit_code")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     """True if `cmd` is a real file-existence probe (`test -f`/`-e`/`-d`/`-r`, or the
     `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path`, whose own flag
@@ -329,7 +352,7 @@ def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     the trailing slash can actually change the outcome (Greptile P1, PR #45, "Different paths
     treated as equal").
     """
-    if cmd.get("exit_code") != 0:
+    if _exit_code_value(cmd) != 0:
         return False
     match = FILE_EXISTENCE_PROBE_RE.match(str(cmd.get("cmd", "")).strip())
     if not match:
@@ -430,15 +453,225 @@ def _self_approval_problems(receipt: dict) -> list[str]:
     return []
 
 
+# A bypass pattern that lands inside the quoted argument of a read-only search names the text
+# being searched FOR (`grep -n -- "--no-verify" file`); nothing is skipped, so it is not a
+# bypass. Only a single simple search command qualifies. Unquoted shell syntax anywhere on the
+# line (separators, substitution, redirection, background) or an expansion inside the quotes
+# means the quoted text might be executed, so every match stays a bypass (fail closed).
+_SEARCH_TOOLS = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack"})
+# Options that only change how a search matches or prints; none reads another file or runs a
+# program. Any option outside these sets disqualifies the whole command from exemption.
+_SAFE_SHORT_FLAGS = frozenset("nicLlwxEFGHhvIsoqPzaybT")
+_SAFE_LONG_FLAGS = frozenset(
+    {
+        "--line-number",
+        "--ignore-case",
+        "--no-ignore-case",
+        "--count",
+        "--files-with-matches",
+        "--files-without-match",
+        "--word-regexp",
+        "--line-regexp",
+        "--extended-regexp",
+        "--fixed-strings",
+        "--basic-regexp",
+        "--perl-regexp",
+        "--with-filename",
+        "--no-filename",
+        "--invert-match",
+        "--only-matching",
+        "--quiet",
+        "--silent",
+        "--recursive",
+        "--no-messages",
+        "--null",
+        "--text",
+        "--initial-tab",
+        "--byte-offset",
+        "--null-data",
+    }
+)
+_SHELL_SYNTAX = frozenset("`$()<>;|&\n\r")
+
+
+def _split_quotes(cmd: str) -> tuple[str, list[tuple[int, int]], bool]:
+    """Blank the content of each quoted argument so the unquoted text can be inspected alone.
+
+    Returns the line with every quoted span's content replaced by spaces (indices unchanged),
+    the (open, close) index of each span, and False when a quote is never closed.
+    """
+    chars = list(cmd)
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(cmd)
+    while i < n:
+        ch = cmd[i]
+        if ch == "\\":
+            i += 2
+        elif ch in "'\"":
+            j = i + 1
+            while j < n and cmd[j] != ch:
+                j += 2 if ch == '"' and cmd[j] == "\\" else 1
+            if j >= n:
+                return cmd, [], False
+            spans.append((i, j))
+            chars[i + 1 : j] = " " * (j - i - 1)
+            i = j + 1
+        else:
+            i += 1
+    return "".join(chars), spans, True
+
+
+class _Token(NamedTuple):
+    """One shell word: its unquoted value, its span in the command, and whether the whole word
+    is a single quoted string (the only shape an exemption may cover)."""
+
+    value: str
+    start: int
+    end: int
+    whole_quoted: bool
+
+
+def _tokenize(cmd: str) -> list[_Token] | None:
+    """Split `cmd` into shell words, removing quotes the way a POSIX shell does.
+
+    Returns None for an unterminated quote. Unquoted shell syntax that could change word
+    boundaries is refused by _SHELL_SYNTAX before this runs, so only plain words and quoted
+    strings reach here.
+    """
+    tokens: list[_Token] = []
+    i, n = 0, len(cmd)
+    while i < n:
+        if cmd[i].isspace():
+            i += 1
+            continue
+        start = i
+        quoted_first = cmd[i] in "'\""
+        value: list[str] = []
+        bare_chars = 0
+        quoted_segments = 0
+        while i < n and not cmd[i].isspace():
+            ch = cmd[i]
+            if ch == "'":
+                close = cmd.find("'", i + 1)
+                if close < 0:
+                    return None
+                value.append(cmd[i + 1 : close])
+                quoted_segments += 1
+                i = close + 1
+            elif ch == '"':
+                j = i + 1
+                buf: list[str] = []
+                while j < n and cmd[j] != '"':
+                    if cmd[j] == "\\" and j + 1 < n and cmd[j + 1] in '"\\':
+                        j += 1
+                    buf.append(cmd[j])
+                    j += 1
+                if j >= n:
+                    return None
+                value.append("".join(buf))
+                quoted_segments += 1
+                i = j + 1
+            elif ch == "\\" and i + 1 < n:
+                value.append(cmd[i + 1])
+                bare_chars += 1
+                i += 2
+            else:
+                value.append(ch)
+                bare_chars += 1
+                i += 1
+        whole = quoted_first and bare_chars == 0 and quoted_segments == 1
+        tokens.append(_Token("".join(value), start, i, whole))
+    return tokens
+
+
+def _search_text_ranges(cmd: str) -> list[tuple[int, int]]:
+    """Half-open ranges of `cmd` that are a search PATTERN, never an option's value.
+
+    Only the pattern operand of a plain search command is exempt: the first word after the
+    tool name, or the operand of -e/--regexp. Every option must be a known search-only flag.
+    Any other option (-f/--file, -O/--open-files-in-pager, --pre, --exclude-from, ...) can
+    read a file or run a program, so the whole command gets no exemption. Unquoted shell
+    syntax on the line, or an expansion inside the quotes, also exempts nothing.
+    """
+    blanked, _spans, balanced = _split_quotes(cmd)
+    if not balanced or any(ch in _SHELL_SYNTAX for ch in blanked):
+        return []
+    tokens = _tokenize(cmd)
+    if not tokens:
+        return []
+    names = [tok.value for tok in tokens]
+    if names[0] in _SEARCH_TOOLS:
+        tool, args = names[0], tokens[1:]
+    elif names[:2] == ["git", "grep"]:
+        tool, args = "grep", tokens[2:]
+    else:
+        return []
+    operands: list[_Token] = []
+    positionals: list[_Token] = []
+    saw_e = False
+    expect_operand = False
+    after_separator = False
+    for tok in args:
+        if expect_operand:
+            operands.append(tok)
+            expect_operand = False
+            saw_e = True
+        elif after_separator or tok.value == "-" or not tok.value.startswith("-"):
+            positionals.append(tok)
+        elif tok.value == "--":
+            after_separator = True
+        elif tok.value.startswith("--"):
+            if tok.value == "--regexp":
+                expect_operand = True
+            elif tok.value not in _SAFE_LONG_FLAGS:
+                return []
+        else:
+            flags = tok.value[1:]
+            for idx, ch in enumerate(flags):
+                rest = flags[idx + 1 :]
+                if ch == "e" and not rest:
+                    expect_operand = True
+                elif ch in "ABCm" and rest.isdigit():
+                    break
+                elif ch in _SAFE_SHORT_FLAGS or (ch in "rR" and tool != "rg"):
+                    continue
+                else:
+                    return []
+    if expect_operand:
+        return []
+    pattern_words = operands if saw_e else positionals[:1]
+    ranges: list[tuple[int, int]] = []
+    for tok in pattern_words:
+        raw = cmd[tok.start + 1 : tok.end - 1]
+        if tok.whole_quoted and "$" not in raw and "`" not in raw:
+            ranges.append((tok.start + 1, tok.end - 1))
+    return ranges
+
+
+def _pattern_hits(pattern: str, cmd: str) -> list[tuple[int, int]]:
+    """Every (start, end) span where `pattern` matches `cmd`, overlapping matches included."""
+    regex = re.compile(pattern)
+    hits: list[tuple[int, int]] = []
+    for pos in range(len(cmd)):
+        match = regex.match(cmd, pos)
+        if match is not None:
+            hits.append((pos, match.end()))
+    return hits
+
+
 def _bypass_problems(commands: object) -> list[str]:
     """Flag commands that produce a green result from work that never ran."""
     problems: list[str] = []
     for i, cmd in enumerate(commands if isinstance(commands, list) else []):
-        cmd_str = cmd.get("cmd", "") if isinstance(cmd, dict) else str(cmd)
+        cmd_str = str(cmd.get("cmd", "")) if isinstance(cmd, dict) else str(cmd)
+        search_text = _search_text_ranges(cmd_str)
         for pattern, why in BYPASS_PATTERNS:
-            if re.search(pattern, cmd_str):
+            if any(
+                not any(lo <= start and end <= hi for lo, hi in search_text)
+                for start, end in _pattern_hits(pattern, cmd_str)
+            ):
                 problems.append(
-                    f"command[{i}] contains a bypass: {cmd_str!r}\n    matched {pattern!r} — {why}"
+                    f"command[{i}] contains a bypass: {cmd_str!r}\n    matched {pattern!r} - {why}"
                 )
     return problems
 
@@ -454,7 +687,13 @@ def _exit_code_problems(commands: object) -> list[str]:
             problems.append(f"command[{i}] has no 'cmd'")
         if "exit_code" not in cmd:
             problems.append(
-                f"command[{i}] has no 'exit_code' — an unrecorded exit code is not evidence"
+                f"command[{i}] has no 'exit_code' - an unrecorded exit code is not evidence"
+            )
+        elif _exit_code_value(cmd) is None:
+            problems.append(
+                f"command[{i}] 'exit_code' must be an integer, got "
+                f"{type(cmd['exit_code']).__name__} - null, boolean, and string results "
+                "are not evidence"
             )
     return problems
 
@@ -478,10 +717,16 @@ def _check_claim(i: int, claim: object, commands: list, strict: bool) -> list[st
             f"claim[{i}] {text!r} cites no command — "
             "a claim without evidence is a guess with confident phrasing"
         ]
-    if not isinstance(idx, int) or not (0 <= idx < len(commands)):
+    if isinstance(idx, bool) or not isinstance(idx, int) or not (0 <= idx < len(commands)):
         return [f"claim[{i}] {text!r} cites command index {idx}, which does not exist"]
     cited = commands[idx]
-    exit_code = cited.get("exit_code") if isinstance(cited, dict) else None
+    exit_code = _exit_code_value(cited)
+    if exit_code is None:
+        return [
+            f"claim[{i}] {text!r} cites command[{idx}] which records no integer exit_code - "
+            "an unrecorded or non-integer result is not evidence, whether or not "
+            "expects_failure is set"
+        ]
     # A claim may legitimately cite a FAILING command: "reproduced the bug" is evidenced
     # by a non-zero exit. That reproduction step is what makes the later green run mean
     # something, so the gate must support it rather than forcing every claim to be green.
@@ -781,19 +1026,33 @@ def _condition_problems(i: int, ack: dict) -> list[str]:
     return []
 
 
+def _scope_names_task(scope: str, task_id: object) -> bool:
+    """True when `scope` names `task_id` as a whole ticket identifier.
+
+    A plain substring test let the scope "SPE-180010 only" authorise SPE-18001. The match
+    must end at identifier boundaries on both sides, so a longer ID, or one with a prefix
+    attached, never counts. A missing or empty task_id names nothing.
+    """
+    if not isinstance(task_id, str) or not task_id:
+        return False
+    pattern = rf"(?<![A-Za-z0-9_-]){re.escape(task_id)}(?![A-Za-z0-9_-])"
+    return re.search(pattern, scope) is not None
+
+
 def _scope_problems(i: int, ack: dict, task_id: object) -> list[str]:
     """The ack scope must bind the ack to this receipt's task."""
     scope = ack.get("scope")
     if scope is not None and not isinstance(scope, str):
         return [f"loop_acks[{i}] scope must be a string"]
-    if scope and isinstance(task_id, str) and task_id not in scope:
+    if scope and not _scope_names_task(scope, task_id):
         # An ack's scope is supposed to bind it to *this* turn. A scope carried
         # over from another ticket, or a blanket phrase like "all turns", is
         # truthy and would otherwise pass unnoticed.
         return [
             f"loop_acks[{i}] scope {scope!r} does not name this receipt's "
-            f"task_id ({task_id!r}) — an ack scoped to another ticket, or a "
-            "blanket scope, does not authorise this turn"
+            f"task_id ({task_id!r}) as a whole ticket identifier - an ack scoped "
+            "to another ticket (including one whose ID merely starts with this "
+            "one), or a blanket scope, does not authorise this turn"
         ]
     return []
 

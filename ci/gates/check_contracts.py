@@ -58,8 +58,20 @@ def _match(pattern: str, path: str) -> bool:
         prefix = pattern[:-3]
         return path == prefix or path.startswith(prefix + "/")
     if "**/" in pattern:
-        tail = pattern.split("**/", 1)[1]
+        # 'mine/**/*.py' keeps its 'mine/' anchor: the head must be a whole directory prefix, so
+        # 'other/private.py' never matches. '**/*.rs' has an empty head and matches at any depth.
+        head, tail = pattern.split("**/", 1)
+        if head and not head.endswith("/"):
+            return False
         parts = path.split("/")
+        if head:
+            head_parts = head[:-1].split("/")
+            if len(parts) <= len(head_parts) or not all(
+                fnmatch.fnmatch(seg, pat)
+                for pat, seg in zip(head_parts, parts[: len(head_parts)], strict=True)
+            ):
+                return False
+            parts = parts[len(head_parts) :]
         return any(_segments_match(tail, "/".join(parts[i:])) for i in range(len(parts)))
     if "/" not in pattern:
         return fnmatch.fnmatch(Path(path).name, pattern)
@@ -103,7 +115,7 @@ def _surface_match(pattern: str, path: str) -> bool:
 def changed_files(base: str) -> list[str]:
     try:
         out = subprocess.run(
-            ["git", "diff", "--name-only", f"{base}...HEAD"],
+            ["git", "diff", "--name-only", "--no-renames", f"{base}...HEAD"],
             capture_output=True,
             text=True,
             check=True,
@@ -131,7 +143,7 @@ def _surface_coverage_problems(
     the strength of a stale non-breaking record. The document's declared surfaces are the
     only thing tying it to a diff, so they have to cover the diff.
     """
-    if touched is None or not surfaces:
+    if touched is None:
         return []
 
     # Compare the change document by resolved path, not by string: the gate may be run
@@ -165,7 +177,7 @@ def _surface_coverage_problems(
         return []
     return [
         "change document does not cover every contract surface in this change.\n"
-        "      Declared: " + ", ".join(surfaces) + "\n"
+        "      Declared: " + (", ".join(surfaces) or "(none)") + "\n"
         "      Undeclared: " + ", ".join(undeclared) + "\n"
         "      Either this is the wrong change document — a stale one selected from\n"
         "      contracts/changes/ validates a change it never described — or the\n"
@@ -173,18 +185,54 @@ def _surface_coverage_problems(
     ]
 
 
-def _required_acknowledgers(doc: dict, manifest: dict, surfaces: list[str]) -> list[str]:
-    """Consumers that must ack: contract_consumers(surface) minus proposed_by (R56)."""
-    needed = list(doc.get("consumers_required") or [])
-    if not needed:
-        for surf in surfaces:
-            for consumer in required_consumers(surf, manifest):
-                if consumer not in needed:
-                    needed.append(consumer)
+def _change_doc_in_diff_problems(
+    files: list[str], change_path: Path, repo_root: Path = REPO_ROOT
+) -> list[str]:
+    """The change document must be added or updated by this diff.
+
+    A document left in contracts/changes/ by an earlier, merged change still declares the same
+    surfaces. Accepting it would validate a new change against an old record, possibly a
+    non-breaking one. Requiring the document itself to be in the diff makes each change bring
+    its own document.
+    """
+    try:
+        rel = change_path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except (OSError, ValueError):
+        return [
+            f"change document '{change_path}' is outside this repository, "
+            "so this diff cannot have added or updated it"
+        ]
+    if rel in {Path(f).as_posix() for f in files}:
+        return []
+    return [
+        f"change document '{rel}' is not added or updated in this diff; "
+        "a stale document from an earlier change cannot validate this one"
+    ]
+
+
+def _resolved_consumers(doc: dict, manifest: dict, surfaces: list[str]) -> list[str]:
+    """Consumers the manifest assigns to the declared surfaces, plus any the document adds.
+
+    The document may only add to this set. It must never shrink it, so a change document
+    cannot drop a consumer that contract_consumers lists.
+    """
+    resolved: list[str] = []
+    for surf in surfaces:
+        for consumer in required_consumers(surf, manifest):
+            if consumer not in resolved:
+                resolved.append(consumer)
+    for consumer in doc.get("consumers_required") or []:
+        if consumer not in resolved:
+            resolved.append(consumer)
+    return resolved
+
+
+def _without_proposer(consumers: list[str], doc: dict) -> list[str]:
+    """Consumers that must ack: the resolved set minus proposed_by (R56)."""
     proposer = doc.get("proposed_by")
     if isinstance(proposer, str) and proposer:
-        needed = [c for c in needed if c != proposer]
-    return needed
+        return [c for c in consumers if c != proposer]
+    return list(consumers)
 
 
 def _visible_acks(doc: dict) -> dict:
@@ -226,27 +274,33 @@ def _non_breaking_rejection_problems(acks: dict) -> list[str]:
 
 
 def _version_bump_problems(doc: dict) -> list[str]:
-    """A breaking change needs a major bump."""
+    """A breaking change needs a major bump over a previous_version the gate can check."""
     version = str(doc["version"])
     try:
         major = int(version.split(".", maxsplit=1)[0])
-    except (ValueError, IndexError):
+    except ValueError:
         return [f"version '{version}' is not semver"]
     problems = []
     if major == 0:
         problems.append(
             f"BREAKING change at version '{version}' — a breaking change needs a major bump"
         )
-    elif doc.get("previous_version"):
-        try:
-            prev_major = int(str(doc["previous_version"]).split(".")[0])
-            if major <= prev_major:
-                problems.append(
-                    "BREAKING change but major version did not increase "
-                    f"({doc['previous_version']} -> {version})"
-                )
-        except (ValueError, IndexError):
-            pass
+    previous = doc.get("previous_version")
+    if not previous:
+        problems.append(
+            "BREAKING change with no 'previous_version' - the major bump cannot be verified"
+        )
+        return problems
+    try:
+        prev_major = int(str(previous).split(".", maxsplit=1)[0])
+    except ValueError:
+        problems.append(f"previous_version '{previous}' is not semver")
+        return problems
+    if major <= prev_major:
+        problems.append(
+            "BREAKING change but major version did not increase "
+            f"({previous} -> {version})"
+        )
     return problems
 
 
@@ -264,12 +318,15 @@ def check_change_doc(
     surfaces = declared_surfaces(doc)
     problems.extend(_surface_coverage_problems(surfaces, touched, change_path))
 
-    needed = _required_acknowledgers(doc, manifest, surfaces)
-    if not needed:
+    resolved = _resolved_consumers(doc, manifest, surfaces)
+    if not resolved:
         problems.append(
-            f"no consumers resolved for surface '{doc['surface']}' — "
+            f"no consumers resolved for surface '{doc['surface']}' - "
             "either the surface is wrong or contract_consumers needs an entry"
         )
+    # A surface whose only consumer is the proposer resolves to a non-empty set, so it is a
+    # known surface that needs no acknowledgements, not a lookup failure.
+    needed = _without_proposer(resolved, doc)
     acks = _visible_acks(doc)
 
     if doc["breaking"]:
@@ -336,7 +393,8 @@ def main() -> int:
         print(f"G-4 FAIL — change document is not valid YAML: {exc}", file=sys.stderr)
         return 1
 
-    problems = check_change_doc(doc, manifest, touched=touched, change_path=args.change)
+    problems = _change_doc_in_diff_problems(files, args.change)
+    problems.extend(check_change_doc(doc, manifest, touched=touched, change_path=args.change))
 
     if problems:
         print(f"\nG-4 FAIL — {args.change}", file=sys.stderr)
