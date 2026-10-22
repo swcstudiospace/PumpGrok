@@ -580,7 +580,7 @@ async def test_manual_sell_without_position_refuses_no_position(tmp_path: Path) 
         with bind_calling_seat(EXIT_SEAT):
             out = await _drive(
                 run_place(
-                    _sell_in(ticket_id, ids.ulid(), approval_id, token_units=1000),
+                    _sell_in(ticket_id, ids.ulid(), approval_id),
                     adapter,
                     RiskBudget,
                     clock,
@@ -594,7 +594,7 @@ async def test_manual_sell_without_position_refuses_no_position(tmp_path: Path) 
         store.close()
 
 
-async def test_manual_unit_sell_closes_position(tmp_path: Path) -> None:
+async def test_unit_sell_against_sol_approval_is_refused(tmp_path: Path) -> None:
     adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
     try:
         ticket_id = _ticket(store, clock)
@@ -610,7 +610,6 @@ async def test_manual_unit_sell_closes_position(tmp_path: Path) -> None:
             )
         assert buy["status"] == "filled", buy
         units = int(_fills(store)[0]["payload"]["filled_units"])
-        assert units > 0
         await adapter.mark_to_market(MINT)
         sell_approval = _approve(store, clock, ids, ticket_id, kind="human_sell")
         with bind_calling_seat(EXIT_SEAT):
@@ -623,14 +622,15 @@ async def test_manual_unit_sell_closes_position(tmp_path: Path) -> None:
                 ),
                 clock,
             )
-        assert sell["status"] == "filled", sell
-        closes = [e for e in store.read(limit=None) if e["type"] == "PositionClosed"]
-        assert len(closes) == 1
+        # A SOL-stated approval never authorises a unit-sized sell (sell-size P1).
+        assert sell["status"] == "rejected", sell
+        assert len(_fills(store)) == 1
+        assert not [e for e in store.read(limit=None) if e["type"] == "PositionClosed"]
     finally:
         store.close()
 
 
-async def test_oversize_sell_caps_at_open_position(tmp_path: Path) -> None:
+async def test_oversize_unit_sell_against_sol_approval_is_refused(tmp_path: Path) -> None:
     adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
     try:
         ticket_id = _ticket(store, clock)
@@ -658,10 +658,9 @@ async def test_oversize_sell_caps_at_open_position(tmp_path: Path) -> None:
                 ),
                 clock,
             )
-        assert sell["status"] == "partial", sell
-        assert _fills(store)[-1]["payload"]["filled_units"] == units
-        closes = [e for e in store.read(limit=None) if e["type"] == "PositionClosed"]
-        assert len(closes) == 1
+        assert sell["status"] == "rejected", sell
+        assert len(_fills(store)) == 1
+        assert not [e for e in store.read(limit=None) if e["type"] == "PositionClosed"]
     finally:
         store.close()
 

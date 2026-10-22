@@ -11,11 +11,14 @@ ambiguous in reverse).
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+import pumpgrok.tools as tools_pkg
 from pumpgrok.core.manifests import (
     effective_roster as _effective_roster,
 )
@@ -25,6 +28,7 @@ from pumpgrok.core.manifests import (
 from pumpgrok.core.manifests import (
     transport_name,
 )
+from pumpgrok.core.tool import ToolSpec
 
 __all__ = [
     "default_contracts_dir",
@@ -70,15 +74,37 @@ def seat_to_short(contracts_dir: Path | str | None = None) -> dict[str, str]:
     return {seat: short for short, seat in short_to_seat(contracts_dir).items()}
 
 
+def implementation_specs() -> dict[str, ToolSpec]:
+    """Every catalog ``ToolSpec`` keyed by dotted name, read from the tool modules.
+
+    The implementation models are what ``tools/call`` validates against, so
+    they are the single source for the advertised input schema (the roster
+    YAML is a second, drifting copy and is not used for ``inputSchema``).
+    """
+    specs: dict[str, ToolSpec] = {}
+    for module_info in pkgutil.walk_packages(tools_pkg.__path__, prefix="pumpgrok.tools."):
+        module = importlib.import_module(module_info.name)
+        for value in vars(module).values():
+            if isinstance(value, ToolSpec):
+                if value.name in specs and specs[value.name] is not value:
+                    raise ValueError(f"duplicate ToolSpec name: {value.name}")
+                specs[value.name] = value
+    return specs
+
+
 def exposure_entries(seat_id: str, contracts_dir: Path | str | None = None) -> list[dict[str, Any]]:
-    """MCP ``tools/list`` entries: transport name plus verbatim description/input."""
+    """MCP ``tools/list`` entries: roster name and description, implementation input schema."""
+    specs = implementation_specs()
     entries: list[dict[str, Any]] = []
     for entry in effective_roster(seat_id, contracts_dir):
+        spec = specs.get(entry["name"])
+        if spec is None:
+            raise KeyError(f"roster tool without implementation: {entry['name']}")
         entries.append(
             {
                 "name": transport_name(entry["name"]),
                 "description": entry["description"],
-                "inputSchema": entry["input"],
+                "inputSchema": spec.input_json_schema(),
             }
         )
     return entries

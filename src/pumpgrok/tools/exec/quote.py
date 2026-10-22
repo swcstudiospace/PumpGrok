@@ -70,14 +70,12 @@ async def run_quote(inp: QuoteIn, adapter: ExecutionAdapter, clock: Clock) -> di
     """Delegate to the adapter (raises ``not_yet_implemented`` in Phase 3)."""
     quote = await adapter.quote(inp.input_mint, inp.output_mint, inp.amount, inp.slippage_bps)
     ambient = ambient_correlation()
-    return QuoteOut.model_validate(
-        {
-            **quote.model_dump(mode="json"),
-            "meta": meta_now(
-                "jupiter", inp.correlation_id or (str(ambient) if ambient else None), clock
-            ),
-        }
-    ).model_dump()
+    payload = quote.model_dump(mode="json")
+    payload["price_impact"] = payload.pop("price_impact_pct")
+    payload["meta"] = meta_now(
+        "jupiter", inp.correlation_id or (str(ambient) if ambient else None), clock
+    )
+    return QuoteOut.model_validate(payload).model_dump()
 
 
 def build_quote_tool(adapter: ExecutionAdapter, clock: Clock) -> Tool:

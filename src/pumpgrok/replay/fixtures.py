@@ -47,6 +47,15 @@ class FixtureManifest(BaseModel):
     sha256: dict[str, str]
     notes: str = ""
 
+    @field_validator("dataset")
+    @classmethod
+    def _plain_dataset_name(cls, value: str) -> str:
+        # The dataset name becomes a path component under var/replay, so it must be one plain
+        # name: no separators, no "..", no hidden or absolute forms.
+        if not _NAME_RE.fullmatch(value) or ".." in value:
+            raise ValueError("dataset must be a plain name without separators or '..'")
+        return value
+
     @field_validator("sha256")
     @classmethod
     def _plain_names_and_digests(cls, value: dict[str, str]) -> dict[str, str]:

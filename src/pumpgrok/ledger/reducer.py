@@ -227,11 +227,29 @@ def _on_fill(
         else:
             filled = int(row.get("filled_units", 0))
             if pos.token_units > 0 and filled > 0:
+                remaining = pos.token_units - filled
                 reduction = pos.cost_basis_lamports * filled // pos.token_units
+                if remaining > 0:
+                    # A partial exit books its own slice now; the closing fill's slice is
+                    # booked by PositionClosed, so no slice is counted twice.
+                    counters = counters.model_copy(
+                        update={
+                            "realized_today_lamports": (
+                                counters.realized_today_lamports + cash_delta - reduction
+                            )
+                        }
+                    )
+                # The sale turns position value into cash: the remaining mark is its
+                # pro-rata share, capped at the last mark less the proceeds, so the sale
+                # alone does not lift equity and a fill below the mark shows as a loss.
+                received = cash_delta + int(row.get("network_cost_lamports", 0))
+                share = pos.last_mtm_lamports * remaining // pos.token_units
+                mark = min(share, max(pos.last_mtm_lamports - received, 0))
                 positions[mint] = pos.model_copy(
                     update={
-                        "token_units": pos.token_units - filled,
+                        "token_units": remaining,
                         "cost_basis_lamports": pos.cost_basis_lamports - reduction,
+                        "last_mtm_lamports": mark,
                     }
                 )
     return _track_peak(

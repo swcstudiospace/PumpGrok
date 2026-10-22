@@ -392,8 +392,10 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
 
 # PUMPGROK_* names read outside the Settings model: PUMPGROK_LOG_JSON by the
 # logging setup (honoured only under the dev profile), PUMPGROK_LIVE_ENABLE
-# by the live gate (precondition 2; env-only, never a TOML key), and
-# PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22).
+# by the live gate (precondition 2; env-only, never a TOML key),
+# PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22), and
+# PUMPGROK_TELEGRAM_TOKEN by the Telegram notify sink (env-only and optional:
+# unset means Telegram is not configured and never blocks startup).
 NON_SETTING_ENV_NAMES = frozenset(
     {
         "PUMPGROK_PROFILE",
@@ -402,6 +404,7 @@ NON_SETTING_ENV_NAMES = frozenset(
         "PUMPGROK_LIVE_ENABLE",
         "PUMPGROK_KILLSWITCH",
         "PUMPGROK_CONFIRMATION_KEY",
+        "PUMPGROK_TELEGRAM_TOKEN",  # pragma: allowlist secret: env var name, not a credential
     }
 )
 
@@ -470,9 +473,32 @@ def _walk_texts(data: Any, prefix: str) -> Iterator[tuple[str, str]]:
         yield prefix, data
 
 
+def _walk_keys(data: Any, prefix: str) -> Iterator[str]:
+    """Yield the dotted path of every table key in decoded TOML."""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            yield path
+            yield from _walk_keys(value, path)
+
+
+def _secret_setting_paths(model: type[BaseModel] = Settings, prefix: str = "") -> set[str]:
+    """Dotted paths of every SecretStr setting; these arrive via env only."""
+    paths: set[str] = set()
+    for field_name, field in model.model_fields.items():
+        path = f"{prefix}{field_name}"
+        if SecretStr in [field.annotation, *get_args(field.annotation)]:
+            paths.add(path)
+        sub = _nested_model(field.annotation)
+        if sub is not None:
+            paths |= _secret_setting_paths(sub, path + ".")
+    return paths
+
+
 def find_key_bearing_toml(files: Sequence[Path]) -> list[str]:
-    """Report key-bearing URL values inside TOML files (paths only)."""
+    """Report secret settings and key-bearing URL values inside TOML files (paths only)."""
     bad: list[str] = []
+    secret_paths = _secret_setting_paths()
     for file in files:
         try:
             with file.open("rb") as handle:
@@ -480,6 +506,9 @@ def find_key_bearing_toml(files: Sequence[Path]) -> list[str]:
         except (OSError, tomllib.TOMLDecodeError) as exc:
             bad.append(f"unreadable config file: {file} ({type(exc).__name__})")
             continue
+        for path in _walk_keys(data, ""):
+            if path in secret_paths:
+                bad.append(f"secret setting refused in config file: {file.name}:{path}")
         for path, value in _walk_texts(data, ""):
             if KEY_BEARING_VALUE_RE.search(value):
                 bad.append(f"key-bearing value refused: {file.name}:{path}")

@@ -2,24 +2,24 @@
 
 The level lives in the ledger, never in config: ``state autonomy`` appends
 a ``ConfigChanged`` row (``keys_changed=["autonomy_level"]``, old policy in
-``old_hash``, new policy in ``new_hash``) plus a ``JournalNote`` (seat
-``desk``, ``note_kind="note"``, text ``autonomy <policy> by <by>``) so the
-journal records every level change. The reader scans the autonomy notes in
-ledger order; the last one wins, default ``manual-ticket``. Live mode always
-forces ``manual-ticket`` at registry build, regardless of the ledger.
+``old_hash``, new policy in ``new_hash``, ``by`` a human) plus a ``JournalNote``
+(seat ``desk``, ``note_kind="note"``, text ``autonomy <policy> by <by>``) so the
+journal records every level change. Seats cannot append ``ConfigChanged``
+(journal.append accepts only journal_note and escalation), so that row is the
+operator-only record. The reader scans ``ConfigChanged`` rows in ledger order;
+the last valid one wins, default ``manual-ticket``. Journal text is never read
+as policy. Live mode always forces ``manual-ticket`` at registry build,
+regardless of the ledger.
 """
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
 
 AUTONOMY_LEVELS: tuple[str, str] = ("manual-ticket", "autonomous-paper")
-
-_AUTONOMY_RE = re.compile(r"^autonomy (manual-ticket|autonomous-paper)\b")
 
 
 def autonomy_note_text(policy: str, by: str) -> str:
@@ -28,17 +28,25 @@ def autonomy_note_text(policy: str, by: str) -> str:
 
 
 def read_autonomy(store: LedgerStore) -> str:
-    """Latest ledger autonomy level; ``manual-ticket`` when never set."""
+    """Latest operator ``ConfigChanged`` autonomy level; ``manual-ticket`` when never set.
+
+    Only ``ConfigChanged`` rows with ``autonomy_level`` in ``keys_changed``, a
+    valid policy in ``new_hash`` and a human ``by`` count. JournalNote text is
+    free-form seat output and is never read as policy.
+    """
     level = "manual-ticket"
-    for event in store.read(limit=None):
-        if event.get("type") != "JournalNote":
-            continue
+    for event in store.read(types=["ConfigChanged"], limit=None):
         payload = event.get("payload", {})
         if not isinstance(payload, dict):
             continue
-        match = _AUTONOMY_RE.match(str(payload.get("text", "")))
-        if match is not None:
-            level = match.group(1)
+        keys = payload.get("keys_changed")
+        policy = payload.get("new_hash")
+        by = payload.get("by")
+        if not isinstance(keys, list) or "autonomy_level" not in keys:
+            continue
+        if policy not in AUTONOMY_LEVELS or not str(by or "").startswith("human:"):
+            continue
+        level = str(policy)
     return level
 
 

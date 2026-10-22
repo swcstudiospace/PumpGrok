@@ -17,11 +17,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.risk.killswitch import env_engaged, kill_file_text
 from pumpgrok.tools._common import meta_now
@@ -43,6 +44,18 @@ class KillSwitchIn(ToolInput):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class FlattenIntent(BaseModel):
+    """One ``kill_flatten`` sell a flatten request calls for: one per open position."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mint: str
+    ticket_id: str
+    token_units: int
+    side: Literal["sell"] = "sell"
+    exit_reason: Literal["kill_flatten"] = "kill_flatten"
+
+
 class KillSwitchOut(ToolOutput):
     """Combined switch view: env, file and ledger causes."""
 
@@ -51,6 +64,7 @@ class KillSwitchOut(ToolOutput):
     source: Literal["env", "file", "command", "none"]
     flatten_requested: bool = False
     reason: str | None = None
+    flatten_intents: list[FlattenIntent] = Field(default_factory=list)
 
 
 KILL_SWITCH_SPEC = ToolSpec(
@@ -112,11 +126,16 @@ async def run_kill_switch(
     if killswitch_path is not None:
         text = kill_file_text(inp.reason, flatten)
         await asyncio.to_thread(killswitch_path.write_text, text, encoding="utf-8")
-    return _status(store, killswitch_path, correlation, clock)
+    intents = tuple(_flatten_intents(store)) if flatten else ()
+    return _status(store, killswitch_path, correlation, clock, intents)
 
 
 def _status(
-    store: LedgerStore, killswitch_path: Path | None, correlation: str, clock: Clock
+    store: LedgerStore,
+    killswitch_path: Path | None,
+    correlation: str,
+    clock: Clock,
+    flatten_intents: tuple[FlattenIntent, ...] = (),
 ) -> dict[str, Any]:
     """Fold env, file and ledger causes into one view."""
     env_set = env_engaged(os.environ.get("PUMPGROK_KILLSWITCH"))
@@ -153,10 +172,23 @@ def _status(
             "since": since,
             "source": source,
             "flatten_requested": flatten_requested,
+            "flatten_intents": list(flatten_intents),
             "reason": reason,
             "meta": meta_now("killswitch", correlation, clock),
         }
     ).model_dump()
+
+
+def _flatten_intents(store: LedgerStore) -> list[FlattenIntent]:
+    """One sell intent per position still holding units, folded from the ledger."""
+    state = initial_state(source="paper", initial_equity_lamports=0, day_utc="")
+    for event in store.read(limit=None):
+        state = reduce(state, event)
+    return [
+        FlattenIntent(mint=pos.mint, ticket_id=pos.ticket_id, token_units=pos.token_units)
+        for pos in state.positions.values()
+        if pos.token_units > 0
+    ]
 
 
 def build_kill_switch_tool(

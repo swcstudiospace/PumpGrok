@@ -105,7 +105,9 @@ class WeeklyReport:
                 )
             )
 
-        base = DailyReport.build(ledger_path, days[-1], mode=mode, autonomy=autonomy)
+        base = DailyReport.build(
+            ledger_path, monday, mode=mode, autonomy=autonomy, last_day=days[-1]
+        )
         gate_root = root if root is not None else Path(os.environ.get("PUMPGROK_ROOT", "."))
         gate = LiveGate(mode="live", environ=dict(os.environ), root=gate_root)
         gate_lines = tuple(

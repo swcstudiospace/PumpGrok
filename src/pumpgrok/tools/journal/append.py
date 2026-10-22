@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -86,12 +87,22 @@ APPEND_SPEC = ToolSpec(
 )
 
 
-def journal_append_key(kind: str, ticket_id: str | None, seat: str, body: dict[str, Any]) -> str:
-    """Derived key: d(kind, seat, ticket_id, sha256(body))."""
-    digest = hashlib.sha256(
-        f"{kind}\n{seat}\n{ticket_id or ''}\n{json.dumps(body, sort_keys=True)}".encode()
-    ).hexdigest()
-    return digest[:32]
+def journal_append_key(
+    kind: str,
+    note_kind: str | None,
+    ticket_id: str | None,
+    seat: str,
+    body: dict[str, Any],
+) -> str:
+    """Derived key: d(kind, note_kind, ticket_id, seat, body).
+
+    The fields are JSON-encoded as one array so that no field's text can be
+    read as another field's boundary; ``None`` and ``""`` stay distinct.
+    """
+    identity = json.dumps(
+        [kind, note_kind, ticket_id, seat, body], sort_keys=True, ensure_ascii=True
+    )
+    return hashlib.sha256(identity.encode("ascii")).hexdigest()[:32]
 
 
 def _payload_of(inp: JournalAppendIn, seat: str) -> tuple[str, dict[str, Any]]:
@@ -111,12 +122,38 @@ def _journal_file(journal_dir: Path, day: datetime) -> Path:
     return journal_dir / f"{day.strftime('%Y-%m-%d')}.jsonl"
 
 
-def _export_line(journal_dir: Path, now: datetime, line: str) -> Path:
-    """Append one JSONL line to the day's journal file (blocking file I/O)."""
+def _has_seq(data: bytes, seq: int) -> bool:
+    """True when ``data`` holds a complete JSONL record whose ``seq`` is ``seq``."""
+    for raw in data.splitlines():
+        try:
+            record = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and record.get("seq") == seq:
+            return True
+    return False
+
+
+def _export_line(journal_dir: Path, day: datetime, seq: int, line: str) -> Path:
+    """Ensure exactly one complete JSONL line for ``seq`` in ``day``'s file.
+
+    A retry whose earlier export was lost finds no such line and writes it; a
+    retry that finds it writes nothing. A trailing fragment from an interrupted
+    write is cut back to the last newline first, so the new record is whole.
+    Blocking file I/O.
+    """
     journal_dir.mkdir(parents=True, exist_ok=True)
-    journal_path = _journal_file(journal_dir, now)
-    with open(journal_path, "a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    journal_path = _journal_file(journal_dir, day)
+    with open(journal_path, "a+b") as handle:
+        handle.seek(0)
+        data = handle.read()
+        complete = data[: data.rfind(b"\n") + 1]
+        if _has_seq(complete, seq):
+            return journal_path
+        if len(complete) != len(data):
+            handle.truncate(len(complete))
+        handle.seek(0, os.SEEK_END)
+        handle.write((line + "\n").encode("utf-8"))
     return journal_path
 
 
@@ -135,7 +172,7 @@ async def run_journal_append(
         )
     seat = bound if bound is not None else inp.bot
     now = datetime.fromtimestamp(clock.now(), UTC)
-    key = journal_append_key(inp.kind, inp.ticket_id, seat, inp.body)
+    key = journal_append_key(inp.kind, inp.note_kind, inp.ticket_id, seat, inp.body)
     event_type, payload = _payload_of(inp, seat)
     try:
         row = store.append(
@@ -150,14 +187,14 @@ async def run_journal_append(
         existing = store.by_key(key)
         if existing is None:  # pragma: no cover - defensive
             raise
-        # A repeat returns the prior result: same seq, same day file, no write.
+        # A repeat keeps the prior seq and day file; the export is re-checked below.
         seq = int(existing["seq"])
-        prior_day = datetime.fromisoformat(str(existing["ts_utc"]))
-        journal_path = _journal_file(journal_dir, prior_day)
+        day = datetime.fromisoformat(str(existing["ts_utc"]))
     else:
         seq = int(row["seq"])
-        line = json.dumps({"seq": seq, "kind": inp.kind, "payload": payload})
-        journal_path = await asyncio.to_thread(_export_line, journal_dir, now, line)
+        day = now
+    line = json.dumps({"seq": seq, "kind": inp.kind, "payload": payload})
+    journal_path = await asyncio.to_thread(_export_line, journal_dir, day, seq, line)
     return JournalAppendOut.model_validate(
         {
             "seq": seq,

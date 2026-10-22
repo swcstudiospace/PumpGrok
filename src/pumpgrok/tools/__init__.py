@@ -73,7 +73,7 @@ from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
 from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
-    from pumpgrok.config.settings import Settings
+    from pumpgrok.config.settings import SafetyThresholds, Settings
     from pumpgrok.core.bot import BotManifest
     from pumpgrok.execution.paper_adapter import CurveSnapshot, PriceSource
 
@@ -151,11 +151,12 @@ def _register_trading(
     rpc: RpcClient,
     adapter: ExecutionAdapter,
     budget: RiskBudget,
+    thresholds: SafetyThresholds,
     store: LedgerStore,
     clock: Clock,
 ) -> None:
     """Scoring, quote/simulate/place/cancel and position tools (real adapter)."""
-    reg.register(build_score_report_tool(rpc))
+    reg.register(build_score_report_tool(rpc, thresholds))
     reg.register(build_quote_tool(adapter, clock))
     reg.register(build_simulate_tool(adapter, clock))
     reg.register(build_place_tool(adapter, lambda: budget, clock))
@@ -265,7 +266,13 @@ def build_operator_registry(
     repo_root = Path(repo_root)
     reg, _audits = build_registry(clock=active_clock, rng=make_rng())
     client = httpx.AsyncClient()
-    rpc = RpcClient(list(settings.rpc.endpoints), client, active_clock, make_rng())
+    rpc = RpcClient(
+        list(settings.rpc.endpoints),
+        client,
+        active_clock,
+        make_rng(),
+        api_key=settings.rpc.api_key,
+    )
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
     live = settings.effective_mode == "live"
     curves = _CachingPriceSource(price_source)
@@ -299,7 +306,15 @@ def build_operator_registry(
     bank = MemoryBank(data_dir / "memory.jsonl")
 
     register_read_tools(reg, rpc)
-    _register_trading(reg, rpc=rpc, adapter=adapter, budget=budget, store=store, clock=active_clock)
+    _register_trading(
+        reg,
+        rpc=rpc,
+        adapter=adapter,
+        budget=budget,
+        thresholds=settings.safety.thresholds,
+        store=store,
+        clock=active_clock,
+    )
     _register_ledger_and_risk(reg, store, active_clock, data_dir, budget)
     _register_desk(
         reg,

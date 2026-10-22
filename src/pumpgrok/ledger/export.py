@@ -28,18 +28,53 @@ def _epoch(ts_utc: str) -> float:
     return parsed.astimezone(UTC).timestamp()
 
 
-def _append_lines(path: Path, lines: list[str]) -> None:
-    """Append-only write with fsync; readers never see a torn line."""
+def _exported_seqs(data: bytes) -> set[int]:
+    """Seqs of the complete export records in one target's bytes.
+
+    Export records carry ``type``. The journal.append tool writes a shorter
+    ``kind`` line for the same seq, which is not an export record.
+    """
+    seqs: set[int] = set()
+    for raw in data.splitlines():
+        try:
+            record = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and "type" in record and isinstance(record.get("seq"), int):
+            seqs.add(record["seq"])
+    return seqs
+
+
+def _append_missing(path: Path, rows: list[tuple[int, str]]) -> int:
+    """Append each ``(seq, line)`` the file does not yet hold; return how many were written.
+
+    Targets are append-only and keyed by ledger seq, so a retry after an
+    interrupted export finds the lines that landed and writes only the rest.
+    A trailing fragment from an interrupted write is cut back to the last
+    newline first, as ``tools.journal.append`` does, so new lines start clean.
+    """
+    if not rows:
+        return 0
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        for line in lines:
-            fh.write(line + "\n")
+    with path.open("a+b") as fh:
+        fh.seek(0)
+        data = fh.read()
+        complete = data[: data.rfind(b"\n") + 1]
+        present = _exported_seqs(complete)
+        fresh = [line for seq, line in rows if seq not in present]
+        if not fresh:
+            return 0
+        if len(complete) != len(data):
+            fh.truncate(len(complete))
+        fh.seek(0, os.SEEK_END)
+        fh.write("".join(line + "\n" for line in fresh).encode("utf-8"))
         fh.flush()
         os.fsync(fh.fileno())
+    return len(fresh)
 
 
-def _journal_batches(events: list[dict[str, Any]]) -> dict[str, list[str]]:
-    by_day: dict[str, list[str]] = {}
+def _journal_batches(events: list[dict[str, Any]]) -> dict[str, list[tuple[int, str]]]:
+    by_day: dict[str, list[tuple[int, str]]] = {}
     for event in events:
         day = str(event.get("ts_utc", ""))[:10]
         line = canonical_json(
@@ -52,7 +87,7 @@ def _journal_batches(events: list[dict[str, Any]]) -> dict[str, list[str]]:
                 "payload": event["payload"],
             }
         )
-        by_day.setdefault(day, []).append(line)
+        by_day.setdefault(day, []).append((int(event["seq"]), line))
     return by_day
 
 
@@ -115,15 +150,16 @@ def _close_line(event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _trade_lines(events: list[dict[str, Any]]) -> list[str]:
-    lines: list[str] = []
+def _trade_lines(events: list[dict[str, Any]]) -> list[tuple[int, str]]:
+    lines: list[tuple[int, str]] = []
     for event in events:
+        seq = int(event["seq"])
         if event.get("type") == "FillRecorded" and event["payload"].get("side") == "buy":
-            lines.append(json.dumps(_buy_line(event), ensure_ascii=False))
+            lines.append((seq, json.dumps(_buy_line(event), ensure_ascii=False)))
         elif event.get("type") == "OrderRejected":
-            lines.append(json.dumps(_skip_line(event), ensure_ascii=False))
+            lines.append((seq, json.dumps(_skip_line(event), ensure_ascii=False)))
         elif event.get("type") == "PositionClosed":
-            lines.append(json.dumps(_close_line(event), ensure_ascii=False))
+            lines.append((seq, json.dumps(_close_line(event), ensure_ascii=False)))
     return lines
 
 
@@ -132,20 +168,22 @@ def export_ledger(
 ) -> dict[str, Any]:
     """Export both targets under the single export_seq cursor.
 
-    A second run with no new rows writes nothing and keeps the cursor.
+    Every target line is keyed by ledger seq and written at most once, so a
+    retry after a failed write or a crash before the cursor update completes
+    the export without duplicate rows. Counts are the lines this call wrote;
+    a second run with no new rows writes nothing and keeps the cursor.
     """
     export_seq = int(store.get_meta(EXPORT_SEQ_KEY) or "0")
     events = store.read(since_seq=export_seq + 1, limit=None)
-    for day, lines in sorted(_journal_batches(events).items()):
-        _append_lines(Path(journal_dir) / f"{day}.jsonl", lines)
-    trade_lines = _trade_lines(events)
-    if trade_lines:
-        _append_lines(Path(trades_path), trade_lines)
+    journal_lines = 0
+    for day, rows in sorted(_journal_batches(events).items()):
+        journal_lines += _append_missing(Path(journal_dir) / f"{day}.jsonl", rows)
+    trade_lines = _append_missing(Path(trades_path), _trade_lines(events))
     if events:
         store.set_meta(EXPORT_SEQ_KEY, str(events[-1]["seq"]))
         export_seq = int(events[-1]["seq"])
     return {
-        "journal_lines": len(events),
-        "trade_lines": len(trade_lines),
+        "journal_lines": journal_lines,
+        "trade_lines": trade_lines,
         "export_seq": export_seq,
     }

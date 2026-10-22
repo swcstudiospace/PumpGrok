@@ -278,6 +278,8 @@ class RiskEngine:
         self._observe_only = observe_only
         self._scan_kill_verdicts = scan_kill_verdicts
         self._decisions: dict[str, RiskDecision] = {}
+        # Breaker name -> order_hash of the order holding its admitted probe.
+        self._probe_owners: dict[str, str] = {}
 
     @property
     def reputation(self) -> ReputationBook | None:
@@ -612,7 +614,12 @@ class RiskEngine:
         self._breakers.refresh(
             ts_utc=ts_utc, source=source, correlation_id=correlation_id, equity_now=equity
         )
+        for name in list(self._probe_owners):
+            if not self._breakers.by_name(name).probe_inflight:
+                del self._probe_owners[name]
         half_all = [name for name in BREAKER_NAMES if self._breakers.by_name(name).half_open]
+        # Probes this order already holds are its own: its repeat checks reuse them.
+        owned = [name for name in half_all if self._probe_owners.get(name) == order_hash]
         half_avail = self._breakers.half_open_breakers()
         ctx = _StepCtx(
             order=order,
@@ -630,7 +637,7 @@ class RiskEngine:
             state=state,
             kill=self._poll_kill(source, correlation_id),
             open_breakers=set(self._breakers.open_breakers()),
-            half_blocked=is_buy and bool(half_all) and not half_avail,
+            half_blocked=is_buy and bool(half_all) and not half_avail and not owned,
             killed=self._killed_mints() if is_buy else set(),
             equity=equity,
             approvals=self._approvals(),
@@ -642,8 +649,11 @@ class RiskEngine:
                 if self._skip(step, ctx):
                     continue
                 getattr(self, f"_step_{step}")(ctx)
-            if ctx.is_buy and not ctx.is_exit_sell and half_avail:
-                if self._breakers.admit_probe(half_avail[0]):
+            if ctx.is_buy and not ctx.is_exit_sell and half_all:
+                if owned:
+                    ctx.probe = True
+                elif half_avail and self._breakers.admit_probe(half_avail[0]):
+                    self._probe_owners[half_avail[0]] = order_hash
                     ctx.probe = True
                 else:
                     raise _Fail("breaker_open", "probe inflight")
@@ -937,6 +947,24 @@ class RiskEngine:
         self._breakers.resolve_probe(
             name, ok, ts_utc=self._now_ts(), source=source, correlation_id=correlation_id
         )
+        self._probe_owners.pop(name, None)
+
+    def release_order_probes(
+        self, order_hash: str, ok: bool, *, source: str, correlation_id: str
+    ) -> None:
+        """Resolve every inflight probe owned by ``order_hash``; others are untouched.
+
+        Breakers whose probe is not inflight are skipped, so repeat or
+        out-of-order calls never raise. Each resolved probe goes through
+        :meth:`resolve_probe`, which also clears its owner entry.
+        """
+        for name, owner in list(self._probe_owners.items()):
+            if owner != order_hash:
+                continue
+            if not self._breakers.by_name(name).probe_inflight:
+                del self._probe_owners[name]
+                continue
+            self.resolve_probe(name, ok, source=source, correlation_id=correlation_id)
 
     def record_kill_verdict(
         self, mint: str, reason: str, *, source: str = "paper", correlation_id: str = "desk"

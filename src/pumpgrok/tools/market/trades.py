@@ -90,22 +90,53 @@ def _pubkeys(message: object) -> list[str]:
     return out
 
 
-def _token_net(meta: dict[str, Any], mint: str) -> int:
-    """Net ``mint`` units gained across pre and post token balances."""
-    net = 0
-    for side in ("preTokenBalances", "postTokenBalances"):
+def _token_deltas(meta: dict[str, Any], mint: str) -> dict[int, tuple[str | None, int]]:
+    """Per token-account ``(owner, post - pre)`` for ``mint``, keyed by account index."""
+    before: dict[int, tuple[str | None, int]] = {}
+    after: dict[int, tuple[str | None, int]] = {}
+    for side, target in (("preTokenBalances", before), ("postTokenBalances", after)):
         balances = meta.get(side, [])
         if not isinstance(balances, list):
             continue
         for entry in balances:
             if not isinstance(entry, dict) or entry.get("mint") != mint:
                 continue
+            index = entry.get("accountIndex")
+            if not isinstance(index, int):
+                continue
             try:
                 amount = int(entry.get("uiTokenAmount", {}).get("amount", "0"))
             except (ValueError, TypeError, AttributeError):
                 continue
-            net += amount if side == "postTokenBalances" else -amount
-    return net
+            owner = entry.get("owner")
+            target[index] = (owner if isinstance(owner, str) else None, amount)
+    deltas: dict[int, tuple[str | None, int]] = {}
+    for index in before.keys() | after.keys():
+        owner = (after.get(index) or before.get(index) or (None, 0))[0]
+        change = after.get(index, (None, 0))[1] - before.get(index, (None, 0))[1]
+        deltas[index] = (owner, change)
+    return deltas
+
+
+def _trader_token_change(meta: dict[str, Any], mint: str, wallet: str, sol_delta: int) -> int:
+    """Signed ``mint`` change for the trader; the pool's opposite leg never counts.
+
+    A swap moves tokens from the pool account to the buyer's account, so summing
+    every account nets to zero. Real RPC token balances carry ``owner``: the
+    trader's change is the sum over accounts owned by the fee payer. Without
+    owner data the trader is the account side matching the SOL direction
+    (SOL out is the buyer's gain, SOL in is the seller's loss).
+    """
+    deltas = _token_deltas(meta, mint)
+    if any(owner is not None for owner, _ in deltas.values()):
+        return sum(change for owner, change in deltas.values() if owner == wallet)
+    gains = sum(change for _, change in deltas.values() if change > 0)
+    losses = sum(change for _, change in deltas.values() if change < 0)
+    if sol_delta < 0:
+        return gains
+    if sol_delta > 0:
+        return losses
+    return 0
 
 
 def _sol_delta(meta: dict[str, Any]) -> int | None:
@@ -145,7 +176,7 @@ def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> T
     sol_delta = _sol_delta(meta)
     if not keys or sol_delta is None:
         return None
-    token_net = _token_net(meta, mint)
+    token_net = _trader_token_change(meta, mint, keys[0], sol_delta)
     side = _classify(token_net, sol_delta)
     if side is None:
         return None

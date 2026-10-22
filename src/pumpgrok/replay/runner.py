@@ -29,7 +29,7 @@ from pumpgrok.engine.pipeline import decide_replay, format_decision
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore, recreate_ledger_db
 from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.replay.fixtures import EVENTS_NAME, CorruptFixture, load_dataset
+from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, CorruptFixture, load_dataset
 from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import DEFAULT_SEED, make_rng
 from pumpgrok.replay.sources import FixtureEventSource
@@ -46,6 +46,16 @@ __all__ = [
 CYCLE_SEAT = "desk"
 STALE_GAP_S = 120.0
 REPLAY_ROOT = Path("var") / "replay"
+
+
+def _contained_ledger_path(dataset_name: str) -> Path:
+    """Default ledger path for a dataset; refuses any path that resolves outside REPLAY_ROOT."""
+    root = REPLAY_ROOT.resolve()
+    target = (root / dataset_name / "ledger.sqlite").resolve()
+    if target.parent.parent != root:
+        raise CorruptFixture("dataset name escapes the replay directory", file=MANIFEST_NAME)
+    return target
+
 
 log = logging.getLogger(__name__)
 
@@ -120,10 +130,7 @@ def run_replay(
     clock = FixtureClock(start=stamps[0])
     ids = IdFactory(clock, make_rng(seed))
     cycle = CorrelationId.new(ids)
-    if ledger_path is None:
-        target = REPLAY_ROOT / source.name / "ledger.sqlite"
-    else:
-        target = Path(ledger_path)
+    target = _contained_ledger_path(source.name) if ledger_path is None else Path(ledger_path)
     # Pre-append checks (manifest, gap, LLM record) run before any file is
     # created, and an append/verify failure removes the just-created ledger,
     # so a failed run leaves no file behind.

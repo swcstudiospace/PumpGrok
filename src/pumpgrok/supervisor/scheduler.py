@@ -1,9 +1,11 @@
 """Ten-seat supervised scheduler (paper-engine.md 6.1-6.2, 6.7).
 
-Within one supervisor tick (``TICK_S = 1`` s) due seats start in roster
-order (00..09) so replay ordering is stable. Each seat runs its cycle in
-its own ``asyncio.Task`` under ``clock.timeout(seat_timeout)``; a timed-out
-cycle counts as a crash. Every wait goes through the injected clock.
+Within one supervisor tick (``TICK_S = 1`` s) due seats start in roster order
+(00..09). Each seat runs its cycle in its own ``asyncio.Task`` under
+``clock.timeout(seat_timeout)``; a timed-out cycle counts as a crash. The serve
+loop never awaits a cycle, so a slow seat cannot hold other seats or the next
+tick, and a seat never overlaps itself. Every wait goes through the injected
+clock.
 
 AUTO-005 degraded modes live here as :class:`DegradedState`: LLM fallback,
 RPC failover/BLIND, WS reconnect/DataStale, bounded unwritable-ledger
@@ -16,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import logging
 import os
@@ -31,7 +34,9 @@ from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.engine.pipeline import decide_replay
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import FixtureClock, WallClock, format_ts_utc, parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
@@ -47,7 +52,7 @@ from pumpgrok.supervisor.health import (
     build_status,
     write_health_json,
 )
-from pumpgrok.supervisor.lifecycle import install_signal_handlers
+from pumpgrok.supervisor.lifecycle import install_signal_handlers, shutdown
 from pumpgrok.supervisor.metrics import Metrics
 from pumpgrok.supervisor.seat_task import (
     CLOCK_SKEW_S,
@@ -287,6 +292,7 @@ class Supervisor:
         self._started_at = clock.now()
         self._last_health_write = 0.0
         self._last_rollover_day: str | None = None
+        self._inflight: dict[str, asyncio.Task[str]] = {}
 
     @property
     def clock(self) -> Clock:
@@ -338,24 +344,56 @@ class Supervisor:
             degraded=self._degraded,
         )
 
-    async def tick_once(self) -> dict[str, str]:
-        """Start every due seat in roster order; returns seat -> outcome."""
+    def _begin_tick(self) -> dict[str, str]:
+        """Record the day's rollover, then start every due seat; nothing is awaited."""
+        self._emit_rollover(self._clock.now())
+        return self._start_due()
+
+    def _start_due(self) -> dict[str, str]:
+        """Start each due seat as its own task, in roster order, without awaiting it.
+
+        A seat whose previous cycle is still running is reported ``"busy"`` and
+        not started again, so one seat never overlaps itself.
+        """
+        now = self._clock.now()
         outcomes: dict[str, str] = {}
         for seat in ROSTER:
-            task = self.tasks[seat]
-            if not task.is_due(self._clock.now()):
+            if not self.tasks[seat].is_due(now):
                 continue
-            child = asyncio.ensure_future(task.run_guarded(self._seat_context(seat)))
-            try:
-                outcomes[seat] = await child
-            except asyncio.CancelledError:
-                child.cancel()
-                raise
+            running = self._inflight.get(seat)
+            if running is not None and not running.done():
+                outcomes[seat] = "busy"
+                continue
+            child = asyncio.ensure_future(self.tasks[seat].run_guarded(self._seat_context(seat)))
+            self._inflight[seat] = child
+            child.add_done_callback(functools.partial(self._reap, seat))
+            outcomes[seat] = "started"
+        return outcomes
+
+    def _reap(self, seat: str, child: asyncio.Task[str]) -> None:
+        """Forget a finished seat task; log a cycle failure nobody awaited."""
+        if self._inflight.get(seat) is child:
+            del self._inflight[seat]
+        if child.cancelled() or child.exception() is None:
+            return
+        log.error("seat %s cycle task failed: %r", seat, child.exception())
+
+    async def tick_once(self) -> dict[str, str]:
+        """One tick: start due seats and await the ones this tick started.
+
+        One-shot callers get every started seat's outcome. The serve loop never
+        awaits a cycle (see :meth:`serve_forever`).
+        """
+        outcomes = self._begin_tick()
+        fresh = [seat for seat, how in outcomes.items() if how == "started"]
+        results = await asyncio.gather(*(self._inflight[seat] for seat in fresh))
+        outcomes.update(zip(fresh, results, strict=True))
         await self._end_of_tick()
         return outcomes
 
     async def run_once(self) -> dict[str, str]:
         """One full cycle of all ten seats in roster order (AUTO-006)."""
+        self._emit_rollover(self._clock.now())
         outcomes: dict[str, str] = {}
         for seat in ROSTER:
             task = self.tasks[seat]
@@ -379,7 +417,6 @@ class Supervisor:
         self._relay_cursor = await relay_tail(
             self._store, self._notifier, self._clock, self._relay_cursor
         )
-        self._emit_rollover(now)
         healthy_interval = now - self._last_health_write >= HEALTH_FILE_INTERVAL_S
         if self._health_path is not None and healthy_interval:
             self._last_health_write = now
@@ -391,10 +428,10 @@ class Supervisor:
     def _emit_rollover(self, now: float) -> None:
         """Append one ``DailyRollover`` per UTC day, including the first day seen.
 
-        Emitted here, outside the seat cycles: ``run_once_replay`` narrows its
-        read-only assertion to allow exactly these day-keyed rows (5.2
-        conflict), so seat cycles stay read-only while the ledger still
-        records one rollover per UTC day (D6).
+        Called at the top of every tick, before any seat runs, so the baseline is
+        the account's equity at the day's start. ``run_once_replay`` allows exactly
+        these day-keyed rows (5.2 conflict): seat cycles stay read-only while the
+        ledger still records one rollover per UTC day (D6).
         """
         day = utc_day(now)
         if self._last_rollover_day == day:
@@ -409,7 +446,7 @@ class Supervisor:
                 payload={
                     "source": self._source,
                     "day_utc": day,
-                    "day_start_equity_lamports": self._day_start_equity(),
+                    "day_start_equity_lamports": self._day_start_equity(now),
                     "prior_day_json": "",
                     "open_positions": [],
                 },
@@ -424,13 +461,31 @@ class Supervisor:
             return
         self._last_rollover_day = day
 
-    def _day_start_equity(self) -> int:
-        """Day-start equity for the rollover row; 0 when the ledger is fresh."""
-        try:
-            meta = self._store.get_meta("initial_equity_lamports")
-            return int(meta) if meta is not None else 0
-        except Exception:
-            return 0
+    def _day_start_equity(self, now: float) -> int:
+        """Account equity folded from the ledger: the day's daily-loss baseline.
+
+        Same fold as ``RiskEngine._fold``: genesis equity from the
+        ``initial_equity_lamports`` meta (the default paper budget when absent),
+        then every row, marked to the last MTM. This is the ``total`` basis that
+        ``EngineLimits`` defaults to, so the halt compares like with like.
+        """
+        events = self._store.read(since_seq=1, limit=None)
+        meta_equity = self._store.get_meta("initial_equity_lamports")
+        if meta_equity is not None:
+            initial = int(meta_equity)
+        else:
+            initial = RiskBudget().paper_equity_lamports
+        meta_source = self._store.get_meta("source")
+        if meta_source:
+            source = meta_source
+        elif events:
+            source = str(events[0]["source"])
+        else:
+            source = self._source
+        state = initial_state(source=source, initial_equity_lamports=initial, day_utc=utc_day(now))
+        for event in events:
+            state = reduce(state, event)
+        return int(equity_lamports(state))
 
     def _sync_risk_latch(self) -> None:
         """Mirror the latch set into RiskEngine so buys refuse desk-wide."""
@@ -481,9 +536,14 @@ class Supervisor:
         return consistent and all(task.cycles >= 1 for task in self.tasks.values())
 
     async def serve_forever(self) -> int:
-        """Tick until stop; shutdown owns snapshot/export/health instead."""
+        """Tick until stop; shutdown owns snapshot/export/health instead.
+
+        Seat cycles run as background tasks: a slow cycle never delays the next
+        tick, and ``shutdown`` drains whatever is still running.
+        """
         while not self._stop.is_set():
-            await self.tick_once()
+            self._begin_tick()
+            await self._end_of_tick()
             await self._clock.sleep(TICK_S)
         return 0
 
@@ -559,7 +619,14 @@ def _replay_cycles(
     async def _signal(ctx: SeatContext) -> dict[str, Any]:
         if replay_llm is None:
             return {"scoring": "skipped"}
-        outcome = replay_llm.complete(llm_request_for(dataset_name, list(dataset_events)), clock)
+        # Recorded latency is virtual time: only a FixtureClock advances. Under the
+        # wall clock it lands on a scratch timeline, never on host time.
+        if isinstance(clock, FixtureClock):
+            latency_clock = clock
+        else:
+            latency_clock = FixtureClock(start=clock.now())
+        request = llm_request_for(dataset_name, list(dataset_events))
+        outcome = replay_llm.complete(request, latency_clock)
         return {"scoring": "llm", "outcome": outcome.outcome}
 
     async def _journal(ctx: SeatContext) -> dict[str, Any]:
@@ -665,7 +732,7 @@ def run_once_replay(
             raise RuntimeError(f"seat {seat} cycle crashed")
         if after != before:
             # 5.2 conflict resolved here (not in the seat cycles): seat cycles
-            # stay read-only, but `_end_of_tick` emits the day-keyed
+            # stay read-only, but `_begin_tick` emits the day-keyed
             # DailyRollover for the fixture day. Only those rows may appear.
             extra = store.read(limit=None)[before:]
             for row in extra:
@@ -767,6 +834,37 @@ def build_serve_replay(
     return supervisor, metrics, store
 
 
+async def _finish_serve(
+    supervisor: Supervisor,
+    server: HealthServer,
+    store: LedgerStore,
+    health_path: str | Path | None,
+) -> None:
+    """Stop-time order: drain and write the final exports, then close server and store.
+
+    ``shutdown`` drains running cycles, writes the ledger snapshot, flushes the
+    JSONL export, and writes ``health.json`` with ``status=stopped`` while the
+    store is still open. Without ``health_path`` the stopped body lands beside
+    the ledger, next to the export files.
+    """
+    root = store.path.parent
+    try:
+        await shutdown(
+            supervisor,
+            store=store,
+            health_path=str(health_path if health_path is not None else root / "health.json"),
+            journal_dir=str(root / "journal"),
+            trades_path=str(root / "trades.jsonl"),
+        )
+    except Exception as exc:
+        log.warning("serve shutdown failed: %s", exc)
+    finally:
+        with contextlib.suppress(Exception):
+            await server.stop()
+        with contextlib.suppress(Exception):
+            store.close()
+
+
 async def serve_replay(
     dataset_dir: str | Path,
     filter_cfg: Any,
@@ -807,7 +905,4 @@ async def serve_replay(
     try:
         return await supervisor.serve_forever()
     finally:
-        with contextlib.suppress(Exception):
-            await server.stop()
-        with contextlib.suppress(Exception):
-            store.close()
+        await _finish_serve(supervisor, server, store, health_path)

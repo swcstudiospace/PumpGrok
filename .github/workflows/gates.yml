@@ -38,6 +38,12 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # The base must already carry the trusted scripts. Without them there is nothing to
+          # overlay, and the PR's own copy must never stand in for it: stop with the remedy.
+          if ! git cat-file -e "origin/$BASE_REF:ci/gates" 2>/dev/null; then
+            echo "::error::origin/$BASE_REF has no ci/gates/. Land the trusted gate scripts on $BASE_REF first; this PR cannot be gated until then."
+            exit 1
+          fi
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF"
           ls ci/gates/
@@ -181,6 +187,10 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          if ! git cat-file -e "origin/$BASE_REF:ci/gates" 2>/dev/null; then
+            echo "::error::origin/$BASE_REF has no ci/gates/. Land the trusted gate scripts on $BASE_REF first."
+            exit 1
+          fi
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
 

@@ -44,7 +44,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell_out, spot
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.latency import P_DROP, draw_latency
-from pumpgrok.ledger.reducer import initial_state, reduce
+from pumpgrok.ledger.reducer import PositionView, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import RiskEngine, order_hash_for
@@ -321,6 +321,42 @@ class PaperAdapter(ExecutionAdapter):
         source: str | None = None,
         correlation_id: str = "desk",
     ) -> Fill:
+        """Place one order; its breaker probe is released on every final outcome.
+
+        A fill resolves the probe as success; a refusal, confirmation timeout or
+        cancel resolves it as failure. Orders without a probe are untouched.
+        """
+        ledger_source = source if source is not None else self._source
+        order_hash = order_hash_for(request)
+        try:
+            fill = await self._place_order(
+                request,
+                seat=seat,
+                exit_reason=exit_reason,
+                creator=creator,
+                source=source,
+                correlation_id=correlation_id,
+            )
+        except BaseException:
+            self._risk.release_order_probes(
+                order_hash, False, source=ledger_source, correlation_id=correlation_id
+            )
+            raise
+        self._risk.release_order_probes(
+            order_hash, True, source=ledger_source, correlation_id=correlation_id
+        )
+        return fill
+
+    async def _place_order(
+        self,
+        request: OrderRequest,
+        *,
+        seat: str | None = None,
+        exit_reason: str | None = None,
+        creator: str | None = None,
+        source: str | None = None,
+        correlation_id: str = "desk",
+    ) -> Fill:
         """Risk, batch, latency, CONFIRMING re-check, then a curve-priced fill."""
         ledger_source = source if source is not None else self._source
         repeated = self._repeat_outcome(request)
@@ -553,7 +589,7 @@ class PaperAdapter(ExecutionAdapter):
         order_id = self._ids.ulid()
         quote_id = self._ids.ulid()
         try:
-            self._append_order_batch(
+            await self._append_order_batch(
                 request,
                 order_id=order_id,
                 quote_id=quote_id,
@@ -755,7 +791,7 @@ class PaperAdapter(ExecutionAdapter):
         order_id = self._ids.ulid()
         quote_id = self._ids.ulid()
         try:
-            self._append_order_batch(
+            await self._append_order_batch(
                 request,
                 order_id=order_id,
                 quote_id=quote_id,
@@ -898,7 +934,7 @@ class PaperAdapter(ExecutionAdapter):
 
     # -- order batch, rejects, repeats -------------------------------------
 
-    def _append_order_batch(
+    async def _append_order_batch(
         self,
         request: OrderRequest,
         *,
@@ -933,6 +969,16 @@ class PaperAdapter(ExecutionAdapter):
             correlation_id=correlation_id,
             stage="ACCEPTED",
         )
+        if not decision.passed:
+            raise await self._reject(
+                request,
+                request.decision_id,
+                decision.reason,
+                "ACCEPTED re-check refused; no order written",
+                stage="ACCEPTED",
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
         risk_json = canonical_json(
             {
                 "reason": decision.reason,
@@ -943,18 +989,20 @@ class PaperAdapter(ExecutionAdapter):
         )
         size = int(request.size_lamports or 0)
         rows: list[dict[str, Any]] = []
+        consume_key: str | None = None
         approval = decision.approval
         if (
             approval is not None
             and approval.approved_by != "risk_engine"
             and decision.approval_id is not None
         ):
+            consume_key = f"consume|{decision.approval_id}"
             rows.append(
                 {
                     "ts_utc": self._now_ts(),
                     "source": ledger_source,
                     "correlation_id": correlation_id,
-                    "idempotency_key": f"consume|{decision.approval_id}|{order_id}",
+                    "idempotency_key": consume_key,
                     "type": "ApprovalRecorded",
                     "payload": {
                         "source": ledger_source,
@@ -1005,7 +1053,28 @@ class PaperAdapter(ExecutionAdapter):
                 },
             }
         )
-        self._store.append_batch(rows)
+        try:
+            self._store.append_batch(rows)
+        except sqlite3.IntegrityError as exc:
+            # The consume row is keyed per approval: a concurrent order that
+            # consumed it first rolls this whole batch back. The stored consume
+            # row tells that apart from a repeated decision (handled by callers).
+            placed = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
+            if (
+                consume_key is not None
+                and self._store.by_key(consume_key) is not None
+                and self._store.by_key(placed) is None
+            ):
+                raise await self._reject(
+                    request,
+                    request.decision_id,
+                    "approval_missing",
+                    f"approval {decision.approval_id} consumed by a concurrent order",
+                    stage="ACCEPTED",
+                    source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from exc
+            raise
 
     async def _reject(
         self,
@@ -1202,6 +1271,8 @@ class PaperAdapter(ExecutionAdapter):
             return None
         last_ts = self._last_price_ts.get(mint)
         if last_ts is None:
+            last_ts = _ledger_mark_epoch(pos)
+        if last_ts is None:
             return None
         if self._clock.now() - last_ts <= float(self._limits.blind_max_s):
             return None
@@ -1240,8 +1311,13 @@ class PaperAdapter(ExecutionAdapter):
         gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
         mtm = gross - self._fees.venue_fee(gross)
         cash = int(state.cash_lamports)
-        equity = cash + mtm
-        unrealized = mtm - int(pos.cost_basis_lamports)
+        # Book value: this mint at the fresh mark, every other open position at
+        # its last ledger mark (the same sum the fold uses for equity).
+        others = [p for key, p in state.positions.items() if key != mint and p.token_units > 0]
+        book_mtm = mtm + sum(int(p.last_mtm_lamports) for p in others)
+        book_basis = int(pos.cost_basis_lamports) + sum(int(p.cost_basis_lamports) for p in others)
+        equity = cash + book_mtm
+        unrealized = book_mtm - book_basis
         prices_json = canonical_json(
             {
                 mint: {
@@ -1290,9 +1366,11 @@ class PaperAdapter(ExecutionAdapter):
         pos = state.positions.get(mint)
         if pos is None or pos.token_units <= 0:
             return None
+        venue_fee = 0
         if reason == "graduated":
             gross = sell_out(last_s, last_t, pos.token_units)
-            proceeds = gross - self._fees.venue_fee(gross)
+            venue_fee = self._fees.venue_fee(gross)
+            proceeds = gross - venue_fee
         else:
             proceeds = last_good_lamports
         realized = proceeds - int(pos.cost_basis_lamports)
@@ -1303,7 +1381,32 @@ class PaperAdapter(ExecutionAdapter):
         except ValueError:
             hold_s = 0
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
+        order_id = self._ids.ulid()
+        price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
         rows: list[dict[str, Any]] = [
+            {
+                "ts_utc": self._now_ts(),
+                "source": ledger_source,
+                "correlation_id": correlation_id,
+                "idempotency_key": f"fill|{order_id}",
+                "type": "FillRecorded",
+                "payload": {
+                    "source": ledger_source,
+                    "order_id": order_id,
+                    "decision_id": "",
+                    "side": "sell",
+                    "mint": mint,
+                    "filled_lamports": proceeds,
+                    "filled_units": pos.token_units,
+                    "filled_fraction": "1",
+                    "price_avg": price_exit,
+                    "venue_fee_lamports": venue_fee,
+                    "network_cost_lamports": 0,
+                    "cash_delta_lamports": proceeds,
+                    "venue_tx_ref": venue_tx_ref,
+                    "route": "curve",
+                },
+            },
             {
                 "ts_utc": self._now_ts(),
                 "source": ledger_source,
@@ -1341,10 +1444,20 @@ class PaperAdapter(ExecutionAdapter):
         stored = self._store.append_batch(rows)
         self._frozen_marks[mint] = proceeds
         self._last_price_ts.pop(mint, None)
-        return stored[0]
+        return stored[1]
 
 
 def _at_iso(at: Any) -> str:
     if isinstance(at, datetime):
         return at.isoformat()
     return str(at)
+
+
+def _ledger_mark_epoch(pos: PositionView) -> float | None:
+    """Epoch of the last ledger mark for an open position; None when unmarked."""
+    if not pos.last_mtm_ts_utc:
+        return None
+    try:
+        return parse_ts_utc(pos.last_mtm_ts_utc)
+    except ValueError:
+        return None

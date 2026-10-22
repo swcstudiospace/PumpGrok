@@ -200,10 +200,18 @@ class ObserveOnly:
 
     def __init__(self) -> None:
         self._latched: dict[str, str] = {}
+        self._latched_after: dict[str, int] = {}
 
-    def latch(self, seat: str, reason: str) -> None:
-        """Latch a seat observe-only; re-latching keeps the first reason."""
-        self._latched.setdefault(seat, reason)
+    def latch(self, seat: str, reason: str, *, after_seq: int = 0) -> None:
+        """Latch a seat observe-only; re-latching keeps the first reason and sequence.
+
+        ``after_seq`` is the ledger head when the latch was set. Only a resume
+        note appended after it clears the latch; older notes are history.
+        """
+        if seat in self._latched:
+            return
+        self._latched[seat] = reason
+        self._latched_after[seat] = after_seq
 
     def is_latched(self, seat: str) -> bool:
         """Whether the seat is currently observe-only."""
@@ -225,7 +233,10 @@ class ObserveOnly:
         return not (side == "buy" and buys_off)
 
     def fold_resume(self, store: LedgerStore) -> list[str]:
-        """Clear latches with a human resume note; returns resumed seats."""
+        """Clear latches with a human resume note appended after the latch.
+
+        Returns the resumed seats. Older resume notes are history, never a clear.
+        """
         resumed: list[str] = []
         try:
             notes = store.read(types=["JournalNote"], limit=None)
@@ -233,7 +244,10 @@ class ObserveOnly:
             log.debug("resume fold skipped: %s", exc)
             return resumed
         for seat in list(self._latched):
+            floor = self._latched_after[seat]
             for event in notes:
+                if int(event.get("seq", 0)) <= floor:
+                    continue
                 payload = event.get("payload")
                 if not isinstance(payload, dict):
                     continue
@@ -244,6 +258,7 @@ class ObserveOnly:
                 text = str(payload.get("text", ""))
                 if text.startswith(f"{RESUME_PREFIX}{seat} by human:"):
                     del self._latched[seat]
+                    del self._latched_after[seat]
                     resumed.append(seat)
                     break
         return resumed
@@ -363,7 +378,14 @@ class SeatTask:
             self.restarts += 1
             self.not_before = now + self._policy.backoff_s(self._rng, now)
             return
-        self._observe_only.latch(self.seat_id, KIND_RESTART_EXHAUSTED)
+        if self._observe_only.is_latched(self.seat_id):
+            # Already latched: the rising edge escalated and relayed once. A seat
+            # that keeps failing must not append a row per cycle.
+            return
+        # seq is contiguous from 1 (hash chain), so the row count is the head seq.
+        self._observe_only.latch(
+            self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=self._store.count()
+        )
         append_escalation(
             self._store,
             self._clock,

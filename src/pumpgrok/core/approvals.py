@@ -117,13 +117,18 @@ class ApprovalRecord(BaseModel):
     def _size_matches(self, request: OrderRequest) -> bool:
         """Every size leg the approval states must agree with the request.
 
-        Unstated legs derive downstream, so a SOL-notional human_sell still
-        covers a unit-sized sell carrying the same notional.
+        A SOL-notional approval binds SOL-sized requests only. The adapter
+        prefers ``token_units`` over ``size_lamports``, so a request that also
+        carries units would sell a different amount than the one approved; it is
+        refused rather than trusted. A unit-stated approval must match on units.
         """
         if request.side.value == "buy" or self.kind == "human_sell":
-            if self.size_lamports is not None and self.size_lamports != request.size_lamports:
-                return False
-            return self.token_units is None or self.token_units == request.token_units
+            size_ok = self.size_lamports is None or self.size_lamports == request.size_lamports
+            if self.token_units is not None:
+                units_ok = self.token_units == request.token_units
+            else:
+                units_ok = request.token_units is None
+            return size_ok and units_ok
         if self.kind == "exit_rule":
             return self.token_units == request.token_units
         if self.kind == "autonomous_paper":
