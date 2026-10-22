@@ -140,8 +140,7 @@ def test_floor_constant_has_a_single_home() -> None:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign) and any(
-                    isinstance(t, ast.Name) and t.id == "FLOOR_HALTED_DAILY"
-                    for t in node.targets
+                    isinstance(t, ast.Name) and t.id == "FLOOR_HALTED_DAILY" for t in node.targets
                 ):
                     definers.append(path.relative_to(REPO_ROOT).as_posix())
     assert definers == ["src/pumpgrok/risk/engine.py"], definers

@@ -16,6 +16,7 @@ Scope: ``src/pumpgrok/core/``, ``ledger/``, ``execution/``, ``risk/`` plus
   boundary converter.
 - No other annotation on a money name may be ``float``.
 """
+
 import ast
 import json
 from pathlib import Path

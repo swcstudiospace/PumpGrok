@@ -203,6 +203,8 @@ PROBES: list[tuple[str, str, bool]] = [
     ("src/pumpgrok/cli.py", "import subprocess\nsubprocess.run(['git', 'x'])\n", False),
     ("src/pumpgrok/other.py", "import subprocess\nsubprocess.run(['git', 'x'])\n", True),
 ]
+
+
 @pytest.mark.parametrize(("rel", "source", "flagged"), PROBES)
 def test_probe_is_classified(tmp_path: Path, rel: str, source: str, flagged: bool) -> None:
     package = tmp_path / rel
@@ -211,6 +213,7 @@ def test_probe_is_classified(tmp_path: Path, rel: str, source: str, flagged: boo
     allowed = {"ci/gates/check_x.py", "src/pumpgrok/cli.py"}
     found = _scan_file(package, rel, allowed)
     assert bool(found) is flagged, found
+
 
 def test_smuggled_eval_in_scratch_copy_is_caught(tmp_path: Path) -> None:
     package = tmp_path / "pumpgrok" / "core" / "ids.py"

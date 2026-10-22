@@ -1078,8 +1078,16 @@ def _collect_node_ids(paths: list) -> set:
     proc = subprocess.run(
         # addopts already carries -q; passing -q again (-qq) would collapse
         # the listing to per-file counts, so override addopts here.
-        [sys.executable, "-m", "pytest", "--collect-only", "-q",
-         "-o", "addopts=--strict-markers", *existing],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-o",
+            "addopts=--strict-markers",
+            *existing,
+        ],
         capture_output=True,
         text=True,
         check=False,

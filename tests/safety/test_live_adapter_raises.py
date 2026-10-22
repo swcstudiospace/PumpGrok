@@ -28,9 +28,7 @@ def _harness(tmp_path: Path) -> tuple[LiveAdapterStub, LedgerStore, OrderRequest
     ledger = LedgerStore(tmp_path / "ledger.sqlite")
     gate = LiveGate(mode="paper", environ={}, root=tmp_path)
     clock = FixtureClock(start=EPOCH_START)
-    stub = LiveAdapterStub(
-        gate=gate, ledger=ledger, clock=clock, ids=IdFactory(clock, make_rng())
-    )
+    stub = LiveAdapterStub(gate=gate, ledger=ledger, clock=clock, ids=IdFactory(clock, make_rng()))
     request = OrderRequest(
         ticket_id="SOL-20260101-001",
         mint=MINT,

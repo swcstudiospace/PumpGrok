@@ -38,7 +38,9 @@ def planted(monkeypatch: pytest.MonkeyPatch):
             monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PUMPGROK_GROK__API_KEY", GROK_SECRET)
     monkeypatch.setenv("PUMPGROK_RPC__API_KEY", RPC_SECRET)
-    monkeypatch.setenv("PUMPGROK_CONFIRMATION_KEY", "confirm-secret-plant-aa11")  # pragma: allowlist secret: planted no-echo value
+    monkeypatch.setenv(
+        "PUMPGROK_CONFIRMATION_KEY", "confirm-secret-plant-aa11"
+    )  # pragma: allowlist secret: planted no-echo value
     return load_settings()
 
 
@@ -90,6 +92,4 @@ def test_secret_values_absent_from_dumps(planted: Settings, capsys) -> None:
 def test_confirmation_key_is_no_setting_field() -> None:
     """INV-C-07: the operator secret is not a Settings field."""
     assert "confirmation_key" not in Settings.model_fields
-    assert "CONFIRMATION_KEY" not in {
-        name.upper() for name in Settings.model_fields
-    }
+    assert "CONFIRMATION_KEY" not in {name.upper() for name in Settings.model_fields}
