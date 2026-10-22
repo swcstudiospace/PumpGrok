@@ -319,3 +319,30 @@ async def test_simulate_previews_full_without_writes(tmp_path: Path) -> None:
     assert sim.would_fill is True
     assert sim.fill_kind == "full"
     assert adapter._store.read(limit=None) == []
+
+
+async def test_repeated_risk_refusal_replays_first_refusal(tmp_path: Path) -> None:
+    """CR-02: retrying a risk-refused order replays the stored refusal.
+
+    An ACCEPTED-stage refusal writes no OrderPlaced row, so the retry reaches
+    ``_reject`` with the identical key. The second attempt must raise the
+    same ``OrderRejectedError`` (never a raw ``sqlite3.IntegrityError``) and
+    must not append a second ``OrderRejected`` row.
+    """
+    adapter, _clock, request = _harness(tmp_path, [_snap(S0, T0)], autonomy="manual-ticket")
+    try:
+        await adapter.place(request, seat="bot-04-sniper", correlation_id="test")
+    except OrderRejectedError as exc:
+        assert exc.reason == "approval_missing"
+    else:
+        raise AssertionError("manual-ticket buy without approval must refuse")
+    try:
+        await adapter.place(request, seat="bot-04-sniper", correlation_id="test")
+    except OrderRejectedError as exc:
+        assert exc.reason == "approval_missing"
+        assert exc.stage == "ACCEPTED"
+    else:
+        raise AssertionError("retry of a refused decision must refuse again")
+    rejects = [e for e in adapter._store.read(limit=None) if e["type"] == "OrderRejected"]
+    assert len(rejects) == 1
+    assert rejects[0]["payload"]["decision_id"] == request.decision_id

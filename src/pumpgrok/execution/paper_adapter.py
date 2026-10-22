@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import random
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal, Protocol
@@ -77,6 +77,31 @@ class PriceSource(Protocol):
     """Curve reads. Live-paper binds RPC/REST; replay binds fixture ticks."""
 
     async def curve(self, mint: str) -> CurveSnapshot | None: ...
+
+
+def _rejection_from_row(
+    stored: Mapping[str, Any], *, fallback: OrderRejectedError
+) -> OrderRejectedError:
+    """Rebuild the refusal recorded in a stored ``OrderRejected`` row.
+
+    A ``confirmation_timeout`` row maps to ``OrderUnknownError`` (the timed-out
+    attempt is never retried); every other reason maps to the documented
+    ``OrderRejectedError``. Unparseable rows fall back to the live error.
+    """
+    payload = stored.get("payload", {})
+    if not isinstance(payload, dict):
+        return fallback
+    reason = str(payload.get("reason", fallback.reason))
+    detail = str(payload.get("detail", fallback.detail))
+    stage = str(payload.get("stage", fallback.stage))
+    fees = payload.get("fees_lamports", fallback.fees_lamports)
+    try:
+        fees_lamports = int(fees)
+    except (TypeError, ValueError):
+        fees_lamports = fallback.fees_lamports
+    if reason == "confirmation_timeout":
+        return OrderUnknownError(reason, detail, stage=stage, fees_lamports=fees_lamports)
+    return OrderRejectedError(reason, detail, stage=stage, fees_lamports=fees_lamports)
 
 
 class PaperAdapter(ExecutionAdapter):
@@ -998,27 +1023,38 @@ class PaperAdapter(ExecutionAdapter):
         source: str,
         correlation_id: str,
     ) -> OrderRejectedError:
-        err = OrderRejectedError(reason, detail, stage=stage, fees_lamports=fees)
-        self._store.append(
-            ts_utc=self._now_ts(),
-            source=source,
-            correlation_id=correlation_id,
-            idempotency_key=f"reject|{request.ticket_id}|{request.side.value}"
-            f"|{decision_id}|{stage}|{reason}",
-            type="OrderRejected",
-            payload={
-                "source": source,
-                "order_id": order_id or f"unplaced-{decision_id}",
-                "decision_id": decision_id,
-                "reason": reason,
-                "detail": f"{detail} ticket={request.ticket_id} mint={request.mint}",
-                "stage": stage,
-                "fees_lamports": fees,
-                "quote_out": quote_out,
-                "other_amount_threshold": threshold,
-                "confirm_out": confirm_out,
-            },
+        err: OrderRejectedError = OrderRejectedError(
+            reason, detail, stage=stage, fees_lamports=fees
         )
+        key = f"reject|{request.ticket_id}|{request.side.value}|{decision_id}|{stage}|{reason}"
+        try:
+            self._store.append(
+                ts_utc=self._now_ts(),
+                source=source,
+                correlation_id=correlation_id,
+                idempotency_key=key,
+                type="OrderRejected",
+                payload={
+                    "source": source,
+                    "order_id": order_id or f"unplaced-{decision_id}",
+                    "decision_id": decision_id,
+                    "reason": reason,
+                    "detail": f"{detail} ticket={request.ticket_id} mint={request.mint}",
+                    "stage": stage,
+                    "fees_lamports": fees,
+                    "quote_out": quote_out,
+                    "other_amount_threshold": threshold,
+                    "confirm_out": confirm_out,
+                },
+            )
+        except sqlite3.IntegrityError:
+            # A repeated decision replays the first refusal (R23): the same
+            # (ticket, side, decision, stage, reason) key is already stored,
+            # so return the stored outcome instead of leaking a traceback.
+            stored = self._store.by_key(key)
+            if stored is None:
+                raise
+            return _rejection_from_row(stored, fallback=err)
         return err
 
     def _repeat_outcome(self, request: OrderRequest) -> Fill | OrderRejectedError | None:
