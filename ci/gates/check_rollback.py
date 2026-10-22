@@ -18,6 +18,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -122,46 +123,112 @@ def check_plan(plan: str | None) -> list[str]:
 
 # An approval counts for a command only when its operation names that exact command. Two
 # things are ignored: the pumpgrok CLI wrapper ("uv run pumpgrok ...") and trailing --by/--reason
-# provenance flags, which the CLI records itself. Everything else must match, so a chained
+# provenance options, which the CLI records itself. Everything else must match, so a chained
 # command ("a; b"), a prefix of the target ("rm -rf var/rep") or the bare verb ("rm -rf") never
 # authorizes the full command.
 CLI_WRAPPER_RE = re.compile(r"^(?:uv\s+run\s+)?(?:pumpgrok\s+)?")
-# A provenance value is one shell word: a double-quoted string (no $ or backtick), a single-quoted
-# string (literal in the shell, so it may hold anything but a single quote), or a bare token with
-# no $ or backtick. Quoted text cannot contain its own quote, so the suffix always ends at a
-# closing quote and never swallows a following command. A value with expansion is never stripped;
-# shell_expansion_in_provenance refuses the command instead.
-PROVENANCE_VALUE = r"""(?:"[^"$`]*"|'[^']*'|[^\s$`]+)"""
-PROVENANCE_SUFFIX_RE = re.compile(rf"(?:\s+--(?:by|reason)\s+{PROVENANCE_VALUE})+$")
-PROVENANCE_OPTION_RE = re.compile(r"\s--(?:by|reason)\s+")
+
+# Provenance is read with POSIX word rules, because the shell (not this gate) decides what text is
+# a literal and what is evaluated. Unquoted blanks separate words; unquoted operators are tokens of
+# their own. Outside quotes a backslash escapes the next character. Inside single quotes nothing is
+# special. Inside double quotes a backslash escapes only $ ` " \ and newline. An option is an
+# unquoted --by or --reason word, so option-looking text inside quotes is value text.
+_SHELL_BLANKS = " \t"
+_SHELL_OPERATORS = ";&|<>()\n"
+_OPTION_NAMES = ("--by", "--reason")
+_DOUBLE_QUOTE_ESCAPABLE = '$`"\\\n'
+
+
+class _Word(NamedTuple):
+    start: int
+    end: int
+    is_op: bool
+    is_option: bool
+
+
+def _scan_shell(text: str) -> tuple[list[_Word], list[int], bool]:
+    """Split text into shell words.
+
+    Returns (words, offsets of unescaped $ or backtick outside single quotes, unterminated quote).
+    """
+    words: list[_Word] = []
+    expansions: list[int] = []
+    unterminated = False
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] in _SHELL_BLANKS:
+            i += 1
+            continue
+        if text[i] in _SHELL_OPERATORS:
+            words.append(_Word(i, i + 1, True, False))
+            i += 1
+            continue
+        start, quoted = i, False
+        while i < n and text[i] not in _SHELL_BLANKS and text[i] not in _SHELL_OPERATORS:
+            ch = text[i]
+            if ch == "\\":
+                quoted = True
+                i += 2
+            elif ch == "'":
+                quoted = True
+                close = text.find("'", i + 1)
+                if close == -1:
+                    unterminated = True
+                    i = n
+                else:
+                    i = close + 1
+            elif ch == '"':
+                quoted = True
+                i += 1
+                while i < n and text[i] != '"':
+                    if text[i] == "\\" and i + 1 < n and text[i + 1] in _DOUBLE_QUOTE_ESCAPABLE:
+                        i += 2
+                        continue
+                    if text[i] in "$`":
+                        expansions.append(i)
+                    i += 1
+                if i >= n:
+                    unterminated = True
+                else:
+                    i += 1
+            else:
+                if ch in "$`":
+                    expansions.append(i)
+                i += 1
+        end = min(i, n)
+        is_option = not quoted and text[start:end] in _OPTION_NAMES
+        words.append(_Word(start, end, False, is_option))
+    return words, expansions, unterminated
+
+
+def _provenance_start(words: list[_Word]) -> int | None:
+    """Offset where the trailing run of `--by VALUE` / `--reason VALUE` pairs begins, if any."""
+    start = None
+    idx = len(words)
+    while idx >= 2:
+        value, option = words[idx - 1], words[idx - 2]
+        if value.is_op or not option.is_option:
+            break
+        start = option.start
+        idx -= 2
+    return start
 
 
 def operation_key(text: str) -> str:
-    key = " ".join(str(text).split())
-    key = CLI_WRAPPER_RE.sub("", key, count=1)
-    return PROVENANCE_SUFFIX_RE.sub("", key, count=1)
+    words, _expansions, unterminated = _scan_shell(text)
+    cut = None if unterminated else _provenance_start(words)
+    base = text if cut is None else text[:cut]
+    return CLI_WRAPPER_RE.sub("", " ".join(base.split()), count=1)
 
 
-def shell_expansion_in_provenance(cmd: str) -> bool:
-    """True when a --by/--reason value holds $ or a backtick outside single quotes.
+def shell_expansion(cmd: str) -> bool:
+    """True when the command has an unescaped $ or backtick outside single quotes, anywhere.
 
-    The shell evaluates such text before pumpgrok runs, so it is code, not a provenance literal.
-    Scans each value as shell words: quotes toggle literal state, an unquoted space ends the value.
+    The shell evaluates such text before the command runs, so its literal text does not show what
+    will execute. Fail closed: no approval can cover it, even one naming the same text.
     """
-    for opt in PROVENANCE_OPTION_RE.finditer(cmd):
-        in_single = in_double = False
-        for ch in cmd[opt.end() :]:
-            if in_single:
-                in_single = ch != "'"
-            elif ch.isspace() and not in_double:
-                break
-            elif ch == "'" and not in_double:
-                in_single = True
-            elif ch == '"':
-                in_double = not in_double
-            elif ch in "$`":
-                return True
-    return False
+    _words, expansions, _unterminated = _scan_shell(cmd)
+    return bool(expansions)
 
 
 def group_actions(hits: list) -> list[dict]:
@@ -183,7 +250,7 @@ def approval_satisfies(approval, action: dict) -> bool:
         return False
     if any(not approval.get(f) for f in REQUIRED_APPROVAL_FIELDS):
         return False
-    if shell_expansion_in_provenance(action["cmd"]):
+    if shell_expansion(action["cmd"]):
         return False
     key = operation_key(action["cmd"])
     if not key or operation_key(approval["operation"]) != key:
@@ -229,11 +296,11 @@ def approval_problems(actions: list[dict], approvals: list) -> list[str]:
         if idx is None:
             trade = "trade" in action["categories"]
             cats = "/".join(action["categories"])
-            if shell_expansion_in_provenance(action["cmd"]):
+            if shell_expansion(action["cmd"]):
                 problems.append(
                     f"[{action['index']}] ({cats}) {action['cmd']}: shell expansion ($ or "
-                    "backtick) in a --by/--reason value is evaluated before the command "
-                    "runs; refused, not stripped (G-6)"
+                    "backtick) outside single quotes is evaluated before the command runs; "
+                    "refused even with an approval naming this text (G-6)"
                 )
                 continue
             note = (

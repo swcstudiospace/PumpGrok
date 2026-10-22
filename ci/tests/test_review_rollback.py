@@ -268,3 +268,94 @@ class TestShellExpansionInProvenance:
             [_approval("killswitch clear", "max_notional_sol=0.2")],
         )
         assert r.returncode == 0, r.stderr
+
+
+class TestPosixShellWordsRound4:
+    def test_escaped_dollar_in_double_quoted_reason_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [r'uv run pumpgrok killswitch clear --by human:op --reason "loss exceeded \$5"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_option_text_inside_single_quotes_is_value_text(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [
+                "uv run pumpgrok killswitch clear --by human:op "
+                "--reason 'reviewed --reason $(x)'"
+            ],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_escaped_double_quote_in_reason_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [r'uv run pumpgrok killswitch clear --by human:op --reason "say \"hi\""'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_bare_escaped_dollar_in_reason_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [r"uv run pumpgrok killswitch clear --by human:op --reason \$5"],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_double_quoted_command_substitution_is_still_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "$(rm)"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_unescaped_backtick_in_double_quotes_is_still_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "`rm`"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_escaped_dollar_then_real_substitution_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            [r'uv run pumpgrok killswitch clear --by human:op --reason "\$5 $(rm)"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_operation_key_reads_escaped_dollar_as_literal(self, rollback_gate):
+        assert (
+            rollback_gate.operation_key(
+                r'uv run pumpgrok killswitch clear --by human:op --reason "loss exceeded \$5"'
+            )
+            == "killswitch clear"
+        )
+
+
+class TestExpansionAnywhereInCommand:
+    def test_command_substitution_in_operation_is_refused_even_with_exact_approval(self, tmp_path):
+        cmd = "git reset --hard $(echo HEAD)"
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_backtick_in_operation_is_refused_even_with_exact_approval(self, tmp_path):
+        cmd = "git reset --hard `echo HEAD`"
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_single_quoted_literal_in_operation_still_authorizes(self, tmp_path):
+        cmd = "git reset --hard '$(echo HEAD)'"
+        r = _run(tmp_path, [cmd], [_approval(cmd)])
+        assert r.returncode == 0, r.stderr
