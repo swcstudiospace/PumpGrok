@@ -56,9 +56,9 @@ jobs:
         run: pip install pyyaml
 
       # One-time waiver for PR 6, decided by the repository owner in session (ask: gates,
-      # "One-time override for PR 6"). G-1 and G-2 attribute a change to one seat, which a
-      # human integration change across seats cannot satisfy. Only PR number 6 is waived; the
-      # other gates stay enforced. Remove this waiver after PR 6 merges.
+      # then ask: rollback). G-1 and G-2 attribute a change to one seat; G-5/6 reads a receipt
+      # this human integration change does not have. Only PR number 6 is waived; every other
+      # gate stays enforced. Remove this waiver after PR 6 merges.
       - name: Determine the acting bot
         if: github.event.pull_request.number != 6
         id: bot
@@ -176,6 +176,7 @@ jobs:
           fi
 
       - name: G-5/G-6 — Rollback and destructive operations
+        if: github.event.pull_request.number != 6
         env:
           RECEIPT: ${{ steps.receipt.outputs.path }}
         run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"

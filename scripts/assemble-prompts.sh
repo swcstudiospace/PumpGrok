@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-python3 - "$ROOT" "$MODE" <<'PY'
+uv run --project "$ROOT" python - "$ROOT" "$MODE" <<'PY'
 import difflib, sys
 from pathlib import Path
 from xml.sax.saxutils import quoteattr

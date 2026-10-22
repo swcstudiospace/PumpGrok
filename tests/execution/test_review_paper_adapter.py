@@ -717,3 +717,38 @@ async def test_flatten_waits_for_in_flight_order_before_closing(tmp_path: Path) 
         assert len(store.read(types=["PositionClosed"], limit=None)) == 1
     finally:
         store.close()
+
+
+# -- PR6 round 4 finding 2: an aborted order must not block flatten -------
+
+
+class _AbortsOnConfirm:
+    """Answers the decision-time read, then fails the CONFIRMING re-read."""
+
+    def __init__(self, snap: CurveSnapshot) -> None:
+        self._snap = snap
+        self._reads = 0
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        self._reads += 1
+        if self._reads > 1:
+            raise RuntimeError("curve feed failed during confirmation")
+        return self._snap
+
+
+async def test_aborted_order_clears_barrier_so_flatten_does_not_wait(tmp_path: Path) -> None:
+    """An order that dies between ACCEPTED and settlement leaves no barrier entry."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        adapter = _adapter(store, clock, price_source=_AbortsOnConfirm(_snap()))
+        ids = IdFactory(clock, make_rng(15))
+        results = await _drive(
+            clock,
+            adapter.place(_order(ids, MINT), seat="bot-04-sniper", correlation_id="test"),
+        )
+        assert isinstance(results[0], RuntimeError), results[0]
+        assert len(adapter.inflight_barrier) == 0
+        assert adapter.inflight_barrier.wait_empty(timeout_s=0.01) is True
+    finally:
+        store.close()

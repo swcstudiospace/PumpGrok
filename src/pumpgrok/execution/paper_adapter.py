@@ -168,6 +168,8 @@ class PaperAdapter(ExecutionAdapter):
         self._last_reserves: dict[str, tuple[int, int]] = {}
         self._frozen_marks: dict[str, int] = {}
         self._active_places: set[str] = set()
+        # Place key -> the order the owning place() registered in the barrier.
+        self._owned_order: dict[str, str] = {}
 
     @property
     def inflight_barrier(self) -> InflightBarrier:
@@ -387,6 +389,9 @@ class PaperAdapter(ExecutionAdapter):
             raise
         finally:
             self._active_places.discard(key)
+            stale = self._owned_order.pop(key, None)
+            if stale is not None:
+                self._inflight.discard(stale)
         self._risk.release_order_probes(
             order_hash, True, source=ledger_source, correlation_id=correlation_id
         )
@@ -507,6 +512,8 @@ class PaperAdapter(ExecutionAdapter):
         for repeat reconstruction, and ``OrderUnknownError`` is raised. The
         timed-out attempt is never retried (single-send rule).
         """
+        owner_key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
+        self._owned_order[owner_key] = order_id
         self._inflight.add(order_id)
         latency_s, dropped = draw_latency(self._rng, p_drop=self._p_drop)
         try:

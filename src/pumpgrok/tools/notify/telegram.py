@@ -11,9 +11,21 @@ import os
 
 import httpx
 
-__all__ = ["TELEGRAM_ENV_VAR", "TelegramSender", "read_telegram_token"]
+__all__ = ["TELEGRAM_ENV_VAR", "TelegramSendError", "TelegramSender", "read_telegram_token"]
 
 TELEGRAM_ENV_VAR = "PUMPGROK_TELEGRAM_TOKEN"  # pragma: allowlist secret: env var name
+
+
+class TelegramSendError(RuntimeError):
+    """Sanitized Telegram failure carrying the HTTP status for the retry classifier.
+
+    The message names only the status or exception type, never the request URL,
+    so the bot token in the path cannot reach an exception message.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def read_telegram_token() -> str:
@@ -38,5 +50,10 @@ class TelegramSender:
                 json={"chat_id": chat_id, "text": text},
             )
             response.raise_for_status()
+        except httpx.TimeoutException:
+            raise TimeoutError("telegram send timed out") from None
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            raise TelegramSendError(f"telegram send failed: HTTP {status}", status) from None
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"telegram send failed: {type(exc).__name__}") from None
+            raise TelegramSendError(f"telegram send failed: {type(exc).__name__}") from None

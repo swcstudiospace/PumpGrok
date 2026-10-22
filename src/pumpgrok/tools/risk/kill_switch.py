@@ -33,6 +33,7 @@ from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.risk.killswitch import InflightBarrier, env_engaged, kill_file_text
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -49,8 +50,15 @@ __all__ = [
     "run_kill_switch",
 ]
 
-#: Bound on the in-flight barrier wait before a flatten refuses (RISK-004).
-FLATTEN_BARRIER_TIMEOUT_S = 30.0
+#: Margin on top of the adapter's confirmation bound for the barrier wait (RISK-004).
+FLATTEN_BARRIER_MARGIN_S = 5.0
+
+#: Bound on the in-flight barrier wait. An order can legitimately stay in flight for the
+#: adapter's ``confirm_timeout_s``, so the wait covers that bound plus a margin.
+FLATTEN_BARRIER_TIMEOUT_S = EngineLimits().confirm_timeout_s + FLATTEN_BARRIER_MARGIN_S
+
+#: Time allowed for the closing work after the barrier clears.
+FLATTEN_CLOSE_BUDGET_S = 30.0
 
 #: ``async close_position(*, mint, ticket_id, reason) -> dict``. The paper
 #: adapter returns ``{"status": "closed", ...}`` only when the sell and the
@@ -121,7 +129,7 @@ KILL_SWITCH_SPEC = ToolSpec(
     input_model=KillSwitchIn,
     output_model=KillSwitchOut,
     side_effect=SideEffect.PAPER_WRITE,
-    timeout_s=5.0,
+    timeout_s=FLATTEN_BARRIER_TIMEOUT_S + FLATTEN_CLOSE_BUDGET_S,
     rate_limit_key="killswitch",
     idempotent=True,
     backend="pumpgrok.ledger.store.LedgerStore",

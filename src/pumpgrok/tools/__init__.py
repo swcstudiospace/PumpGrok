@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -84,6 +85,32 @@ __all__ = ["build_operator_registry", "build_registry", "register_read_tools"]
 
 
 log = logging.getLogger(__name__)
+
+# Telegram bot tokens live in the request path: /bot<digits>:<secret>/sendMessage.
+# httpx logs that URL at INFO. The value-based redaction pattern needs a word
+# boundary before the digits, and "bot" is a word character, so it never matches.
+_TELEGRAM_PATH_TOKEN = re.compile(r"/bot\d+:[A-Za-z0-9_-]+")
+_HTTP_CLIENT_LOGGERS: tuple[str, ...] = ("httpx", "httpcore")
+
+
+class _TelegramPathFilter(logging.Filter):
+    """Mask Telegram bot tokens in a rendered request URL before any handler sees it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        masked = _TELEGRAM_PATH_TOKEN.sub("/bot[redacted]", message)
+        if masked != message:
+            record.msg = masked
+            record.args = ()
+        return True
+
+
+def _install_telegram_path_filter() -> None:
+    """Attach the token mask to each HTTP client logger once (idempotent)."""
+    for name in _HTTP_CLIENT_LOGGERS:
+        logger = logging.getLogger(name)
+        if not any(isinstance(f, _TelegramPathFilter) for f in logger.filters):
+            logger.addFilter(_TelegramPathFilter())
 
 
 async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
@@ -200,6 +227,7 @@ def _register_desk(
     client: httpx.AsyncClient,
 ) -> None:
     """Alert, brief, docs, memory, ownership, receipt, event and doctor tools."""
+    _install_telegram_path_filter()
     notifier = HttpxNotifier(
         telegram=TelegramSender(client),
         webhook=WebhookSender(client, clock),

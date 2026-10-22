@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 from pathlib import Path
 from typing import Any
@@ -223,3 +224,46 @@ async def test_run_score_report_uses_stricter_configured_kill_floor() -> None:
     finally:
         await client.aclose()
     assert out["thresholds_used"]["kill_below_score"] == 95.0
+
+
+TELEGRAM_TOKEN = "123456789:AAFakeSyntheticTelegramTokenValue_0123"
+
+
+async def test_failing_telegram_send_does_not_log_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Finding 4: httpx logs every request URL at INFO and the token sits in the
+    # /bot<token>/sendMessage path. A failing send must not leak it to any record.
+    monkeypatch.setenv("PUMPGROK_TELEGRAM_TOKEN", TELEGRAM_TOKEN)  # pragma: allowlist secret: fake
+    monkeypatch.setenv("PUMPGROK_NOTIFY__ALLOWLIST", json.dumps(["424242"]))
+    settings = load_settings()
+
+    async def _reject(self: httpx.AsyncHTTPTransport, request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, request=request)  # non-retryable: fails once, no backoff
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _reject)
+    caplog.set_level(logging.DEBUG)
+    reg, manifests, client = build_operator_registry(
+        data_dir=tmp_path / "desk",
+        repo_root=ROOT,
+        settings=settings,
+        clock=FixtureClock(start=START),
+        ledger_path=tmp_path / "ledger.sqlite",
+        p_drop=0.0,
+    )
+    try:
+        factory = IdFactory(FixtureClock(start=START), random.Random(7))
+        with bind_correlation(CorrelationId.new(factory)):
+            alert = reg.find(
+                "notify.alert",
+                max_side_effect=SideEffect.PAPER_WRITE,
+                bot=manifests["bot-09-journal"],
+            )
+            out = await alert(AlertIn(severity="critical", kind="escalation", text="rug flagged"))
+    finally:
+        await client.aclose()
+    delivered = {d["sink"]: d for d in out.delivered}
+    assert delivered["424242"]["ok"] is False  # the send really failed
+    assert TELEGRAM_TOKEN not in caplog.text
+    assert TELEGRAM_TOKEN not in json.dumps(out.model_dump(), default=str)
+    assert "bot[redacted]" in caplog.text  # the request was logged, with the token masked

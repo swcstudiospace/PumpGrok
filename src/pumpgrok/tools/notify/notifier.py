@@ -10,6 +10,7 @@ never retry. Idempotency is ``d(kind, ticket, severity, minute)`` via
 from __future__ import annotations
 
 import abc
+import asyncio
 import hashlib
 import json
 import sys
@@ -58,6 +59,13 @@ AlertSeverity = Literal["info", "warning", "critical"]
 
 J8 = RetryPolicy(attempts=3, base_s=1.0, max_s=8.0)
 
+# One destination's whole delivery, retries included, must finish inside this bound.
+# notify.alert runs under a 10s registry budget (ALERT_SPEC.timeout_s), so a slow
+# destination can never consume the budget that the other destinations and the
+# backup path depend on.
+DESTINATION_TIMEOUT_S = 4.0
+STDOUT_FILE_SINK = "stdout+file"
+
 
 def _is_retriable_sink_error(exc: BaseException) -> bool:
     """Retry only timeouts and 5xx/429 (D5); 4xx and refusals never retry."""
@@ -87,11 +95,16 @@ class Notifier(abc.ABC):
         allowlist: tuple[str, ...] | list[str],
         clock: Clock,
         alert_file: Path,
+        destination_timeout_s: float = DESTINATION_TIMEOUT_S,
     ) -> None:
         self._allowlist = list(allowlist)
         self._clock = clock
         self._alert_file = alert_file
-        self._seen_keys: set[str] = set()
+        self._destination_timeout_s = destination_timeout_s
+        # Idempotency is per sink: a sink is recorded only after it succeeds, so a
+        # retry of the same alert re-sends to any sink that failed.
+        self._written_keys: set[str] = set()
+        self._delivered: set[tuple[str, str]] = set()
 
     @property
     def allowlist(self) -> list[str]:
@@ -116,38 +129,69 @@ class Notifier(abc.ABC):
         destinations: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        """Fan out; a repeated key suppresses every sink (stdout/file too)."""
+        """Fan out concurrently; each sink is idempotent on its own key.
+
+        A sink that already succeeded for this key is skipped. A sink that failed or
+        ran past its bound is not recorded, so the next call with the same key retries
+        it. Returns ``suppressed`` only when every requested sink is already done.
+        """
         # INV-R-23: alert text and fields are redacted at the fan-out edge,
         # so every sink (stdout, file, telegram, webhook) sees masked values.
         text = redact_text(text)
         fields = redact_value(None, fields or {})
         key = idempotency_key or alert_key(kind, ticket_id, severity, self._clock)
-        if key in self._seen_keys:
-            return {"delivered": [], "suppressed": True}
-        self._seen_keys.add(key)
         requested = destinations if destinations is not None else list(self._allowlist)
         allowed, refused = partition_destinations(requested, self._allowlist)
+        pending = [d for d in dict.fromkeys(allowed) if (key, d) not in self._delivered]
+        file_pending = key not in self._written_keys
+        if not pending and not file_pending:
+            return {"delivered": [], "suppressed": True}
         delivered: list[dict[str, Any]] = []
-        self._write_stdout_and_file(severity, kind, text, ticket_id, fields or {})
-        delivered.append({"sink": "stdout+file", "ok": True, "error": None})
-        for destination in allowed:
-            try:
+        if file_pending:
+            self._write_stdout_and_file(severity, kind, text, ticket_id, fields or {})
+            self._written_keys.add(key)
+            delivered.append({"sink": STDOUT_FILE_SINK, "ok": True, "error": None})
+        results = await asyncio.gather(
+            *(
+                self._deliver_to(key, d, kind, text=text, ticket_id=ticket_id, fields=fields or {})
+                for d in pending
+            )
+        )
+        delivered.extend(results)
+        for destination in refused:
+            delivered.append({"sink": destination, "ok": False, "error": "not_allowlisted"})
+        return {"delivered": delivered, "suppressed": False}
+
+    async def _deliver_to(
+        self,
+        key: str,
+        destination: str,
+        kind: str,
+        *,
+        ticket_id: str | None,
+        fields: dict[str, Any],
+        text: str,
+    ) -> dict[str, Any]:
+        """Deliver to one sink inside its own bound; never raises, records success only."""
+        try:
+            async with self._clock.timeout(self._destination_timeout_s):
                 if destination.startswith(("http://", "https://")):
                     payload: dict[str, Any] = {
                         "event": kind,
                         "text": text,
                         "ticket_id": ticket_id,
-                        "fields": fields or {},
+                        "fields": fields,
                     }
                     await self._with_j8(partial(self.send_webhook, destination, payload))
                 else:
                     await self._with_j8(partial(self.send_telegram, destination, text))
-                delivered.append({"sink": destination, "ok": True, "error": None})
-            except Exception as exc:  # sinks report, never raise
-                delivered.append({"sink": destination, "ok": False, "error": str(exc)})
-        for destination in refused:
-            delivered.append({"sink": destination, "ok": False, "error": "not_allowlisted"})
-        return {"delivered": delivered, "suppressed": False}
+        except TimeoutError as exc:
+            error = str(exc) or f"timed out after {self._destination_timeout_s}s"
+            return {"sink": destination, "ok": False, "error": error}
+        except Exception as exc:  # sinks report, never raise
+            return {"sink": destination, "ok": False, "error": str(exc)}
+        self._delivered.add((key, destination))
+        return {"sink": destination, "ok": True, "error": None}
 
     async def _with_j8(self, make_coro: Callable[[], Awaitable[None]]) -> None:
         """Retry an awaitable factory (a coroutine object cannot be re-awaited)."""

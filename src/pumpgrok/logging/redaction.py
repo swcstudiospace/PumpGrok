@@ -38,7 +38,7 @@ VALUE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]",  # solana_json_keypair
         r"(?i)helius(?:-rpc)?\.com/[^\s\"']*api-key=[A-Za-z0-9-]{20,}",  # helius_url_key
         r"(?i)[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}",  # quicknode_url
-        r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b",  # telegram_bot_token
+        r"(?:(?<=bot)|\b)\d{8,10}:[A-Za-z0-9_-]{35}\b",  # telegram_bot_token (also /bot<token>/)
         r"\bxai-[A-Za-z0-9]{32,}\b",  # xai_key
         r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----",  # private_key
         r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",  # jwt

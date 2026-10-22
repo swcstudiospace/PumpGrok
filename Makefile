@@ -46,11 +46,11 @@ gates:           ## G-1..G-7 for BOT/TASK (stdlib + pyyaml only, like CI)
 
 prompts:         ## assemble prompts and regenerate agent templates
 	bash scripts/assemble-prompts.sh
-	python3 scripts/generate-templates.py
+	$(UV) run python scripts/generate-templates.py
 
 check: lint typecheck test audit  ## everything ci.yml runs
 	bash scripts/assemble-prompts.sh --check
-	python3 scripts/generate-templates.py --check
+	$(UV) run python scripts/generate-templates.py --check
 	$(UV) run python scripts/generate-event-schemas.py --check
 	./scripts/check.sh
 

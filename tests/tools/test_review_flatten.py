@@ -22,7 +22,11 @@ from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import InflightBarrier
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.risk.kill_switch import (
+    FLATTEN_BARRIER_TIMEOUT_S,
+    FLATTEN_CLOSE_BUDGET_S,
+    KILL_SWITCH_SPEC,
     KillSwitchIn,
     build_kill_switch_tool,
     run_kill_switch,
@@ -232,3 +236,17 @@ def test_closer_without_in_flight_barrier_is_refused_at_wiring(tmp_path: Path) -
     with pytest.raises(ValueError, match="in-flight barrier"):
         build_kill_switch_tool(store, clock, tmp_path / "KILLSWITCH", close_position=closer)
     store.close()
+
+
+def test_flatten_deadlines_cover_the_adapter_confirmation_bound() -> None:
+    """Review finding 3: the registry deadline must outlast the barrier wait and closes.
+
+    The registry cancels a tool call at ``spec.timeout_s``. An order may legitimately
+    stay in flight for the adapter's ``confirm_timeout_s``, so the flatten barrier
+    bound must cover that bound, and the tool deadline must cover the barrier wait
+    plus the closing work. Otherwise flatten is cancelled mid-close.
+    """
+    confirm_bound = EngineLimits().confirm_timeout_s
+    assert confirm_bound <= FLATTEN_BARRIER_TIMEOUT_S
+    assert KILL_SWITCH_SPEC.timeout_s >= FLATTEN_BARRIER_TIMEOUT_S + FLATTEN_CLOSE_BUDGET_S
+    assert KILL_SWITCH_SPEC.timeout_s <= 300.0
