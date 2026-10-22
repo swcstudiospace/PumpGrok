@@ -80,3 +80,14 @@ def test_serve_replay_binds_loopback_by_default() -> None:
     from pumpgrok.supervisor.scheduler import serve_replay
 
     assert inspect.signature(serve_replay).parameters["host"].default == "127.0.0.1"
+
+
+def test_health_port_rejects_out_of_range_values(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for bad in ("99999", "65536", "-1"):
+        monkeypatch.setenv("PUMPGROK_HEALTH__PORT", bad)
+        with pytest.raises(ConfigError):
+            load_settings()
+    monkeypatch.setenv("PUMPGROK_HEALTH__PORT", "65535")
+    assert load_settings().health.port == 65535

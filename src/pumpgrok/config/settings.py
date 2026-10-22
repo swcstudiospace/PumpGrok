@@ -265,7 +265,7 @@ class HealthSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     host: str = Field(default="127.0.0.1", min_length=1)
-    port: int = 0
+    port: int = Field(default=0, ge=0, le=65535)
 
 
 class Settings(BaseSettings):
