@@ -14,6 +14,7 @@ import random
 import sqlite3
 import sys
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -62,9 +63,9 @@ def _engine(
     **kwargs: Any,
 ) -> RiskEngine:
     kwargs.setdefault("get_reserves", lambda _mint: BIG_RESERVES)
+    kwargs.setdefault("budget", RiskBudget())
     return RiskEngine(
         store=store,
-        budget=RiskBudget(),
         ids=IdFactory(clock, random.Random(seed)),
         clock=clock,
         autonomy=autonomy,  # type: ignore[arg-type]
@@ -493,6 +494,33 @@ def test_max_trade_fraction_caps(tmp_path: Path) -> None:
         assert decision.capped is True
         assert decision.size_lamports == 200_000_000
         assert decision.caps == {"max_trade_fraction": 200_000_000}
+    finally:
+        store.close()
+
+
+def test_fraction_caps_use_decimal_math(tmp_path: Path) -> None:
+    """WR-06: fraction caps are exact Decimal math on lamports (R28).
+
+    ``float(Decimal("0.8455548"))`` is inexact, so the old
+    ``int(float(fraction) * equity)`` cap lands one lamport above the
+    Decimal computation at this equity. Money stays int; ratios stay Decimal.
+    """
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        store.set_meta("initial_equity_lamports", "592936786815")
+        engine = _engine(
+            store,
+            clock,
+            budget=RiskBudget(max_trade_fraction=Decimal("0.8455548")),
+            get_reserves=lambda _mint: (10**15, 10**18),
+        )
+        decision = engine.check(_buy(clock, ids, size=600_000_000_000), seat="bot-04-sniper")
+        assert decision.capped is True
+        assert decision.caps["max_trade_fraction"] == 501360546187
+        assert decision.caps["max_trade_fraction"] == int(Decimal("0.8455548") * 592936786815)
+        assert decision.caps["max_token_fraction"] == int(Decimal("0.05") * 592936786815)
     finally:
         store.close()
 

@@ -843,7 +843,7 @@ class RiskEngine:
         if not ctx.is_buy:
             return
         assert ctx.final_size is not None
-        cap = int(float(self._budget.max_trade_fraction) * ctx.equity)
+        cap = int(self._budget.max_trade_fraction * ctx.equity)
         if ctx.final_size > cap:
             ctx.final_size = cap
             ctx.capped = True
@@ -856,7 +856,7 @@ class RiskEngine:
         assert ctx.final_size is not None
         pos = ctx.state.positions.get(ctx.order.mint)
         basis = int(pos.cost_basis_lamports) if pos is not None else 0
-        cap = int(float(self._budget.max_token_fraction) * ctx.equity) - basis
+        cap = int(self._budget.max_token_fraction * ctx.equity) - basis
         if ctx.final_size > cap:
             if cap < int(self._limits.min_trade_lamports):
                 raise _Fail("max_token_fraction", f"cap={cap} below minimum")
