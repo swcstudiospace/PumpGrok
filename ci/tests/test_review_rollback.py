@@ -205,3 +205,66 @@ class TestRound2UnrelatedApprovalAndQuotedReason:
             rollback_gate.operation_key('git reset --hard --reason "x" ; rm -rf var/cache')
             != "git reset --hard"
         )
+
+
+class TestShellExpansionInProvenance:
+    def test_exact_receipt_with_command_substitution_in_reason_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "$(rm -rf var/ledger)"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_bare_command_substitution_in_reason_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard --reason $(rm)"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_backtick_in_bare_reason_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard --reason `rm`"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_backtick_in_double_quoted_reason_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['git reset --hard --reason "`rm -rf var`"'],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_quoted_then_bare_substitution_is_refused(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["git reset --hard --reason 'a'$(rm)"],
+            [_approval("git reset --hard")],
+        )
+        assert r.returncode == 1
+        assert "shell expansion" in r.stderr
+
+    def test_plain_double_quoted_reason_with_spaces_still_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ['uv run pumpgrok killswitch clear --by human:op --reason "reviewed with operator"'],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_single_quoted_literal_substitution_still_authorizes(self, tmp_path):
+        r = _run(
+            tmp_path,
+            ["uv run pumpgrok killswitch clear --by human:op --reason '$(x)'"],
+            [_approval("killswitch clear", "max_notional_sol=0.2")],
+        )
+        assert r.returncode == 0, r.stderr

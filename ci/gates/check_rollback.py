@@ -126,17 +126,42 @@ def check_plan(plan: str | None) -> list[str]:
 # command ("a; b"), a prefix of the target ("rm -rf var/rep") or the bare verb ("rm -rf") never
 # authorizes the full command.
 CLI_WRAPPER_RE = re.compile(r"^(?:uv\s+run\s+)?(?:pumpgrok\s+)?")
-# A provenance value is one shell word: a double-quoted or single-quoted string (which may hold
-# spaces) or a bare non-space token. Quoted text cannot contain its own quote, so the suffix
-# always ends at a closing quote and never swallows a following command.
-PROVENANCE_VALUE = r"""(?:"[^"]*"|'[^']*'|\S+)"""
+# A provenance value is one shell word: a double-quoted string (no $ or backtick), a single-quoted
+# string (literal in the shell, so it may hold anything but a single quote), or a bare token with
+# no $ or backtick. Quoted text cannot contain its own quote, so the suffix always ends at a
+# closing quote and never swallows a following command. A value with expansion is never stripped;
+# shell_expansion_in_provenance refuses the command instead.
+PROVENANCE_VALUE = r"""(?:"[^"$`]*"|'[^']*'|[^\s$`]+)"""
 PROVENANCE_SUFFIX_RE = re.compile(rf"(?:\s+--(?:by|reason)\s+{PROVENANCE_VALUE})+$")
+PROVENANCE_OPTION_RE = re.compile(r"\s--(?:by|reason)\s+")
 
 
 def operation_key(text: str) -> str:
     key = " ".join(str(text).split())
     key = CLI_WRAPPER_RE.sub("", key, count=1)
     return PROVENANCE_SUFFIX_RE.sub("", key, count=1)
+
+
+def shell_expansion_in_provenance(cmd: str) -> bool:
+    """True when a --by/--reason value holds $ or a backtick outside single quotes.
+
+    The shell evaluates such text before pumpgrok runs, so it is code, not a provenance literal.
+    Scans each value as shell words: quotes toggle literal state, an unquoted space ends the value.
+    """
+    for opt in PROVENANCE_OPTION_RE.finditer(cmd):
+        in_single = in_double = False
+        for ch in cmd[opt.end() :]:
+            if in_single:
+                in_single = ch != "'"
+            elif ch.isspace() and not in_double:
+                break
+            elif ch == "'" and not in_double:
+                in_single = True
+            elif ch == '"':
+                in_double = not in_double
+            elif ch in "$`":
+                return True
+    return False
 
 
 def group_actions(hits: list) -> list[dict]:
@@ -157,6 +182,8 @@ def approval_satisfies(approval, action: dict) -> bool:
     if not isinstance(approval, dict):
         return False
     if any(not approval.get(f) for f in REQUIRED_APPROVAL_FIELDS):
+        return False
+    if shell_expansion_in_provenance(action["cmd"]):
         return False
     key = operation_key(action["cmd"])
     if not key or operation_key(approval["operation"]) != key:
@@ -202,6 +229,13 @@ def approval_problems(actions: list[dict], approvals: list) -> list[str]:
         if idx is None:
             trade = "trade" in action["categories"]
             cats = "/".join(action["categories"])
+            if shell_expansion_in_provenance(action["cmd"]):
+                problems.append(
+                    f"[{action['index']}] ({cats}) {action['cmd']}: shell expansion ($ or "
+                    "backtick) in a --by/--reason value is evaluated before the command "
+                    "runs; refused, not stripped (G-6)"
+                )
+                continue
             note = (
                 " and whose blast_radius is 'max_notional_sol=<float>' - the notional "
                 "the human approved (G-6)"
