@@ -842,5 +842,12 @@ class TestCliRegressionSweep:
         assert "Traceback" not in err
 
 
+def test_minted_approval_ids_are_unique_in_a_burst() -> None:
+    """WR-03: rapid CLI mints never collide, even within one millisecond."""
+    minted = {cli_mod._mint_approval_id() for _ in range(500)}
+    assert len(minted) == 500
+    assert all(approval_id.startswith("apr-") for approval_id in minted)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -554,8 +554,15 @@ _APPROVAL_REASONS = frozenset({"approval_missing", "approval_mismatch", "approva
 
 
 def _mint_approval_id() -> str:
-    """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29)."""
-    return f"apr-{IdFactory(WallClock(), make_rng()).ulid()}"
+    """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29).
+
+    Seeded from OS entropy: two mints in the same wall-clock millisecond --
+    or in two processes -- must still differ, which the fixed replay seed
+    cannot guarantee. Replay paths keep the seeded stream; only CLI-minted
+    ids draw OS entropy.
+    """
+    seed = int.from_bytes(os.urandom(16), "big")
+    return f"apr-{IdFactory(WallClock(), make_rng(seed)).ulid()}"
 
 
 def _paper_outcome(verb: str, body: dict[str, Any]) -> int:
