@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import pumpgrok.cli as cli_mod
-from pumpgrok.cli import main
+from pumpgrok.cli import _unflattened_lines, main
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.execution.paper_adapter import CurveSnapshot
@@ -237,6 +237,69 @@ class TestPaperFillPath:
         assert "OrderPlaced" not in kinds
 
 
+_SEED_TICKET = "SOL-20260101-001"
+_SEED_MINT = "So11111111111111111111111111111111111111112"
+
+
+def _seed_open_position(tmp_path: Path, *, with_mark: bool) -> None:
+    """One open paper position in the canonical ledger, with or without a ledger mark.
+
+    With no mark and no price source the flatten has nothing to value the sell with (G7).
+    """
+    path = tmp_path / "var" / "ledger.sqlite"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    store = LedgerStore(str(path))
+    try:
+        store.set_meta("initial_equity_lamports", "10000000000")
+        store.set_meta("source", "paper")
+        now = format_ts_utc(WallClock().now())
+        store.append(
+            ts_utc=now,
+            source="paper",
+            correlation_id="seed",
+            idempotency_key="seed-pos",
+            type="PositionOpened",
+            payload={
+                "source": "paper",
+                "mint": _SEED_MINT,
+                "price_entry": "0.00001",
+                "token_units": 3_000_000,
+                "cost_basis_lamports": 200_000_000,
+                "opened_ts_utc": now,
+                "symbol": "TST",
+                "creator": "Creator1111111111111111111111111111111111",
+                "ticket_id": _SEED_TICKET,
+                "score": "0.8",
+            },
+        )
+        if with_mark:
+            store.append(
+                ts_utc=now,
+                source="paper",
+                correlation_id="seed",
+                idempotency_key="seed-mark",
+                type="MarkToMarket",
+                payload={
+                    "source": "paper",
+                    "ts_source": now,
+                    "cash_lamports": 9_800_000_000,
+                    "equity_lamports": 10_000_000_000,
+                    "unrealized_lamports": 0,
+                    "prices_json": json.dumps(
+                        {
+                            _SEED_MINT: {
+                                "mtm_lamports": 200_000_000,
+                                "venue_fee_lamports": 0,
+                                "spot": "0.00001",
+                            }
+                        }
+                    ),
+                },
+            )
+    finally:
+        store.close()
+
+
 class TestOperatorVerbs:
     """Task 2: killswitch/state verbs plus hidden tools help (TOOL-011, B5, B8, R22)."""
 
@@ -282,6 +345,48 @@ class TestOperatorVerbs:
         assert code == 0
         payload = json.loads(out)
         assert payload["flatten_requested"] is True
+
+    def test_killswitch_flatten_json_reports_incomplete_when_a_position_has_no_mark(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """G7 follow-up: the JSON must not say "completed" while a position is still open."""
+        _seed_open_position(tmp_path, with_mark=False)
+        _, out, _ = self._run(
+            tmp_path, monkeypatch, ["killswitch", "flatten", "--reason", "g7 json"]
+        )
+        payload = json.loads(out)
+        assert payload["flatten_status"] == "incomplete", payload
+        assert [o["status"] for o in payload["flatten_outcomes"]] == ["not_flattened"]
+
+    def test_killswitch_flatten_exits_6_when_a_position_has_no_mark(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """G7: a position the flatten cannot value stays open, so the exit code must say so."""
+        _seed_open_position(tmp_path, with_mark=False)
+        code, out, err = self._run(
+            tmp_path, monkeypatch, ["killswitch", "flatten", "--reason", "g7 red"]
+        )
+        assert code == 6, (code, out, err)
+        unflattened = [line for line in err.splitlines() if _SEED_MINT in line]
+        assert len(unflattened) == 1, err
+        assert "no_mark" in unflattened[0], unflattened[0]
+        assert "UNFLATTENED" in unflattened[0], unflattened[0]
+        # Fail closed: the latch is set even though the flatten did not finish.
+        assert (tmp_path / "var" / "desk" / "KILLSWITCH").is_file()
+        assert "KillSwitchSet" in _ledger_kinds(tmp_path)
+
+    def test_killswitch_flatten_exits_0_and_closes_when_a_mark_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _seed_open_position(tmp_path, with_mark=True)
+        code, out, err = self._run(
+            tmp_path, monkeypatch, ["killswitch", "flatten", "--reason", "g7 green"]
+        )
+        assert code == 0, (code, out, err)
+        payload = json.loads(out)
+        assert [o["status"] for o in payload["flatten_outcomes"]] == ["closed"]
+        assert "UNFLATTENED" not in err
+        assert "PositionClosed" in _ledger_kinds(tmp_path)
 
     def test_killswitch_clear_appends_cleared_and_approval(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -669,3 +774,18 @@ def test_minted_approval_ids_are_unique_in_a_burst() -> None:
     minted = {cli_mod._mint_approval_id() for _ in range(500)}
     assert len(minted) == 500
     assert all(approval_id.startswith("apr-") for approval_id in minted)
+
+
+def test_unflattened_lines_name_open_positions_and_unfinished_runs() -> None:
+    """G7: every outcome that is not closed, and a run that did not finish, gets a line."""
+    closed = {"mint": "M1", "ticket_id": "T1", "status": "closed", "detail": ""}
+    open_ = {"mint": "M2", "ticket_id": "T2", "status": "not_flattened", "detail": "status=no_mark"}
+    assert _unflattened_lines({"flatten_status": "completed", "flatten_outcomes": [closed]}) == []
+    lines = _unflattened_lines({"flatten_status": "completed", "flatten_outcomes": [closed, open_]})
+    assert len(lines) == 1 and "mint=M2" in lines[0] and "detail=status=no_mark" in lines[0]
+    blocked = _unflattened_lines(
+        {"flatten_status": "blocked", "flatten_detail": "barrier", "flatten_outcomes": []}
+    )
+    assert len(blocked) == 1 and "flatten_status=blocked" in blocked[0]
+    unavailable = _unflattened_lines({"flatten_status": "unavailable", "flatten_outcomes": []})
+    assert len(unavailable) == 1 and "flatten_status=unavailable" in unavailable[0]

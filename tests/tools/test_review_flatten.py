@@ -219,7 +219,7 @@ async def test_not_closed_adapter_status_is_reported_not_flattened(tmp_path: Pat
         barrier=InflightBarrier(),
     )
     store.close()
-    assert out["flatten_status"] == "completed"
+    assert out["flatten_status"] == "incomplete"
     assert out["flatten_outcomes"] == [
         {"mint": MINT_A, "ticket_id": TICKET, "status": "not_flattened", "detail": "status=no_mark"}
     ]

@@ -27,6 +27,16 @@ pumpgrok killswitch clear --by human:operator --reason "feed recovered, doctor g
 - `clear` needs `--by human:<name>`. A seat id is never accepted as the clearer.
 - When in doubt, set first and investigate second. Clearing requires a green `pumpgrok doctor` and a stated reason.
 
+## Flatten outcomes and exit codes
+
+`flatten` sets the switch first, then closes every open paper position with reason `kill_flatten`. A position is closed only when the adapter values it: from the live curve, or from the last ledger mark. A position with neither (no ledger mark and no reserves) is left open.
+
+- Exit 0: every open position closed, or none was open. The stdout JSON lists each outcome with `status` `closed`.
+- Exit 6 (`EXIT_UNFLATTENED`): at least one position is still open, or the flatten did not finish (`flatten_status` `blocked` or `unavailable`). One stderr line per position names its mint, ticket, status and detail, for example `UNFLATTENED mint=... status=not_flattened detail=status=no_mark`. Exit 6 is used for this case only. The stdout JSON reports `flatten_status` `incomplete` whenever a position is left open, and `completed` only when every position closed.
+- The switch stays set in every case. Exit 6 does not clear it, and the desk stays halted to new buys.
+
+When the flatten leaves a position open, do not treat the book as flat. Find the mint in the stderr line, decide how to close it (for example, by restoring a ledger mark and running `flatten` again), and confirm `status` is `closed` before you rely on the book. The gateway and the alert-channel poll log the same positions at ERROR and retry them on each poll.
+
 ## References
 
 - Switch implementation: `src/pumpgrok/risk/killswitch.py`

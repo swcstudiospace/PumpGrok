@@ -76,6 +76,7 @@ The phase verifier records gaps; it does not waive them.
 
 These are not gates, but the replay gate and the container health check depend on them.
 `pumpgrok` exits 0 on success, 1 on config or usage error, 2 on ledger inconsistency, 3 when the
-live gate refuses, 4 on a corrupt replay fixture, and 5 for verbs not yet implemented.
+live gate refuses, 4 on a corrupt replay fixture, 5 for verbs not yet implemented, and 6 when
+`killswitch flatten` leaves a position open (see `docs/runbooks/kill_switch.md`).
 `pumpgrok doctor` exits 0 whenever settings are valid; subsystems that have not landed are
 reported as warnings.

@@ -14,9 +14,9 @@ partial until Phase 4). Replay maintenance verbs exit 5. `paper` and `state`
 halt/autonomy require `--seat` and refuse `sniper`/`exit`. Hidden
 `tools <id> --help` prints the tool JSON schema (B8).
 Exit codes: 0 ok; 1 config or usage; 2 ledger inconsistent; 3 live refused; 4 corrupt
-fixture; 5 not implemented. argparse's own exit 2 is overridden so that 2 means only a
-ledger inconsistency. Stdout carries JSON (or the doctor report and the engine decision);
-diagnostics go to stderr.
+fixture; 5 not implemented; 6 a kill flatten that left a position open.
+argparse's own exit 2 is overridden so that 2 means only a ledger inconsistency.
+Stdout carries JSON (or the doctor report and the engine decision); diagnostics go to stderr.
 
 Run order: refuse key-bearing CLI values -> parse -> settings (mode R30) -> logging ->
 live gate (live exits 3 before any other work) -> verb. For the replay cycle: manifest
@@ -87,6 +87,10 @@ EXIT_CONFIG = 1
 EXIT_LEDGER = 2
 EXIT_LIVE = 3
 EXIT_FIXTURE = 4
+# A killswitch flatten that did not close every open position (G7). 6 is the lowest code the CLI
+# does not otherwise use (0-5 are taken above), so it collides with no other verb. The UNFLATTENED
+# stderr line names the positions. The latch stays set either way.
+EXIT_UNFLATTENED = 6
 EXIT_NOT_IMPLEMENTED = 5
 
 DATASET_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
@@ -292,8 +296,34 @@ def _run_wired(
     return asyncio.run(_with_tools(verb, seat, settings, capabilities, use))
 
 
+def _unflattened_lines(dumped: dict[str, Any]) -> list[str]:
+    """One stderr line per flatten outcome that did not close, and per run that did not finish.
+
+    A position with no outcome row (flatten ``blocked`` or ``unavailable``) is named by the run
+    status instead, since nothing was closed for it either.
+    """
+    lines: list[str] = []
+    for outcome in dumped.get("flatten_outcomes", []):
+        if outcome.get("status") != "closed":
+            lines.append(
+                "killswitch flatten: UNFLATTENED "
+                f"mint={outcome.get('mint')} ticket={outcome.get('ticket_id')} "
+                f"status={outcome.get('status')} detail={outcome.get('detail')}"
+            )
+    run_status = dumped.get("flatten_status")
+    if run_status in ("blocked", "unavailable"):
+        lines.append(
+            "killswitch flatten: UNFLATTENED "
+            f"flatten_status={run_status} detail={dumped.get('flatten_detail')}"
+        )
+    return lines
+
+
 def _call_use(
-    verb: str, index: int, fields: dict[str, Any]
+    verb: str,
+    index: int,
+    fields: dict[str, Any],
+    check: Callable[[dict[str, Any]], list[str]] | None = None,
 ) -> Callable[[list[Tool]], Awaitable[int]]:
     """Tail that validates one input through the tool spec and calls the tool (B5).
 
@@ -316,7 +346,13 @@ def _call_use(
             out = await tool(payload)
         except PumpgrokError as exc:
             return _tool_error(verb, exc.code, exc.message)
-        _say(sys.stdout, json.dumps(out.model_dump(mode="json")))
+        dumped = out.model_dump(mode="json")
+        _say(sys.stdout, json.dumps(dumped))
+        if check is not None:
+            problems = check(dumped)
+            if problems:
+                _say(sys.stderr, *problems)
+                return EXIT_UNFLATTENED
         return EXIT_OK
 
     return use
@@ -808,7 +844,12 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
             "risk",
             settings,
             ("risk.kill_switch",),
-            _call_use(verb, 0, {"action": "flatten_request", "reason": args.reason}),
+            _call_use(
+                verb,
+                0,
+                {"action": "flatten_request", "reason": args.reason},
+                check=_unflattened_lines,
+            ),
         )
     return _run_wired(verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {}))
 

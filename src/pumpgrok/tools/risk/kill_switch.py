@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import logging
 import os
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -49,6 +50,8 @@ __all__ = [
     "kill_switch_key",
     "run_kill_switch",
 ]
+
+log = logging.getLogger(__name__)
 
 #: Margin on top of the adapter's confirmation bound for the barrier wait (RISK-004).
 FLATTEN_BARRIER_MARGIN_S = 5.0
@@ -112,9 +115,9 @@ class KillSwitchOut(ToolOutput):
     source: Literal["env", "file", "command", "none"]
     flatten_requested: bool = False
     reason: str | None = None
-    flatten_status: Literal["not_requested", "completed", "blocked", "unavailable"] = (
-        "not_requested"
-    )
+    flatten_status: Literal[
+        "not_requested", "completed", "incomplete", "blocked", "unavailable"
+    ] = "not_requested"
     flatten_detail: str = ""
     flatten_outcomes: list[FlattenOutcome] = Field(default_factory=list)
 
@@ -260,6 +263,20 @@ async def run_kill_switch(
     return _status(store, killswitch_path, correlation, clock, result)
 
 
+def _reported_flatten_status(flatten: FlattenResult | None) -> str:
+    """The flatten status the caller sees: ``completed`` only when every position closed.
+
+    A run whose outcomes include a position that did not close reports ``incomplete``, so no
+    reader can take a partly-flattened book for a flat one (G7). ``blocked`` and ``unavailable``
+    runs already name themselves and are reported as they are.
+    """
+    if flatten is None:
+        return "not_requested"
+    if flatten.status == "completed" and any(o.status != "closed" for o in flatten.outcomes):
+        return "incomplete"
+    return flatten.status
+
+
 def _status(
     store: LedgerStore,
     killswitch_path: Path | None,
@@ -303,7 +320,7 @@ def _status(
             "source": source,
             "flatten_requested": flatten_requested,
             "reason": reason,
-            "flatten_status": flatten.status if flatten is not None else "not_requested",
+            "flatten_status": _reported_flatten_status(flatten),
             "flatten_detail": flatten.detail if flatten is not None else "",
             "flatten_outcomes": [o.model_dump() for o in flatten.outcomes] if flatten else [],
             "meta": meta_now("killswitch", correlation, clock),
@@ -335,11 +352,27 @@ def flatten_hook_for(
     """
 
     async def _flatten() -> None:
-        await execute_flatten(
+        result = await execute_flatten(
             lambda: _flatten_intents(store),
             barrier=barrier,
             close_position=close_position,
         )
+        # G7: a position the flatten did not close stays open. Say so at ERROR, with the mint
+        # and the adapter's detail. Nothing here records the flatten as complete; the request
+        # stays set, so the next poll retries the positions that are still open.
+        if result.status != "completed":
+            log.error(
+                "kill flatten did not complete: status=%s detail=%s", result.status, result.detail
+            )
+        for outcome in result.outcomes:
+            if outcome.status != "closed":
+                log.error(
+                    "kill flatten left a position open: mint=%s ticket=%s status=%s detail=%s",
+                    outcome.mint,
+                    outcome.ticket_id,
+                    outcome.status,
+                    outcome.detail,
+                )
 
     return _flatten
 
