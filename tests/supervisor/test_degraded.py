@@ -154,16 +154,26 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
     ledger = tmp_path / "ledger.sqlite"
     call = partial(run_once_replay, SMOKE, FilterSettings(), seed=20260101, ledger_path=ledger)
     result = await asyncio.to_thread(call)
-    assert result.decision == "skip"
-    assert result.reason == "data_unavailable"
-    assert result.events_read == 4
+    assert result.decision == "buy"
+    assert result.reason == "ok"
+    assert result.events_read == 5
     store = LedgerStore(str(ledger))
     try:
         assert store.verify() is True
         rows = store.read(limit=None)
-        assert len(rows) == 2
+        assert len(rows) == 10
         assert rows[0]["type"] == "JournalNote"
-        assert "engine decision=skip reason=data_unavailable" in str(rows[0]["payload"]["text"])
+        assert "engine decision=buy reason=ok" in str(rows[0]["payload"]["text"])
+        assert [row["type"] for row in rows[2:]] == [
+            "OrderRejected",
+            "OrderPlaced",
+            "FillRecorded",
+            "PositionOpened",
+            "ApprovalRecorded",
+            "OrderPlaced",
+            "FillRecorded",
+            "PositionClosed",
+        ]
         rollover = rows[1]
         assert rollover["type"] == "DailyRollover"
         assert rollover["payload"]["day_utc"] == "2026-01-01"
@@ -181,10 +191,23 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
     assert ledger.is_file()
     store = LedgerStore(str(ledger))
     try:
-        assert store.count() == 2
+        assert store.count() == 10
         rows = store.read(limit=None)
-        assert [row["type"] for row in rows] == ["JournalNote", "DailyRollover"]
+        assert [row["type"] for row in rows] == [
+            "JournalNote",
+            "DailyRollover",
+            "OrderRejected",
+            "OrderPlaced",
+            "FillRecorded",
+            "PositionOpened",
+            "ApprovalRecorded",
+            "OrderPlaced",
+            "FillRecorded",
+            "PositionClosed",
+        ]
     finally:
         store.close()
     captured = capsys.readouterr()
-    assert "engine decision=skip reason=data_unavailable" in captured.out
+    assert "engine decision=buy reason=ok" in captured.out
+    assert "outcome=filled reason=ok" in captured.out
+    assert "trades filled=2 not_filled=1" in captured.out

@@ -71,9 +71,20 @@ def _verdict(path: Path) -> dict[str, object]:
 
 
 def _replay_ledger_contract(path: Path) -> None:
-    """CLI replay ledgers hold exactly the verdict row plus the D6 rollover row."""
+    """CLI replay ledgers hold the verdict row, the D6 rollover row and the order rows."""
     rows = _rows(path, "SELECT type, idempotency_key, payload_json FROM events ORDER BY seq")
-    assert [row[0] for row in rows] == ["JournalNote", "DailyRollover"]
+    assert [row[0] for row in rows] == [
+        "JournalNote",
+        "DailyRollover",
+        "OrderRejected",
+        "OrderPlaced",
+        "FillRecorded",
+        "PositionOpened",
+        "ApprovalRecorded",
+        "OrderPlaced",
+        "FillRecorded",
+        "PositionClosed",
+    ]
     payload = json.loads(str(rows[1][2]))
     day = str(load_dataset(SMOKE).events[0]["ts_utc"])[:10]
     assert payload["day_utc"] == day
@@ -83,9 +94,9 @@ def _replay_ledger_contract(path: Path) -> None:
 def test_runner_folds_fixture_events_into_one_fail_closed_verdict(tmp_path: Path) -> None:
     result = run_replay(SMOKE, FilterSettings(), ledger_path=tmp_path / "ledger.sqlite")
 
-    assert result.decision == "skip"
-    assert result.reason == "data_unavailable"
-    assert result.events_read == 4
+    assert result.decision == "buy"
+    assert result.reason == "ok"
+    assert result.events_read == 5
     assert result.seq == 1
     dataset = load_dataset(SMOKE)
     assert result.ledger_path == tmp_path / "ledger.sqlite"
@@ -109,8 +120,8 @@ def test_runner_folds_fixture_events_into_one_fail_closed_verdict(tmp_path: Path
     assert isinstance(payload, dict)
     assert payload["seat"] == "desk"
     assert payload["note_kind"] == "verdict"
-    assert "engine decision=skip reason=data_unavailable" in str(payload["text"])
-    assert "read 4 fixture events from smoke" in str(payload["text"])
+    assert "engine decision=buy reason=ok" in str(payload["text"])
+    assert "read 5 fixture events from smoke" in str(payload["text"])
     assert event_epoch(dataset.events[-1]) > event_epoch(dataset.events[0])
 
 
@@ -123,15 +134,17 @@ def test_skip_cycle_cli_reports_the_runner_verdict(
     verdict = _verdict(_ledger(tmp_path))
     payload = verdict["payload"]
     assert isinstance(payload, dict)
-    assert "engine decision=skip reason=data_unavailable" in str(payload["text"])
+    assert "engine decision=buy reason=ok" in str(payload["text"])
     captured = capsys.readouterr()
-    assert "engine decision=skip reason=data_unavailable" in captured.out
+    assert "engine decision=buy reason=ok" in captured.out
+    assert "outcome=filled reason=ok" in captured.out
+    assert "trades filled=2 not_filled=1" in captured.out
     log_records = [json.loads(line) for line in captured.err.splitlines() if line]
     (cycle_end,) = [record for record in log_records if record["event"] == "cycle_end"]
     assert cycle_end["correlation_id"] == verdict["correlation_id"]
-    assert cycle_end["data"]["events_read"] == 4
-    assert cycle_end["data"]["engine_decision"] == "skip"
-    assert cycle_end["data"]["engine_reason"] == "data_unavailable"
+    assert cycle_end["data"]["events_read"] == 5
+    assert cycle_end["data"]["engine_decision"] == "buy"
+    assert cycle_end["data"]["engine_reason"] == "ok"
 
 
 def test_verify_smoke_10m_reports_a_stable_events_hash(

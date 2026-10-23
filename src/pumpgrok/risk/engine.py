@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +34,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pumpgrok.core.adapter import OrderRequest, Side
+from pumpgrok.core.adapter import EXIT_RULE_REASONS, OrderRequest, Side
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import Clock, IdFactory, calling_seat
@@ -44,8 +44,9 @@ from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
+from pumpgrok.risk.alert_channel import AlertChannel
 from pumpgrok.risk.breakers import BREAKER_NAMES, BreakerSet
-from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillSwitch
+from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
 
 STEP_IDS: tuple[str, ...] = (
@@ -94,8 +95,11 @@ EXIT_SKIP_STEPS: frozenset[str] = frozenset(
 #: (``graduated``, ``blind_flatten``) carry no order; they still name the
 #: same vocabulary when they do flow through ``check``.
 EXIT_SELL_REASONS: frozenset[str] = frozenset(
-    {"exit_rule", "rug_alert", "kill_flatten", "blind_flatten", "graduated"}
+    {"exit_rule", "rug_alert", "kill_flatten", "blind_flatten", "graduated", *EXIT_RULE_REASONS}
 )
+
+#: The rule-named exit reasons (engine/exits.py). Each one names the rule an approval binds.
+RULE_EXIT_REASONS: frozenset[str] = frozenset(EXIT_RULE_REASONS)
 
 #: System-initiated risk exits mint their own approval in any autonomy mode.
 SYSTEM_EXIT_REASONS: frozenset[str] = frozenset({"kill_flatten", "rug_alert"})
@@ -252,7 +256,7 @@ class RiskEngine:
         mode: Literal["paper", "live"] = "paper",
         autonomy: Literal["manual-ticket", "autonomous-paper"] = "manual-ticket",
         killswitch_path: Path | str | None = None,
-        alert_lines: Callable[[], list[str]] | None = None,
+        alert_channel: AlertChannel | None = None,
         env: Mapping[str, str] | None = None,
         get_reserves: Callable[[str], tuple[int, int] | None] | None = None,
         live_check: Callable[[], list[str]] | None = None,
@@ -268,12 +272,13 @@ class RiskEngine:
         self._mode = mode
         self._autonomy = autonomy
         self._reputation = reputation
+        self._flatten_hook: Callable[[], Awaitable[None]] | None = None
         self._killswitch = KillSwitch(
             clock,
             store=store,
             killswitch_path=killswitch_path,
-            alert_lines=alert_lines,
             env=env,
+            alert_channel=alert_channel,
         )
         self._breakers = BreakerSet(store, clock)
         self._get_reserves = get_reserves
@@ -325,6 +330,32 @@ class RiskEngine:
         )
         for event in events:
             state = reduce(state, event)
+        return state
+
+    def attach_flatten_hook(self, hook: Callable[[], Awaitable[None]]) -> None:
+        """Bind the flatten executor that ``poll_kill_sources`` runs on a requested flatten.
+
+        The composition root binds it once the adapter exists (``flatten_hook_for``), since the
+        adapter is built from this engine.
+        """
+        self._flatten_hook = hook
+
+    async def poll_kill_sources(self) -> KillState:
+        """Absorb the env, file and alert kill sources once, then honour a requested flatten.
+
+        RISK-004: call this once per supervised cycle, independent of any order check, so an
+        alert ``KILL FLATTEN`` acts even when no order is being checked. Safe to call repeatedly:
+        the channel consumes each update once, the ledger rows are idempotent, and a flatten
+        closes only positions still open. A requested flatten with no hook attached is an error,
+        never a silent no-op.
+        """
+        self._killswitch.absorb_alerts()
+        state = self._killswitch.poll()
+        self._killswitch.observe(ts_utc=self._now_ts(), source="paper", correlation_id="desk")
+        if state.active and state.flatten_requested:
+            if self._flatten_hook is None:
+                raise RuntimeError("kill flatten requested but no flatten hook is attached")
+            await self._flatten_hook()
         return state
 
     def _poll_kill(self, source: str, correlation_id: str) -> tuple[str, str, bool] | None:
@@ -414,6 +445,7 @@ class RiskEngine:
             size_lamports=order.size_lamports if order.token_units is None else None,
             token_units=order.token_units,
             max_slippage_bps=order.max_slippage_bps,
+            exit_rule_id=exit_reason if exit_reason in RULE_EXIT_REASONS else None,
             approved_by="risk_engine",
             raw_message=message,
             at=now,
@@ -552,6 +584,8 @@ class RiskEngine:
         fill is refused at the fill, and a sell refuses with ``no_position`` when
         its holding has closed.
         """
+        # RISK-004: the alert channel is polled on every check, after env and file are read.
+        self._killswitch.absorb_alerts()
         order_hash = order_hash_for(order)
         cache_key = self._cache_key(order, order_hash=order_hash, stage=stage)
         cached = self._decisions.get(cache_key)
@@ -806,6 +840,14 @@ class RiskEngine:
         approval = ctx.approval
         if approval is not None and approval.approved_by == "risk_engine":
             return
+        names_other_rule = (
+            approval is not None
+            and approval.kind == "exit_rule"
+            and ctx.exit_reason in RULE_EXIT_REASONS
+            and approval.exit_rule_id != ctx.exit_reason
+        )
+        if names_other_rule:
+            raise _Fail("approval_mismatch", "exit_rule approval names another rule")
         if approval is None or approval.kind not in ctx.wanted or not approval.matches(ctx.order):
             raise _Fail("approval_mismatch", "approval does not bind this order")
 

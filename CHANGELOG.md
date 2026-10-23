@@ -13,8 +13,14 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
   and key-bearing values, and mode resolution `--mode` > `PUMPGROK_MODE` > TOML.
 - Hash-chained append-only ledger with a verify step, and a deterministic replay clock, seeded RNG
   and fixture loader that checks every listed digest before any ledger file exists.
-- Skip-only replay cycle: `pumpgrok run --mode paper --once --replay <dir>` reads one recorded
-  fixture, appends one `JournalNote`, verifies the chain and exits 0. No engine runs.
+- Replay paper cycle: `pumpgrok run --mode paper --once --replay <dir>` judges each fixture tick as
+  a candidate carrying its recorded evidence, appends the verdict `JournalNote`, lets the sniper seat
+  place granted BUYs through `exec.place` (risk and PaperAdapter approve or veto), verifies the chain
+  and exits 0. Only seats with an `exec.place` grant trade. Kill-switch flatten closes open replay
+  positions through PaperAdapter. Exit rules (stop-loss 30%, take-profit 120%, trailing stop 35%,
+  max hold 3600 s; `config/settings.py` `ExitsSettings`) run each replay and serve cycle through the
+  ported `PositionWatcher`; a fired rule sells through the exit seat's `exec.place` with
+  `exit_reason` set, and only the exit seat may send one.
 - `pumpgrok doctor`: subsystem health report. Exit 0 whenever settings are valid.
 - Redacted JSON logs with correlation IDs carried in context variables.
 - Tool and registry core (`core/`), including the `ToolRegistry` invariants and the live-write refusal.

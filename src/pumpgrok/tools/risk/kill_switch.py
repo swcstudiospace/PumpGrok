@@ -323,6 +323,27 @@ def _flatten_intents(store: LedgerStore) -> list[FlattenIntent]:
     ]
 
 
+def flatten_hook_for(
+    store: LedgerStore,
+    barrier: InflightBarrier,
+    close_position: ClosePosition,
+) -> Callable[[], Awaitable[None]]:
+    """Bind the kill-poll flatten to one store, in-flight barrier and position closer (RISK-004).
+
+    The engine calls the returned hook from ``RiskEngine.poll_kill_sources`` whenever a flatten
+    is requested, so an alert ``KILL FLATTEN`` is honoured without any order check.
+    """
+
+    async def _flatten() -> None:
+        await execute_flatten(
+            lambda: _flatten_intents(store),
+            barrier=barrier,
+            close_position=close_position,
+        )
+
+    return _flatten
+
+
 def build_kill_switch_tool(
     store: LedgerStore,
     clock: Clock,

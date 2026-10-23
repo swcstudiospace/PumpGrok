@@ -19,6 +19,7 @@ import pytest
 
 from desk_gateway.config import GatewayConfig
 from desk_gateway.server import close_server, create_server
+from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.replay.clock import WallClock
 
@@ -88,8 +89,14 @@ def gateway(tmp_path_factory: pytest.TempPathFactory) -> Any:
         data_dir=data_dir,
         repo_root=Path(__file__).resolve().parents[3],
         tokens=tokens,
+        ledger_path=data_dir / "ledger.sqlite",
     )
-    server = create_server(config, clock=WallClock(), http_client=http_client)
+    server = create_server(
+        config,
+        settings=Settings(mode="paper"),
+        clock=WallClock(),
+        http_client=http_client,
+    )
     registry = server.gateway_state["registry"]  # type: ignore[attr-defined]
     manifests = server.gateway_state["manifests"]  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.serve_forever, daemon=True)

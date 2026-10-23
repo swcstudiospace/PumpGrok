@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.replay.clock import WallClock
 
 MIN_PAPER_DAYS = 14
@@ -121,16 +122,16 @@ def _paper_window(root: Path) -> tuple[bool, str, bool, str]:
     never creates ``var/`` files. Any ``source=replay`` row refuses both
     metrics (a FixtureClock must never fabricate the paper window).
     """
-    rows = _read_gate_rows(root / "var" / "ledger.sqlite")
+    rows = _read_gate_rows(root / PAPER_LEDGER_PATH)
     if rows is None:
-        reason = "no source=paper ledger at var/ledger.sqlite"
+        reason = f"no source=paper ledger at {PAPER_LEDGER_PATH}"
         return (False, reason, False, reason)
     if any(source == "replay" for source, _, _, _ in rows):
         reason = "replay ledger: metrics refuse source=replay rows"
         return (False, reason, False, reason)
     paper = [(ts, type, payload) for source, ts, type, payload in rows if source == "paper"]
     if not paper:
-        reason = "no source=paper events in var/ledger.sqlite"
+        reason = f"no source=paper events in {PAPER_LEDGER_PATH}"
         return (False, reason, False, reason)
     return (*_paper_days(paper), *_paper_perf(paper))
 

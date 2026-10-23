@@ -47,7 +47,7 @@ from pumpgrok.execution.latency import P_DROP, draw_latency
 from pumpgrok.ledger.reducer import PositionView, initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
-from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS, RiskEngine, order_hash_for
+from pumpgrok.risk.engine import RULE_EXIT_REASONS, SYSTEM_EXIT_REASONS, RiskEngine, order_hash_for
 from pumpgrok.risk.killswitch import InflightBarrier
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
@@ -360,6 +360,8 @@ class PaperAdapter(ExecutionAdapter):
         decision leaves the probe to its owner. Orders without a probe are
         untouched.
         """
+        if exit_reason is None:
+            exit_reason = request.exit_reason
         ledger_source = source if source is not None else self._source
         order_hash = order_hash_for(request)
         key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
@@ -1103,7 +1105,7 @@ class PaperAdapter(ExecutionAdapter):
         approval = decision.approval
         if (
             approval is not None
-            and approval.approved_by != "risk_engine"
+            and (approval.approved_by != "risk_engine" or exit_reason in RULE_EXIT_REASONS)
             and decision.approval_id is not None
         ):
             consume_key = f"consume|{decision.approval_id}"

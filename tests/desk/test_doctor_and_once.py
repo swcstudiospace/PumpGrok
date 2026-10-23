@@ -1,8 +1,8 @@
-"""Foundation checkpoint: skip-only cycle and doctor rows (INV-C-12).
+"""Foundation checkpoint: replay cycle and doctor rows (INV-C-12).
 
 ``pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke``
-executes a skip-only cycle (fixture events read, one ``JournalNote``
-appended, exit 0) and ``pumpgrok doctor`` reports one line per subsystem:
+executes one replay cycle (fixture events read, the verdict ``JournalNote`` and the
+sniper's order rows appended, exit 0) and ``pumpgrok doctor`` reports one line per subsystem:
 ``ok`` when the module resolves, ``warn ... not-yet-implemented`` for
 subsystems whose owning phase has not landed, and ``warn ... (not served:
 health.port=0, ...)`` for the served endpoints when no port is bound (no
@@ -21,11 +21,12 @@ SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 
 
 def test_once_skip_only_cycle_and_doctor_rows(tmp_path, monkeypatch, capsys) -> None:
-    """INV-C-12: skip-only cycle exit 0; doctor rows ok, not-yet-implemented, or not-served."""
+    """INV-C-12: replay cycle exit 0; doctor rows ok, not-yet-implemented, or not-served."""
     monkeypatch.chdir(tmp_path)
     assert main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
     out = capsys.readouterr().out
-    assert "engine decision=skip" in out
+    assert "engine decision=buy" in out
+    assert "trades filled=2 not_filled=1" in out
 
     ledger = LedgerStore(tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite")
     try:

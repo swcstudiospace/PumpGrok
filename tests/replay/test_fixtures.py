@@ -34,10 +34,10 @@ def test_smoke_fixture_passes_manifest_verification() -> None:
     assert list(manifest.sha256) == ["events.jsonl"]
 
 
-def test_smoke_fixture_loads_four_ordered_events() -> None:
+def test_smoke_fixture_loads_five_ordered_events() -> None:
     dataset = load_dataset(SMOKE)
-    assert len(dataset.events) == 4
-    assert [event["kind"] for event in dataset.events] == ["tick"] * 4
+    assert len(dataset.events) == 5
+    assert [event["kind"] for event in dataset.events] == ["tick"] * 5
 
 
 def test_tampered_byte_raises_corrupt_fixture_and_creates_no_ledger(tmp_path: Path) -> None:

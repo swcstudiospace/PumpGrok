@@ -20,6 +20,7 @@ from conftest import HTTP_OK, rpc_call
 
 from desk_gateway.config import GatewayConfig
 from desk_gateway.server import close_server, create_server
+from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.core.binding_key import (
     BINDING_KEY_FILENAME,
@@ -93,9 +94,15 @@ def _serve(data_dir: Path) -> Any:
         data_dir=data_dir,
         repo_root=REPO_ROOT,
         tokens=tokens,
+        ledger_path=data_dir / "ledger.sqlite",
     )
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(_no_network))
-    server = create_server(config, clock=WallClock(), http_client=http_client)
+    server = create_server(
+        config,
+        settings=Settings(mode="paper"),
+        clock=WallClock(),
+        http_client=http_client,
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address

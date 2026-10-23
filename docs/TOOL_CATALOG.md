@@ -427,7 +427,7 @@ runs write `var/replay/<dataset>/ledger.sqlite`.
 | timeout_s | 5 |
 | retry | none |
 | rate_limit_key | `ledger` |
-| backend | ledger + config `[risk]` block (R20 keys) + `var/KILLSWITCH` + breaker state |
+| backend | ledger + config `[risk]` block (R20 keys) + `var/desk/KILLSWITCH` + breaker state |
 | callers | chief, risk; `RiskEngine.check` in-process for sniper/exit orders (no roster grant needed) |
 | source | port `vendor/grokbot-pumpfun/src/risk.py:149` `evaluate` and `:143` `position_size` (score-proportional sizing, `MAX_SHARE_OF_REMAINING_BUDGET=0.30` at `:33`, `MIN_TRADE_SOL=0.01` at `:36`) into `src/pumpgrok/risk/{engine,limits,sizing}.py`, extended with fraction-of-equity limits |
 
@@ -450,15 +450,15 @@ runs write `var/replay/<dataset>/ledger.sqlite`.
 
 | Attribute | Value |
 |---|---|
-| description | Set the global kill switch or request a flatten of every open paper position (D6, R22). Actions `set` and `flatten_request` only: `clear` is not a tool action; it is the human CLI `pumpgrok killswitch clear --by <human> --reason <text>`, which appends `KillSwitchCleared` with an `ApprovalRecorded` of kind `killswitch_clear` (R22, R33). Sources: env `PUMPGROK_KILLSWITCH=1` read once at start; file `var/KILLSWITCH` and the alert-channel command polled every cycle. `RiskEngine.check` re-checks the switch at CONFIRMING so in-flight orders are rejected with reason `kill_switch`; `flatten_request` waits on the in-flight barrier, then closes every open position with reason `kill_flatten` |
+| description | Set the global kill switch or request a flatten of every open paper position (D6, R22). Actions `set` and `flatten_request` only: `clear` is not a tool action; it is the human CLI `pumpgrok killswitch clear --by <human> --reason <text>`, which appends `KillSwitchCleared` with an `ApprovalRecorded` of kind `killswitch_clear` (R22, R33). Sources: env `PUMPGROK_KILLSWITCH=1` read once at start; file `var/desk/KILLSWITCH` and the alert channel (`KILL <reason>` from an allowlisted chat) polled every cycle; a valid alert KILL writes the file. `RiskEngine.check` re-checks the switch at CONFIRMING so in-flight orders are rejected with reason `kill_switch`; `flatten_request` waits on the in-flight barrier, then closes every open position with reason `kill_flatten` |
 | input | `action: enum[set, flatten_request]` (required); `reason: str` (required) |
-| output | `active: bool`; `since: datetime or null`; `source: enum[env, file, command, none]`; `flatten_requested: bool`; `reason: str or null` |
+| output | `active: bool`; `since: datetime or null`; `source: enum[env, file, alert_command, none]`; `flatten_requested: bool`; `reason: str or null` |
 | side_effect | paper-write |
 | timeout_s | 5 |
 | retry | none |
 | rate_limit_key | `killswitch` |
 | idempotency_key | derived (`risk.kill_switch`, action, reason, UTC minute) |
-| backend | `var/KILLSWITCH` file + ledger events `KillSwitchSet` / `PositionClosed` (`reason: kill_flatten`) + `Escalation` (relayed to `notify.alert` by the supervisor) |
+| backend | `var/desk/KILLSWITCH` file + ledger events `KillSwitchSet` / `PositionClosed` (`reason: kill_flatten`) + `Escalation` (relayed to `notify.alert` by the supervisor) |
 | callers | risk only (`docs/ROSTER.md` section 6); `pumpgrok killswitch set|flatten` CLI; status is read through `risk.halt_status` |
 | source | new; replaces `tools/desk_state.py:195` `write_halt` (`Halt: true` in desk.md) |
 

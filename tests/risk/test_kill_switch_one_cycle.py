@@ -21,7 +21,7 @@ from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc, parse_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, kill_file_text
+from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, engage_from_alert, kill_file_text
 from pumpgrok.tools.risk.kill_switch import KillSwitchIn
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
@@ -158,8 +158,9 @@ async def test_kill_switch_halts_within_one_cycle(tmp_path: Path, source: str) -
             engine = _engine(store, clock, killswitch_path=kill_file)
             origin = "file"
         else:
-            engine = _engine(store, clock, alert_lines=lambda: ["KILL operator stop"])
-            origin = "alert_command"
+            engage_from_alert("KILL operator stop", tmp_path)
+            engine = _engine(store, clock, killswitch_path=kill_file)
+            origin = "file"
         adapter = _adapter(store, clock, engine, ids)
         for step in range(2):
             clock.advance_to(START + 5.0 * step)

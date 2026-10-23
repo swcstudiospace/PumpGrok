@@ -12,12 +12,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+
 SEAT_CREDENTIAL_ENV_PREFIX = "DESK_GATEWAY_TOKEN_"
 
 
 @dataclass(frozen=True)
 class GatewayConfig:
-    """Everything one gateway process binds with; ``tokens`` is never repr'd."""
+    """Everything one gateway process binds with; ``tokens`` is never repr'd.
+
+    ``ledger_path`` is the one paper ledger, the file ``pumpgrok report --daily`` reads.
+    ``data_dir`` holds the kill latch (``KILLSWITCH``) and the journal, not the ledger.
+    """
 
     host: str
     port: int
@@ -25,6 +31,9 @@ class GatewayConfig:
     data_dir: Path
     repo_root: Path
     tokens: Mapping[str, str] = field(repr=False)
+    ledger_path: Path = PAPER_LEDGER_PATH
+    # Bot token for the alert channel (RISK-004). Empty means no Telegram kill source.
+    telegram_token: str = field(default="", repr=False)
 
 
 def token_env_name(short: str) -> str:

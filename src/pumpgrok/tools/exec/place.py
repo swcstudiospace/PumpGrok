@@ -14,10 +14,10 @@ from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 
-from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
+from pumpgrok.core.adapter import ExecutionAdapter, ExitRuleReason, OrderRequest
 from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
 from pumpgrok.core.idempotency import exec_place_key
-from pumpgrok.core.ids import ULID_RE, Clock, ambient_correlation
+from pumpgrok.core.ids import ULID_RE, Clock, ambient_correlation, calling_seat
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
@@ -30,6 +30,9 @@ __all__ = [
     "build_place_tool",
     "run_place",
 ]
+
+#: The only seat that may send a rule-named sell (TOOL-009, PAPER-007).
+EXIT_SEAT = "bot-06-exit"
 
 
 class PlaceIn(ToolInput):
@@ -44,6 +47,8 @@ class PlaceIn(ToolInput):
     max_slippage_bps: int = Field(ge=1, le=10_000)
     approval_id: str = Field(pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
     quote_id: str | None = None
+    # Set only by the exit seat's rule engine (TOOL-009). The gateway schema omits it.
+    exit_reason: ExitRuleReason | None = None
 
     @model_validator(mode="after")
     def _size_matches_side(self) -> Self:
@@ -51,6 +56,8 @@ class PlaceIn(ToolInput):
             raise ValueError("buy requires size_lamports")
         if self.side == "sell" and self.token_units is None and self.size_lamports is None:
             raise ValueError("sell requires token_units or size_lamports")
+        if self.exit_reason is not None and self.side != "sell":
+            raise ValueError("exit_reason applies to sells only")
         return self
 
 
@@ -125,6 +132,18 @@ async def run_place(
                 "idempotency_key": key,
                 "status": "rejected",
                 "reason": "seat_may_trade",
+                "meta": meta_now("exec", correlation, clock),
+            }
+        ).model_dump()
+    if inp.exit_reason is not None and calling_seat() != EXIT_SEAT:
+        return PlaceOut.model_validate(
+            {
+                "ticket_id": inp.ticket_id,
+                "side": inp.side,
+                "decision_id": inp.decision_id,
+                "idempotency_key": key,
+                "status": "rejected",
+                "reason": "exit_reason_seat",
                 "meta": meta_now("exec", correlation, clock),
             }
         ).model_dump()

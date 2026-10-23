@@ -1,8 +1,9 @@
 """Seeded deterministic replay runner (paper-engine.md 4.4-4.5, PAPER-004).
 
 One path drives every replay: verify the manifest, advance a
-:class:`FixtureClock` through each fixture timestamp, fold the events into one
-engine decision, append one ``JournalNote`` (``source=replay``) through
+:class:`FixtureClock` through each fixture timestamp, judge each event as a
+candidate, summarise the verdicts as one engine decision, append one
+``JournalNote`` (``source=replay``) through
 ``LedgerStore.append_batch``, then verify the chain. Same dataset plus same
 seed yields identical ULIDs, timestamps and hashes; any silent gap longer than
 :data:`STALE_GAP_S` fails the run with :class:`DataStale` instead of replaying
@@ -38,6 +39,7 @@ __all__ = [
     "CYCLE_SEAT",
     "STALE_GAP_S",
     "ReplayResult",
+    "ReplayTrade",
     "ledger_events_hash",
     "llm_request_for",
     "run_replay",
@@ -61,6 +63,31 @@ log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class ReplayTrade:
+    """One order attempt a replay cycle made through the registry (G1).
+
+    ``outcome`` is the place tool's status (``filled``, ``rejected`` or
+    ``unknown``) and ``reason`` its catalog reason: ``ok`` on a fill, the risk
+    or adapter refusal otherwise.
+    """
+
+    side: str
+    mint: str
+    outcome: str
+    reason: str
+    rule: str = ""
+
+
+def format_trade(trade: ReplayTrade) -> str:
+    """One stdout line for a replay order attempt; a rule sell names its rule."""
+    rule = f" rule={trade.rule}" if trade.rule else ""
+    return (
+        f"trade side={trade.side} mint={trade.mint} outcome={trade.outcome} "
+        f"reason={trade.reason}{rule}"
+    )
+
+
+@dataclass(frozen=True)
 class ReplayResult:
     """Outcome of one replay run; every field derives from fixture plus seed."""
 
@@ -71,6 +98,7 @@ class ReplayResult:
     events_hash: str
     ledger_path: Path
     seq: int
+    trades: tuple[ReplayTrade, ...] = ()
 
 
 def llm_request_for(dataset_name: str, events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -138,12 +166,12 @@ def run_replay(
     with bind_correlation(cycle), bind_seat(CYCLE_SEAT):
         for stamp in stamps:
             clock.advance_to(stamp)
-        # Pure engine stage only: fixture ticks become evidence-less
-        # candidates, so the fail-closed filter decides. No monitor stream,
-        # no analyzer fetch. Model resolution answers from the fixture: a
-        # recorded outcome sleeps its virtual latency on the clock, and a
-        # request with no record fails the run (ReplayMissingRecord).
-        decision = decide_replay(list(source), filter_cfg, clock.now())
+        # Pure engine stage only: each fixture tick is a candidate carrying its
+        # recorded evidence, judged by the fail-closed filter at its own time.
+        # No monitor stream, no analyzer fetch. Model resolution answers from
+        # the fixture: a recorded outcome sleeps its virtual latency on the
+        # clock, and a request with no record fails the run (ReplayMissingRecord).
+        decision = decide_replay(list(source), filter_cfg)
         replay_llm = load_llm_records(source_dir)
         llm_clause = ""
         if replay_llm is not None:
@@ -173,8 +201,8 @@ def run_replay(
                                 f"replay engine cycle: {format_decision(decision)}; "
                                 "model resolution skipped (replay); "
                                 f"read {len(source)} fixture events from {source.name}; "
-                                "metadata and age gates satisfied by construction, "
-                                "buyer evidence absent by construction"
+                                "candidates judged on fixture evidence "
+                                "(name, image, created time, buyers, reserves)"
                                 f"{llm_clause}"
                             ),
                             "refs": [],

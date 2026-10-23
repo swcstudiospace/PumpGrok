@@ -260,7 +260,7 @@ unrealized:      196_020_000 - 200_009_000 = -3_989_000 lamports (-0.003989 SOL,
 
 Step 5b, confirmation with a larger move (`S1 = 42.5`): `T1 = 757,411,764.7`; `out1 = 757,411,764.7 * 0.198 / 42.698 = 3,512,285 < 3,560,247` so the order is REJECTED `reason=slippage_exceeded` with `quote_out=3,596,210 threshold=3,560,247 confirm_out=3,512,285`. No cash moves; `fees_lamports` on the rejection is `network_cost_lamports = 9_000` because a failed transaction still pays the base and priority fee (REVIEW: charge network cost on `slippage_exceeded`; do not charge on `tx_dropped`).
 
-Step 5c, kill switch during latency: if `var/KILLSWITCH` appears while the order sleeps, the re-check at `CONFIRMING` rejects it `reason=kill_switch`, `stage=CONFIRMING`; no cash moves and no fee is charged (nothing was sent).
+Step 5c, kill switch during latency: if `var/desk/KILLSWITCH` appears while the order sleeps, the re-check at `CONFIRMING` rejects it `reason=kill_switch`, `stage=CONFIRMING`; no cash moves and no fee is charged (nothing was sent).
 
 Step 6, partial fill variant: size 1.5 SOL on the same curve. Floor: `42 >= 15` passes. `fill_cap = 0.84 < 1.5`, so `filled_lamports = 840_000_000`, `filled_fraction = 0.56`, and the remaining 0.66 SOL is cancelled, not queued. The threshold is recomputed for 0.84 SOL: `x_net = 0.8316`, `out_amount = 766,428,571.4 * 0.8316 / 42.8316 = 14,880,603`, `threshold = 14,731,797`; confirmation compares `out1` for 0.8316 SOL against that figure, not against the 1.5 SOL quote (R38).
 
@@ -332,7 +332,7 @@ All payloads carry no secrets and no wallet keys. Money is integer base units (R
 | `MarkToMarket` | `desk` | `ts_source, prices{mint: {spot, S, T, mtm_lamports, venue_fee_lamports, source, age_s, frozen}}, cash_lamports, equity_lamports, unrealized_lamports`; `venue_fee_lamports` is the venue fee netted in `mtm_lamports` (absent on marks written before it was added) | journal seat / RiskEngine |
 | `HaltSet` | `desk` | `reason (daily_loss/drawdown/ledger_inconsistent/manual), detail, set_by="risk_engine", equity_lamports, day_start_equity_lamports`; idempotency per `(reason, utc_day)` | RiskEngine only (R24) |
 | `HaltCleared` | `desk` | `reason, cleared_by ("human:<name>" required), approval_id (ApprovalRecorded kind=halt_clear), note` | CLI only |
-| `KillSwitchSet` | `desk` | `source (env/file/alert_command/tool), reason, flatten_requested, set_by` | RiskEngine / risk.kill_switch |
+| `KillSwitchSet` | `desk` | `source (env/alert_command/file/tool), reason, flatten_requested, set_by`; an alert line that engages the latch is recorded as `alert_command`, later polls of the same latch as `file` | RiskEngine / risk.kill_switch |
 | `KillSwitchCleared` | `desk` | `cleared_by ("human:<name>"), approval_id (ApprovalRecorded kind=killswitch_clear), sources_now_clear[]` | CLI only |
 | `BreakerTripped` | `desk` | `breaker (data_stale/loss_velocity/exec_errors), metric, threshold, cooldown_s`; idempotency per `(breaker, occurrence)`, where occurrence is the n-th trip row of that breaker (a trip, reset and re-trip on one UTC day are three transitions) | RiskEngine breakers |
 | `BreakerReset` | `desk` | `breaker, after_s, probe_ok` | RiskEngine breakers |
@@ -523,7 +523,7 @@ src/pumpgrok/risk/
   limits.py     RiskBudget ([risk], R20 keys) and EngineLimits ([limits]) pydantic-settings models (all REVIEW defaults)
   sizing.py     proposal sizer (vendor position_size port)
   breakers.py   Breaker base (vendor CircuitBreaker port from vendor src/ops.py) + DataStale, LossVelocity, ExecErrors
-  killswitch.py KillSwitch: env/file/alert-command sources, set/flatten_request, audit
+  killswitch.py KillSwitch: env, file and alert-channel sources (the channel writes the latch file), set/flatten_request, audit
 ```
 
 `RiskEngine` (the class is `RiskEngine`, never `RiskManager`; R31) is owned by bot-02-risk as code (D3), but it is library code (R24): `PaperAdapter.place` calls `RiskEngine.check(order)` in-process for every order regardless of the RISK seat's health, and `RiskEngine` owns every `HaltSet` and `BreakerTripped` append (idempotent per `(reason, utc_day)` / `(breaker, occurrence)` through the ledger `idempotency_key`). The RISK seat monitors, alerts and sets the kill switch; it never appends `HaltSet` itself (F-m2). It is the only component that may say "no" to an order; `PaperAdapter` refuses to proceed without a passed `RiskDecision` whose `order_hash` matches, and re-runs the stop checks at `CONFIRMING` (section 2.8, R22).
@@ -556,7 +556,7 @@ blind_max_s               = 300          # R25
 
 ```
  1. ledger_inconsistent     ledger status must be CONSISTENT (sec 3.5)
- 2. kill_switch             no active kill switch (file and alert sources re-polled now; env read at start, sec 5.4)
+ 2. kill_switch             no active kill switch (file and alert channel re-polled now, env read at start, sec 5.4)
  3. halted                  no active halt (daily_loss / drawdown / ledger_inconsistent / manual); detail carries the reason
  4. breaker_open            no breaker open (any of the three); detail carries the breaker name
  5. live_gate               order.adapter == "paper" or LiveGate.check() empty (and LiveWriteAttempted appended on failure)
@@ -614,19 +614,27 @@ Each transition appends `BreakerTripped`/`BreakerReset` (idempotent per `(breake
 sources:
   env   : PUMPGROK_KILLSWITCH set and not in {"", "0", "false"}  -> source=env, reason=env value
           READ ONCE AT PROCESS START (an env var cannot change inside a running process, F-m1); it starts the desk already switched
-  file  : var/KILLSWITCH exists (any size)                       -> source=file, reason=first line
-          LIVE: polled on every RiskEngine.check, at CONFIRMING of every order, and every risk-seat cycle (5 s)
-  alert : Notifier inbound command "KILL <reason>" from an allowlisted chat id (hermes/profiles.yaml:16 telegram_token_profile chief;
-          allowlist = alerts.telegram.allowed_chat_ids, non-empty required to enable the inbound path)
-          LIVE: the Telegram adapter writes var/KILLSWITCH with "alert:<chat_id>: <reason>" so the file source is authoritative and the switch survives restart
-  tool  : risk.kill_switch (RISK-only grant) with action in {set, flatten_request}; it writes var/KILLSWITCH; there is no clear action (R22)
+  file  : var/desk/KILLSWITCH exists (any size)                       -> source=file, reason=first line
+          LIVE: polled once per supervised cycle (RiskEngine.poll_kill_sources), on every RiskEngine.check and at CONFIRMING of every order
+          the one latch path; every writer resolves it through killswitch_file(data_dir)
+  alert : the alert channel, a live source (RISK-004). Telegram getUpdates with a 2 s timeout, accepting text only
+          from allowlisted chat ids (a bot token in PUMPGROK_TELEGRAM_TOKEN and at least one chat id in
+          notify.allowlist; otherwise the channel is empty and polls nothing). Polled once per supervised cycle by
+          RiskEngine.poll_kill_sources (env, then file, then alert) and at the start of every RiskEngine.check.
+          A valid "KILL <reason>" line writes the latch file through latch_from_alert when neither env nor the file
+          is engaged (origin alert_command while that latch is in force). A "KILL FLATTEN <reason>" arriving while
+          the switch is engaged escalates it: the latch file is rewritten as "FLATTEN <reason>" and the flatten runs
+          from the same poll, closing open positions with reason kill_flatten. The next update offset is committed
+          under the desk data dir after each poll is handled, so a restart never re-reads a consumed KILL. A
+          getUpdates failure returns no lines and is logged without the token; the file source does not depend on it.
+  tool  : risk.kill_switch (RISK-only grant) with action in {set, flatten_request}; it writes var/desk/KILLSWITCH; there is no clear action (R22)
 ```
 
 Semantics:
 
 - Set: first observation appends `KillSwitchSet(source, reason, flatten_requested)`; `RiskEngine.check` rejects every buy with `reason=kill_switch` from that instant. Orders already in `ACCEPTED` are re-checked at `CONFIRMING` (section 2.8) and rejected `kill_switch` (likewise `halted` / `breaker_open`), so no order decided before the switch can fill after it (F-B5).
-- Flatten: `risk.kill_switch.flatten = false` (REVIEW). When `flatten_request` is used, the file first line is `FLATTEN`, or the alert command is `KILL FLATTEN <reason>`, the supervisor executes the flatten in-process: it waits on the adapter's in-flight barrier (every `ACCEPTED`/`CONFIRMING` order reaches `REJECTED`), then calls `PaperAdapter.place` directly for one sell per open position with `reason=kill_flatten` and an `ApprovalRecord(kind=autonomous_paper)` minted by `RiskEngine` (one order per `(ticket_id, sell, decision_id)`; a partial fill leaves a remainder that the supervisor sells with a fresh `decision_id` on the next tick, R23). The EXIT seat is not in the path, so the flatten completes even when EXIT is observe-only.
-- Clear: CLI-only, human only. `env` unset and file removed are necessary but not sufficient; the switch stays logically active until `pumpgrok killswitch clear --by human:<name> --reason "<text>"` appends `KillSwitchCleared` together with `ApprovalRecorded(kind=killswitch_clear)` (R22). `pumpgrok killswitch set --reason "<text>" [--flatten]` writes `var/KILLSWITCH`; `pumpgrok killswitch status` prints every source and the ledger state. The CLI refuses `--by` values that do not start with `human:` or that match `SEAT_RE`, the same rule G-2 applies to `approved_by`. If any live source is still set, the clear is refused and lists which. No seat, tool or skill can clear (D9: RISK KILL non-overridable).
+- Flatten: `risk.kill_switch.flatten = false` (REVIEW). When `flatten_request` is used, the file first line is `FLATTEN` (written by `risk.kill_switch` flatten_request, or by the alert command `KILL FLATTEN <reason>`), the supervisor executes the flatten in-process: it waits on the adapter's in-flight barrier (every `ACCEPTED`/`CONFIRMING` order reaches `REJECTED`), then calls `PaperAdapter.place` directly for one sell per open position with `reason=kill_flatten` and an `ApprovalRecord(kind=autonomous_paper)` minted by `RiskEngine` (one order per `(ticket_id, sell, decision_id)`; a partial fill leaves a remainder that the supervisor sells with a fresh `decision_id` on the next tick, R23). The EXIT seat is not in the path, so the flatten completes even when EXIT is observe-only.
+- Clear: CLI-only, human only. `env` unset and file removed are necessary but not sufficient; the switch stays logically active until `pumpgrok killswitch clear --by human:<name> --reason "<text>"` appends `KillSwitchCleared` together with `ApprovalRecorded(kind=killswitch_clear)` (R22). `pumpgrok killswitch set --reason "<text>" [--flatten]` writes `var/desk/KILLSWITCH`; `pumpgrok killswitch status` prints every source and the ledger state. The CLI refuses `--by` values that do not start with `human:` or that match `SEAT_RE`, the same rule G-2 applies to `approved_by`. If any live source is still set, the clear is refused and lists which. No seat, tool or skill can clear (D9: RISK KILL non-overridable).
 - Audit: `KillSwitchSet`, `KillSwitchCleared`, `ApprovalRecorded(kind=killswitch_clear)`, every `OrderRejected reason=kill_switch`, and a `JournalNote` with the operator's reason are all in the ledger; the desk markdown mirror writes `FLOOR HALTED - KILL SWITCH (<source>)` via tmp + `os.replace`.
 
 ### 5.5 Daily rollover (UTC)
@@ -698,7 +706,7 @@ on exception in bot.cycle (anything except CancelledError):
       if seat == bot-02-risk:   desk enters observe-only for BUYS: RiskEngine.check step seat_may_trade rejects every buy;
                                 exits continue; RiskEngine.check keeps running inside PaperAdapter.place for every order
                                 and keeps owning HaltSet / BreakerTripped appends (R24, F-B4); the seat's monitoring and
-                                kill-switch setting are lost until `state resume`, which is why the file and alert sources
+                                kill-switch setting are lost until `state resume`, which is why the file and the alert channel
                                 are polled by RiskEngine itself (sec 5.4)
 ```
 
@@ -876,7 +884,7 @@ Every subcommand is a thin wrapper over a registry tool (`<ns>.<verb>` names per
 | `pumpgrok doctor` / `pumpgrok audit` | health + readiness probe; receipt/ownership checks (programming-desk `desk_cli.py` precedent) | 6.6 |
 | `pumpgrok report --daily|--weekly [--day|--week] [--out] [--desk]` | `journal.render_report` | 8.1 |
 | `pumpgrok paper buy|sell --ticket --mint --size-sol --slippage-bps --approval-id` | `exec.place` through PaperAdapter (manual-ticket path); `--size-sol` is SOL at the CLI boundary only and is converted to lamports before the request is built (R40) | 2 |
-| `pumpgrok killswitch set --reason <text> [--flatten]` / `status` / `clear --by <human> --reason <text>` | `set` writes `var/KILLSWITCH`; `clear` is CLI-only and appends `KillSwitchCleared` with `ApprovalRecorded(kind=killswitch_clear)` (R22) | 5.4 |
+| `pumpgrok killswitch set --reason <text> [--flatten]` / `status` / `clear --by <human> --reason <text>` | `set` writes `var/desk/KILLSWITCH`; `clear` is CLI-only and appends `KillSwitchCleared` with `ApprovalRecorded(kind=killswitch_clear)` (R22) | 5.4 |
 | `pumpgrok state status` / `state halt --clear --by <human> --reason <text>` / `state autonomy <manual-ticket|autonomous-paper>` / `state resume --seat <seat> --by <human>` | ledger views; `HaltCleared` with `ApprovalRecorded(kind=halt_clear)`; `ConfigChanged` | 5.2, 5.5, 6.4, 7.5 |
 | `pumpgrok replay trim|rebuild-ticks --dataset <name>` | `replay.trim`, `replay.rebuild_ticks` | 4.3, 4.6 |
 | `pumpgrok live confirm` | writes the signed confirmation record (operator-only; needs `PUMPGROK_CONFIRMATION_KEY`) | 7.3 |
@@ -914,7 +922,7 @@ All tests are pytest with `asyncio_mode = auto` (D5), use `FixtureClock` and the
 | `tests/ledger/test_ledger_restart_reconcile.py` | append N events, kill the writer mid-way (simulated by closing the connection), reopen: chain verifies, snapshot + tail equals full replay; tamper one `payload_json` via a raw connection with triggers dropped -> `INCONSISTENT`, `HaltSet(ledger_inconsistent)` appended, `RiskEngine.check` rejects; duplicate `idempotency_key` -> `IntegrityError` surfaced as a refused order; views (cash, positions, realized, unrealized, equity curve, drawdown) match hand-computed lamport integers from a 6-event fixture; JSONL export resumes from `meta.export_seq` without duplicates; vendor-shape `trades.jsonl` lines validate against the key sets of `log.py:98-183`; every event row carries `source` |
 | `tests/ledger/test_single_writer_concurrent_appends.py` | two processes (supervisor and `pumpgrok paper buy` CLI) append 200 events each through `ledger/store.py`; the chain verifies, `seq` has no gaps, every `prev_hash` matches, no `UNIQUE` violation on `hash` (R26 `BEGIN IMMEDIATE`) |
 | `tests/replay/test_replay_determinism.py` | two runs over `smoke-10m` give identical `events.hash` sha256, identical JSONL bytes, identical final state and identical ULIDs; a run with a different seed differs (so the seed is actually wired); a fixture with a 180 s hole trips `DataStale` at the right virtual time; a replay whose `llm.jsonl` lacks a record for a request the desk makes FAILS with `ReplayMissingRecord` (R27); the run is repeated with `FixtureClock` while the host sleeps 2 s of real time inside a cycle and the events are byte-identical (F-M3) |
-| `tests/risk/test_kill_switch_one_cycle.py` | create file / inject alert command in two parametrised cases (env `PUMPGROK_KILLSWITCH` is a third case that starts the process already switched, since env is read at start only); advance `FixtureClock` by one risk cadence (5 s); assert zero `FillRecorded side=buy` after the set time, `KillSwitchSet` present with the correct source; with `flatten_request` every open position has `PositionClosed reason=kill_flatten`; `risk.kill_switch(action="clear")` is a validation error; `pumpgrok killswitch clear --by bot-02-risk` refused, `--by human:alice` accepted only after all sources are clear and appends `KillSwitchCleared` plus `ApprovalRecorded(kind=killswitch_clear)` |
+| `tests/risk/test_kill_switch_one_cycle.py` | create the latch file, or send a KILL line through the alert channel (fake transport; it writes the same file), in two parametrised cases (env `PUMPGROK_KILLSWITCH` is a third case that starts the process already switched, since env is read at start only); advance `FixtureClock` by one risk cadence (5 s); assert zero `FillRecorded side=buy` after the set time, `KillSwitchSet` present with the correct source; with `flatten_request` every open position has `PositionClosed reason=kill_flatten`; `risk.kill_switch(action="clear")` is a validation error; `pumpgrok killswitch clear --by bot-02-risk` refused, `--by human:alice` accepted only after all sources are clear and appends `KillSwitchCleared` plus `ApprovalRecorded(kind=killswitch_clear)` |
 | `tests/risk/test_kill_switch_in_flight.py` | an order in `ACCEPTED` (latency sleep pending) when the switch is set is rejected at `CONFIRMING` with `reason=kill_switch` and no `FillRecorded`; the same for `halted` and `breaker_open`; `flatten_request` waits on the in-flight barrier before closing positions, so no buy opens after a flatten was requested (R22, F-B5) |
 | `tests/execution/test_live_gate_fails_fast.py` | parametrised over each of the 9 preconditions removed one at a time: `cli.main(["run", "--mode", "live"])` exits `3` and stderr lists exactly that id as `[ ]`; `--mode live` with a paper overlay runs the gate (R30, F-M8); all present except 8 -> construction raises `LiveGateError(unmet=["adapter_registered"])`; default config (`pumpgrok run` with no `--mode`) yields effective mode `paper` and the gate is never evaluated; `LiveWriteAttempted` appended on every `place`/`cancel` |
 | `tests/safety/test_live_gate_rejects_replay_ledger.py` | a ledger with one `source=replay` row is refused for metrics (ids 3 and 4 unmet with `replay ledger`); `source=paper` only is accepted (R21, F-B1) |
@@ -981,7 +989,7 @@ Module placement (R31, single truth; every module appears in exactly one R37 bat
 | 6 | Whether Jupiter lite-api quotes graduated pump.fun tokens | irrelevant to fills: the Jupiter quote is informational only (R38); a graduated token is never bought |
 | 7 | Confirmation latency distribution on Solana mainnet for priority-fee'd pump.fun swaps | lognormal median 1.2 s, sigma 0.5, clip [0.4, 20] s; `p_drop = 0.02` (REVIEW) |
 | 8 | Whether a `slippage_exceeded` failure on-chain still pays base + priority fee | charged (REVIEW); `tx_dropped` not charged |
-| 9 | Telegram inbound command availability: `hermes/profiles.yaml:16,29` give only chief a token and inbound; the Notifier inbound path for `KILL` assumes that bot can receive commands | alert-command source enabled only when `alerts.telegram.allowed_chat_ids` is non-empty; env (start-time) and file sources always work |
+| 9 | Telegram inbound command availability: `hermes/profiles.yaml:16,29` give only chief a token and inbound; the alert channel (sec 5.4) polls getUpdates only for allowlisted chats | Verified against a fake transport only (`tests/risk/test_alert_channel.py`); a live bot has not been exercised. Env (start-time) and file sources always work and do not depend on Telegram |
 | 10 | Nightly CI artifact store for `soak-3d` | named in `.github/workflows/ci.yml` by n5/n8; the soak test skips with a clear reason if the dataset is absent |
 | 11 | Exact event-count scale per day for snapshot cadence | 500 events / 300 s (REVIEW) |
 | 12 | Live-gate performance thresholds (`closed_trades >= 50`, `profit_factor >= 1.2`, `max_drawdown <= drawdown_halt_fraction`) | as fixed by R21 (REVIEW); they gate nothing in paper mode |

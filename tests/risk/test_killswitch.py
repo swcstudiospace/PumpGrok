@@ -27,8 +27,10 @@ from pumpgrok.risk.killswitch import (
     ClearRefused,
     InflightBarrier,
     KillSwitch,
+    engage_from_alert,
     env_engaged,
     kill_file_text,
+    killswitch_file,
     parse_kill_line,
 )
 from pumpgrok.tools.risk.halt_status import (
@@ -144,15 +146,8 @@ def test_kill_sources_precedence(tmp_path: Path) -> None:
     store = _store(tmp_path)
     killswitch = tmp_path / "KILLSWITCH"
     try:
-        ks = KillSwitch(
-            clock,
-            store=store,
-            killswitch_path=killswitch,
-            alert_lines=lambda: ["KILL alert reason"],
-            env={},
-        )
-        assert ks.poll().active is True
-        assert ks.poll().source == "alert_command"
+        ks = KillSwitch(clock, store=store, killswitch_path=killswitch, env={})
+        assert ks.poll().active is False
         killswitch.write_text("file reason", encoding="utf-8")
         assert ks.poll() == ks.poll()
         assert ks.poll().source == "file"
@@ -160,7 +155,6 @@ def test_kill_sources_precedence(tmp_path: Path) -> None:
             clock,
             store=store,
             killswitch_path=killswitch,
-            alert_lines=lambda: ["KILL alert reason"],
             env={"PUMPGROK_KILLSWITCH": "1"},
         )
         assert ks_env.poll().source == "env"
@@ -169,17 +163,48 @@ def test_kill_sources_precedence(tmp_path: Path) -> None:
         store.close()
 
 
-def test_alert_source_observed_to_ledger(tmp_path: Path) -> None:
+def test_latch_path_is_the_operational_data_dir_file(tmp_path: Path) -> None:
+    assert killswitch_file(Path("var") / "desk") == Path("var") / "desk" / "KILLSWITCH"
+    assert killswitch_file(tmp_path) == tmp_path / "KILLSWITCH"
+
+
+def test_alert_command_writes_latch_file(tmp_path: Path) -> None:
+    assert engage_from_alert("KILL FLATTEN go flat", tmp_path) is True
+    assert killswitch_file(tmp_path).read_text(encoding="utf-8") == "FLATTEN go flat"
+    other = tmp_path / "other"
+    assert engage_from_alert("KILLX nope", other) is False
+    assert engage_from_alert("KILL", other) is False
+    assert not killswitch_file(other).exists()
+
+
+def test_alert_latch_observed_to_ledger(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        ks = KillSwitch(clock, store=store, alert_lines=lambda: ["KILL FLATTEN go flat"], env={})
+        engage_from_alert("KILL FLATTEN go flat", tmp_path)
+        ks = KillSwitch(clock, store=store, killswitch_path=killswitch_file(tmp_path), env={})
         row = ks.observe(ts_utc=format_ts_utc(START), source="paper", correlation_id="t")
         assert row is not None
-        assert row["payload"]["origin"] == "alert_command"
+        assert row["payload"]["origin"] == "file"
         assert row["payload"]["flatten_requested"] is True
         assert ks.observe(ts_utc=format_ts_utc(START), source="paper", correlation_id="t") is None
         assert len(store.read(types=["KillSwitchSet"], limit=None)) == 1
+    finally:
+        store.close()
+
+
+def test_alert_command_latch_halts_engine_on_next_check(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    data_dir = tmp_path / "desk"
+    try:
+        engine = _engine(store, clock, killswitch_path=killswitch_file(data_dir))
+        assert engine.check(_buy(clock, ids), seat="bot-04-sniper").passed is True
+        assert engage_from_alert("KILL operator stop", data_dir) is True
+        decision = engine.check(_buy(clock, ids), seat="bot-04-sniper")
+        assert decision.passed is False
+        assert decision.reason == "kill_switch"
     finally:
         store.close()
 

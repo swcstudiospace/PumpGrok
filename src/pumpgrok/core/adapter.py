@@ -22,6 +22,11 @@ class Side(enum.StrEnum):
     SELL = "sell"
 
 
+#: Exit-rule reasons (engine/exits.py rule order). A sell carrying one is a rule sell.
+EXIT_RULE_REASONS: tuple[str, ...] = ("stop_loss", "take_profit", "trailing_stop", "max_hold")
+ExitRuleReason = Literal["stop_loss", "take_profit", "trailing_stop", "max_hold"]
+
+
 class OrderRequest(BaseModel):
     """Input of exec.place / exec.simulate. The idempotency key is NOT a caller field.
 
@@ -41,6 +46,7 @@ class OrderRequest(BaseModel):
     max_slippage_bps: int = Field(ge=1, le=10_000)
     approval_id: str = Field(pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
     quote_id: str | None = None
+    exit_reason: ExitRuleReason | None = None
     correlation_id: str
 
     @model_validator(mode="after")
@@ -49,6 +55,8 @@ class OrderRequest(BaseModel):
             raise ValueError("buy requires size_lamports")
         if self.side is Side.SELL and self.token_units is None and self.size_lamports is None:
             raise ValueError("sell requires token_units or size_lamports")
+        if self.exit_reason is not None and self.side is not Side.SELL:
+            raise ValueError("exit_reason applies to sells only")
         return self
 
     @property

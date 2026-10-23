@@ -1,4 +1,4 @@
-.PHONY: help sync lint fmt typecheck test audit run-paper replay report gates prompts check doctor clean
+.PHONY: help sync lint fmt typecheck test audit run-paper gateway replay report gates prompts check doctor clean
 
 UV ?= uv
 BOT ?= bot-00-chief
@@ -31,6 +31,9 @@ audit: sync      ## pip-audit against the lockfile
 
 run-paper: sync  ## start the paper desk (foreground)
 	$(UV) run pumpgrok run --mode paper
+
+gateway:         ## serve the desk gateway over HTTP (foreground, paper only)
+	cd services/desk-gateway && $(UV) run python -m desk_gateway
 
 replay: sync     ## one cycle against a recorded dataset
 	$(UV) run pumpgrok run --mode paper --once --replay $(REPLAY)

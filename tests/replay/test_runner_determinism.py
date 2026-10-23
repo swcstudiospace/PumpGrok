@@ -56,7 +56,7 @@ def test_replay_ledger_verifies_consistent_and_holds_one_verdict(tmp_path: Path)
     (row,) = _rows(ledger)
     assert row[2] == "replay"
     assert row[5] == "JournalNote"
-    assert result.events_read == 4
+    assert result.events_read == 5
     assert result.seq == 1
 
 

@@ -28,6 +28,7 @@ from conftest import (
 
 from desk_gateway.config import GatewayConfig
 from desk_gateway.server import close_server, create_server
+from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.replay.clock import WallClock
 
@@ -45,8 +46,14 @@ def _serve_without(short_missing: str, tmp_path: Any) -> Any:
         data_dir=tmp_path / "data",
         repo_root=tmp_path,
         tokens=tokens,
+        ledger_path=tmp_path / "ledger.sqlite",
     )
-    server = create_server(config, clock=WallClock(), http_client=http_client)
+    server = create_server(
+        config,
+        settings=Settings(mode="paper"),
+        clock=WallClock(),
+        http_client=http_client,
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address

@@ -22,7 +22,7 @@ fixtures:
 
 ## L1 - Summary
 
-The kill switch halts the desk. RISK sets it with the `risk.kill_switch` tool (`set` or `flatten_request` only); CHIEF watches it with `risk.halt_status`. The switch can be set from the environment at start, from the `var/KILLSWITCH` file, or from an alert-channel command polled every cycle. Clearing is CLI-only with a human-signed record; no skill and no seat clears the switch.
+The kill switch halts the desk. RISK sets it with the `risk.kill_switch` tool (`set` or `flatten_request` only); CHIEF watches it with `risk.halt_status`. The switch can be set from the environment at start, or from the `var/desk/KILLSWITCH` file (the one latch path; an alert KILL from an allowlisted Telegram chat writes this same file). Clearing is CLI-only with a human-signed record; no skill and no seat clears the switch.
 
 ```
 threat seen -> RISK set (or file/env/alert trips it) -> halt: no new tickets
@@ -35,7 +35,7 @@ clear -> pumpgrok killswitch clear --by <human> --reason <text> only
 1. S1 - Read the state first: call `risk.halt_status` to learn whether the desk is halted and which source tripped it (tool action, file, environment, or alert channel). CHIEF polls this every cycle.
 2. S2 - Set on danger: RISK calls `risk.kill_switch` with `action=set` on a confirmed threat (suspected rug in inventory, daily-loss breach, integrity failure). The action enum accepts only `set` and `flatten_request`; `clear` is a validation error.
 3. S3 - Flatten when exposed: with open positions, RISK uses `action=flatten_request` so the supervisor waits on the adapter barrier and closes every position with the kill reason instead of abandoning it.
-4. S4 - Honor every source: a `var/KILLSWITCH` file present at start, the environment flag, or an alert-channel command all halt before the first ticket. Removing the file does not clear a tool-set switch.
+4. S4 - Honor every source: a `var/desk/KILLSWITCH` file present at start, the environment flag, or an alert KILL from an allowlisted chat all halt before the first ticket. Removing the file does not clear a tool-set switch.
 5. S5 - Clear human-only: `pumpgrok killswitch clear --by <human> --reason <text>` with an approval record. Seats never clear; CHIEF requests, the human clears.
 
 ## Failure modes

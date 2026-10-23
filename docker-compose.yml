@@ -1,6 +1,7 @@
 # Usage:
 #   docker compose config --quiet                 # validate
 #   docker compose build pumpgrok
+#   docker compose up -d desk-gateway            # desk gateway on 127.0.0.1:8787 (paper only)
 #   docker compose up -d pumpgrok                 # long-running serve: replays the
 #                                                 # recorded dataset in a loop and
 #                                                 # serves /healthz and /metrics
@@ -47,6 +48,45 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Desk gateway (TOOL-010): the MCP JSON-RPC projection over the paper registry, served by
+  # `python -m desk_gateway`. Paper only: live mode is refused at start (exit 3). Per-seat
+  # tokens arrive as DESK_GATEWAY_TOKEN_<SHORT> through .env, never baked into the image.
+  # Published on the host loopback only; /healthz answers without a token.
+  desk-gateway:
+    build: .
+    image: pumpgrok:local
+    container_name: desk-gateway
+    entrypoint: ["python", "-m", "desk_gateway"]
+    env_file:
+      - path: .env
+        required: false          # operator PUMPGROK_* and DESK_GATEWAY_TOKEN_* values
+    environment:
+      PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+      PYTHONPATH: "/app/services/desk-gateway/src"
+      DESK_GATEWAY_HOST: "0.0.0.0"
+      DESK_GATEWAY_PORT: "8787"
+    volumes:
+      - ./var:/app/var
+    ports:
+      - "127.0.0.1:8787:8787"    # loopback only; /mcp/<seat> and /healthz
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('DESK_GATEWAY_PORT', '8787') + '/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     logging:
       driver: json-file

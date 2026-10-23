@@ -20,9 +20,11 @@ diagnostics go to stderr.
 
 Run order: refuse key-bearing CLI values -> parse -> settings (mode R30) -> logging ->
 live gate (live exits 3 before any other work) -> verb. For the replay cycle: manifest
-verification (exit 4, before any ledger file exists) -> recreate ledger -> map fixture
-ticks to evidence-less engine candidates -> run the pure filter stage -> print one
-`engine decision=` line -> append one `JournalNote` (source=replay) -> verify chain.
+verification (exit 4, before any ledger file exists) -> recreate ledger -> judge each
+fixture tick as a candidate carrying its evidence -> append the verdict `JournalNote`
+(source=replay) -> run the ten seat cycles, the sniper placing granted BUYs through risk
+and PaperAdapter -> print the `engine decision=` line and one `trade` line per order
+attempt -> verify chain.
 """
 
 from __future__ import annotations
@@ -64,18 +66,19 @@ from pumpgrok.core.tool import Tool
 from pumpgrok.doctor import doctor_report
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.logging.json import setup_logging
 from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import CorruptFixture
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.replay.runner import run_replay
+from pumpgrok.replay.runner import format_trade
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch
+from pumpgrok.risk.killswitch import SEAT_RE, ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import build_operator_registry
 
@@ -88,10 +91,8 @@ EXIT_NOT_IMPLEMENTED = 5
 
 DATASET_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
-# Canonical paper ledger (paper-engine.md 3.1): every wired verb opens
-# var/ledger.sqlite for paper state. var/desk/ledger.sqlite is retired;
-# fixture replays write var/replay/<dataset>/ledger.sqlite (R21).
-PAPER_LEDGER_PATH = Path("var") / "ledger.sqlite"
+# Canonical paper ledger: pumpgrok.ledger.paths.PAPER_LEDGER_PATH (paper-engine.md 3.1),
+# shared with the desk gateway and the daily report.
 
 FORBIDDEN_OWNERS = frozenset({"sniper", "exit"})
 TICKET_RE = re.compile(r"^SOL-\d{8}-\d{3}$")
@@ -571,7 +572,14 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
     host = settings.health.host
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(
-        serve_replay(source, settings.filter, seed=settings.replay.seed, host=host, port=port)
+        serve_replay(
+            source,
+            settings.filter,
+            seed=settings.replay.seed,
+            host=host,
+            port=port,
+            exits=settings.exits,
+        )
     )
 
 
@@ -580,8 +588,13 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
 
-    result = run_once_replay(source, settings.filter, seed=settings.replay.seed)
+    result = run_once_replay(
+        source, settings.filter, seed=settings.replay.seed, exits=settings.exits
+    )
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
+    _say(sys.stdout, *(format_trade(trade) for trade in result.trades))
+    filled = sum(1 for trade in result.trades if trade.outcome == "filled")
+    _say(sys.stdout, f"trades filled={filled} not_filled={len(result.trades) - filled}")
     return EXIT_OK
 
 
@@ -746,7 +759,7 @@ def _killswitch_clear(by: str, reason: str) -> int:
         switch = KillSwitch(
             clock,
             store=store,
-            killswitch_path=Path("var") / "desk" / "KILLSWITCH",
+            killswitch_path=killswitch_file(Path("var") / "desk"),
         )
         approval = ApprovalRecord(
             id=_mint_approval_id(),
@@ -1054,7 +1067,7 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
 
 def _ledger_id_or_none() -> str:
     """Ledger id for the confirmation record, read-only; "none" when absent."""
-    ledger = Path.cwd() / "var" / "ledger.sqlite"
+    ledger = Path.cwd() / PAPER_LEDGER_PATH
     if not ledger.exists():
         return "none"
     try:
@@ -1102,7 +1115,7 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
     ``mode=ro``, so reporting never creates ``var/`` files.
     """
 
-    ledger = Path.cwd() / "var" / "ledger.sqlite"
+    ledger = Path.cwd() / PAPER_LEDGER_PATH
     mode = settings.effective_mode
     if args.daily:
         day = str(args.day or _utc_now().strftime("%Y-%m-%d"))
@@ -1138,7 +1151,9 @@ def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
             raise ConfigError([f"unknown fixture dataset: {raw!r}"])
         dataset_dir = bundled
     try:
-        result = run_replay(dataset_dir, settings.filter, seed=settings.replay.seed)
+        result = run_once_replay(
+            dataset_dir, settings.filter, seed=settings.replay.seed, exits=settings.exits
+        )
     except (DataStale, ReplayMissingRecord) as exc:
         _say(sys.stderr, f"replay failed: {exc.code}: {exc.message}")
         return EXIT_CONFIG

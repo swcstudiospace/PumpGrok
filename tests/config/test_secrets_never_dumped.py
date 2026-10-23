@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -77,8 +78,13 @@ def _surfaces(settings: Settings) -> dict[str, str]:
     }
 
 
-def test_secret_values_absent_from_dumps(planted: Settings, capsys) -> None:
+def test_secret_values_absent_from_dumps(
+    planted: Settings, capsys, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """INV-C-07: no secret value in any dump, body, payload or hash input."""
+    # The registry writes the operational data dir (binding.key) under the working directory,
+    # so the test runs from tmp_path and never touches the repo's gitignored var/.
+    monkeypatch.chdir(tmp_path)
     settings = planted
     for surface, body in _surfaces(settings).items():
         assert GROK_SECRET not in body, surface
@@ -88,6 +94,9 @@ def test_secret_values_absent_from_dumps(planted: Settings, capsys) -> None:
     out = capsys.readouterr().out
     assert GROK_SECRET not in out
     assert RPC_SECRET not in out
+    # Regression: the registry must not write binding.key into the repo's gitignored var/.
+    repo_root = Path(__file__).resolve().parents[2]
+    assert not (repo_root / "var" / "desk" / "binding.key").exists()
 
 
 def test_confirmation_key_is_no_setting_field() -> None:

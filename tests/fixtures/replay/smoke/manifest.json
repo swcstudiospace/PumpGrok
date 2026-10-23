@@ -1,14 +1,14 @@
 {
   "dataset": "smoke",
   "recorded_from_utc": "2026-01-01T00:00:00.000Z",
-  "recorded_to_utc": "2026-01-01T00:00:03.000Z",
+  "recorded_to_utc": "2026-01-01T00:00:30.000Z",
   "seed_hint": 20260101,
   "sources": {
     "rest": "hand-authored",
     "pumpportal": "hand-authored"
   },
   "sha256": {
-    "events.jsonl": "9ee37f754c065cc60790ccd0c287fd748fdf69f38b45e885938b3e70f7e212d7"
+    "events.jsonl": "ed9447d9ce4725a82e782f83a6bb45dbd6522c2370953c2c59e25e34b1ae6570"
   },
-  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two mints, four ticks, strictly ordered ts_utc."
+  "notes": "Hand-authored CI smoke dataset (not recorded from live feeds). Two mints, five ticks, strictly ordered ts_utc. Each entry tick carries token evidence (name, image_uri, created_ts_utc, unique_buyers); the final curve-only tick (no buyer evidence, not an entry candidate) moves mint B to 2.5x its entry reserves so the take-profit exit rule fires."
 }

@@ -30,8 +30,9 @@ from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.alert_channel import build_alert_channel
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import InflightBarrier
+from pumpgrok.risk.killswitch import InflightBarrier, killswitch_file
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -55,7 +56,7 @@ from pumpgrok.tools.market.price import build_price_tool
 from pumpgrok.tools.market.trades import build_trades_tool
 from pumpgrok.tools.notify.alert import build_alert_tool
 from pumpgrok.tools.notify.notifier import HttpxNotifier
-from pumpgrok.tools.notify.telegram import TelegramSender
+from pumpgrok.tools.notify.telegram import TelegramSender, read_telegram_token
 from pumpgrok.tools.notify.webhook import WebhookSender
 from pumpgrok.tools.onchain.authorities_tool import build_authorities_tool
 from pumpgrok.tools.onchain.deployer_history import build_deployer_history_tool
@@ -72,7 +73,7 @@ from pumpgrok.tools.portfolio.pnl import build_pnl_tool
 from pumpgrok.tools.risk.check_limits import build_check_limits_tool
 from pumpgrok.tools.risk.drawdown import build_drawdown_tool
 from pumpgrok.tools.risk.halt_status import build_halt_status_tool
-from pumpgrok.tools.risk.kill_switch import ClosePosition, build_kill_switch_tool
+from pumpgrok.tools.risk.kill_switch import ClosePosition, build_kill_switch_tool, flatten_hook_for
 from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
@@ -194,7 +195,7 @@ def _register_ledger_and_risk(
     barrier: InflightBarrier,
 ) -> None:
     """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
-    kill_switch_file = data_dir / "KILLSWITCH"
+    kill_switch_file = killswitch_file(data_dir)
     reg.register(build_ledger_read_tool(store, clock))
     reg.register(build_ledger_write_tool(store, clock))
     reg.register(build_exposure_tool(store, clock))
@@ -323,7 +324,12 @@ def build_operator_registry(
         limits=settings.limits,
         mode="live" if live else "paper",
         autonomy="manual-ticket" if live else read_autonomy(store),  # type: ignore[arg-type]
-        killswitch_path=data_dir / "KILLSWITCH",
+        killswitch_path=killswitch_file(data_dir),
+        alert_channel=build_alert_channel(
+            token=read_telegram_token(),
+            allowlist=settings.notify.allowlist,
+            state_dir=data_dir,
+        ),
         get_reserves=curves.last.get,
     )
     log.info(
@@ -340,6 +346,9 @@ def build_operator_registry(
         rng=make_rng(),
         price_source=curves,
         p_drop=p_drop,
+    )
+    engine.attach_flatten_hook(
+        flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
     )
     bank = MemoryBank(data_dir / "memory.jsonl")
 

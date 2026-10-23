@@ -586,6 +586,7 @@ class TestG5G6RollbackAndDestructive:
             ("uv run pumpgrok killswitch clear --by human:op --reason ok", "trade"),
             ("uv run pumpgrok risk raise-limit max_notional_sol=1", "trade"),
             ("rm -f var/KILLSWITCH", "trade"),
+            ("rm -f var/desk/KILLSWITCH", "trade"),
             ("sqlite3 var/ledger.sqlite 'select 1'", "ledger"),
             ("DELETE FROM events WHERE seq = 1", "ledger"),
         ],
