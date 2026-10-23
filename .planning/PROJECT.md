@@ -8,6 +8,17 @@ PumpGrok is a Solana memecoin (pump.fun launch) trading desk: ten LLM-backed sea
 
 The desk runs autonomously in paper mode for 2-4 weeks and produces honest, replayable reports; no code path can move real funds.
 
+## Current State
+
+v2 shipped 2026-10-23: a paper-only desk with ten seats, a risk engine, a paper adapter on the bonding-curve model, deterministic replay, a supervised serve loop, a desk gateway, and a Telegram kill channel. All 71 requirements are complete, with PAPER-007 narrowed by owner decision. Archived under `.planning/milestones/`: `v2-ROADMAP.md`, `v2-REQUIREMENTS.md`, `v2-MILESTONE-AUDIT.md`.
+
+## Next Milestone Goals
+
+- Manual-ticket exit approvals: a standing human `exit_rule` approval that the exit seat consults before a rule sell.
+- A live curve source for serve and paper trading. Serve trades only on fixture curves today.
+- Telegram inbound verification against a live bot: getUpdates behaviour, webhook 409, group chats.
+- Persist the pending kill and its offset across restarts, before commit (in memory today).
+
 ## Requirements
 
 ### Validated

@@ -1,19 +1,14 @@
 ---
 milestone: v2
 audited: 2026-10-23
-status: gaps_found
+status: passed
 scores:
-  requirements: 70/71
+  requirements: 71/71
   phases: 5/5
   integration: 7/7
   flows: 6/6
 gaps:
-  requirements:
-    - id: "PAPER-007"
-      status: "partial"
-      phase: "4"
-      verification_status: "phase 4 passed; this requirement is partial"
-      evidence: "Under manual-ticket the exit seat refuses each rule sell with approval_missing, because no verb or tool records a standing human exit_rule approval. Owner decision pending: build that path, or narrow PAPER-007."
+  requirements: []
   integration: []
   flows: []
 tech_debt:
@@ -45,7 +40,7 @@ tech_debt:
 
 # Milestone v2 audit: PumpGrok Desk v2
 
-Verdict: gaps_found. One requirement is partial: PAPER-007. Completion (archive) waits for the owner's decision on it.
+Verdict: passed. PAPER-007 was narrowed by owner decision on 2026-10-23 to the shipped autonomous-paper exit path; the manual-ticket exit approval path is a deferred follow-up, not part of v2.
 
 ## Phases
 
@@ -54,16 +49,16 @@ Verdict: gaps_found. One requirement is partial: PAPER-007. Completion (archive)
 | 1 | Foundation | 14/14 | passed | .planning/phases/01-foundation/01-VERIFICATION.md |
 | 2 | Restructure | 5/5 | passed (re-verified 2026-10-23 at origin/main) | 02-VERIFICATION.md; CR-03 re-verified resolved |
 | 3 | Tools and Skills | 7/7 | passed | 03-VERIFICATION.md |
-| 4 | Paper Trading and Autonomy | 10/10 | passed; PAPER-007 partial | 04-VERIFICATION.md |
+| 4 | Paper Trading and Autonomy | 10/10 | passed; PAPER-007 narrowed by owner decision | 04-VERIFICATION.md |
 | 5 | Hardening | 8/8 | passed (re-verified 2026-10-23; SC5 met by security-pr run 39882086579) | 05-VERIFICATION.md |
 
 ## Requirements coverage
 
 Sources cross-referenced: the REQUIREMENTS.md checkboxes and traceability table, and the five VERIFICATION.md status fields. The SUMMARY frontmatter cross-check (requirements-completed) was not run in this audit.
 
-- 71 requirements in REQUIREMENTS.md. 70 are complete. PAPER-007 is partial.
+- 71 requirements in REQUIREMENTS.md. 71 are complete. PAPER-007 is complete as narrowed.
 - Traceability rows: 71, mapped to phases 1 to 5. Unmapped: 0.
-- TOOL-011 and PAPER-007 are narrowed by owner decisions (see Decisions). TOOL-011 stays complete with the narrowing stated. PAPER-007 is partial.
+- TOOL-011 and PAPER-007 are narrowed by owner decisions (see Decisions). Both are complete with the narrowing stated.
 
 ## Integration (end-to-end)
 
@@ -103,8 +98,8 @@ Closeout run on gap/v2-closeout: full pytest exit 0; ci/tests 407 passed, exit 0
 - Kill channel: Telegram inbound commands are polled every risk cycle, allowlisted by chat id, with an offset persisted in the data directory.
 - The one-time gate waivers for PR 6, PR 8, PR 9 and PR 11 are owner decisions, each bound to its PR number.
 - PR 9 shipped with --ignore-gsd (owner decision bootgsd).
-- PAPER-007 is open: build the manual-ticket exit approval path, or narrow the requirement. Owner decision required before completion.
+- PAPER-007 narrowed by owner decision (2026-10-23): a standing human exit_rule approval under manual-ticket is a deferred follow-up. The requirement text states it.
 
 ## Completion
 
-Archive and tag are not run. They are irreversible and wait on the PAPER-007 decision and an explicit go-ahead. The preview is a dry run only.
+The archive ships in the same planning PR as the PAPER-007 narrowing, as approved by the owner on 2026-10-23 ("narrow PAPER-007, then archive v2"). The git tag v2 is created on the merge commit after that PR merges.

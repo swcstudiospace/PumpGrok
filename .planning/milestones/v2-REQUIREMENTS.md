@@ -1,3 +1,12 @@
+# Requirements Archive: v2 PumpGrok Desk v2
+
+**Archived:** 2026-10-23
+**Status:** SHIPPED
+
+For current requirements, see `.planning/REQUIREMENTS.md`.
+
+---
+
 # Requirements: PumpGrok Desk v2
 
 **Defined:** 2026-10-21
@@ -63,7 +72,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **PAPER-004**: Replay runs the full desk over `tests/fixtures/replay/<dataset>/` with `FixtureClock`, one seeded RNG and fixture timestamps as ledger `ts_utc`; LLM calls are served from the recorder's `canonical_request_hash` records (`outcome` in `{ok, timeout, error}`, virtual `latency_s`) and a missing record fails the replay (R27); two runs over `smoke-10m` give identical `events.hash`, JSONL bytes and final state, a different seed differs, and a 180 s hole trips `DataStale` (section 9); `pumpgrok run --record <dataset> --duration <s>` writes new datasets from live transports stamping the clock's ts (R40).
 - [x] **PAPER-005**: A bonding-curve graduation event force-closes the open paper position at the last curve price with reason `graduated` and freezes MTM, a BUY on a graduated token is rejected `post_graduation_no_reserves` (R8, R38), and after `blind_max_s = 300` without a price EXIT force-closes at `last_good` with reason `blind_flatten` and escalates (R25); open positions are marked to market at liquidation value every 60 s.
 - [x] **PAPER-006**: `pumpgrok report --daily` (00:05Z) and `--weekly` (Monday 00:15Z, R40) render the sections of `docs/design/paper-engine.md` section 8.3 (summary, trades, open positions, rejected signals by R34 reason, safety outcomes, risk events, bot health, data freshness, live gate on weekly, unverified) with `str.format` only (R9), ASCII only, snapshot-tested from a fixture ledger (section 9).
-- [ ] **PAPER-007**: Tickets are `SOL-YYYYMMDD-NNN` sequence-allocated in the ledger; approvals are persisted as `ApprovalRecorded` with kind in `{human_buy, human_sell, exit_rule, autonomous_paper, killswitch_clear, halt_clear, live_gate}` (R33); under `manual-ticket` a buy needs a human phrase matching the ticket token-for-token (`rules/pumpgrok-team.mdc:28`, mismatch -> `OrderRejected reason=approval_mismatch`) and each exit rule needs a per-ticket `exit_rule` approval, while under `autonomous-paper` the EXIT rule engine is always on (R17); sniper and exit send once per ticket because `exec.place` is idempotent on `(ticket_id, side, decision_id)` (R18, R23) and an unknown or timed-out result enters state `UNKNOWN` and is never auto-retried (D9, `rules/pumpgrok-team.mdc:30`). Partial (2026-10-23): under `manual-ticket` the exit seat refuses each rule sell with `approval_missing`, because no verb or tool records a standing human `exit_rule` approval yet; building that path or narrowing this requirement is an open owner decision.
+- [x] **PAPER-007**: Tickets are `SOL-YYYYMMDD-NNN` sequence-allocated in the ledger; approvals are persisted as `ApprovalRecorded` with kind in `{human_buy, human_sell, exit_rule, autonomous_paper, killswitch_clear, halt_clear, live_gate}` (R33); under `manual-ticket` a buy needs a human phrase matching the ticket token-for-token (`rules/pumpgrok-team.mdc:28`, mismatch -> `OrderRejected reason=approval_mismatch`); under `autonomous-paper` the EXIT rule engine is always on (R17) and each rule sell is recorded as `ApprovalRecorded` kind `autonomous_paper` with `approved_by` `risk_engine` and its `exit_rule_id`; sniper and exit send once per ticket because `exec.place` is idempotent on `(ticket_id, side, decision_id)` (R18, R23) and an unknown or timed-out result enters state `UNKNOWN` and is never auto-retried (D9, `rules/pumpgrok-team.mdc:30`). Narrowed by owner decision (2026-10-23): a standing human `exit_rule` approval under `manual-ticket` is a deferred follow-up; until it ships, the exit seat refuses rule sells under `manual-ticket` with `approval_missing`.
 
 ### Risk (RISK)
 
@@ -176,7 +185,7 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | PAPER-004 | Phase 4 Paper Trading and Autonomy | Complete |
 | PAPER-005 | Phase 4 Paper Trading and Autonomy | Complete |
 | PAPER-006 | Phase 4 Paper Trading and Autonomy | Complete |
-| PAPER-007 | Phase 4 Paper Trading and Autonomy | Partial |
+| PAPER-007 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-001 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-002 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-003 | Phase 4 Paper Trading and Autonomy | Complete |
