@@ -45,7 +45,7 @@ DESTRUCTIVE_PATTERNS: list[tuple[str, str, str]] = [
     (r"\bpumpgrok\s+risk\s+raise-limit\b", "trade", "raises a risk limit"),
     (r"\bpumpgrok\s+killswitch\s+clear\b", "trade", "clears the kill switch"),
     (r"\bpumpgrok\s+state\s+halt\b.*--clear\b", "trade", "clears a halt (R22: human only)"),
-    (r"\brm\s+(?:-f\s+)?var/KILLSWITCH\b", "trade", "removes the kill switch file"),
+    (r"\brm\s+(?:-f\s+)?var/(?:desk/)?KILLSWITCH\b", "trade", "removes the kill switch file"),
     (r"\bDELETE\s+FROM\s+events\b", "ledger", "deletes ledger events"),
     (r"\bsqlite3\b.*var/ledger\.sqlite", "ledger", "writes to the ledger database directly"),
 ]
