@@ -316,7 +316,8 @@ def _on_mtm(
                 update={
                     "last_mtm_venue_fee_lamports": venue,
                     "last_mtm_lamports": mtm,
-                    "last_mtm_ts_utc": ts_utc,
+                    # The snapshot's recorded time, so a silent mint shows its real age.
+                    "last_mtm_ts_utc": str(mark.get("ts_utc", ts_utc)),
                     "mtm_source": str(mark.get("source", "curve")),
                     "price_peak": peak,
                 }

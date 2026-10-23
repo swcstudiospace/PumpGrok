@@ -57,20 +57,22 @@ class FixtureCurveSource:
 
     def _latest(self, mint: str) -> CurveSnapshot | None:
         now = self._clock.now()
-        best: dict[str, Any] | None = None
+        best: tuple[float, dict[str, Any]] | None = None
         for stamp, event in self._ticks:
             if stamp > now:
                 break
             if event.get("mint") == mint:
-                best = event
+                best = (stamp, event)
         if best is None:
             return None
+        stamp, event = best
         return CurveSnapshot(
             mint=mint,
-            s_lamports=int(best["S"]),
-            t_units=int(best["T"]),
-            complete=bool(best.get("complete", False)),
+            s_lamports=int(event["S"]),
+            t_units=int(event["T"]),
+            complete=bool(event.get("complete", False)),
             source="fixture",
+            ts=stamp,
         )
 
     async def curve(self, mint: str) -> CurveSnapshot | None:

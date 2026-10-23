@@ -68,4 +68,6 @@ regexes = [
   '''AbCdEfGhIjKlMnOpQrStUvWx1234''',
   # "." matches one character, so this entry holds no Telegram-token-shaped literal.
   '''123456789:AAFake.yntheticTelegramTokenValue_0''',  # pragma: allowlist secret: synthetic test value
+  # Telegram-shaped placeholder the redaction tests build in tests/risk/test_alert_channel.py.
+  '''123456789:PLACEHOLDER_NOT_A_REAL_TOKEN_0000AB''',  # pragma: allowlist secret: synthetic test value
 ]

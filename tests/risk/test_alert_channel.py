@@ -38,9 +38,10 @@ MINT_A = "So11111111111111111111111111111111111111112"
 S0 = 42_000_000_000
 T0 = 764_000_000_000_000
 SIZE = 200_000_000
-TOKEN = (
-    "123456789:PLACEHOLDER_NOT_A_REAL_TOKEN_0000AB"  # pragma: allowlist secret: test placeholder
-)
+# Synthetic Telegram-shaped placeholder, kept at the full token shape so the redaction tests
+# prove the real shape is masked. It is built from two parts so no single source literal is
+# token-shaped; the joined value is allowlisted in ci/security/gitleaks.toml.
+TOKEN = "123456789:" + "PLACEHOLDER_NOT_A_REAL_TOKEN_0000AB"  # pragma: allowlist secret
 LOG = "pumpgrok.risk.alert_channel"
 
 

@@ -957,14 +957,18 @@ class RiskEngine:
 
     def _step_data_stale(self, ctx: _StepCtx) -> None:
         ctx.mark("data_stale")
-        if not any(p.token_units > 0 for p in ctx.state.positions.values()):
-            return
-        last_mtm = ctx.state.last_mtm_ts_utc
-        if not last_mtm:
-            raise _Fail("data_stale", "no MarkToMarket yet")
-        age = self._clock.now() - parse_ts_utc(last_mtm)
-        if age > float(self._limits.mtm_interval_s):
-            raise _Fail("data_stale", f"mtm age {age:.1f}s")
+        now = self._clock.now()
+        limit = float(self._limits.mtm_interval_s)
+        # Every held mint must carry a mark younger than the limit: a silent mint makes the
+        # whole balance stale, however fresh the other mints are.
+        for mint, pos in ctx.state.positions.items():
+            if pos.token_units <= 0:
+                continue
+            if not pos.last_mtm_ts_utc:
+                raise _Fail("data_stale", f"mint={mint} no MarkToMarket yet")
+            age = now - parse_ts_utc(pos.last_mtm_ts_utc)
+            if age > limit:
+                raise _Fail("data_stale", f"mint={mint} mtm age {age:.1f}s")
 
     def _step_size_too_small(self, ctx: _StepCtx) -> None:
         ctx.mark("size_too_small")

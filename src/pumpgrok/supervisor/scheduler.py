@@ -633,6 +633,7 @@ def _replay_cycles(
     async def _sniper(ctx: SeatContext) -> dict[str, Any]:
         if ctx.observe_only or not dataset_events:
             return {"orders": 0, "observe_only": ctx.observe_only}
+        await _mark_open()
         if trading is not None:
             return await _place_candidates(trading)
         first = dataset_events[0]
@@ -1000,20 +1001,15 @@ def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
             max_side_effect=SideEffect.PAPER_WRITE,
             bot=runtime.manifests[EXIT_SEAT],
         )
-    marked: dict[str, float] = {}
 
     async def refresh_marks() -> None:
-        """Mark each open position at this instant, once per instant (a fresh MarkToMarket).
+        """Write one combined mark for every held mint at this instant.
 
         A position without a fresh mark is refused as data_stale and counts as zero value in
         loss checks, so the replay refreshes marks before risk checks and before each order.
+        Each mint keeps the recorded time of its own tick, so a silent mint stays visibly old.
         """
-        now = runtime.clock.now()
-        for position in await runtime.adapter.positions():
-            if marked.get(position.mint) == now:
-                continue
-            if await runtime.adapter.mark_to_market(position.mint, source="replay") is not None:
-                marked[position.mint] = now
+        await runtime.adapter.mark_open_positions(source="replay")
 
     trading = _ReplayTrading(
         clock=runtime.clock,
