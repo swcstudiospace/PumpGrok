@@ -20,7 +20,7 @@ import hashlib
 import logging
 import os
 import sqlite3
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -152,6 +152,7 @@ async def execute_flatten(
     barrier: InflightBarrier,
     close_position: ClosePosition,
     barrier_timeout_s: float = FLATTEN_BARRIER_TIMEOUT_S,
+    open_mints: Callable[[], Iterable[str]] | None = None,
 ) -> FlattenResult:
     """Wait for in-flight orders to settle, then close each open position.
 
@@ -163,6 +164,12 @@ async def execute_flatten(
     only when the adapter returns status ``closed``; a refusal or a
     ``PumpgrokError`` marks that position ``not_flattened`` and the remaining
     positions still close.
+
+    A ``no_position`` answer is ambiguous: the position may have been closed by another caller
+    (an overlapping ``flatten`` or a gateway poll) that selected it too. After the loop,
+    ``open_mints`` re-reads the ledger, and a ``no_position`` outcome counts as ``closed`` only
+    when its mint is no longer open. A mint still listed stays ``not_flattened``. Without
+    ``open_mints`` every ``no_position`` stays ``not_flattened`` (fail closed).
     """
     cleared = await asyncio.to_thread(barrier.wait_empty, barrier_timeout_s)
     if not cleared:
@@ -200,7 +207,26 @@ async def execute_flatten(
                     detail=f"status={adapter_status}",
                 )
             )
+    if open_mints is not None and any(_is_no_position(o) for o in outcomes):
+        still_open = set(open_mints())
+        outcomes = [_settle_already_closed(o, still_open) for o in outcomes]
     return FlattenResult(status="completed", outcomes=outcomes)
+
+
+def _is_no_position(outcome: FlattenOutcome) -> bool:
+    return outcome.status == "not_flattened" and outcome.detail == "status=no_position"
+
+
+def _settle_already_closed(outcome: FlattenOutcome, still_open: set[str]) -> FlattenOutcome:
+    """A ``no_position`` outcome whose mint the ledger no longer lists was closed elsewhere."""
+    if _is_no_position(outcome) and outcome.mint not in still_open:
+        return FlattenOutcome(
+            mint=outcome.mint,
+            ticket_id=outcome.ticket_id,
+            status="closed",
+            detail="closed by another caller",
+        )
+    return outcome
 
 
 async def run_kill_switch(
@@ -259,6 +285,7 @@ async def run_kill_switch(
                 barrier=barrier,
                 close_position=close_position,
                 barrier_timeout_s=barrier_timeout_s,
+                open_mints=lambda: [i.mint for i in _flatten_intents(store)],
             )
     return _status(store, killswitch_path, correlation, clock, result)
 
@@ -356,6 +383,7 @@ def flatten_hook_for(
             lambda: _flatten_intents(store),
             barrier=barrier,
             close_position=close_position,
+            open_mints=lambda: [i.mint for i in _flatten_intents(store)],
         )
         # G7: a position the flatten did not close stays open. Say so at ERROR, with the mint
         # and the adapter's detail. Nothing here records the flatten as complete; the request

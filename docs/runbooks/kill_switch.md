@@ -29,13 +29,22 @@ pumpgrok killswitch clear --by human:operator --reason "feed recovered, doctor g
 
 ## Flatten outcomes and exit codes
 
-`flatten` sets the switch first, then closes every open paper position with reason `kill_flatten`. A position is closed only when the adapter values it: from the live curve, or from the last ledger mark. A position with neither (no ledger mark and no reserves) is left open.
+`flatten` sets the switch first, then closes every open paper position with reason `kill_flatten`. A position is closed only when the adapter values it: from the live curve, or from the last ledger mark. A position with neither (no ledger mark and no reserves) is left open. A position that another caller (an overlapping `flatten`, or the gateway poll) closed first counts as closed.
 
-- Exit 0: every open position closed, or none was open. The stdout JSON lists each outcome with `status` `closed`.
-- Exit 6 (`EXIT_UNFLATTENED`): at least one position is still open, or the flatten did not finish (`flatten_status` `blocked` or `unavailable`). One stderr line per position names its mint, ticket, status and detail, for example `UNFLATTENED mint=... status=not_flattened detail=status=no_mark`. Exit 6 is used for this case only. The stdout JSON reports `flatten_status` `incomplete` whenever a position is left open, and `completed` only when every position closed.
-- The switch stays set in every case. Exit 6 does not clear it, and the desk stays halted to new buys.
+- Exit 0: every open position is closed, or none was open. `flatten_status` is `completed`, and each outcome in `flatten_outcomes` is `closed`.
+- Exit 6 (`EXIT_UNFLATTENED`): the book is not flat. The stderr output depends on which of two cases happened.
 
-When the flatten leaves a position open, do not treat the book as flat. Find the mint in the stderr line, decide how to close it (for example, by restoring a ledger mark and running `flatten` again), and confirm `status` is `closed` before you rely on the book. The gateway and the alert-channel poll log the same positions at ERROR and retry them on each poll.
+Position-level (the flatten ran, and some positions were not closed): `flatten_status` is `incomplete`. `flatten_outcomes` has one row per open position with its `mint`, `ticket_id`, `status` `not_flattened` and `detail`. Stderr has one line per open position, with the full mint and ticket, for example `UNFLATTENED mint=... ticket=... status=not_flattened detail=status=no_mark`.
+
+Run-level (the barrier did not clear, or no position closer was wired): `flatten_status` is `blocked` or `unavailable`, and `flatten_outcomes` is empty. Nothing was closed. Stderr has one line, `UNFLATTENED flatten_status=blocked detail=...` (or `unavailable`). That line names no mint and no ticket, because the run produced no position rows.
+
+The switch stays set in every case. Exit 6 does not clear it, and the desk stays halted to new buys.
+
+After a position-level exit 6, the stderr line gives the mint, so you know what is open. After a run-level exit 6, find the open positions with `pumpgrok report --daily`. Its "Open positions" section lists one row per open position, and shows the first eight characters of each mint. It does not print tickets. When the flatten has closed everything, that section reads `none open`. Once `report --daily` shows the positions you expect, run `pumpgrok killswitch flatten --reason "..."` again. A run-level `blocked` result closed nothing, so repeating the flatten does not double-close.
+
+Do not treat the book as flat until `pumpgrok report --daily` shows `none open`.
+
+The gateway and the alert-channel poll log each position left open at ERROR, with the mint and detail, and log a run that did not complete at ERROR, for example `kill flatten did not complete: status=blocked detail=...`. They retry the open positions on every poll.
 
 ## References
 

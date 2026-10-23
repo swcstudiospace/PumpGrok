@@ -250,3 +250,74 @@ def test_flatten_deadlines_cover_the_adapter_confirmation_bound() -> None:
     assert confirm_bound <= FLATTEN_BARRIER_TIMEOUT_S
     assert KILL_SWITCH_SPEC.timeout_s >= FLATTEN_BARRIER_TIMEOUT_S + FLATTEN_CLOSE_BUDGET_S
     assert KILL_SWITCH_SPEC.timeout_s <= 300.0
+
+
+def _close_by_other_caller(store: LedgerStore, clock: FixtureClock, mint: str) -> None:
+    """The overlapping caller's close: a PositionClosed row, as the paper adapter writes it."""
+    store.append(
+        ts_utc=format_ts_utc(clock.now()),
+        source="paper",
+        correlation_id="other-caller",
+        idempotency_key=f"closed-by-other-{mint[-4:]}",
+        type="PositionClosed",
+        payload={
+            "source": "paper",
+            "mint": mint,
+            "price_exit": "0.00001",
+            "proceeds_lamports": 0,
+            "realized_pnl_lamports": 0,
+            "reason": "kill_flatten",
+            "pnl_pct": "0",
+            "hold_seconds": 0,
+            "venue_tx_ref": "",
+        },
+    )
+
+
+async def test_position_closed_by_another_caller_is_not_reported_unflattened(
+    tmp_path: Path,
+) -> None:
+    """PR 11 finding 1: a no_position close whose mint is no longer open counts as flat."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    _open(store, clock, MINT_A, 100)
+
+    async def overlapping_close(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+        _close_by_other_caller(store, clock, mint)
+        return {"status": "no_position", "mint": mint}
+
+    out = await run_kill_switch(
+        KillSwitchIn(action="flatten_request", reason="overlap"),
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=overlapping_close,
+        barrier=InflightBarrier(),
+    )
+    store.close()
+    assert out["flatten_status"] == "completed", out
+    assert [(o["mint"], o["status"]) for o in out["flatten_outcomes"]] == [(MINT_A, "closed")]
+
+
+async def test_no_position_while_mint_is_still_open_stays_incomplete(tmp_path: Path) -> None:
+    """Guard: a no_position close does not count as flat while the ledger still lists the mint."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    _open(store, clock, MINT_A, 100)
+
+    async def refusing_close(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+        return {"status": "no_position", "mint": mint}
+
+    out = await run_kill_switch(
+        KillSwitchIn(action="flatten_request", reason="still open"),
+        store,
+        clock,
+        tmp_path / "KILLSWITCH",
+        close_position=refusing_close,
+        barrier=InflightBarrier(),
+    )
+    store.close()
+    assert out["flatten_status"] == "incomplete", out
+    assert [(o["mint"], o["status"]) for o in out["flatten_outcomes"]] == [
+        (MINT_A, "not_flattened")
+    ]

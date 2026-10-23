@@ -19,7 +19,7 @@ import pumpgrok.cli as cli_mod
 from pumpgrok.cli import _unflattened_lines, main
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import IdFactory
-from pumpgrok.execution.paper_adapter import CurveSnapshot
+from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
@@ -387,6 +387,49 @@ class TestOperatorVerbs:
         assert [o["status"] for o in payload["flatten_outcomes"]] == ["closed"]
         assert "UNFLATTENED" not in err
         assert "PositionClosed" in _ledger_kinds(tmp_path)
+
+    def test_killswitch_flatten_overlap_closed_elsewhere_exits_0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR 11 finding 1: a position another caller closed first is not reported unflattened."""
+        _seed_open_position(tmp_path, with_mark=True)
+        path = tmp_path / "var" / "ledger.sqlite"
+
+        async def overlapping_close(self, *, mint, ticket_id, reason):  # type: ignore[no-untyped-def]
+            # The overlapping caller closed it first; this call finds nothing open.
+            store = LedgerStore(str(path))
+            try:
+                store.append(
+                    ts_utc=format_ts_utc(WallClock().now()),
+                    source="paper",
+                    correlation_id="other-caller",
+                    idempotency_key="closed-by-overlap",
+                    type="PositionClosed",
+                    payload={
+                        "source": "paper",
+                        "mint": mint,
+                        "price_exit": "0.00001",
+                        "proceeds_lamports": 200_000_000,
+                        "realized_pnl_lamports": 0,
+                        "reason": reason,
+                        "pnl_pct": "0",
+                        "hold_seconds": 0,
+                        "venue_tx_ref": "",
+                    },
+                )
+            finally:
+                store.close()
+            return {"status": "no_position", "mint": mint}
+
+        monkeypatch.setattr(PaperAdapter, "close_position", overlapping_close)
+        code, out, err = self._run(
+            tmp_path, monkeypatch, ["killswitch", "flatten", "--reason", "overlap"]
+        )
+        assert code == 0, (code, out, err)
+        payload = json.loads(out)
+        assert payload["flatten_status"] == "completed", payload
+        assert [o["status"] for o in payload["flatten_outcomes"]] == ["closed"]
+        assert "UNFLATTENED" not in err
 
     def test_killswitch_clear_appends_cleared_and_approval(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

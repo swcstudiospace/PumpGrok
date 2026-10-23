@@ -13,6 +13,7 @@ import logging
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,7 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import killswitch_file
+from pumpgrok.risk.killswitch import InflightBarrier, killswitch_file
 from pumpgrok.tools.risk.kill_switch import flatten_hook_for
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
@@ -110,3 +111,42 @@ def test_unflattened_position_is_logged_at_error_with_mint_and_detail(
     message = errors[0].getMessage()
     assert MINT in message, message
     assert "no_mark" in message, message
+
+
+def test_position_closed_by_another_caller_is_not_logged_at_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """PR 11 finding 1: the poll hook must not log ERROR for a position another caller closed."""
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _open_position(store, clock)
+
+        async def overlapping_close(*, mint: str, ticket_id: str, reason: str) -> dict[str, Any]:
+            store.append(
+                ts_utc=format_ts_utc(clock.now()),
+                source="paper",
+                correlation_id="other-caller",
+                idempotency_key="closed-by-other",
+                type="PositionClosed",
+                payload={
+                    "source": "paper",
+                    "mint": mint,
+                    "price_exit": "0.00001",
+                    "proceeds_lamports": 0,
+                    "realized_pnl_lamports": 0,
+                    "reason": reason,
+                    "pnl_pct": "0",
+                    "hold_seconds": 0,
+                    "venue_tx_ref": "",
+                },
+            )
+            return {"status": "no_position", "mint": mint}
+
+        hook = flatten_hook_for(store, InflightBarrier(), overlapping_close)
+        asyncio.run(hook())
+    finally:
+        store.close()
+    errors = [r for r in caplog.records if r.name == LOGGER and r.levelno == logging.ERROR]
+    assert errors == [], [r.getMessage() for r in errors]
