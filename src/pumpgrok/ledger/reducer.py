@@ -35,6 +35,7 @@ class PositionView(BaseModel):
     fees_lamports: MoneyInt = 0
     opened_ts_utc: str = ""
     last_mtm_lamports: MoneyInt = 0
+    last_mtm_venue_fee_lamports: MoneyInt = 0
     last_mtm_ts_utc: str = ""
     mtm_source: str = ""
     mtm_frozen: bool = False
@@ -301,6 +302,7 @@ def _on_mtm(
             if pos is None or pos.mtm_frozen:
                 continue
             mtm = int(mark.get("mtm_lamports", pos.last_mtm_lamports))
+            venue = int(mark.get("venue_fee_lamports", pos.last_mtm_venue_fee_lamports))
             spot = str(mark.get("spot", "0"))
             try:
                 peak = max(Decimal(pos.price_peak), Decimal(spot))
@@ -308,6 +310,7 @@ def _on_mtm(
                 peak = pos.price_peak
             positions[str(mint)] = pos.model_copy(
                 update={
+                    "last_mtm_venue_fee_lamports": venue,
                     "last_mtm_lamports": mtm,
                     "last_mtm_ts_utc": ts_utc,
                     "mtm_source": str(mark.get("source", "curve")),

@@ -1418,7 +1418,8 @@ class PaperAdapter(ExecutionAdapter):
         if curve is None or curve.complete:
             return None
         gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
-        mtm = gross - self._fees.venue_fee(gross)
+        venue = self._fees.venue_fee(gross)
+        mtm = gross - venue
         cash = int(state.cash_lamports)
         # Book value: this mint at the fresh mark, every other open position at
         # its last ledger mark (the same sum the fold uses for equity).
@@ -1431,6 +1432,7 @@ class PaperAdapter(ExecutionAdapter):
             {
                 mint: {
                     "mtm_lamports": mtm,
+                    "venue_fee_lamports": venue,
                     "spot": str(spot(curve.s_lamports, curve.t_units)),
                     "source": "curve",
                 }
@@ -1527,13 +1529,18 @@ class PaperAdapter(ExecutionAdapter):
     def _last_good_value(self, mint: str, pos: PositionView) -> tuple[int, int, int] | None:
         """Last ledger mark, else the last-good reserves; never reads a live price.
 
-        A ledger mark is already net of the venue fee, so only the network cost is
-        taken off it. Its venue fee is therefore not reported separately (cash is
-        still correct); the reserves path reports both fees.
+        A ledger mark is already net of the venue fee, so the close takes only the
+        network cost off it and books the venue fee stored with that mark. Marks
+        written before the venue key existed report a venue fee of 0 (disclosed);
+        their cash is unaffected. The reserves path reports both fees.
         """
         if pos.last_mtm_lamports > 0:
             network = self._fees.network_cost()
-            return int(pos.last_mtm_lamports) - network, 0, network
+            return (
+                int(pos.last_mtm_lamports) - network,
+                int(pos.last_mtm_venue_fee_lamports),
+                network,
+            )
         last = self._last_reserves.get(mint)
         if last is not None:
             return self._curve_exit(last[0], last[1], pos.token_units)

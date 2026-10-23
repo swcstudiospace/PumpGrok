@@ -31,6 +31,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.curve_math import sell_out
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -926,5 +927,177 @@ async def test_owner_failure_after_retry_keeps_retry_probe(tmp_path: Path) -> No
         fill = await retry
         assert isinstance(fill, Fill)
         assert len(store.read(types=["FillRecorded"], limit=None)) == 1
+    finally:
+        store.close()
+
+
+# -- Venue fee persisted on the mark: forced closes on the mark path -----
+
+
+def _mark_with_venue(
+    store: LedgerStore, clock: FixtureClock, mint: str, mtm: int, venue: int, key: str
+) -> None:
+    """A MarkToMarket row as the new writer produces it: per-mint venue beside mtm."""
+    entry = {"mtm_lamports": mtm, "venue_fee_lamports": venue, "spot": "1", "source": "curve"}
+    store.append(
+        ts_utc=format_ts_utc(clock.now()),
+        source="paper",
+        correlation_id="test",
+        idempotency_key=key,
+        type="MarkToMarket",
+        payload={
+            "source": "paper",
+            "ts_source": format_ts_utc(clock.now()),
+            "cash_lamports": EQUITY,
+            "equity_lamports": EQUITY + mtm,
+            "unrealized_lamports": mtm,
+            "prices_json": json.dumps({mint: entry}),
+        },
+    )
+
+
+async def test_mark_row_carries_venue_fee_per_mint(tmp_path: Path) -> None:
+    """The mark writer records the venue fee it netted, next to mtm_lamports."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        row = await adapter.mark_to_market(MINT, correlation_id="t")
+        assert row is not None
+        prices = json.loads(json.loads(str(row["payload_json"]))["prices_json"])
+        gross = sell_out(S0, T0, UNITS)
+        venue = FeeModel().venue_fee(gross)
+        assert prices[MINT]["venue_fee_lamports"] == venue
+        assert prices[MINT]["mtm_lamports"] == gross - venue
+    finally:
+        store.close()
+
+
+def test_fold_sets_mark_venue_fee() -> None:
+    """Folding a mark with the venue key stores it; a legacy mark leaves it at 0."""
+    opened = {
+        "seq": 1,
+        "ts_utc": "2026-01-31T00:00:00.000000Z",
+        "correlation_id": "t",
+        "type": "PositionOpened",
+        "payload": {
+            "mint": MINT,
+            "token_units": UNITS,
+            "cost_basis_lamports": BASIS,
+            "opened_ts_utc": "2026-01-31T00:00:00.000000Z",
+            "price_entry": "0.00001",
+        },
+    }
+    base = initial_state(source="paper", initial_equity_lamports=EQUITY, day_utc="2026-01-31")
+    state = reduce(base, opened)
+    assert state.positions[MINT].last_mtm_venue_fee_lamports == 0
+    marked = {
+        "seq": 2,
+        "ts_utc": "2026-01-31T00:01:00.000000Z",
+        "correlation_id": "t",
+        "type": "MarkToMarket",
+        "payload": {
+            "prices_json": json.dumps(
+                {MINT: {"mtm_lamports": 9900, "venue_fee_lamports": 100, "spot": "1"}}
+            ),
+        },
+    }
+    state = reduce(state, marked)
+    assert state.positions[MINT].last_mtm_lamports == 9900
+    assert state.positions[MINT].last_mtm_venue_fee_lamports == 100
+    legacy_mark = {
+        "seq": 2,
+        "ts_utc": "2026-01-31T00:01:00.000000Z",
+        "correlation_id": "t",
+        "type": "MarkToMarket",
+        "payload": {"prices_json": json.dumps({MINT: {"mtm_lamports": 9900, "spot": "1"}})},
+    }
+    legacy = reduce(reduce(base, opened), legacy_mark)
+    assert legacy.positions[MINT].last_mtm_lamports == 9900
+    assert legacy.positions[MINT].last_mtm_venue_fee_lamports == 0
+
+
+async def test_kill_flatten_on_complete_curve_books_stored_venue(tmp_path: Path) -> None:
+    """Graduated-curve exit: the close values from the stored mark and books its venue fee."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        marker = _adapter(store, clock, price_source=_Fixed(_snap()))
+        assert await marker.mark_to_market(MINT, correlation_id="t") is not None
+        complete = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0, complete=True)
+        adapter = _adapter(store, clock, price_source=_Fixed(complete))
+        gross = sell_out(S0, T0, UNITS)
+        fees = FeeModel()
+        venue, network = fees.venue_fee(gross), fees.network_cost()
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        assert result["status"] == "closed"
+        fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == venue
+        assert fill["network_cost_lamports"] == network
+        assert fill["cash_delta_lamports"] == gross - venue - network
+        closed = store.read(types=["PositionClosed"], limit=None)[-1]["payload"]
+        assert closed["proceeds_lamports"] == gross - venue - network
+        assert closed["realized_pnl_lamports"] == gross - venue - network - BASIS
+        assert adapter.cash_lamports() == EQUITY + gross - venue - network
+    finally:
+        store.close()
+
+
+async def test_blind_flatten_books_stored_venue(tmp_path: Path) -> None:
+    """Outage flatten: the price feed is gone, the close values from the stored mark."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        marker = _adapter(store, clock, price_source=_Fixed(_snap()))
+        assert await marker.mark_to_market(MINT, correlation_id="t") is not None
+        gross = sell_out(S0, T0, UNITS)
+        venue = FeeModel().venue_fee(gross)
+        clock.advance_to(clock.now() + 301.0)
+        adapter = _adapter(store, clock, price_source=None)
+        closed = await adapter.check_blind(MINT, correlation_id="t")
+        assert closed is not None
+        fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == venue
+        assert fill["cash_delta_lamports"] == gross - venue - FeeModel().network_cost()
+    finally:
+        store.close()
+
+
+async def test_legacy_mark_closes_with_zero_venue_and_same_cash(tmp_path: Path) -> None:
+    """A mark written before the venue key still closes; venue reports 0, cash is unchanged."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        _mark(store, clock, MINT, 163_000_000, "mtm-legacy")
+        adapter = _adapter(store, clock, price_source=None)
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        assert result["status"] == "closed"
+        network = FeeModel().network_cost()
+        fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == 0
+        assert fill["cash_delta_lamports"] == 163_000_000 - network
+        assert adapter.cash_lamports() == EQUITY + 163_000_000 - network
+    finally:
+        store.close()
+
+
+async def test_thread_case_mark_9900_reports_venue_100(tmp_path: Path) -> None:
+    """Greptile thread PRRT_kwDOUFNf2M6vVFHG: mark 9900 from gross 10000 at 1% reports venue 100."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        _mark_with_venue(store, clock, MINT, 9900, 100, "mtm-thread")
+        adapter = _adapter(store, clock, price_source=None)
+        result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
+        assert result["status"] == "closed"
+        network = FeeModel().network_cost()
+        fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == 100
+        assert fill["cash_delta_lamports"] == 9900 - network
     finally:
         store.close()

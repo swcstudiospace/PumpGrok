@@ -198,6 +198,8 @@ unrealized_lamports = mtm_lamports - pos.cost_basis_lamports     cost_basis = ca
 
 This is deliberately conservative for thin curves: spot x quantity overstates what a sell would return. `MarkToMarket` events are written by the journal seat every `ledger.mtm_interval_s` (60 s, REVIEW) and whenever RiskEngine needs fresh equity (it reads the cached value if younger than `mtm_interval_s`). Positions with `mtm_frozen = true` (`graduated`, `blind_flatten`) keep their last value and are excluded from the refresh.
 
+Each per-mint mark entry also records the venue fee it netted: `gross = mtm_lamports + venue_fee_lamports`. A forced close that values from the last mark (a complete curve, or an unreadable curve as in `blind_flatten`) books that stored venue fee on its `FillRecorded` and deducts only the network cost from the mark, so cash moves by `mtm_lamports - network_cost_lamports`. A mark written before this field existed has no venue fee: such a close reports `venue_fee_lamports = 0` (disclosed); its cash is unchanged.
+
 ### 2.8 State machine of one paper order
 
 ```
@@ -327,7 +329,7 @@ All payloads carry no secrets and no wallet keys. Money is integer base units (R
 | `FillRecorded` | token's | `order_id, decision_id, side, mint, filled_lamports, filled_units, filled_fraction, price_avg, venue_fee_lamports, network_cost_lamports, cash_delta_lamports, latency_s, curve_before{S,T}, curve_after{S,T}, venue_tx_ref ("dry_run:<ULID>")` | PaperAdapter.place |
 | `PositionOpened` | token's | `mint, symbol, creator, ticket_id, price_entry, token_units, cost_basis_lamports, score, opened_ts_utc` | adapter after the first buy fill |
 | `PositionClosed` | token's | `mint, price_exit, proceeds_lamports, realized_pnl_lamports, pnl_pct, hold_seconds, reason, venue_tx_ref`; `reason` in `{stop_loss, take_profit, trailing_stop, max_hold, rug_alert, kill_flatten, blind_flatten, graduated, manual}` (R32) | adapter after a sell fill that zeroes the position, or the `graduated` / `blind_flatten` force-close |
-| `MarkToMarket` | `desk` | `ts_source, prices{mint: {spot, S, T, mtm_lamports, source, age_s, frozen}}, cash_lamports, equity_lamports, unrealized_lamports` | journal seat / RiskEngine |
+| `MarkToMarket` | `desk` | `ts_source, prices{mint: {spot, S, T, mtm_lamports, venue_fee_lamports, source, age_s, frozen}}, cash_lamports, equity_lamports, unrealized_lamports`; `venue_fee_lamports` is the venue fee netted in `mtm_lamports` (absent on marks written before it was added) | journal seat / RiskEngine |
 | `HaltSet` | `desk` | `reason (daily_loss/drawdown/ledger_inconsistent/manual), detail, set_by="risk_engine", equity_lamports, day_start_equity_lamports`; idempotency per `(reason, utc_day)` | RiskEngine only (R24) |
 | `HaltCleared` | `desk` | `reason, cleared_by ("human:<name>" required), approval_id (ApprovalRecorded kind=halt_clear), note` | CLI only |
 | `KillSwitchSet` | `desk` | `source (env/file/alert_command/tool), reason, flatten_requested, set_by` | RiskEngine / risk.kill_switch |
@@ -352,7 +354,7 @@ LedgerState:
   seq, source, day_utc, day_start_equity_lamports, peak_equity_lamports
   cash_lamports
   positions{mint: Position(mint, symbol, creator, ticket_id, correlation_id, price_entry, price_peak,
-                           token_units, cost_basis_lamports, fees_lamports, opened_ts_utc, last_mtm_lamports, last_mtm_ts, mtm_source, mtm_frozen)}
+                           token_units, cost_basis_lamports, fees_lamports, opened_ts_utc, last_mtm_lamports, last_mtm_venue_fee_lamports, last_mtm_ts, mtm_source, mtm_frozen)}
   halt{active, reason, since}  kill_switch{active, source, since, flatten_requested}  breakers{name: {state, until}}
   approvals{approval_id: {kind, consumed}}
   counters{trades_today, rejected_today{reason: n}, fees_today_lamports, realized_today_lamports}
