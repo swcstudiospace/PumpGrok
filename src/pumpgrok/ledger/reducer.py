@@ -243,14 +243,18 @@ def _on_fill(
                 # The sale turns position value into cash: the remaining mark is its
                 # pro-rata share, capped at the last mark less the proceeds, so the sale
                 # alone does not lift equity and a fill below the mark shows as a loss.
+                # The stored venue fee shrinks pro-rata too, so a later close books only
+                # the fee of the units still held.
                 received = cash_delta + int(row.get("network_cost_lamports", 0))
                 share = pos.last_mtm_lamports * remaining // pos.token_units
                 mark = min(share, max(pos.last_mtm_lamports - received, 0))
+                venue_share = pos.last_mtm_venue_fee_lamports * remaining // pos.token_units
                 positions[mint] = pos.model_copy(
                     update={
                         "token_units": remaining,
                         "cost_basis_lamports": pos.cost_basis_lamports - reduction,
                         "last_mtm_lamports": mark,
+                        "last_mtm_venue_fee_lamports": venue_share,
                     }
                 )
     return _track_peak(

@@ -108,6 +108,26 @@ def test_partial_sell_scales_the_remaining_mark_to_remaining_units() -> None:
     assert state.positions[MINT].last_mtm_lamports == 600
 
 
+def test_partial_sell_scales_the_stored_venue_fee_with_the_mark() -> None:
+    # Net mark 990 with a 10 venue fee on 100 units; selling 40 leaves 60 units.
+    marked = [
+        *_open_position()[:2],
+        _event(
+            3,
+            "MarkToMarket",
+            {
+                "source": "paper",
+                "prices_json": json.dumps(
+                    {MINT: {"mtm_lamports": 990, "venue_fee_lamports": 10, "spot": "10"}}
+                ),
+            },
+        ),
+    ]
+    state = _fold([*marked, _sell(4, 40, 400)])
+    # The fee of the 60 units still held: 10 * 60 // 100.
+    assert state.positions[MINT].last_mtm_venue_fee_lamports == 6
+
+
 def test_partial_sell_does_not_count_sale_proceeds_twice_in_equity() -> None:
     before = _fold(_open_position())
     after = _fold([*_open_position(), _sell(4, 40, 400)])
