@@ -184,6 +184,9 @@ class KillSwitch:
         )
         # Set while the latch file holds a reason this process wrote from an alert line.
         self._alert_latch: tuple[bool, str] | None = None
+        # A KILL line accepted from the channel whose latch file could not be written yet. It
+        # keeps the switch in force (fail closed) and is retried before any further poll.
+        self._pending_line: str | None = None
         # Set when a KILL FLATTEN escalated an engaged switch; cleared once nothing is engaged.
         self._flatten_escalated = False
 
@@ -192,9 +195,13 @@ class KillSwitch:
 
         With env and the latch file both clear, a valid line engages the latch file. While the
         switch is engaged, a ``KILL FLATTEN`` escalates it to flatten and is persisted to the
-        latch file before anything else; a plain ``KILL`` changes nothing. The channel's offset
-        is committed only after every line is handled, so a failed persist redelivers them.
+        latch file before anything else; a plain ``KILL`` changes nothing. A line whose latch
+        cannot be written stays pending: the switch is engaged in memory (orders are refused),
+        no further poll runs until the latch is saved, and the channel's offset is not committed,
+        so Telegram redelivers the command once the write succeeds.
         """
+        if self._pending_line is not None and not self._save_pending():
+            return
         for text in self._alerts.poll():
             for raw in text.splitlines():
                 parsed = parse_kill_line(raw)
@@ -214,13 +221,24 @@ class KillSwitch:
                 if self._path is None:
                     log.warning("alert KILL ignored: no latch file is configured")
                     continue
-                try:
-                    self._alert_latch = latch_from_alert(raw, self._path)
-                except OSError as exc:
-                    log.warning("alert KILL not persisted: %s", type(exc).__name__)
+                self._pending_line = raw
+                if not self._save_pending():
                     return
-                log.warning("alert KILL engaged the kill latch file")
         self._alerts.commit()
+
+    def _save_pending(self) -> bool:
+        """Write the pending KILL line to the latch; True once saved, False while it cannot be."""
+        raw = self._pending_line
+        if raw is None or self._path is None:
+            return False
+        try:
+            self._alert_latch = latch_from_alert(raw, self._path)
+        except OSError as exc:
+            log.warning("alert KILL not persisted, kill stays in force: %s", type(exc).__name__)
+            return False
+        self._pending_line = None
+        log.warning("alert KILL engaged the kill latch file")
+        return True
 
     def _escalate(self, reason: str) -> bool:
         """Escalate an engaged switch to flatten, persisting it to the latch file first.
@@ -277,6 +295,11 @@ class KillSwitch:
                 if line == kill_file_text(reason, flatten):
                     return KillState(True, "alert_command", reason, flatten)
             return _file_state(line)
+        if self._pending_line is not None:
+            parsed = parse_kill_line(self._pending_line)
+            if parsed is not None:
+                flatten, reason = parsed
+                return KillState(True, "alert_command", reason, flatten)
         self._alert_latch = None
         if self._store is not None:
             row = self._latest_set()
@@ -332,6 +355,8 @@ class KillSwitch:
             live.append("env")
         if self._path is not None and self._path.is_file():
             live.append("file")
+        if self._pending_line is not None:
+            live.append("alert_command")
         return live
 
     def request_clear(

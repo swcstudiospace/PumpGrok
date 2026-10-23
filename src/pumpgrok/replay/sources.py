@@ -84,6 +84,23 @@ class FixtureCurveSource:
             return None
         return snapshot.s_lamports, snapshot.t_units
 
+    def last_open_reserves(self, mint: str) -> tuple[int, int] | None:
+        """Reserves of the latest tick at or before ``now`` that still had the curve open.
+
+        A graduated position closes at these reserves, the last price before the curve
+        completed (``close_on_graduation``). None when no open tick exists yet.
+        """
+        now = self._clock.now()
+        best: dict[str, Any] | None = None
+        for stamp, event in self._ticks:
+            if stamp > now:
+                break
+            if event.get("mint") == mint and not event.get("complete", False):
+                best = event
+        if best is None:
+            return None
+        return int(best["S"]), int(best["T"])
+
 
 def _has_reserves(event: dict[str, Any]) -> bool:
     for key in ("S", "T"):

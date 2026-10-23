@@ -16,12 +16,24 @@ RUN uv sync --frozen --no-dev --no-editable
 # /opt/venv/lib/python3.12/site-packages. Copy it to that site root and keep it world-readable.
 COPY contracts/tool-rosters /opt/venv/lib/python3.12/contracts/tool-rosters
 RUN chmod -R a+rX /opt/venv/lib/python3.12/contracts
+# Repo-anchored resources the desk tools read from the same site root (the gateway's
+# DESK_GATEWAY_REPO_ROOT points here): ownership.yaml for desk.ownership_resolve, ci/gates for
+# desk.receipt_check, and docs/ and skills/ for desk.docs_search. Read-only and world-readable.
+COPY ownership.yaml /opt/venv/lib/python3.12/ownership.yaml
+COPY ci/gates /opt/venv/lib/python3.12/ci/gates
+COPY docs /opt/venv/lib/python3.12/docs
+COPY skills /opt/venv/lib/python3.12/skills
+RUN chmod -R a+rX /opt/venv/lib/python3.12/ci
+RUN chmod -R a+rX /opt/venv/lib/python3.12/docs
+RUN chmod -R a+rX /opt/venv/lib/python3.12/skills
+RUN chmod a+r /opt/venv/lib/python3.12/ownership.yaml
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
-    PUMPGROK_PROFILE=paper
+    PUMPGROK_PROFILE=paper \
+    DESK_GATEWAY_REPO_ROOT=/opt/venv/lib/python3.12
 RUN useradd --system --create-home --home-dir /home/pumpgrok pumpgrok \
  && mkdir -p /app/var \
  && chown pumpgrok:pumpgrok /app/var

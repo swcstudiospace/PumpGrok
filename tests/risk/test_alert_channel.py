@@ -443,3 +443,72 @@ def test_failed_latch_write_does_not_commit_offset(tmp_path: Path) -> None:
         assert not (desk / "alert_offset").exists()
     finally:
         store.close()
+
+
+def _blocked_desk(tmp_path: Path) -> Path:
+    """A regular file where the desk directory should be, so every latch write fails."""
+    desk = tmp_path / "desk"
+    desk.write_text("not a directory", encoding="utf-8")
+    return desk
+
+
+def test_failed_latch_write_redelivers_kill_once_directory_writable(tmp_path: Path) -> None:
+    """Index 1: a KILL whose latch write failed stays pending and engages on the next poll."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    desk = _blocked_desk(tmp_path)
+    fake = FakeTelegram([_update(7, 111, "KILL operator stop")])
+    try:
+        engine = _engine(
+            store,
+            clock,
+            killswitch_path=killswitch_file(desk),
+            alert_channel=_channel(fake, desk),
+        )
+        asyncio.run(engine.poll_kill_sources())
+        # The failed write must not advance the offset that the next poll asks Telegram for.
+        assert fake.offsets == [0]
+        desk.unlink()
+        desk.mkdir()
+        asyncio.run(engine.poll_kill_sources())
+        assert killswitch_file(desk).read_text(encoding="utf-8") == "operator stop"
+        sets = store.read(types=["KillSwitchSet"], limit=None)
+        assert [row["payload"]["origin"] for row in sets] == ["alert_command"]
+        assert fake.offsets[-1] == 0
+    finally:
+        store.close()
+
+
+def test_order_refused_while_kill_latch_cannot_be_saved(tmp_path: Path) -> None:
+    """Index 1: while a pending KILL cannot be saved, no order passes (fail closed)."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    desk = _blocked_desk(tmp_path)
+    fake = FakeTelegram([_update(7, 111, "KILL operator stop")])
+    try:
+        engine = _engine(
+            store,
+            clock,
+            killswitch_path=killswitch_file(desk),
+            alert_channel=_channel(fake, desk),
+        )
+        first = engine.check(_buy(clock, ids), seat="bot-04-sniper")
+        assert first.passed is False
+        assert first.reason == "kill_switch"
+        second = engine.check(_buy(clock, ids), seat="bot-04-sniper")
+        assert second.passed is False
+        assert second.reason == "kill_switch"
+        # The engagement is in force, so the ledger records it once, even before the latch saves.
+        pending_sets = store.read(types=["KillSwitchSet"], limit=None)
+        assert [row["payload"]["origin"] for row in pending_sets] == ["alert_command"]
+        assert desk.is_file()  # still the blocker: no latch was written
+        desk.unlink()
+        desk.mkdir()
+        refused = engine.check(_buy(clock, ids), seat="bot-04-sniper")
+        assert refused.reason == "kill_switch"
+        assert killswitch_file(desk).read_text(encoding="utf-8") == "operator stop"
+        sets = store.read(types=["KillSwitchSet"], limit=None)
+        assert [row["payload"]["origin"] for row in sets] == ["alert_command"]
+    finally:
+        store.close()

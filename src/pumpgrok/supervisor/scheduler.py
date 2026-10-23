@@ -303,6 +303,7 @@ class Supervisor:
                 notifier=notifier,
                 observe_only=self.observe_only,
                 cycle_observer=cycle_observer,
+                stale_cadence_s=SEAT_CADENCES[seat],
             )
             for seat in ROSTER
         }
@@ -616,7 +617,13 @@ def _replay_cycles(
     async def _scout(ctx: SeatContext) -> dict[str, Any]:
         return {"candidates": len(dataset_events)}
 
+    async def _mark_open() -> None:
+        """Refresh every open position's mark (no-op without a trading wiring)."""
+        if trading is not None and trading.refresh_marks is not None:
+            await trading.refresh_marks()
+
     async def _risk(ctx: SeatContext) -> dict[str, Any]:
+        await _mark_open()
         verdict = risk.evaluate_halts(source="replay", correlation_id=ctx.correlation_id)
         return {"halt": verdict}
 
@@ -676,6 +683,7 @@ def _replay_cycles(
         return {"scoring": "llm", "outcome": outcome.outcome}
 
     async def _journal(ctx: SeatContext) -> dict[str, Any]:
+        await _mark_open()
         decision = decide_replay(list(dataset_events), filter_cfg)
         return {"decision": decision.decision, "reason": decision.reason}
 
@@ -721,6 +729,10 @@ TRADE_ROW_TYPES = frozenset(
         "PositionOpened",
     }
 )
+#: Risk rows a replay cycle can legitimately produce under the selected settings: a
+#: daily-loss or drawdown halt (``HaltSet``), a tripped breaker, and the position marks
+#: the journal and risk seats refresh (``MarkToMarket``). Anything else is refused.
+RISK_ROW_TYPES = frozenset({"HaltSet", "BreakerTripped", "MarkToMarket"})
 _VIRTUAL_STEP_S = 0.25
 _VIRTUAL_MAX_STEPS = 4000
 #: Real seconds between recorded steps when a serve replays its fixture timeline.
@@ -742,6 +754,7 @@ class _ReplayTrading:
     attempted: set[int] = field(default_factory=set)
     exit_place: Tool | None = None
     exits: ExitRules | None = None
+    refresh_marks: Callable[[], Awaitable[None]] | None = None
 
 
 @dataclass
@@ -895,6 +908,8 @@ async def _place_candidates(trading: _ReplayTrading) -> dict[str, Any]:
         if candidate.ts > trading.clock.now():
             continue  # the recording has not reached this candidate yet
         trading.attempted.add(index)
+        if trading.refresh_marks is not None:
+            await trading.refresh_marks()
         mint = candidate.token.mint
         payload = trading.place.spec.input_model.model_validate(
             {
@@ -924,7 +939,11 @@ def _check_cycle_rows(rows: Sequence[Mapping[str, Any]]) -> None:
             day = str((row.get("payload") or {}).get("day_utc", ""))
             if not day or row.get("idempotency_key") != rollover_key(day):
                 raise RuntimeError("replay seat cycles wrote an unkeyed DailyRollover")
-        elif row_type not in TRADE_ROW_TYPES:
+        elif row_type in TRADE_ROW_TYPES or row_type in RISK_ROW_TYPES:
+            continue
+        elif row_type == "Escalation" and (row.get("payload") or {}).get("kind") == "graduated":
+            continue  # the exit seat closed a graduated position (exit_rules._close_graduated)
+        else:
             raise RuntimeError(f"replay seat cycles wrote an unexpected {row_type} row")
 
 
@@ -981,16 +1000,44 @@ def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
             max_side_effect=SideEffect.PAPER_WRITE,
             bot=runtime.manifests[EXIT_SEAT],
         )
+    marked: dict[str, float] = {}
+
+    async def refresh_marks() -> None:
+        """Mark each open position at this instant, once per instant (a fresh MarkToMarket).
+
+        A position without a fresh mark is refused as data_stale and counts as zero value in
+        loss checks, so the replay refreshes marks before risk checks and before each order.
+        """
+        now = runtime.clock.now()
+        for position in await runtime.adapter.positions():
+            if marked.get(position.mint) == now:
+                continue
+            if await runtime.adapter.mark_to_market(position.mint, source="replay") is not None:
+                marked[position.mint] = now
+
     trading = _ReplayTrading(
         clock=runtime.clock,
         ids=runtime.ids,
         place=place,
         candidates=runtime.candidates,
         exit_place=exit_place,
+        refresh_marks=refresh_marks,
     )
 
     async def place_sell(mint: str, ticket: str, units: int, rule: str) -> dict[str, Any]:
         return await _place_rule_sell(trading, mint, ticket, units, rule)
+
+    async def close_graduated(mint: str, last_s: int, last_t: int) -> dict[str, Any] | None:
+        """Close a graduated position at its last open reserves; book it as a trade."""
+        with bind_seat(EXIT_SEAT):
+            row = await runtime.adapter.close_on_graduation(
+                mint, last_s=last_s, last_t=last_t, source="replay"
+            )
+        if row is not None:
+            trading.attempts.append(
+                ReplayTrade(side="sell", mint=mint, outcome="filled", reason="ok", rule="graduated")
+            )
+        return row
 
     trading.exits = ExitRules(
         store=runtime.store,
@@ -998,6 +1045,7 @@ def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
         exits=runtime.exits,
         clock=runtime.clock,
         place_sell=place_sell,
+        graduate=close_graduated,
     )
     return trading
 

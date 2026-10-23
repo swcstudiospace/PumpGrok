@@ -7,6 +7,9 @@ one sell through the exit seat's granted ``exec.place``. A sell the venue report
 ``unknown`` is never retried: that position is held out of later passes (R18,
 single-send), so the desk does not sell it twice.
 
+A position whose curve has completed (graduated) cannot take an ordinary order, so
+it is closed first, at its last pre-graduation reserves, with reason ``graduated``.
+
 A position is identified by its opening ``PositionOpened`` sequence, not only its
 mint. A re-entry in the same mint therefore starts a new position with a fresh entry
 and peak; it never inherits the peak of the trade it replaced.
@@ -30,15 +33,18 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, parse_ts_utc
 from pumpgrok.replay.sources import FixtureCurveSource
 
-__all__ = ["ExitRules", "LedgerExitBook", "PlaceSell", "RuleSell"]
+__all__ = ["ExitRules", "GraduateClose", "LedgerExitBook", "PlaceSell", "RuleSell"]
 
 #: ``(mint, ticket_id, token_units, rule)`` -> the place tool's output payload.
 PlaceSell = Callable[[str, str, int, str], Awaitable[dict[str, Any]]]
 
+#: ``(mint, last_s, last_t)`` -> the PositionClosed row, or None when no position is open.
+GraduateClose = Callable[[str, int, int], Awaitable[dict[str, Any] | None]]
+
 
 @dataclass(frozen=True)
 class RuleSell:
-    """One rule-fired sell and what the place tool answered."""
+    """One rule-fired sell (or graduation close) and what the venue answered."""
 
     mint: str
     rule: str
@@ -128,10 +134,12 @@ class ExitRules:
         exits: ExitsSettings,
         clock: Clock,
         place_sell: PlaceSell,
+        graduate: GraduateClose | None = None,
     ) -> None:
         self._store = store
         self._curves = curves
         self._place_sell = place_sell
+        self._graduate = graduate
         self._book = LedgerExitBook(exits)
         self._sold: list[RuleSell] = []
         self._watcher = PositionWatcher(self._book, self._price, self._sell, clock)
@@ -157,14 +165,35 @@ class ExitRules:
             )
         )
 
+    async def _close_graduated(self) -> None:
+        """Close each open position whose curve completed, at its last open reserves.
+
+        The adapter refuses ordinary orders on a completed curve, rule sells included,
+        so this runs before the ordinary rules and the position closes as ``graduated``.
+        """
+        if self._graduate is None:
+            return
+        for mint in list(self._book.positions):
+            snapshot = await self._curves.curve(mint)
+            if snapshot is None or not snapshot.complete:
+                continue
+            reserves = self._curves.last_open_reserves(mint)
+            if reserves is None:
+                continue
+            row = await self._graduate(mint, reserves[0], reserves[1])
+            if row is not None:
+                self._sold.append(RuleSell(mint=mint, rule="graduated", status="filled", reason=""))
+
     def holding(self) -> bool:
         """Whether any open paper position is held right now (reads the ledger, no sells)."""
         self._book.sync(self._store)
         return bool(self._book.positions)
 
     async def check(self, now: float) -> list[RuleSell]:
-        """One pass over the open positions at ``now``; returns the rule sells it placed."""
+        """One pass over the open positions at ``now``; returns the sells it placed."""
         self._book.sync(self._store)
         self._sold = []
+        await self._close_graduated()
+        self._book.sync(self._store)
         await self._watcher.check_once(now)
         return list(self._sold)

@@ -108,7 +108,10 @@ class TelegramAlertChannel:
         self._client = client
         self._offset_path = state_dir / OFFSET_FILE_NAME
         self._committed = _load_offset(self._offset_path)
+        # ``_offset`` is what getUpdates asks for: it advances only once a commit persisted it.
+        # ``_next`` is where the lines just returned would end; it is never used for requests.
         self._offset = self._committed
+        self._next = self._committed
         _redact_http_client_logs()
 
     def poll(self) -> list[str]:
@@ -131,26 +134,31 @@ class TelegramAlertChannel:
         return self._accept(updates)
 
     def commit(self) -> None:
-        """Write the next offset atomically; a write failure keeps the old offset (conservative)."""
-        if self._offset <= self._committed:
+        """Persist the next offset atomically, then advance the request offset to it.
+
+        Called only after every line of the poll is handled. A write failure leaves the request
+        offset where it was, so Telegram redelivers the same updates on the next poll.
+        """
+        if self._next <= self._committed:
             return
         tmp = self._offset_path.with_suffix(".tmp")
         try:
             self._offset_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(str(self._offset), encoding="utf-8")
+            tmp.write_text(str(self._next), encoding="utf-8")
             os.replace(tmp, self._offset_path)
         except OSError as exc:
             log.warning("alert channel could not persist its offset: %s", type(exc).__name__)
             return
-        self._committed = self._offset
+        self._committed = self._next
+        self._offset = self._next
 
     def _accept(self, updates: list[Any]) -> list[str]:
         lines: list[str] = []
         for update in updates:
             if not isinstance(update, dict) or not isinstance(update.get("update_id"), int):
                 continue
-            # Confirm every update, allowlisted or not, so it is never delivered again.
-            self._offset = max(self._offset, update["update_id"] + 1)
+            # Every update, allowlisted or not, is confirmed once commit() persists the offset.
+            self._next = max(self._next, update["update_id"] + 1)
             message = update.get("message")
             if not isinstance(message, dict):
                 continue

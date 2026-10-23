@@ -283,9 +283,13 @@ class SeatTask:
         observe_only: ObserveOnly | None = None,
         policy: RestartPolicy | None = None,
         cycle_observer: Callable[[str, float, str], None] | None = None,
+        stale_cadence_s: float | None = None,
     ) -> None:
         self.seat_id = seat_id
         self.cadence_s = cadence_s
+        # The heartbeat grace is the seat's production cadence, independent of how often
+        # a fixture timeline polls it (cadence_s); defaults to cadence_s.
+        self.stale_cadence_s = stale_cadence_s if stale_cadence_s is not None else cadence_s
         self._cycle = cycle
         self._clock = clock
         self._rng = rng
@@ -315,7 +319,7 @@ class SeatTask:
         """Stale after 3 missed cadences (paper-engine.md 6.3)."""
         if self.last_finished_at is None:
             return False
-        return now - self.last_finished_at > STALE_CADENCES * self.cadence_s
+        return now - self.last_finished_at > STALE_CADENCES * self.stale_cadence_s
 
     def is_due(self, now: float) -> bool:
         """Due when the backoff window passed and a full cadence elapsed."""

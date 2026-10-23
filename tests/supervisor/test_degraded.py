@@ -161,7 +161,7 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
     try:
         assert store.verify() is True
         rows = store.read(limit=None)
-        assert len(rows) == 10
+        assert len(rows) == 11
         assert rows[0]["type"] == "JournalNote"
         assert "engine decision=buy reason=ok" in str(rows[0]["payload"]["text"])
         assert [row["type"] for row in rows[2:]] == [
@@ -169,6 +169,7 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
             "OrderPlaced",
             "FillRecorded",
             "PositionOpened",
+            "MarkToMarket",
             "ApprovalRecorded",
             "OrderPlaced",
             "FillRecorded",
@@ -191,7 +192,7 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
     assert ledger.is_file()
     store = LedgerStore(str(ledger))
     try:
-        assert store.count() == 10
+        assert store.count() == 11
         rows = store.read(limit=None)
         assert [row["type"] for row in rows] == [
             "JournalNote",
@@ -200,6 +201,7 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
             "OrderPlaced",
             "FillRecorded",
             "PositionOpened",
+            "MarkToMarket",
             "ApprovalRecorded",
             "OrderPlaced",
             "FillRecorded",

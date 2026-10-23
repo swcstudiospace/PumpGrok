@@ -80,6 +80,7 @@ def _replay_ledger_contract(path: Path) -> None:
         "OrderPlaced",
         "FillRecorded",
         "PositionOpened",
+        "MarkToMarket",
         "ApprovalRecorded",
         "OrderPlaced",
         "FillRecorded",
