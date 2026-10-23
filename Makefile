@@ -32,8 +32,8 @@ audit: sync      ## pip-audit against the lockfile
 run-paper: sync  ## start the paper desk (foreground)
 	$(UV) run pumpgrok run --mode paper
 
-gateway:         ## serve the desk gateway over HTTP (foreground, paper only)
-	cd services/desk-gateway && $(UV) run python -m desk_gateway
+gateway:         ## serve the desk gateway over HTTP (foreground, paper only; repo root var/)
+	$(UV) run --project services/desk-gateway python -m desk_gateway
 
 replay: sync     ## one cycle against a recorded dataset
 	$(UV) run pumpgrok run --mode paper --once --replay $(REPLAY)

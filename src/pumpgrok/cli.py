@@ -579,6 +579,8 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             host=host,
             port=port,
             exits=settings.exits,
+            budget=settings.risk,
+            limits=settings.limits,
         )
     )
 
@@ -589,7 +591,12 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
 
     result = run_once_replay(
-        source, settings.filter, seed=settings.replay.seed, exits=settings.exits
+        source,
+        settings.filter,
+        seed=settings.replay.seed,
+        exits=settings.exits,
+        budget=settings.risk,
+        limits=settings.limits,
     )
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     _say(sys.stdout, *(format_trade(trade) for trade in result.trades))
@@ -1152,7 +1159,12 @@ def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
         dataset_dir = bundled
     try:
         result = run_once_replay(
-            dataset_dir, settings.filter, seed=settings.replay.seed, exits=settings.exits
+            dataset_dir,
+            settings.filter,
+            seed=settings.replay.seed,
+            exits=settings.exits,
+            budget=settings.risk,
+            limits=settings.limits,
         )
     except (DataStale, ReplayMissingRecord) as exc:
         _say(sys.stderr, f"replay failed: {exc.code}: {exc.message}")

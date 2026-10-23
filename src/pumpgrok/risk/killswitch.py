@@ -191,9 +191,9 @@ class KillSwitch:
         """Poll the alert channel once and act on each KILL line in order (RISK-004).
 
         With env and the latch file both clear, a valid line engages the latch file. While the
-        switch is engaged, a ``KILL FLATTEN`` escalates it to flatten (the latch file is rewritten
-        and the request is kept in process); a plain ``KILL`` changes nothing. The channel's offset
-        is committed only after the lines are handled, so a crash before that redelivers them.
+        switch is engaged, a ``KILL FLATTEN`` escalates it to flatten and is persisted to the
+        latch file before anything else; a plain ``KILL`` changes nothing. The channel's offset
+        is committed only after every line is handled, so a failed persist redelivers them.
         """
         for text in self._alerts.poll():
             for raw in text.splitlines():
@@ -206,24 +206,49 @@ class KillSwitch:
                 )
                 if engaged:
                     if flatten and not self._flatten_escalated:
-                        self._escalate(reason)
+                        if not self._escalate(reason):
+                            return
                     else:
                         log.info("alert KILL ignored: the switch is already engaged")
                     continue
                 if self._path is None:
                     log.warning("alert KILL ignored: no latch file is configured")
                     continue
-                self._alert_latch = latch_from_alert(raw, self._path)
+                try:
+                    self._alert_latch = latch_from_alert(raw, self._path)
+                except OSError as exc:
+                    log.warning("alert KILL not persisted: %s", type(exc).__name__)
+                    return
                 log.warning("alert KILL engaged the kill latch file")
         self._alerts.commit()
 
-    def _escalate(self, reason: str) -> None:
-        """Escalate an engaged switch to flatten; the latch file is rewritten when present."""
-        self._flatten_escalated = True
-        if self._path is not None and self._path.is_file():
-            self._path.write_text(kill_file_text(reason, True), encoding="utf-8")
+    def _escalate(self, reason: str) -> bool:
+        """Escalate an engaged switch to flatten, persisting it to the latch file first.
+
+        The latch file is the durable record: a restart reads ``FLATTEN`` from it even when env
+        is the source of record. Returns False when the write fails, so the caller does not
+        commit the offset and the KILL line is delivered again on the next poll.
+        """
+        if self._path is not None:
+            try:
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = self._path.with_name(self._path.name + ".tmp")
+                tmp.write_text(kill_file_text(reason, True), encoding="utf-8")
+                os.replace(tmp, self._path)
+            except OSError as exc:
+                log.warning("alert KILL FLATTEN not persisted: %s", type(exc).__name__)
+                return False
             self._alert_latch = (True, reason)
+        self._flatten_escalated = True
         log.warning("alert KILL FLATTEN escalated the kill switch to flatten")
+        return True
+
+    def _file_requests_flatten(self) -> bool:
+        """True when the latch file's first line is a ``FLATTEN`` request."""
+        if self._path is None or not self._path.is_file():
+            return False
+        first = self._path.read_text(encoding="utf-8").splitlines()
+        return bool(first) and _file_state(first[0].strip()).flatten_requested
 
     def poll(self) -> KillState:
         """Current switch state: env (start) beats the latch file beats the ledger.
@@ -241,7 +266,9 @@ class KillSwitch:
 
     def _engaged_state(self) -> KillState:
         if env_engaged(self._env_start):
-            return KillState(True, "env", self._env_start.strip(), False)
+            # Env is the source of record for the reason; a FLATTEN latch in the file still
+            # requests the flatten, so a consumed KILL FLATTEN survives a restart.
+            return KillState(True, "env", self._env_start.strip(), self._file_requests_flatten())
         if self._path is not None and self._path.is_file():
             first = self._path.read_text(encoding="utf-8").splitlines()
             line = first[0].strip() if first else ""

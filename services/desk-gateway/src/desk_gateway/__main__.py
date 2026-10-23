@@ -71,7 +71,10 @@ def main() -> int:
         _say(str(exc))
         return EXIT_CONFIG
     host = os.environ.get("DESK_GATEWAY_HOST", "").strip() or DEFAULT_HOST
-    data_dir = Path(os.environ.get("DESK_GATEWAY_DATA_DIR", "").strip() or DEFAULT_DATA_DIR)
+    # Anchored to the working directory the target runs from (the repo root), so the gateway
+    # reads and writes the same var/ as the CLI, the reports and the kill latch.
+    desk_root = Path.cwd()
+    data_dir = desk_root / (os.environ.get("DESK_GATEWAY_DATA_DIR", "").strip() or DEFAULT_DATA_DIR)
     default_root = Path(__file__).resolve().parents[4]
     repo_root = Path(os.environ.get("DESK_GATEWAY_REPO_ROOT", "").strip() or default_root)
     contracts_dir = default_contracts_dir()
@@ -86,7 +89,7 @@ def main() -> int:
         data_dir=data_dir,
         repo_root=repo_root,
         tokens=tokens,
-        ledger_path=PAPER_LEDGER_PATH,
+        ledger_path=desk_root / PAPER_LEDGER_PATH,
         telegram_token=read_telegram_token(),
     )
     try:

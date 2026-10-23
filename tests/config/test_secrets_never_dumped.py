@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -78,13 +79,24 @@ def _surfaces(settings: Settings) -> dict[str, str]:
     }
 
 
-def test_secret_values_absent_from_dumps(
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BINDING_KEY = Path("var") / "desk" / "binding.key"
+
+
+def _key_state(root: Path) -> tuple[bool, str]:
+    """Existence and content digest of the repo's binding key; never creates it."""
+    key = root / BINDING_KEY
+    if not key.is_file():
+        return (False, "")
+    return (True, hashlib.sha256(key.read_bytes()).hexdigest())
+
+
+def _run_dump_check(
     planted: Settings, capsys, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """INV-C-07: no secret value in any dump, body, payload or hash input."""
-    # The registry writes the operational data dir (binding.key) under the working directory,
-    # so the test runs from tmp_path and never touches the repo's gitignored var/.
+    """INV-C-07 dump check; the registry runs from tmp_path so its data dir is tmp_path."""
     monkeypatch.chdir(tmp_path)
+    before = _key_state(REPO_ROOT)
     settings = planted
     for surface, body in _surfaces(settings).items():
         assert GROK_SECRET not in body, surface
@@ -94,9 +106,31 @@ def test_secret_values_absent_from_dumps(
     out = capsys.readouterr().out
     assert GROK_SECRET not in out
     assert RPC_SECRET not in out
-    # Regression: the registry must not write binding.key into the repo's gitignored var/.
-    repo_root = Path(__file__).resolve().parents[2]
-    assert not (repo_root / "var" / "desk" / "binding.key").exists()
+    # Regression: the run must neither create nor change the repo's binding.key. A key that
+    # already exists (a developer's runtime file) is allowed; it must come out unchanged.
+    assert _key_state(REPO_ROOT) == before
+
+
+def test_secret_values_absent_from_dumps(
+    planted: Settings, capsys, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """INV-C-07: no secret value in any dump, body, payload or hash input."""
+    _run_dump_check(planted, capsys, tmp_path, monkeypatch)
+
+
+def test_existing_repo_binding_key_is_tolerated_and_untouched(
+    planted: Settings, capsys, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 11: a developer's existing var/desk/binding.key neither fails nor changes."""
+    repo = tmp_path / "repo"
+    key = repo / BINDING_KEY
+    key.parent.mkdir(parents=True)
+    key.write_bytes(b"developer-binding-key-bytes")
+    monkeypatch.setattr(sys.modules[__name__], "REPO_ROOT", repo)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    _run_dump_check(planted, capsys, cwd, monkeypatch)
+    assert key.read_bytes() == b"developer-binding-key-bytes"
 
 
 def test_confirmation_key_is_no_setting_field() -> None:

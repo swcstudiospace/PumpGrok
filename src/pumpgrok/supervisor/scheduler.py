@@ -41,7 +41,7 @@ from pumpgrok.engine.pipeline import BUY, CandidateVerdict, decide_replay, evalu
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.reducer import initial_state, reduce
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import FixtureClock, WallClock, format_ts_utc, parse_ts_utc
@@ -271,6 +271,7 @@ class Supervisor:
         health_path: str | Path | None = None,
         risk: Any | None = None,
         cycle_observer: Callable[[str, float, str], None] | None = None,
+        seat_cadences: Mapping[str, float] | None = None,
     ) -> None:
         unknown = set(cycles) - set(ROSTER)
         if unknown:
@@ -292,7 +293,7 @@ class Supervisor:
         self.tasks: dict[str, SeatTask] = {
             seat: SeatTask(
                 seat,
-                SEAT_CADENCES[seat],
+                (seat_cadences or {}).get(seat, SEAT_CADENCES[seat]),
                 cycles[seat],
                 clock=clock,
                 rng=rng,
@@ -399,17 +400,28 @@ class Supervisor:
             return
         log.error("seat %s cycle task failed: %r", seat, child.exception())
 
-    async def tick_once(self) -> dict[str, str]:
-        """One tick: start due seats and await the ones this tick started.
+    async def tick_once(self, *, heartbeats: bool = True) -> dict[str, str]:
+        """One tick: run the due seats one after another in roster order, then end the tick.
 
-        One-shot callers get every started seat's outcome. The serve loop never
-        awaits a cycle (see :meth:`serve_forever`).
+        Sequential, so a seat's order-placing work and its clock effects finish before the
+        next seat starts (deterministic on a fixture clock). ``heartbeats=False`` skips the
+        cadence staleness check, which a one-shot replay does not use.
         """
-        outcomes = self._begin_tick()
-        fresh = [seat for seat, how in outcomes.items() if how == "started"]
-        results = await asyncio.gather(*(self._inflight[seat] for seat in fresh))
-        outcomes.update(zip(fresh, results, strict=True))
-        await self._end_of_tick()
+        self._emit_rollover(self._clock.now())
+        outcomes: dict[str, str] = {}
+        for seat in ROSTER:
+            if not self.tasks[seat].is_due(self._clock.now()):
+                continue  # not due this tick: no outcome is reported, as before
+            child = asyncio.ensure_future(self.tasks[seat].run_guarded(self._seat_context(seat)))
+            self._inflight[seat] = child
+            try:
+                outcomes[seat] = await child
+            except asyncio.CancelledError:
+                child.cancel()
+                raise
+            finally:
+                self._inflight.pop(seat, None)
+        await self._end_of_tick(heartbeats=heartbeats)
         return outcomes
 
     async def run_once(self) -> dict[str, str]:
@@ -687,6 +699,11 @@ def dataset_events_start(dataset: Any) -> float:
     return min(stamps) if stamps else 0.0
 
 
+def dataset_stamps(dataset: Any) -> list[float]:
+    """Sorted, distinct epoch stamps of the recording: the replay timeline, in order."""
+    return sorted({event_epoch(event) for event in dataset.events})
+
+
 REPLAY_TICKET = "SOL-20260101-001"
 REPLAY_BUY_LAMPORTS = 10_000_000
 REPLAY_SLIPPAGE_BPS = 100
@@ -706,6 +723,11 @@ TRADE_ROW_TYPES = frozenset(
 )
 _VIRTUAL_STEP_S = 0.25
 _VIRTUAL_MAX_STEPS = 4000
+#: Real seconds between recorded steps when a serve replays its fixture timeline.
+SERVE_PACE_S = 1.0
+#: Fixture supervisors check the sniper and exit seats on every recorded tick. The recording
+#: is their poll schedule, so the seat cadence (a live-host poll rate) does not gate them.
+FIXTURE_SEAT_CADENCES: dict[str, float] = {"bot-04-sniper": 0.0, "bot-06-exit": 0.0}
 
 
 @dataclass
@@ -718,11 +740,8 @@ class _ReplayTrading:
     candidates: Sequence[CandidateVerdict]
     attempts: list[ReplayTrade] = field(default_factory=list)
     attempted: set[int] = field(default_factory=set)
-    # Replay drives the fixture clock to each tick; a serve caller owns its clock.
-    drive_clock: bool = False
     exit_place: Tool | None = None
     exits: ExitRules | None = None
-    stamps: tuple[float, ...] = ()
 
 
 @dataclass
@@ -741,7 +760,6 @@ class ReplayRuntime:
     candidates: list[CandidateVerdict]
     curves: FixtureCurveSource
     exits: ExitsSettings
-    stamps: tuple[float, ...] = ()
 
 
 def open_replay_runtime(
@@ -753,6 +771,8 @@ def open_replay_runtime(
     roster_dir: str | Path | None = None,
     clock: Clock | None = None,
     exits: ExitsSettings | None = None,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> ReplayRuntime:
     """Open one offline replay sandbox over the dataset's ledger (G1, G7).
 
@@ -773,7 +793,8 @@ def open_replay_runtime(
     clock = clock if clock is not None else FixtureClock(start=dataset_events_start(dataset))
     rng = make_rng(seed)
     ids = IdFactory(clock, rng)
-    budget = RiskBudget()
+    budget = budget if budget is not None else RiskBudget()
+    limits = limits if limits is not None else EngineLimits()
     store = LedgerStore(str(target))
     try:
         store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
@@ -783,7 +804,7 @@ def open_replay_runtime(
             budget=budget,
             ids=IdFactory(clock, rng),
             clock=clock,
-            limits=EngineLimits(),
+            limits=limits,
             autonomy="autonomous-paper",
             # Replay is hermetic: live-host kill state (env/file/alert) must
             # not leak rows into the deterministic ledger.
@@ -797,7 +818,7 @@ def open_replay_runtime(
             clock=clock,
             rng=make_rng(seed),
             budget=budget,
-            limits=EngineLimits(),
+            limits=limits,
             price_source=curves,
             # The fixture is the venue: no random tx drop, so a recorded buy fills.
             p_drop=0.0,
@@ -832,7 +853,6 @@ def open_replay_runtime(
         candidates=candidates,
         curves=curves,
         exits=exits if exits is not None else ExitsSettings(),
-        stamps=tuple(sorted({event_epoch(event) for event in dataset.events})),
     )
 
 
@@ -863,21 +883,17 @@ async def _await_order(clock: Clock, awaitable: Awaitable[Any]) -> Any:
 
 
 async def _place_candidates(trading: _ReplayTrading) -> dict[str, Any]:
-    """Place every BUY candidate once through the sniper's granted ``exec.place`` tool.
+    """Place each BUY candidate once, when the recorded timeline reaches its tick.
 
-    Each candidate is judged at its own fixture time and attempted at most once, so
-    a serve loop that ticks again over the same dataset never repeats an order. The
-    tool resolves through the sniper's roster grant, so risk and PaperAdapter approve
-    or veto each order, and the attempt with its outcome is recorded.
+    A candidate waits until the clock is at or past its own tick, and is never priced
+    from a later one. The tool resolves through the sniper's roster grant, so risk and
+    PaperAdapter approve or veto each order, and the attempt with its outcome is recorded.
     """
     for index, candidate in enumerate(trading.candidates):
         if candidate.verdict.decision != BUY or index in trading.attempted:
             continue
-        if isinstance(trading.clock, FixtureClock):
-            if trading.drive_clock:
-                trading.clock.advance_to(max(trading.clock.now(), candidate.ts))
-            elif candidate.ts > trading.clock.now():
-                continue  # the caller's fixture clock has not reached this tick yet
+        if candidate.ts > trading.clock.now():
+            continue  # the recording has not reached this candidate yet
         trading.attempted.add(index)
         mint = candidate.token.mint
         payload = trading.place.spec.input_model.model_validate(
@@ -942,24 +958,13 @@ async def _place_rule_sell(
 
 
 async def _run_exit_rules(trading: _ReplayTrading) -> list[RuleSell]:
-    """One exit pass. Serve checks now. Replay checks now, or walks the fixture ticks still
-    ahead of the clock while a position is held, so the rule sees each recorded curve."""
+    """One exit pass at the current clock: the rules see the price as of this tick."""
     if trading.exits is None:
         return []
-    if not trading.drive_clock or not trading.exits.holding():
-        return await trading.exits.check(trading.clock.now())
-    if not isinstance(trading.clock, FixtureClock):
-        raise RuntimeError("a driven replay needs the fixture clock")
-    now = trading.clock.now()
-    times = [at for at in trading.stamps if at >= now] or [now]
-    sold: list[RuleSell] = []
-    for at in times:
-        trading.clock.advance_to(at)
-        sold.extend(await trading.exits.check(trading.clock.now()))
-    return sold
+    return await trading.exits.check(trading.clock.now())
 
 
-def _replay_trading(runtime: ReplayRuntime, *, drive_clock: bool = False) -> _ReplayTrading:
+def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
     """Resolve the sniper's and the exit seat's ``exec.place`` through their roster grants.
 
     Each grant is resolved through the registry, so a seat without one cannot place. The
@@ -981,9 +986,7 @@ def _replay_trading(runtime: ReplayRuntime, *, drive_clock: bool = False) -> _Re
         ids=runtime.ids,
         place=place,
         candidates=runtime.candidates,
-        drive_clock=drive_clock,
         exit_place=exit_place,
-        stamps=runtime.stamps,
     )
 
     async def place_sell(mint: str, ticket: str, units: int, rule: str) -> dict[str, Any]:
@@ -1008,16 +1011,18 @@ def run_once_replay(
     health_path: str | Path | None = None,
     roster_dir: str | Path | None = None,
     exits: ExitsSettings | None = None,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> ReplayResult:
-    """AUTO-006: replay verdict, then one full ten-seat cycle, offline.
+    """AUTO-006: replay verdict, then one full recorded timeline, offline.
 
     ``run_replay`` writes the checkpoint verdict row first, so the stdout line and
-    ``cycle_end`` log are unchanged. The ten seat cycles then run in roster order
-    against the same ledger. The sniper places each BUY candidate through its
-    granted ``exec.place`` tool, so risk and PaperAdapter approve or veto it;
-    every other seat stays read-only. The exit seat evaluates the exit rules at each
-    fixture tick and sells through its granted ``exec.place`` when one fires. The
-    result lists each order attempt.
+    ``cycle_end`` log are unchanged. The seats then run tick by tick along the recorded
+    timeline (:func:`serve_fixture_timeline`), so each BUY is judged and priced at its own
+    tick and an exit rule sees every later tick in order. The sniper places BUYs and the
+    exit seat sells through their granted ``exec.place``, so risk and PaperAdapter approve
+    or veto each order. The result lists each attempt, the final ledger sequence, and the
+    hash of the completed, verified chain.
     """
     result = run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
     runtime = open_replay_runtime(
@@ -1027,9 +1032,11 @@ def run_once_replay(
         ledger_path=ledger_path,
         roster_dir=roster_dir,
         exits=exits,
+        budget=budget,
+        limits=limits,
     )
     try:
-        trading = _replay_trading(runtime, drive_clock=True)
+        trading = _replay_trading(runtime)
         rng = make_rng(seed)
         degraded = DegradedState()
         cycles = _replay_cycles(
@@ -1056,23 +1063,76 @@ def run_once_replay(
             degraded=degraded,
             health_path=health_path,
             risk=runtime.risk,
+            seat_cadences=FIXTURE_SEAT_CADENCES,
         )
         before = runtime.store.count()
-        outcomes = asyncio.run(supervisor.run_once())
-        for seat in ROSTER:
-            if outcomes.get(seat) != "crash":
-                continue
-            raise RuntimeError(f"seat {seat} cycle crashed")
+        ticks = asyncio.run(
+            serve_fixture_timeline(
+                supervisor, dataset_stamps(runtime.dataset), hold=False, heartbeats=False
+            )
+        )
+        for outcome in ticks:
+            for seat in ROSTER:
+                if outcome.get(seat) == "crash":
+                    raise RuntimeError(f"seat {seat} cycle crashed")
         _check_cycle_rows(runtime.store.read(limit=None)[before:])
         if not supervisor.ready():
-            raise RuntimeError("supervisor not ready after full cycle")
+            raise RuntimeError("supervisor not ready after the recorded timeline")
+        if not runtime.store.verify():
+            raise LedgerInconsistent("replay ledger failed verification after the cycle")
+        final_seq = int(runtime.store.read(limit=None)[-1]["seq"])
+        events_hash = ledger_events_hash(runtime.ledger_path)
     finally:
         runtime.store.close()
     return replace(
         result,
-        events_hash=ledger_events_hash(runtime.ledger_path),
+        seq=final_seq,
+        events_hash=events_hash,
         trades=tuple(trading.attempts),
     )
+
+
+async def serve_fixture_timeline(
+    supervisor: Supervisor,
+    stamps: Sequence[float],
+    *,
+    pace: Clock | None = None,
+    pace_s: float = 0.0,
+    hold: bool = False,
+    heartbeats: bool = True,
+) -> list[dict[str, str]]:
+    """Advance the fixture clock along the recording and tick the supervisor at each tick.
+
+    Each recorded tick is one supervisor tick at its own time, so a BUY is judged and
+    priced at its own tick and an exit rule sees every later tick in order. A tick the
+    clock has already passed (an order's latency moved it on) is skipped, never replayed
+    backwards. With ``hold`` the clock then keeps stepping at the tick cadence until the
+    supervisor is stopped, so a serve stays up after its recording ends. ``pace_s`` real
+    seconds separate steps (zero for a one-shot run), waited on the injected ``pace`` clock
+    (a ``WallClock`` in serve, so production keeps real time; never ``asyncio.sleep``).
+    Returns each recorded tick's outcomes.
+    """
+    clock = supervisor.clock
+    if not isinstance(clock, FixtureClock):
+        raise RuntimeError("a fixture timeline needs the fixture clock")
+    ticks: list[dict[str, str]] = []
+    for at in stamps:
+        if at < clock.now():
+            continue
+        clock.advance_to(at)
+        ticks.append(await supervisor.tick_once(heartbeats=heartbeats))
+        if pace_s > 0 and pace is not None:
+            await pace.sleep(pace_s)
+        if supervisor.stopped:
+            return ticks
+    if not hold:
+        return ticks
+    while not supervisor.stopped:
+        clock.advance_to(clock.now() + TICK_S)
+        await supervisor.tick_once(heartbeats=heartbeats)
+        if pace_s > 0 and pace is not None:
+            await pace.sleep(pace_s)
+    return ticks
 
 
 def build_serve_replay(
@@ -1084,6 +1144,8 @@ def build_serve_replay(
     ledger_path: str | Path | None = None,
     health_path: str | Path | None = None,
     exits: ExitsSettings | None = None,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
@@ -1092,11 +1154,16 @@ def build_serve_replay(
     the health body carries ``ledger_source=replay`` (never live data). The
     returned store stays open; the caller closes it after the serve loop.
     """
-    if clock is None:
-        clock = WallClock()
     run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
     runtime = open_replay_runtime(
-        dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, clock=clock, exits=exits
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        ledger_path=ledger_path,
+        clock=clock,
+        exits=exits,
+        budget=budget,
+        limits=limits,
     )
     store = runtime.store
     try:
@@ -1137,6 +1204,7 @@ def build_serve_replay(
             health_path=health_path,
             risk=runtime.risk,
             cycle_observer=metrics.observe,
+            seat_cadences=FIXTURE_SEAT_CADENCES,
         )
     except Exception:
         store.close()
@@ -1185,6 +1253,9 @@ async def serve_replay(
     ledger_path: str | Path | None = None,
     health_path: str | Path | None = None,
     exits: ExitsSettings | None = None,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
+    pace_s: float = SERVE_PACE_S,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
@@ -1195,7 +1266,9 @@ async def serve_replay(
     LAN safety for the container comes from the compose file, which publishes
     127.0.0.1:8080 only; there are no unauthenticated write routes.
     SIGINT/SIGTERM stop the loop and the server closes before the store does.
-    Returns 0.
+    Fixture time follows the recording (see :func:`serve_fixture_timeline`), paced
+    ``pace_s`` real seconds per step; after the last recorded tick the clock keeps
+    moving at the tick cadence until stop. Returns 0.
     """
     supervisor, metrics, store = build_serve_replay(
         dataset_dir,
@@ -1204,6 +1277,8 @@ async def serve_replay(
         ledger_path=ledger_path,
         health_path=health_path,
         exits=exits,
+        budget=budget,
+        limits=limits,
     )
     server = HealthServer(
         supervisor.clock,
@@ -1215,6 +1290,13 @@ async def serve_replay(
     log.info("serve listening on %s:%d (ledger_source=replay)", host, bound)
     install_signal_handlers(supervisor.request_stop)
     try:
-        return await supervisor.serve_forever()
+        await serve_fixture_timeline(
+            supervisor,
+            dataset_stamps(load_dataset(Path(dataset_dir))),
+            pace=WallClock(),
+            pace_s=pace_s,
+            hold=True,
+        )
+        return 0
     finally:
         await _finish_serve(supervisor, server, store, health_path)

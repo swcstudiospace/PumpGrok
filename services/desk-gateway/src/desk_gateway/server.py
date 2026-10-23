@@ -22,6 +22,7 @@ non-negative integer (400) and at most 1 MiB (413).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -54,7 +55,7 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution import build_adapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, WallClock
-from pumpgrok.risk.alert_channel import build_alert_channel
+from pumpgrok.risk.alert_channel import AlertChannel, build_alert_channel
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import killswitch_file
 from pumpgrok.tools import build_registry, register_read_tools
@@ -89,6 +90,9 @@ from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 log = logging.getLogger("desk_gateway")
 
+#: RISK-004: kill sources (env, file, alert channel) are polled on this fixed cycle.
+KILL_POLL_INTERVAL_S = 5.0
+
 
 class _ClosedNotifier(Notifier):
     """Refusing alert sink: the gateway owns no delivery path (fail-closed)."""
@@ -117,9 +121,10 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     repo_root: Path,
     ledger_path: Path,
     telegram_token: str,
+    alert_channel: AlertChannel | None = None,
     clock: Clock | None = None,
     http_client: httpx.AsyncClient | None = None,
-) -> tuple[ToolRegistry, dict[str, BotManifest]]:
+) -> tuple[ToolRegistry, dict[str, BotManifest], RiskEngine]:
     """Compose the full catalog registry the gateway projects (no tool logic).
 
     Every collaborator reads its configuration from the operator ``settings``, loaded by
@@ -153,8 +158,12 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
         limits=settings.limits,
         mode="paper",
         killswitch_path=latch,
-        alert_channel=build_alert_channel(
-            token=telegram_token, allowlist=settings.notify.allowlist, state_dir=data_dir
+        alert_channel=(
+            alert_channel
+            if alert_channel is not None
+            else build_alert_channel(
+                token=telegram_token, allowlist=settings.notify.allowlist, state_dir=data_dir
+            )
         ),
     )
     adapter = build_adapter(
@@ -204,7 +213,27 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     binding_key = load_or_create_binding_key(data_dir)
     reg.register(build_doctor_tool(settings, data_dir / "bindings", binding_key, active_clock))
     manifests = load_bot_manifests(default_contracts_dir())
-    return reg, manifests
+    return reg, manifests, engine
+
+
+async def _poll_kill_sources(engine: RiskEngine, interval_s: float) -> None:
+    """RISK-004: poll the env, file and alert kill sources on a fixed cycle until cancelled.
+
+    A failing cycle is logged and retried on the next tick; only cancellation (shutdown) stops it.
+    """
+    while True:
+        try:
+            await engine.poll_kill_sources()
+        except Exception:
+            log.exception("kill source poll failed; retrying next cycle")
+        await asyncio.sleep(interval_s)
+
+
+async def _cancel_and_wait(task: asyncio.Task[Any]) -> None:
+    """Cancel one task on its own loop and wait for it to finish."""
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
 
 
 def _short_from_path(path: str) -> str | None:
@@ -520,6 +549,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 _CALL_TIMEOUT_S = 120.0
+_CLOSE_TIMEOUT_S = 10.0
 
 
 def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
@@ -529,6 +559,8 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
     repo_root: Path,
     ledger_path: Path,
     telegram_token: str,
+    alert_channel: AlertChannel | None,
+    kill_poll_interval_s: float,
     clock: Clock,
     http_client: httpx.AsyncClient | None,
 ) -> tuple[Any, dict[str, Any]]:
@@ -545,17 +577,22 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
     def _serve_tools() -> None:
         asyncio.set_event_loop(loop)
         try:
-            cell["registry"], cell["manifests"] = build_gateway_registry(
+            cell["registry"], cell["manifests"], cell["engine"] = build_gateway_registry(
                 settings=settings,
                 data_dir=data_dir,
                 repo_root=repo_root,
                 ledger_path=ledger_path,
                 telegram_token=telegram_token,
+                alert_channel=alert_channel,
                 clock=clock,
                 http_client=http_client,
             )
             names = cell["registry"].names()
             cell["global_map"] = {transport_name(name): name for name in names}
+            # RISK-004: an idle gateway must still read KILL lines, so the poll runs on this loop.
+            cell["kill_poll_task"] = loop.create_task(
+                _poll_kill_sources(cell["engine"], kill_poll_interval_s)
+            )
         except Exception as exc:  # fail fast: never leave ready unset
             cell["error"] = exc
         finally:
@@ -573,12 +610,14 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
     return loop, cell
 
 
-def create_server(
+def create_server(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
     config: GatewayConfig,
     *,
     settings: Settings,
     clock: Clock | None = None,
     http_client: httpx.AsyncClient | None = None,
+    alert_channel: AlertChannel | None = None,
+    kill_poll_interval_s: float = KILL_POLL_INTERVAL_S,
 ) -> ThreadingHTTPServer:
     """Bind a threaded JSON-RPC server over an owner-thread registry built from ``settings``."""
     active_clock = clock if clock is not None else WallClock()
@@ -588,6 +627,8 @@ def create_server(
         repo_root=config.repo_root,
         ledger_path=config.ledger_path,
         telegram_token=config.telegram_token,
+        alert_channel=alert_channel,
+        kill_poll_interval_s=kill_poll_interval_s,
         clock=active_clock,
         http_client=http_client,
     )
@@ -599,6 +640,7 @@ def create_server(
         "manifests": cell["manifests"],
         "global_map": cell["global_map"],
         "owner_loop": owner_loop,
+        "kill_poll_task": cell["kill_poll_task"],
         "clock": active_clock,
         "shorts": short_to_seat(config.contracts_dir),
     }
@@ -607,8 +649,13 @@ def create_server(
 
 
 def close_server(server: ThreadingHTTPServer) -> None:
-    """Stop HTTP serving and the owner tool loop."""
-    loop = server.gateway_state.get("owner_loop")  # type: ignore[attr-defined]
+    """Stop the kill poll, HTTP serving and the owner tool loop, in that order."""
+    state = server.gateway_state  # type: ignore[attr-defined]
+    loop = state.get("owner_loop")
+    poll_task = state.get("kill_poll_task")
+    if loop is not None and poll_task is not None:
+        future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(poll_task), loop)
+        future.result(timeout=_CLOSE_TIMEOUT_S)
     server.shutdown()
     server.server_close()
     if loop is not None:

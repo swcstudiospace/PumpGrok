@@ -614,8 +614,8 @@ Each transition appends `BreakerTripped`/`BreakerReset` (idempotent per `(breake
 sources:
   env   : PUMPGROK_KILLSWITCH set and not in {"", "0", "false"}  -> source=env, reason=env value
           READ ONCE AT PROCESS START (an env var cannot change inside a running process, F-m1); it starts the desk already switched
-  file  : var/desk/KILLSWITCH exists (any size)                       -> source=file, reason=first line
-          LIVE: polled once per supervised cycle (RiskEngine.poll_kill_sources), on every RiskEngine.check and at CONFIRMING of every order
+  file  : var/desk/KILLSWITCH exists (any size)                       -> source=file, reason=first line; with env also set, a FLATTEN first line still requests the flatten (source stays env)
+          LIVE: polled once per supervised cycle (RiskEngine.poll_kill_sources), by the desk gateway owner loop every KILL_POLL_INTERVAL_S (5 s) on an idle desk, on every RiskEngine.check and at CONFIRMING of every order
           the one latch path; every writer resolves it through killswitch_file(data_dir)
   alert : the alert channel, a live source (RISK-004). Telegram getUpdates with a 2 s timeout, accepting text only
           from allowlisted chat ids (a bot token in PUMPGROK_TELEGRAM_TOKEN and at least one chat id in

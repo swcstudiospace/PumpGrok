@@ -370,3 +370,76 @@ def test_flatten_on_alert_channel_closes_position_without_orders(tmp_path: Path)
         assert len(store.read(types=["KillSwitchSet"], limit=None)) == 1
     finally:
         store.close()
+
+
+def test_flatten_consumed_under_env_survives_restart(tmp_path: Path) -> None:
+    """Finding 10: a KILL FLATTEN consumed while PUMPGROK_KILLSWITCH is set survives a restart."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    desk = tmp_path / "desk"
+    latch = killswitch_file(desk)
+    env = {"PUMPGROK_KILLSWITCH": "1"}
+    fake = FakeTelegram([_update(7, 111, "KILL FLATTEN close all")])
+    try:
+        _position(store, clock, 3_000_000)
+        assert not latch.exists()
+        first = _engine(
+            store, clock, killswitch_path=latch, alert_channel=_channel(fake, desk), env=env
+        )
+        # The process dies after the offset is committed and before the flatten executes.
+        with pytest.raises(RuntimeError):
+            asyncio.run(first.poll_kill_sources())
+        assert (desk / "alert_offset").read_text(encoding="utf-8") == "8"
+        restarted = _engine(
+            store,
+            clock,
+            killswitch_path=latch,
+            alert_channel=_channel(FakeTelegram([]), desk),
+            env=env,
+        )
+        adapter = _adapter(store, clock, restarted, ids)
+        restarted.attach_flatten_hook(
+            flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
+        )
+        state = asyncio.run(restarted.poll_kill_sources())
+        assert state.flatten_requested is True
+        closed = store.read(types=["PositionClosed"], limit=None)
+        assert [row["payload"]["reason"] for row in closed] == ["kill_flatten"]
+    finally:
+        store.close()
+
+
+def test_env_engaged_switch_keeps_flatten_from_file_latch(tmp_path: Path) -> None:
+    """Finding 10: env and file sources combine; a FLATTEN latch keeps flatten_requested."""
+    latch = killswitch_file(tmp_path / "desk")
+    latch.parent.mkdir(parents=True)
+    latch.write_text("FLATTEN close all", encoding="utf-8")
+    state = KillSwitch(
+        FixtureClock(start=START), killswitch_path=latch, env={"PUMPGROK_KILLSWITCH": "1"}
+    ).poll()
+    assert state.active is True
+    assert state.source == "env"
+    assert state.flatten_requested is True
+
+
+def test_failed_latch_write_does_not_commit_offset(tmp_path: Path) -> None:
+    """Finding 10: the offset is committed only after the flatten request is persisted."""
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    desk = tmp_path / "desk"
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    fake = FakeTelegram([_update(7, 111, "KILL FLATTEN close all")])
+    try:
+        engine = _engine(
+            store,
+            clock,
+            killswitch_path=blocker / "KILLSWITCH",
+            alert_channel=_channel(fake, desk),
+            env={"PUMPGROK_KILLSWITCH": "1"},
+        )
+        engine._killswitch.absorb_alerts()
+        assert not (desk / "alert_offset").exists()
+    finally:
+        store.close()

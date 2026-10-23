@@ -7,6 +7,10 @@ one sell through the exit seat's granted ``exec.place``. A sell the venue report
 ``unknown`` is never retried: that position is held out of later passes (R18,
 single-send), so the desk does not sell it twice.
 
+A position is identified by its opening ``PositionOpened`` sequence, not only its
+mint. A re-entry in the same mint therefore starts a new position with a fresh entry
+and peak; it never inherits the peak of the trade it replaced.
+
 Peaks for the trailing stop live in memory for the run. A restart re-learns them
 from the next curve read; the vendor persisted them to disk.
 """
@@ -49,7 +53,10 @@ class LedgerExitBook:
     exits: ExitsSettings
     _positions: dict[str, ExitPosition] = field(default_factory=dict)
     _tickets: dict[str, str] = field(default_factory=dict)
-    _held_out: set[str] = field(default_factory=set)
+    #: mint -> the ``PositionOpened`` sequence of the position currently tracked.
+    _identity: dict[str, int] = field(default_factory=dict)
+    #: (mint, opening sequence) pairs whose sell the venue left unknown.
+    _held_out: set[tuple[str, int]] = field(default_factory=set)
 
     @property
     def positions(self) -> dict[str, ExitPosition]:
@@ -70,32 +77,44 @@ class LedgerExitBook:
         return self._tickets[mint]
 
     def hold_out(self, mint: str) -> None:
-        """Stop offering a position whose sell the venue left unknown (never retried)."""
-        self._held_out.add(mint)
+        """Stop offering the tracked position in ``mint`` whose sell the venue left unknown."""
+        self._held_out.add((mint, self._identity[mint]))
 
     def sync(self, store: LedgerStore) -> None:
-        """Rebuild the open positions from the ledger; keep each peak already seen."""
+        """Rebuild the open positions from the ledger, one tracked position per mint.
+
+        The peak carries over only while the opening sequence is unchanged. Entry,
+        amount, opening time and ticket are refreshed from the ledger on every pass.
+        """
         state = initial_state(source="replay", initial_equity_lamports=0, day_utc="")
+        opened_seq: dict[str, int] = {}
         for event in store.read(limit=None):
+            if event["type"] == "PositionOpened":
+                opened_seq[str(event["payload"]["mint"])] = int(event["seq"])
             state = reduce(state, event)
         fresh: dict[str, ExitPosition] = {}
+        identity: dict[str, int] = {}
         for mint, view in state.positions.items():
-            if view.token_units <= 0 or mint in self._held_out:
+            if view.token_units <= 0:
                 continue
-            prior = self._positions.get(mint)
-            if prior is not None:
-                fresh[mint] = prior
+            seq = opened_seq.get(mint, 0)
+            if (mint, seq) in self._held_out:
                 continue
             entry = float(view.price_entry)
+            prior = self._positions.get(mint)
+            same_position = prior is not None and self._identity.get(mint) == seq
+            peak = prior.peak_price if same_position and prior is not None else entry
             fresh[mint] = ExitPosition(
                 mint=mint,
                 entry_price=entry,
-                peak_price=entry,
+                peak_price=peak,
                 token_amount=float(view.token_units),
                 opened_at=parse_ts_utc(view.opened_ts_utc),
             )
+            identity[mint] = seq
             self._tickets[mint] = view.ticket_id
         self._positions = fresh
+        self._identity = identity
 
 
 class ExitRules:

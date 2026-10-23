@@ -37,10 +37,10 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name, raising=False)
 
 
-def test_limits_section_parses_from_env() -> None:
+def test_limits_section_parses_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """[limits] is a real Settings section: env overrides land on the model."""
-    os.environ["PUMPGROK_RISK__MAX_OPEN_POSITIONS"] = "1"
-    os.environ["PUMPGROK_LIMITS__MIN_TRADE_LAMPORTS"] = "20000000"
+    monkeypatch.setenv("PUMPGROK_RISK__MAX_OPEN_POSITIONS", "1")
+    monkeypatch.setenv("PUMPGROK_LIMITS__MIN_TRADE_LAMPORTS", "20000000")
     settings = load_settings()
     assert settings.risk.max_open_positions == 1
     assert settings.limits.min_trade_lamports == 20_000_000
@@ -103,8 +103,8 @@ def test_operator_registry_threads_settings_budget(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The wired engine is built from settings.risk/settings.limits."""
-    os.environ["PUMPGROK_RISK__MAX_OPEN_POSITIONS"] = "1"
-    os.environ["PUMPGROK_LIMITS__MIN_TRADE_LAMPORTS"] = "20000000"
+    monkeypatch.setenv("PUMPGROK_RISK__MAX_OPEN_POSITIONS", "1")
+    monkeypatch.setenv("PUMPGROK_LIMITS__MIN_TRADE_LAMPORTS", "20000000")
     settings = load_settings()
 
     seen: dict[str, Any] = {}
