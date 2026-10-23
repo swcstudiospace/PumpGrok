@@ -39,11 +39,11 @@ files_reviewed_list:
   - src/pumpgrok/tools/onchain/priority_fee.py
   - src/pumpgrok/tools/onchain/rpc.py
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 02: Code Review Report (iteration 2 — re-review after fixes)
@@ -51,7 +51,7 @@ status: issues_found
 **Reviewed:** 2026-10-21T00:00:00Z
 **Depth:** deep
 **Files Reviewed:** 33
-**Status:** issues_found (1 carried-open Critical, 0 new findings)
+**Status:** clean (CR-03 resolved on re-verification 2026-10-23, 0 open findings)
 
 ## Summary
 
@@ -95,9 +95,10 @@ for Phase 4 only if the trade leg adds new direct callers.
 
 ## Critical Issues
 
-### CR-03: Corrupt reputation file silently discards rug history (fail-open) — CARRIED OPEN
+### CR-03: Corrupt reputation file silently discards rug history (fail-open) — RESOLVED on re-verification 2026-10-23
 
-**File:** `src/pumpgrok/engine/reputation.py:77-92`
+**File:** `src/pumpgrok/engine/reputation.py:77-92` (verified on origin/main export; `load` at lines 83-122 quarantines and sets `degraded=True`; fail-closed enforced in `src/pumpgrok/risk/engine.py:754-756`)
+**Resolution evidence:** `tests/safety/test_reputation_degraded.py::test_corrupt_file_degraded_book_refuses_buy_with_escalation` passes (exit 0 via `uv run --frozen` from pristine `/tmp/cr03-main` export); no-crash contract `tests/characterization/test_reputation.py::test_corrupt_file_does_not_crash` still holds
 **Issue:** `ReputationBook.load` still catches *all* exceptions on a
 present-but-unreadable/invalid file (unreadable bytes, bad JSON,
 pydantic validation failure), logs, and returns an empty book.

@@ -73,7 +73,7 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **RISK-004**: The kill switch reads env `PUMPGROK_KILLSWITCH` at start only and polls file `var/KILLSWITCH` and the alert-channel command every risk cycle (5 s); zero buys occur after it is set within one cycle; `flatten_request` waits on the in-flight barrier then closes every open position with reason `kill_flatten`; clear is CLI-only `pumpgrok killswitch clear --by <human> --reason <text>` appending `KillSwitchCleared` with an `ApprovalRecorded` of kind `killswitch_clear` and refused while any live source is still set (R22, section 9).
 - [x] **RISK-005**: A RISK verdict `KILL` on a mint blocks that token path for the session for every seat (`rules/pumpgrok-team.mdc:32`) and the `seat_may_trade` step rejects a BUY from exit and a SELL from sniper (R34).
 - [x] **RISK-006**: A seat in observe-only (restart budget exhausted, LLM required but down, clock skew) cannot resolve its paper-write tools; when sniper or bot-02-risk is observe-only the desk enters observe-only for BUYS while exits continue (R24), and when exit is observe-only `HaltSet(manual, "exit seat observe-only")` is appended (`docs/design/paper-engine.md` section 6.4).
-- [ ] **RISK-007**: `docs/RISK_POLICY.md` states the D7 compliance boundary and `tests/safety/test_no_manipulation_tools.py` passes over `tools/social/`, `notify.*` and the `browser-ops` forbidden-actions scope (R39): no registered tool name matches `post|reply|like|follow|dm|broadcast|wash|volume`, no social module issues anything but GET, and `notify.alert` sends only to the configured allowlist.
+- [x] **RISK-007**: `docs/RISK_POLICY.md` states the D7 compliance boundary and `tests/safety/test_no_manipulation_tools.py` passes over `tools/social/`, `notify.*` and the `browser-ops` forbidden-actions scope (R39): no registered tool name matches `post|reply|like|follow|dm|broadcast|wash|volume`, no social module issues anything but GET, and `notify.alert` sends only to the configured allowlist.
 
 ### Autonomy (AUTO)
 
@@ -83,15 +83,15 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **AUTO-004**: `GET /healthz` returns 200 only when status is ok (503 while any seat is stale), `GET /readyz` returns 200 only after the ledger reconciled CONSISTENT and every seat completed one cycle, and `var/health.json` is rewritten atomically every 10 s for Hermes prompts.
 - [x] **AUTO-005**: The degraded modes of `docs/design/paper-engine.md` section 6.7 hold: LLM failure degrades bot-08-signal to rule-based scoring in live paper runs only (observe-only for buys when `signal.require_llm`; in replay a missing LLM record fails the run, R27), RPC failure fails over then marks `BLIND`, WebSocket loss reconnects with backoff and trips `DataStale` after 120 s, an unwritable ledger refuses orders into a bounded buffer with `Escalation(persistence_down)`, and clock skew refuses appends with `Escalation(clock_skew)`.
 - [x] **AUTO-006**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` runs one full cycle of all ten seats on fixture data through the engine, risk and paper adapter, writes `var/replay/smoke/ledger.sqlite`, and exits 0 with no network access.
-- [ ] **AUTO-007**: `tests/soak/test_soak_multiday_replay.py` replays `soak-3d`: peak memory growth after the first virtual hour is under 20 MB (REVIEW), no unhandled exception reaches the loop handler, at least one `DailyRollover` per day, the ledger verifies, and a report renders for each day.
-- [ ] **AUTO-008**: A fault-injection suite under `tests/degradation/` drives each AUTO-005 row through `FaultInjector` on replay and asserts the stated behaviour and recovery.
+- [x] **AUTO-007**: `tests/soak/test_soak_multiday_replay.py` replays `soak-3d`: peak memory growth after the first virtual hour is under 20 MB (REVIEW), no unhandled exception reaches the loop handler, at least one `DailyRollover` per day, the ledger verifies, and a report renders for each day.
+- [x] **AUTO-008**: A fault-injection suite under `tests/degradation/` drives each AUTO-005 row through `FaultInjector` on replay and asserts the stated behaviour and recovery.
 
 ### Observability (OBS)
 
 - [x] **OBS-001**: Every log record is one JSON line with the fields of `docs/FOUNDATION_STACK.md` section 5.1, secrets and key-shaped values are redacted before emission (`tests/test_logging.py::test_log_redaction`), and `PUMPGROK_LOG_JSON=false` restores text only in the `dev` overlay.
 - [x] **OBS-002**: A cycle bound to a ULID correlation id yields child spans `<ulid>.<n>` on every tool call, log record and ledger event (R29; `tests/test_correlation.py::test_correlation_id_chain`).
-- [ ] **OBS-003**: `GET /metrics` exposes `pumpgrok_cycle_seconds{seat}`, `pumpgrok_bot_crashes_total{seat}`, `pumpgrok_orders_total{side,outcome}`, `pumpgrok_equity_sol`, `pumpgrok_drawdown_pct`, `pumpgrok_data_age_seconds{source}`, `pumpgrok_breaker_state{breaker}`, `pumpgrok_kill_switch`, `pumpgrok_ledger_seq` (`docs/design/paper-engine.md` section 6.6) and span timings for every tool call are logged.
-- [ ] **OBS-004**: `docs/runbooks/{setup,engine,start_stop,kill_switch,breaker_reset,outage,rollback,reading_reports,go_live}.md` exist, each command in them is one of the canonical commands or a `pumpgrok` verb, and they pass `./scripts/check.sh`.
+- [x] **OBS-003**: `GET /metrics` exposes `pumpgrok_cycle_seconds{seat}`, `pumpgrok_bot_crashes_total{seat}`, `pumpgrok_orders_total{side,outcome}`, `pumpgrok_equity_sol`, `pumpgrok_drawdown_pct`, `pumpgrok_data_age_seconds{source}`, `pumpgrok_breaker_state{breaker}`, `pumpgrok_kill_switch`, `pumpgrok_ledger_seq` (`docs/design/paper-engine.md` section 6.6) and span timings for every tool call are logged.
+- [x] **OBS-004**: `docs/runbooks/{setup,engine,start_stop,kill_switch,breaker_reset,outage,rollback,reading_reports,go_live}.md` exist, each command in them is one of the canonical commands or a `pumpgrok` verb, and they pass `./scripts/check.sh`.
 - [x] **OBS-005**: `CHANGELOG.md` records every phase, `AGENTS.md` indexes the rules a cloud agent must read, and the milestone report (phase reports appended to this file, section 6.6) lists the final test, gate and audit results.
 
 ### Security (SEC)
@@ -100,13 +100,13 @@ Requirements for the v1 milestone. Each maps to exactly one roadmap phase (see T
 - [x] **SEC-002**: Secrets reach the desk only through env (or a secret manager injecting env); `--rpc https://...?api-key=` style CLI flags are refused and the operator confirmation secret is readable only by `pumpgrok live confirm` and `LiveGate.validate`, never by a seat or tool (R21).
 - [x] **SEC-003**: `tests/safety/test_no_signing_outside_live_stub.py` walks the AST and fails on any `sign`, `send_transaction`, `sendTransaction` or `Keypair` symbol outside `src/pumpgrok/execution/live/`, and the live stub itself builds no transaction.
 - [x] **SEC-004**: `pumpgrok run --mode live` (or env `PUMPGROK_MODE=live`, R30) with any of the nine R21 preconditions unmet exits 3 listing every unmet line and sends nothing; precondition 8 (a registered live adapter implementation) is always unmet because none ships; `LiveAdapter.place`/`cancel` (`src/pumpgrok/execution/live/live_adapter.py`) always raise `LiveGateError` after appending `LiveWriteAttempted` and a critical alert; every registry grant decision is a `GrantAudit` row.
-- [ ] **SEC-005**: `security-pr.yml` (gitleaks, semgrep, bandit, pip-audit via the R2 bridge, trivy) is green on `main` or every exception is listed in `SECURITY.md` with an expiry.
+- [x] **SEC-005**: `security-pr.yml` (gitleaks, semgrep, bandit, pip-audit via the R2 bridge, trivy) is green on `main` or every exception is listed in `SECURITY.md` with an expiry.
 
 ### Go-live gate (GOLIVE)
 
 - [x] **GOLIVE-001**: `pumpgrok live confirm --by human:<name> --notional-cap <sol> --expires <iso>` writes the HMAC-signed confirmation record bound to the config hash using an operator secret no seat or tool can read (R21) and appends `ApprovalRecorded(kind=live_gate)` plus `ConfigChanged(keys_changed=["live.confirmation"])`; it never changes `execution.mode`.
 - [x] **GOLIVE-002**: `LiveGate.validate` (`src/pumpgrok/execution/live/live_gate.py`) evaluates the paper window and the thresholds `closed_trades >= 50`, `profit_factor >= 1.2`, `max_drawdown <= drawdown_halt_fraction` only over ledger events with `source=paper`, refuses any ledger containing `source=replay` for its metrics, and `0 < live.notional_cap_sol <= 1.0` (R21, REVIEW); the weekly report prints each precondition with OK/unmet.
-- [ ] **GOLIVE-003**: `docs/runbooks/go_live.md` documents the full procedure, `tests/execution/test_live_gate_fails_fast.py` proves each of the nine preconditions independently, and the milestone ships with `live.enabled = false` in every overlay.
+- [x] **GOLIVE-003**: `docs/runbooks/go_live.md` documents the full procedure, `tests/execution/test_live_gate_fails_fast.py` proves each of the nine preconditions independently, and the milestone ships with `live.enabled = false` in every overlay.
 
 ## v2 Requirements
 
@@ -183,28 +183,28 @@ Which phases cover which requirements. Populated during roadmap creation from `d
 | RISK-004 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-005 | Phase 4 Paper Trading and Autonomy | Complete |
 | RISK-006 | Phase 4 Paper Trading and Autonomy | Complete |
-| RISK-007 | Phase 5 Hardening | Pending |
+| RISK-007 | Phase 5 Hardening | Complete |
 | AUTO-001 | Phase 4 Paper Trading and Autonomy | Complete |
 | AUTO-002 | Phase 4 Paper Trading and Autonomy | Complete |
 | AUTO-003 | Phase 4 Paper Trading and Autonomy | Complete |
 | AUTO-004 | Phase 4 Paper Trading and Autonomy | Complete |
 | AUTO-005 | Phase 4 Paper Trading and Autonomy | Complete |
 | AUTO-006 | Phase 4 Paper Trading and Autonomy | Complete |
-| AUTO-007 | Phase 5 Hardening | Pending |
-| AUTO-008 | Phase 5 Hardening | Pending |
+| AUTO-007 | Phase 5 Hardening | Complete |
+| AUTO-008 | Phase 5 Hardening | Complete |
 | OBS-001 | Phase 1 Foundation | Complete |
 | OBS-002 | Phase 1 Foundation | Complete |
-| OBS-003 | Phase 5 Hardening | Pending |
-| OBS-004 | Phase 5 Hardening | Pending |
+| OBS-003 | Phase 5 Hardening | Complete |
+| OBS-004 | Phase 5 Hardening | Complete |
 | OBS-005 | Phase 5 Hardening | Complete |
 | SEC-001 | Phase 1 Foundation | Complete |
 | SEC-002 | Phase 1 Foundation | Complete |
 | SEC-003 | Phase 2 Restructure | Complete |
 | SEC-004 | Phase 4 Paper Trading and Autonomy | Complete |
-| SEC-005 | Phase 5 Hardening | Pending |
+| SEC-005 | Phase 5 Hardening | Complete |
 | GOLIVE-001 | Phase 4 Paper Trading and Autonomy | Complete |
 | GOLIVE-002 | Phase 4 Paper Trading and Autonomy | Complete |
-| GOLIVE-003 | Phase 5 Hardening | Pending |
+| GOLIVE-003 | Phase 5 Hardening | Complete |
 
 **Coverage:**
 

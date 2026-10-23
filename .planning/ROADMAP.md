@@ -12,7 +12,7 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [x] **Phase 2: Restructure** - Read-only tools and vendor engine ported into `src/pumpgrok` with characterization tests, skills rewritten, CLI verbs exposed (5 requirements) (completed 2026-10-21)
 - [x] **Phase 3: Tools and Skills** - Dotted typed tool layer, least-privilege rosters, desk gateway and the 35-skill set (15 requirements) (completed 2026-10-21)
 - [x] **Phase 4: Paper Trading and Autonomy** - Curve-faithful paper fills, risk engine, deterministic replay, supervised ten-seat loop, reports, live refusal and vendor retirement (24 requirements) (completed 2026-10-22)
-- [ ] **Phase 5: Hardening** - Multi-day soak, fault injection, metrics, runbooks, go-live gate proof and security evidence (8 requirements)
+- [x] **Phase 5: Hardening** - Multi-day soak, fault injection, metrics, runbooks, go-live gate proof and security evidence (8 requirements) (completed 2026-10-23)
 
 ## Phase Details
 
@@ -176,15 +176,15 @@ Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `
 - [ ] Go-live runbook and fail-fast proof for each of the nine preconditions; `live.enabled = false` in every overlay (GOLIVE-003)
 - [ ] Security workflow green on `main` or exceptions with expiry in `SECURITY.md` (SEC-005)
 
-**Plans**: 5/8 plans executed in 5 waves
+**Plans**: 8/8 plans complete in 5 waves
 - [x] 05-01-PLAN.md (wave 1, OBS-003)
 - [x] 05-02-PLAN.md (wave 1, OBS-004, OBS-005)
 - [x] 05-03-PLAN.md (wave 2, AUTO-007, AUTO-008)
 - [x] 05-04-PLAN.md (wave 2, RISK-007, GOLIVE-003)
 - [x] 05-05-PLAN.md (wave 3, OBS-005)
-- [ ] 05-06-PLAN.md (wave 3, OBS-005)
-- [ ] 05-07-PLAN.md (wave 4, SEC-005, OBS-004)
-- [ ] 05-08-PLAN.md (wave 5, OBS-005)
+- [x] 05-06-PLAN.md (wave 3, OBS-005)
+- [x] 05-07-PLAN.md (wave 4, SEC-005, OBS-004)
+- [x] 05-08-PLAN.md (wave 5, OBS-005)
 
 ## Progress
 
@@ -197,4 +197,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Restructure | 5/5 | Complete    | 2026-10-21 |
 | 3. Tools and Skills | 7/7 | Complete    | 2026-10-21 |
 | 4. Paper Trading and Autonomy | 10/10 | Complete    | 2026-10-22 |
-| 5. Hardening | 5/8 | In Progress | - |
+| 5. Hardening | 8/8 | Complete    | 2026-10-23 |
