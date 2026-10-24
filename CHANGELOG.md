@@ -14,6 +14,7 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
   bytes, and returns a parse error for deeply nested JSON.
 - Hermes scripts: verify-isolation reports failures, bootstrap dry-run writes nothing, and the cron
   installer refuses unreadable or blank prompts before creating any job.
+- The go-live quick start computes a future expiry; the live-confirm test pins the CLI clock.
 
 ## [Unreleased] - Gate trust hardening
 
