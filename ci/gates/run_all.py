@@ -18,7 +18,7 @@ REPO_ROOT = GATES_DIR.parents[1]
 
 def run(name: str, argv: list[str]) -> tuple[str, int]:
     print(f"\n{'=' * 70}\n{name}\n{'=' * 70}")
-    result = subprocess.run([sys.executable, *argv], cwd=REPO_ROOT, check=False)
+    result = subprocess.run([sys.executable, "-P", *argv], cwd=REPO_ROOT, check=False)
     return name, result.returncode
 
 

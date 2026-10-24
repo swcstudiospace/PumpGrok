@@ -46,8 +46,11 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/gates/. Land the trusted gate scripts on $BASE_REF first; this PR cannot be gated until then."
             exit 1
           fi
+          rm -rf ci/gates
           git checkout "origin/$BASE_REF" -- ci/gates/
-          echo "Trusted ci/gates overlay from origin/$BASE_REF"
+          # The ownership manifest decides G-1, so the PR must not supply the rules that judge it.
+          git checkout "origin/$BASE_REF" -- ownership.yaml
+          echo "Trusted ci/gates and ownership.yaml overlay from origin/$BASE_REF"
           ls ci/gates/
 
       - uses: actions/setup-python@v5
@@ -82,7 +85,7 @@ jobs:
 
       - name: G-1 — Manifest self-check
         if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
-        run: python3 ci/gates/check_ownership.py --validate-manifest
+        run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
         if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
@@ -90,7 +93,7 @@ jobs:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          python3 ci/gates/check_ownership.py \
+          python3 -P ci/gates/check_ownership.py \
             --bot "$BOT" \
             --base "origin/$BASE_REF"
 
@@ -152,7 +155,7 @@ jobs:
           RECEIPT: ${{ steps.receipt.outputs.path }}
           BOT: ${{ steps.bot.outputs.bot }}
         run: |
-          python3 ci/gates/check_receipt.py \
+          python3 -P ci/gates/check_receipt.py \
             --receipt "$RECEIPT" \
             --bot "$BOT" \
             --strict
@@ -160,7 +163,7 @@ jobs:
       - name: G-3 — Committed secrets
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
-        run: python3 ci/gates/check_secrets.py --base "origin/$BASE_REF"
+        run: python3 -P ci/gates/check_secrets.py --base "origin/$BASE_REF"
 
       - name: G-4 — Contract-first changes
         env:
@@ -172,20 +175,20 @@ jobs:
             "origin/$BASE_REF...HEAD" -- contracts/changes \
             | grep -E '\.ya?ml$' | head -n1 || true)
           if [[ -n "$CHANGE" ]]; then
-            python3 ci/gates/check_contracts.py \
+            python3 -P ci/gates/check_contracts.py \
               --base "origin/$BASE_REF" --change "$CHANGE"
           else
-            python3 ci/gates/check_contracts.py --base "origin/$BASE_REF"
+            python3 -P ci/gates/check_contracts.py --base "origin/$BASE_REF"
           fi
 
       - name: G-5/G-6 — Rollback and destructive operations
         if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
         env:
           RECEIPT: ${{ steps.receipt.outputs.path }}
-        run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"
+        run: python3 -P ci/gates/check_rollback.py --receipt "$RECEIPT"
 
       - name: G-7 — Desk integrity
-        run: python3 ci/gates/check_desk_integrity.py --repo .
+        run: python3 -P ci/gates/check_desk_integrity.py --repo .
 
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
@@ -205,6 +208,7 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/gates/. Land the trusted gate scripts on $BASE_REF first."
             exit 1
           fi
+          rm -rf ci/gates
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
 

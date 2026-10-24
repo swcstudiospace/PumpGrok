@@ -59,9 +59,27 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
 
+      - name: Use trusted scanner config from base ref
+        # The scanner configuration decides what blocks the PR, so the PR must not supply it.
+        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          if ! git cat-file -e "origin/$BASE_REF:ci/security"; then
+            echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
+            exit 1
+          fi
+          rm -rf ci/security
+          git checkout "origin/$BASE_REF" -- ci/security/
+          echo "Trusted ci/security overlay from origin/$BASE_REF"
+
       - name: Gitleaks — scan only this PR's commits
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
+          BASE: ${{ github.event_name == 'push' && github.event.before || format('origin/{0}', github.base_ref || 'main') }}
         run: |
           set -euo pipefail
           curl -sSL -o gitleaks.tar.gz \
@@ -69,7 +87,7 @@ jobs:
           tar xzf gitleaks.tar.gz gitleaks
           ./gitleaks detect --source . \
             --config ci/security/gitleaks.toml \
-            --log-opts="origin/$BASE_REF..HEAD" \
+            --log-opts="$BASE..HEAD" \
             --report-format sarif --report-path gitleaks.sarif \
             --exit-code 1 \
             -v
@@ -111,12 +129,30 @@ jobs:
         # ci/tests/test_security_workflows.py. Verified on PyPI 2026-10-22.
         run: python -m pip install "semgrep==1.182.1"
 
+      - name: Use trusted scanner config from base ref
+        # The scanner configuration decides what blocks the PR, so the PR must not supply it.
+        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          if ! git cat-file -e "origin/$BASE_REF:ci/security"; then
+            echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
+            exit 1
+          fi
+          rm -rf ci/security
+          git checkout "origin/$BASE_REF" -- ci/security/
+          echo "Trusted ci/security overlay from origin/$BASE_REF"
+
       - name: Semgrep — repo rules + registry security/secrets packs
         # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
         # the high-severity findings. --baseline-commit scopes blocking findings to what this PR
         # changed, so a pre-existing finding in untouched code does not fail an unrelated PR.
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
+          BASE: ${{ github.event_name == 'push' && github.event.before || format('origin/{0}', github.base_ref || 'main') }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
@@ -126,7 +162,7 @@ jobs:
             --config p/secrets \
             --sarif --output semgrep.sarif \
             --severity ERROR --error \
-            --baseline-commit "origin/$BASE_REF" \
+            --baseline-commit "$BASE" \
             .
 
       - name: Upload SARIF artifact
@@ -166,6 +202,23 @@ jobs:
         # ci/tests/test_security_workflows.py. Verified on PyPI 2026-10-22.
         run: python -m pip install "bandit==1.9.4"
 
+      - name: Use trusted scanner config from base ref
+        # The scanner configuration decides what blocks the PR, so the PR must not supply it.
+        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          if ! git cat-file -e "origin/$BASE_REF:ci/security"; then
+            echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
+            exit 1
+          fi
+          rm -rf ci/security
+          git checkout "origin/$BASE_REF" -- ci/security/
+          echo "Trusted ci/security overlay from origin/$BASE_REF"
+
       - name: Bandit baseline — snapshot the base ref's own findings
         # A whole-repo scan fails every PR on findings already present on the base ref. Bandit's
         # -b/--baseline suppresses findings present on both sides, so only new HIGH findings
@@ -176,13 +229,14 @@ jobs:
         # baseline scan runs from inside the worktree with `-r .`.
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
+          BASE: ${{ github.event_name == 'push' && github.event.before || format('origin/{0}', github.base_ref || 'main') }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           # RUNNER_TEMP plus the run id and attempt keeps the worktree path unique per run, so a
           # worktree left registered by a cancelled run cannot make `git worktree add` fail later.
           WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git worktree add --detach "$WORKTREE_DIR" "origin/$BASE_REF"
+          git worktree add --detach "$WORKTREE_DIR" "$BASE"
           set +e
           (cd "$WORKTREE_DIR" && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
           baseline_ec=$?
