@@ -65,7 +65,7 @@ async def run_drawdown(
     inp: DrawdownIn, store: LedgerStore, budget: RiskBudget, clock: Clock
 ) -> dict[str, Any]:
     """Current equity against the folded peak; an empty ledger yields zeros."""
-    state = fold_current_state(store, clock)
+    state = fold_current_state(store, clock, budget)
     current = equity_lamports(state)
     peak = max(int(state.peak_equity_lamports), current)
     drawdown = max(drawdown_fraction(state), Decimal("0"))

@@ -29,5 +29,9 @@ __all__ = [
 ]
 
 
-class NetworkBlocked(RuntimeError):
-    """A test reached for the network without an explicit mock transport."""
+class NetworkBlocked(BaseException):
+    """A test reached for the network without an explicit mock transport.
+
+    Derives from BaseException so that ``except Exception`` handlers in product
+    code cannot swallow it; tests catch it with ``pytest.raises``.
+    """

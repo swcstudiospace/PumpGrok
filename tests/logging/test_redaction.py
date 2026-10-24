@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 
 from pumpgrok.logging import setup_logging
+from pumpgrok.logging.redaction import RedactionFilter, redact_text
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.notify.notifier import Notifier
 
@@ -180,3 +181,52 @@ async def test_log_redaction(
     out = capsys.readouterr().out
     for secret in (PLANTED_B58, PLANTED_AUTH):
         assert secret not in out
+
+
+def _filtered(**extra: Any) -> logging.LogRecord:
+    record = logging.LogRecord("test", logging.INFO, __file__, 1, "message", (), None)
+    for key, value in extra.items():
+        setattr(record, key, value)
+    RedactionFilter().filter(record)
+    return record
+
+
+@pytest.mark.parametrize(
+    "key", ["accessToken", "refreshToken", "dbPassword", "apiSecret", "access_token", "x-api-key"]
+)
+def test_camel_case_secret_names_are_masked(key: str) -> None:
+    record = _filtered(**{key: "plain-value-123"})
+    assert getattr(record, key) == "[redacted]"
+
+
+def test_authorization_header_value_is_masked() -> None:
+    record = _filtered(headers={"Authorization": "Basic dXNlcjpwYXNz", "Accept": "text/plain"})
+    assert record.headers == {"Authorization": "[redacted]", "Accept": "text/plain"}
+
+
+def test_non_secret_camel_case_names_are_kept() -> None:
+    record = _filtered(marketCap="1500", monkeyCount="3")
+    assert record.marketCap == "1500"
+    assert record.monkeyCount == "3"
+
+
+def _pem_marker(edge: str) -> str:
+    # Built at runtime so the file commits no key-shaped literal for secret scanners.
+    return f"-----{edge} RSA PRIVATE KEY-----"
+
+
+def test_complete_pem_block_leaves_no_body_line() -> None:
+    body = ["synthetic-body-line-1", "synthetic-body-line-2", "synthetic-body-line-3"]
+    block = "\n".join([_pem_marker("BEGIN"), *body, _pem_marker("END")])
+    out = redact_text(f"before {block} after")
+    for line in body:
+        assert line not in out
+    assert "before" in out
+    assert "after" in out
+
+
+def test_pem_block_without_end_masks_to_end_of_text() -> None:
+    out = redact_text("head -----BEGIN EC PRIVATE KEY-----\nbodyAAAsynthetic\nbodyBBBsynthetic")
+    assert "bodyAAAsynthetic" not in out
+    assert "bodyBBBsynthetic" not in out
+    assert out.startswith("head ")

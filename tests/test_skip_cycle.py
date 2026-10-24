@@ -220,6 +220,21 @@ def test_live_is_refused_with_exit_3_before_other_work(
     assert not (tmp_path / "var").exists()
 
 
+def test_refused_live_run_leaves_seeded_ledger_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
+    ledger = _ledger(tmp_path)
+    rows_before = _rows(ledger, "SELECT * FROM events ORDER BY seq")
+    head_before = _rows(ledger, "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1")
+    assert rows_before
+
+    assert main(["run", "--mode", "live", "--once", "--replay", str(SMOKE)]) == 3
+    assert _rows(ledger, "SELECT * FROM events ORDER BY seq") == rows_before
+    assert _rows(ledger, "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1") == head_before
+
+
 def test_config_errors_exit_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -234,10 +249,16 @@ def test_config_errors_exit_1(
     assert not (tmp_path / "var").exists()
 
 
-def test_key_bearing_cli_value_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_key_bearing_cli_value_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.chdir(tmp_path)
-    url = "https://rpc.example.test/?api-key=abcdefghijklmnop"  # pragma: allowlist secret
+    secret = "abcdefghijklmnop"  # pragma: allowlist secret
+    url = f"https://rpc.example.test/?api-key={secret}"  # pragma: allowlist secret
     assert main(["run", "--mode", "paper", "--replay", url]) == 1
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err
     assert not (tmp_path / "var").exists()
 
 

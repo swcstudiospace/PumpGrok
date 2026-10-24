@@ -150,7 +150,6 @@ class PaperAdapter(ExecutionAdapter):
         fees: FeeModel | None = None,
         price_source: PriceSource | None = None,
         source: Literal["paper", "replay", "manual"] = "paper",
-        curve_origin: str = "fixture",
         p_drop: float = P_DROP,
     ) -> None:
         self._store = store
@@ -163,7 +162,6 @@ class PaperAdapter(ExecutionAdapter):
         self._fees = fees if fees is not None else FeeModel()
         self._price = price_source
         self._source = source
-        self._curve_origin = curve_origin
         self._p_drop = p_drop
         self._inflight = _InflightOrders()
         self._cancelled: set[str] = set()
@@ -468,16 +466,6 @@ class PaperAdapter(ExecutionAdapter):
                 source=ledger_source,
                 correlation_id=correlation_id,
             )
-        if not rpc_curve_price_allowed(curve_source=self._curve_origin):
-            raise await self._reject(
-                request,
-                request.decision_id,
-                "data_unavailable",
-                f"curve layout {self._curve_origin} reads are ASSUMED",
-                stage="ACCEPTED",
-                source=ledger_source,
-                correlation_id=correlation_id,
-            )
         curve0 = await self._read_curve(request.mint)
         if curve0 is None:
             raise await self._reject(
@@ -485,6 +473,17 @@ class PaperAdapter(ExecutionAdapter):
                 request.decision_id,
                 "no_reserves",
                 f"mint={request.mint}",
+                stage="ACCEPTED",
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+        # The source gate prices entries only: a stop-loss sell must still fill (INV-R-16).
+        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve0.source):
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "data_unavailable",
+                f"curve layout {curve0.source} reads are ASSUMED",
                 stage="ACCEPTED",
                 source=ledger_source,
                 correlation_id=correlation_id,
@@ -591,6 +590,18 @@ class PaperAdapter(ExecutionAdapter):
                 request.decision_id,
                 "no_reserves",
                 f"mint={request.mint}",
+                stage="CONFIRMING",
+                order_id=order_id,
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
+        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve1.source):
+            self._inflight.discard(order_id)
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "data_unavailable",
+                f"curve layout {curve1.source} reads are ASSUMED",
                 stage="CONFIRMING",
                 order_id=order_id,
                 source=ledger_source,

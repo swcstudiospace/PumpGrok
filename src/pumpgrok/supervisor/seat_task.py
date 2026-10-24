@@ -1,6 +1,6 @@
 """Per-seat task wrapper: heartbeats, bounded restarts, observe-only latch.
 
-``SeatTask`` owns one seat's execution record. The wrapper — never the bot —
+``SeatTask`` owns one seat's execution record. The wrapper - never the bot -
 records ``(started_at, finished_at, ok, duration_s)`` so a seat cannot fake
 its own heartbeat (paper-engine.md 6.3). A cycle that raises, or that
 exceeds ``clock.timeout(max(30, 4 * cadence))``, counts as a crash and feeds
@@ -14,7 +14,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
-from collections.abc import Awaitable, Callable, Mapping
+import sys
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +40,8 @@ STALE_CADENCES = 3
 #: Escalation kinds this module appends.
 KIND_RESTART_EXHAUSTED = "bot_restart_exhausted"
 KIND_HEARTBEAT_STALE = "heartbeat_stale"
+#: Latch reason when the ledger cannot be read at construction (fail closed).
+KIND_LEDGER_READ_FAILED = "ledger_read_failed"
 #: Resume note prefix written by ``state resume`` (cli.py).
 RESUME_PREFIX = "resume "
 #: Clock skew budget: refuse appends when the clock trails the head by more.
@@ -188,6 +191,23 @@ class RestartPolicy:
         return float(min(BACKOFF_CAP_S, 2.0**n) + rng.uniform(0.0, 1.0))
 
 
+def _resume_after(notes: Sequence[Mapping[str, Any]], seat: str, floor: int) -> bool:
+    """True when a human resume note for ``seat`` was appended after ledger sequence ``floor``."""
+    for event in notes:
+        if int(event.get("seq", 0)) <= floor:
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("note_kind") != "note":
+            continue
+        if str(payload.get("seat", "")) != seat:
+            continue
+        if str(payload.get("text", "")).startswith(f"{RESUME_PREFIX}{seat} by human:"):
+            return True
+    return False
+
+
 class ObserveOnly:
     """Desk-wide observe-only latch set (paper-engine.md 6.4, RISK-006).
 
@@ -245,23 +265,10 @@ class ObserveOnly:
             log.debug("resume fold skipped: %s", exc)
             return resumed
         for seat in list(self._latched):
-            floor = self._latched_after[seat]
-            for event in notes:
-                if int(event.get("seq", 0)) <= floor:
-                    continue
-                payload = event.get("payload")
-                if not isinstance(payload, dict):
-                    continue
-                if payload.get("note_kind") != "note":
-                    continue
-                if str(payload.get("seat", "")) != seat:
-                    continue
-                text = str(payload.get("text", ""))
-                if text.startswith(f"{RESUME_PREFIX}{seat} by human:"):
-                    del self._latched[seat]
-                    del self._latched_after[seat]
-                    resumed.append(seat)
-                    break
+            if _resume_after(notes, seat, self._latched_after[seat]):
+                del self._latched[seat]
+                del self._latched_after[seat]
+                resumed.append(seat)
         return resumed
 
 
@@ -310,6 +317,57 @@ class SeatTask:
         self.not_before: float | None = None
         self._stale_raised: bool = False
 
+        self._rebuild_exhaustion_latch()
+        if self.seat_id == "bot-06-exit" and self._observe_only.is_latched(self.seat_id):
+            # A latch rebuilt from the ledger must not leave buys open because the original
+            # halt write never landed: restore the protective halt before any seat runs.
+            self._append_exit_halt(self._correlation_id)
+
+    def _rebuild_exhaustion_latch(self) -> None:
+        """Re-latch an exhausted seat from the ledger after a restart.
+
+        The latch lives in memory, so a restarted process would run an exhausted seat again.
+        The newest ``bot_restart_exhausted`` escalation for this seat latches it, unless a human
+        resume note was appended after that escalation (the same rule ``fold_resume`` applies).
+        An unreadable ledger latches the seat with ``ledger_read_failed`` instead: the restored
+        state is unknown, so the seat stays observe-only until a human resumes it.
+        """
+        try:
+            escalations = self._store.read(types=["Escalation"], limit=None)
+            notes = self._store.read(types=["JournalNote"], limit=None)
+        except Exception as exc:
+            log.error("exhaustion latch rebuild failed for %s: %s", self.seat_id, exc)
+            self._latch_unreadable_ledger()
+            return
+        newest: Mapping[str, Any] | None = None
+        for event in escalations:
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("kind") != KIND_RESTART_EXHAUSTED:
+                continue
+            if payload.get("seat") == self.seat_id:
+                newest = event
+        if newest is None:
+            return
+        floor = int(newest.get("seq", 0))
+        if _resume_after(notes, self.seat_id, floor):
+            return
+        self._observe_only.latch(self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=floor)
+
+    def _latch_unreadable_ledger(self) -> None:
+        """Latch observe-only with ``ledger_read_failed`` when the ledger cannot be read.
+
+        ``fold_resume`` clears a latch only on a human resume note after its sequence floor,
+        which is the ledger head here. When the head is unknown too, ``sys.maxsize`` keeps the
+        latch for the life of this process, so no resume note can clear it early.
+        """
+        try:
+            floor = self._store.count()
+        except Exception:
+            floor = sys.maxsize
+        self._observe_only.latch(self.seat_id, KIND_LEDGER_READ_FAILED, after_seq=floor)
+
     @property
     def timeout_s(self) -> float:
         """Cycle timeout: max(30 s, 4 x cadence) via clock.timeout."""
@@ -335,6 +393,10 @@ class SeatTask:
         Returns ``"ok"`` or ``"crash"``. ``CancelledError`` (shutdown drain)
         propagates; every other failure feeds the restart policy.
         """
+        if self.seat_id == "bot-06-exit" and self._observe_only.is_latched(self.seat_id):
+            # EXIT owes its protective halt until it lands. A restored latch does not crash
+            # again, so the crash-path retry alone would never write it (day-keyed, idempotent).
+            self._append_exit_halt(ctx.correlation_id)
         started = self._clock.now()
         self.last_started_at = started
         outcome = "ok"
@@ -384,11 +446,8 @@ class SeatTask:
             self.not_before = now + self._policy.backoff_s(self._rng, now)
             return
         if self._observe_only.is_latched(self.seat_id):
-            # Already latched: the escalation and relay fired once on the rising
-            # edge and must not repeat. EXIT still owes its protective halt, so
-            # retry it on every failed cycle until it lands (day-keyed, idempotent).
-            if self.seat_id == "bot-06-exit":
-                self._append_exit_halt(ctx)
+            # Already latched: the escalation and relay fired once on the rising edge and
+            # must not repeat. EXIT's halt is retried at the start of every cycle instead.
             return
         # seq is contiguous from 1 (hash chain), so the row count is the head seq.
         self._observe_only.latch(
@@ -396,7 +455,7 @@ class SeatTask:
         )
         if self.seat_id == "bot-06-exit":
             # Halt first: a failed escalation write must not leave EXIT unhalted.
-            self._append_exit_halt(ctx)
+            self._append_exit_halt(ctx.correlation_id)
         append_escalation(
             self._store,
             self._clock,
@@ -408,7 +467,7 @@ class SeatTask:
         )
         await self._relay(KIND_RESTART_EXHAUSTED, f"{self.seat_id} restart budget exhausted")
 
-    def _append_exit_halt(self, ctx: SeatContext) -> None:
+    def _append_exit_halt(self, correlation_id: str) -> None:
         """Exit seat unmanaged: HaltSet(reason=manual) via the day idempotency."""
         ts_utc = format_ts_utc(self._clock.now())
         equity = self._initial_equity()
@@ -416,7 +475,7 @@ class SeatTask:
             self._store.append(
                 ts_utc=ts_utc,
                 source=self._source,
-                correlation_id=ctx.correlation_id,
+                correlation_id=correlation_id,
                 idempotency_key=halt_key("manual", ts_utc[:10]),
                 type="HaltSet",
                 payload={

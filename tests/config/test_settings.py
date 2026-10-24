@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from pumpgrok.cli import main
 from pumpgrok.config.settings import (
     ConfigError,
     Settings,
@@ -116,8 +118,20 @@ def test_load_settings_reports_live_mode_and_leaves_refusal_to_the_gate(
     assert load_settings(mode="live").effective_mode == "live"
 
 
-def test_live_profile_loads_and_gate_decides_startup(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
+def test_live_profile_loads_and_gate_refuses_startup(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PUMPGROK_PROFILE", "live")
+    smoke = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
     assert load_settings().effective_mode == "live"
+    assert main(["run", "--mode", "live", "--once", "--replay", str(smoke)]) == 3
+    ledger = tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite"
+    types: set[str] = set()
+    if ledger.exists():
+        conn = sqlite3.connect(ledger)
+        try:
+            types = {str(row[0]) for row in conn.execute("SELECT type FROM events")}
+        finally:
+            conn.close()
+    assert not types & {"OrderPlaced", "FillRecorded"}

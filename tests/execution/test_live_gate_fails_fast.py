@@ -129,10 +129,23 @@ def test_live_gate_fails_fast_per_precondition(
     assert f" {target} " in unmet[0]
 
 
-def test_paper_mode_never_evaluates_gate(tmp_path: Path, monkeypatch) -> None:
+def test_paper_mode_never_evaluates_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A paper run never reaches LiveGate.evaluate, so no precondition is read."""
     gate = LiveGate(mode="paper", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
     assert gate.check()[0] == "mode_live"
-    assert gate.evaluate()[0] == gate.evaluate()[0]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
+    smoke = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
+    calls: list[LiveGate] = []
+    real_evaluate = LiveGate.evaluate
+
+    def _spy(self: LiveGate) -> tuple[Precondition, ...]:
+        calls.append(self)
+        return real_evaluate(self)
+
+    monkeypatch.setattr(LiveGate, "evaluate", _spy)
+    assert main(["run", "--mode", "paper", "--once", "--replay", str(smoke)]) == 0
+    assert calls == []
 
 
 def test_mature_paper_window_meets_days_and_thresholds(tmp_path: Path) -> None:
