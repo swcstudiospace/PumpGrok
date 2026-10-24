@@ -40,15 +40,29 @@ if ! command -v hermes >/dev/null 2>&1; then
   DRY_RUN=1
 fi
 
+# Print one prompt body. Fails when the file is unreadable or holds only blank lines;
+# the read is checked directly so a failed cat is never hidden inside a here-document.
+read_prompt() {
+  local file="$1" body
+  if ! body="$(cat "${ROOT}/hermes/cron/prompts/${file}" 2>/dev/null)"; then
+    return 1
+  fi
+  if [[ -z "${body//[[:space:]]/}" ]]; then
+    return 1
+  fi
+  printf '%s\n' "${body}"
+}
+
 prompt_body() {
-  local file="$1"
+  local file="$1" body
+  body="$(read_prompt "${file}")" || return 1
   cat <<EOF
 REPO=${ROOT}
 DESK=${DESK}
 Read and follow these instructions exactly. Files beat memory.
 Run the desk CLI as: uv run --project "\$REPO" pumpgrok <verb> ... (substitute \$REPO/\$DESK from the two lines above; never export PUMPGROK_* names into the process env, Settings refuses them).
 
-$(cat "${ROOT}/hermes/cron/prompts/${file}")
+${body}
 EOF
 }
 
@@ -68,8 +82,16 @@ install_job() {
       ;;
   esac
 
+  local prompt_path="${ROOT}/hermes/cron/prompts/${prompt_file}"
+  if [[ ! -f "${prompt_path}" ]]; then
+    echo "REFUSED: missing prompt ${prompt_path}; no cron job created for ${owner}" >&2
+    return 1
+  fi
   local prompt
-  prompt="$(prompt_body "${prompt_file}")"
+  if ! prompt="$(prompt_body "${prompt_file}")"; then
+    echo "REFUSED: unreadable or empty cron prompt ${prompt_file}; no cron job created for ${owner}" >&2
+    return 1
+  fi
   echo "JOB owner=${owner} name=${name} schedule=${schedule} deliver=${deliver}"
   if [[ ${DRY_RUN} -eq 1 ]]; then
     echo "--- prompt ${prompt_file} ---"
@@ -104,6 +126,19 @@ if [[ ${REMOVE} -eq 1 ]]; then
   done
   exit 0
 fi
+
+# Refuse before creating any job if a prompt is missing, unreadable or blank: a
+# header-only job would otherwise be scheduled with no instructions.
+for prompt_name in scout-discover.md scout-pipeline.md risk-audit.md chief-pickup.md rug-watch.md chief-journal.md; do
+  if [[ ! -f "${ROOT}/hermes/cron/prompts/${prompt_name}" ]]; then
+    echo "REFUSED: missing cron prompt ${prompt_name}; no jobs installed" >&2
+    exit 1
+  fi
+  if ! read_prompt "${prompt_name}" >/dev/null; then
+    echo "REFUSED: unreadable or empty cron prompt ${prompt_name}; no jobs installed" >&2
+    exit 1
+  fi
+done
 
 install_job scout "every 60m" "[bot:scout] discover" "bot-chat:chief" \
   "scout-discover.md" discovery-tools solana-market-data grokbot-pipeline hermes-cron-desk

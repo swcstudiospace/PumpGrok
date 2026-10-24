@@ -6,7 +6,7 @@ The live gate and the human confirmation record. In this release every live star
 
 ```bash
 pumpgrok run --mode live --once --replay tests/fixtures/replay/smoke
-pumpgrok live confirm --by human:operator --notional-cap 1 --expires 2026-10-23T00:00:00Z
+pumpgrok live confirm --by human:operator --notional-cap 1 --expires "$(uv run python -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
 ```
 
 The first command exits 3 and prints one refusal line per unmet precondition, in R21 order. The second records a human live-gate confirmation bound to the config hash; it needs `PUMPGROK_CONFIRMATION_KEY` in the environment and never changes the effective mode.

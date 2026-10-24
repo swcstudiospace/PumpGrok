@@ -271,9 +271,15 @@ _MAX_BODY_BYTES = 1 << 20  # 1 MiB; tool arguments are small JSON
 _MAX_CONTENT_LENGTH_DIGITS = 7  # len(str(_MAX_BODY_BYTES)); longer can only be 400
 _CONTENT_LENGTH_RE = re.compile(r"[0-9]+")
 
+_REQUEST_TIMEOUT_S = 10.0  # per-socket-operation bound on every client connection
+
 
 class _Handler(BaseHTTPRequestHandler):
     """JSON-RPC over POST with per-seat compare_digest auth."""
+
+    # Socket timeout for every read and write on the connection: a stalled client is
+    # closed within this bound instead of pinning a handler thread.
+    timeout = _REQUEST_TIMEOUT_S
 
     def log_message(self, _format: str, *_args: Any) -> None:
         return
@@ -317,9 +323,13 @@ class _Handler(BaseHTTPRequestHandler):
         if short not in tokens:
             return 503
         presented = _presented_token(self.headers)
+        # Compare as bytes: hmac.compare_digest raises TypeError on non-ASCII str.
+        presented_bytes = presented.encode() if presented is not None else None
         matched: str | None = None
         for seat_short, expected in tokens.items():
-            if presented is not None and hmac.compare_digest(presented, expected):
+            if presented_bytes is not None and hmac.compare_digest(
+                presented_bytes, expected.encode()
+            ):
                 matched = seat_short
         if matched is None:
             return HTTP_UNAUTHORIZED
@@ -411,7 +421,7 @@ class _Handler(BaseHTTPRequestHandler):
         """Parse one JSON-RPC envelope and answer the supported methods."""
         try:
             envelope = json.loads(raw.decode() or "null")
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self._send_json(
                 400,
                 {

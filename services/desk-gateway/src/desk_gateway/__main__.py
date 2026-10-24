@@ -23,9 +23,10 @@ from pathlib import Path
 
 from desk_gateway.config import GatewayConfig, load_tokens
 from desk_gateway.server import GatewayRefusedError, close_server, create_server
-from pumpgrok.config.settings import ConfigError, load_settings
+from pumpgrok.config.settings import ConfigError, current_profile, load_settings
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.ledger.paths import DESK_DATA_DIR, PAPER_LEDGER_PATH
+from pumpgrok.logging.json import setup_logging
 from pumpgrok.tools.notify.telegram import read_telegram_token
 
 EXIT_OK = 0
@@ -65,6 +66,11 @@ def main() -> int:
     except ConfigError as exc:
         _say(str(exc))
         return EXIT_CONFIG
+    setup_logging(mode=settings.effective_mode, profile=current_profile())
+    # httpx and httpcore log every request URL at INFO, and the redaction filter does not
+    # mask a credential carried in a URL path, so keep them at WARNING.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     try:
         port = _port(os.environ.get("DESK_GATEWAY_PORT"))
     except ValueError as exc:

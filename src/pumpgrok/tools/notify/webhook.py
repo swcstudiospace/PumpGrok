@@ -13,7 +13,19 @@ import httpx
 
 from pumpgrok.core.ids import Clock
 
-__all__ = ["WebhookSender"]
+__all__ = ["WebhookSendError", "WebhookSender"]
+
+
+class WebhookSendError(RuntimeError):
+    """Sanitized webhook failure carrying the HTTP status for the retry classifier.
+
+    The message names only the status or exception type, never the request URL,
+    so a secret carried in the webhook path cannot reach an exception message.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class WebhookSender:
@@ -29,5 +41,13 @@ class WebhookSender:
             **payload,
             "ts": datetime.fromtimestamp(self._clock.now(), UTC).isoformat(),
         }
-        response = await self._client.post(url, json=body)
-        response.raise_for_status()
+        try:
+            response = await self._client.post(url, json=body)
+            response.raise_for_status()
+        except httpx.TimeoutException:
+            raise TimeoutError("webhook send timed out") from None
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            raise WebhookSendError(f"webhook send failed: HTTP {status}", status) from None
+        except httpx.HTTPError as exc:
+            raise WebhookSendError(f"webhook send failed: {type(exc).__name__}") from None

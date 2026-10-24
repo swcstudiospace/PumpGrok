@@ -21,6 +21,20 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - The RPC entry gate refuses buys only; a stop-loss sell is not refused as ASSUMED-layout data.
 - A failed degraded-marker write refuses startup instead of starting with a healthy empty book.
 
+## [Unreleased] - Operator surface fixes
+
+### Fixed
+
+- Live confirmation expiry is recorded in UTC; naive, past and out-of-range expiries are refused.
+- --day and --week are validated as dates.
+- Notify errors never echo webhook URLs; a failed console or alert-file write no longer blocks
+  network sinks.
+- The gateway logs at the configured level, applies request timeouts, compares bearer tokens as
+  bytes, and returns a parse error for deeply nested JSON.
+- Hermes scripts: verify-isolation reports failures, bootstrap dry-run writes nothing, and the cron
+  installer refuses unreadable or blank prompts before creating any job.
+- The go-live quick start computes a future expiry; the live-confirm test pins the CLI clock.
+
 ## [Unreleased] - Gate trust hardening
 
 ### Fixed

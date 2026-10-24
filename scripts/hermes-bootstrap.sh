@@ -87,26 +87,6 @@ if [[ ${DRY_RUN} -eq 1 ]]; then
   echo "DRY-RUN clone_all=false copy_provider_env=${COPY_PROVIDER_ENV}"
 fi
 
-mkdir -p "${DESK}"/{proposals,briefs,leads,research,journal,incidents,positions,watch}
-if [[ ! -f "${DESK}/desk.md" ]]; then
-  cat > "${DESK}/desk.md" <<EOF
-# PumpGrok Desk Record
-Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-Engagement: research
-Halt: false
-Throwaway wallet: not yet connected
-Daily loss limit: 5 %
-Notes: Hermes isolated profiles + cron state machine. Research only.
-EOF
-fi
-if [[ ! -f "${DESK}/risk-limits.md" ]]; then
-  cat > "${DESK}/risk-limits.md" <<EOF
-# Risk limits
-Status: interview pending
-Default paper size: TBD
-EOF
-fi
-
 if ! command -v hermes >/dev/null 2>&1; then
   echo "WARN: hermes CLI not on PATH. Will write profile trees only." >&2
 fi
@@ -217,9 +197,12 @@ else
     home="${PROFILES_DIR}/${role}"
     if command -v hermes >/dev/null 2>&1; then
       if [[ ! -d "${home}" ]]; then
-        hermes profile create "${role}" --no-skills 2>/dev/null \
-          || hermes profile create "${role}" 2>/dev/null \
-          || mkdir -p "${home}"
+        if ! create_out="$(hermes profile create "${role}" --no-skills 2>&1)" \
+          && ! create_out="$(hermes profile create "${role}" 2>&1)"; then
+          echo "${create_out}" >&2
+          echo "hermes profile create ${role} failed; no profile directory created" >&2
+          exit 1
+        fi
       fi
       hermes -p "${role}" skills opt-out 2>/dev/null || true
     fi
@@ -228,24 +211,28 @@ else
   done
 fi
 
-# Create the shared file-bus tree (mirrors the retired desk_state.py ensure:
-# eight children plus the seeded desk.md and risk-limits.md).
-for child in proposals briefs leads research journal incidents positions watch; do
-  mkdir -p "${DESK}/${child}"
-done
-if [[ ! -f "${DESK}/desk.md" ]]; then
-  cat > "${DESK}/desk.md" <<EOF
+# Create the shared file-bus tree: eight children plus the seeded desk.md and
+# risk-limits.md. Skipped in dry-run so nothing is written.
+if [[ ${DRY_RUN} -eq 0 ]]; then
+  mkdir -p "${DESK}"/{proposals,briefs,leads,research,journal,incidents,positions,watch}
+  if [[ ! -f "${DESK}/desk.md" ]]; then
+    cat > "${DESK}/desk.md" <<EOF
 # PumpGrok Desk Record
 Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Engagement: research
 Halt: false
 Throwaway wallet: not yet connected
 Daily loss limit: 5 %
-Notes: Cron state machine installed. Research only.
+Notes: Hermes isolated profiles + cron state machine. Research only.
 EOF
-fi
-if [[ ! -f "${DESK}/risk-limits.md" ]]; then
-  printf '# Risk limits\n\nStatus: interview pending\nDefault paper size: TBD\n' > "${DESK}/risk-limits.md"
+  fi
+  if [[ ! -f "${DESK}/risk-limits.md" ]]; then
+    cat > "${DESK}/risk-limits.md" <<EOF
+# Risk limits
+Status: interview pending
+Default paper size: TBD
+EOF
+  fi
 fi
 
 echo

@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -310,6 +311,7 @@ def test_live_confirm_writes_hmac_record_without_changing_mode(
         "operator-secret-for-tests",  # pragma: allowlist secret: test placeholder, not a credential
     )
     monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
+    monkeypatch.setattr("pumpgrok.cli._utc_now", lambda: datetime(2026, 1, 1, tzinfo=UTC))
     code = main(
         [
             "live",

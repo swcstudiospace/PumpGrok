@@ -63,8 +63,8 @@ jobs:
       # One-time waiver, approved by the repository owner (ask: shipwaivers). G-1, G-2 and
       # G-5/6 attribute a change to one seat or read a receipt that a human change does not
       # have. Only PR number 14 from this repository is waived; every other gate stays
-      # enforced. The waiver for PR 13 is removed, since it is merged. Remove this waiver
-      # after the merge.
+      # enforced. The waivers for PR 13 and PR 15 are removed, since they are merged. Remove
+      # this waiver after the merge.
       - name: Determine the acting bot
         if: github.event.pull_request.number != 14 || github.event.pull_request.head.repo.full_name != github.repository
         id: bot

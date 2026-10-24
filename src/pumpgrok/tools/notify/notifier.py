@@ -148,9 +148,21 @@ class Notifier(abc.ABC):
             return {"delivered": [], "suppressed": True}
         delivered: list[dict[str, Any]] = []
         if file_pending:
-            self._write_stdout_and_file(severity, kind, text, ticket_id, fields or {})
-            self._written_keys.add(key)
-            delivered.append({"sink": STDOUT_FILE_SINK, "ok": True, "error": None})
+            # A local write failure is a failed row for this sink only; the network
+            # sinks still run, and the key stays unrecorded so a retry writes again.
+            try:
+                self._write_stdout_and_file(severity, kind, text, ticket_id, fields or {})
+            except (OSError, UnicodeError) as exc:
+                delivered.append(
+                    {
+                        "sink": STDOUT_FILE_SINK,
+                        "ok": False,
+                        "error": f"alert file write failed: {type(exc).__name__}",
+                    }
+                )
+            else:
+                self._written_keys.add(key)
+                delivered.append({"sink": STDOUT_FILE_SINK, "ok": True, "error": None})
         results = await asyncio.gather(
             *(
                 self._deliver_to(key, d, kind, text=text, ticket_id=ticket_id, fields=fields or {})
@@ -189,7 +201,11 @@ class Notifier(abc.ABC):
             error = str(exc) or f"timed out after {self._destination_timeout_s}s"
             return {"sink": destination, "ok": False, "error": error}
         except Exception as exc:  # sinks report, never raise
-            return {"sink": destination, "ok": False, "error": str(exc)}
+            # Sinks report a status or an exception class only: never str(exc), which
+            # can carry the request URL and its path secret.
+            status = getattr(exc, "status_code", None)
+            error = f"HTTP {status}" if isinstance(status, int) else type(exc).__name__
+            return {"sink": destination, "ok": False, "error": error}
         self._delivered.add((key, destination))
         return {"sink": destination, "ok": True, "error": None}
 
