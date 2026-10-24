@@ -67,6 +67,10 @@ def main() -> int:
         _say(str(exc))
         return EXIT_CONFIG
     setup_logging(mode=settings.effective_mode, profile=current_profile())
+    # httpx and httpcore log every request URL at INFO, and the redaction filter does not
+    # mask a credential carried in a URL path, so keep them at WARNING.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     try:
         port = _port(os.environ.get("DESK_GATEWAY_PORT"))
     except ValueError as exc:

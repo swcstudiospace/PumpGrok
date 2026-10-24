@@ -89,3 +89,13 @@ def test_weekly_report_refuses_a_non_date_week(
     captured = capsys.readouterr()
     assert "usage error" in captured.err
     assert captured.out == ""
+
+
+def test_overflowing_expiry_is_a_usage_error_not_a_traceback(
+    confirm_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _confirm("9999-12-31T23:59:59-01:00") == EXIT_CONFIG
+    captured = capsys.readouterr()
+    assert "usage error" in captured.err
+    assert "Traceback" not in captured.err
+    assert not (confirm_env / "var" / "live_confirmation.json").exists()

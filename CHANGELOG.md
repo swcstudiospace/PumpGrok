@@ -2,6 +2,19 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - Operator surface fixes
+
+### Fixed
+
+- Live confirmation expiry is recorded in UTC; naive, past and out-of-range expiries are refused.
+- --day and --week are validated as dates.
+- Notify errors never echo webhook URLs; a failed console or alert-file write no longer blocks
+  network sinks.
+- The gateway logs at the configured level, applies request timeouts, compares bearer tokens as
+  bytes, and returns a parse error for deeply nested JSON.
+- Hermes scripts: verify-isolation reports failures, bootstrap dry-run writes nothing, and the cron
+  installer refuses unreadable or blank prompts before creating any job.
+
 ## [Unreleased] - Phase 1: Foundation (2026-10-21)
 
 ### Added

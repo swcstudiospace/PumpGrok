@@ -1077,7 +1077,10 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
         raise UsageError(f"bad --expires {args.expires!r}: want ISO-8601 UTC") from exc
     if expires.tzinfo is None:
         raise UsageError(f"bad --expires {args.expires!r}: want an offset or Z, not a naive time")
-    expires_utc = expires.astimezone(UTC)
+    try:
+        expires_utc = expires.astimezone(UTC)
+    except (OverflowError, ValueError) as exc:
+        raise UsageError(f"bad --expires {args.expires!r}: expiry is out of range") from exc
     if expires_utc <= _utc_now():
         raise UsageError(f"bad --expires {args.expires!r}: expiry is in the past")
     key = os.environ.get("PUMPGROK_CONFIRMATION_KEY", "")

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 import httpx
+import pytest
 
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.notify.notifier import STDOUT_FILE_SINK, HttpxNotifier
@@ -103,3 +105,25 @@ async def test_failed_file_write_is_retried_on_next_send(tmp_path: Path) -> None
     second = await notifier.send(severity="critical", kind="halt", text="stop")
     assert _row(second, STDOUT_FILE_SINK) == {"sink": STDOUT_FILE_SINK, "ok": True, "error": None}
     assert (tmp_path / "not-a-directory" / "alerts.log").exists()
+
+
+async def test_ascii_console_failure_still_delivers_to_webhook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ascii_stdout = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    monkeypatch.setattr(sys, "stdout", ascii_stdout)
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"ok": True})
+
+    notifier = _notifier(tmp_path / "alerts.log", handler)
+    # U+1F6D1 (stop sign) cannot be encoded by an ASCII console.
+    out = await notifier.send(severity="critical", kind="halt", text="stop \U0001f6d1")
+
+    assert seen == [WEBHOOK_URL]
+    assert _row(out, WEBHOOK_URL) == {"sink": WEBHOOK_URL, "ok": True, "error": None}
+    file_row = _row(out, STDOUT_FILE_SINK)
+    assert file_row["ok"] is False
+    assert file_row["error"].startswith("alert file write failed: ")

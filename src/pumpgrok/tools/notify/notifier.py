@@ -152,7 +152,7 @@ class Notifier(abc.ABC):
             # sinks still run, and the key stays unrecorded so a retry writes again.
             try:
                 self._write_stdout_and_file(severity, kind, text, ticket_id, fields or {})
-            except OSError as exc:
+            except (OSError, UnicodeError) as exc:
                 delivered.append(
                     {
                         "sink": STDOUT_FILE_SINK,
