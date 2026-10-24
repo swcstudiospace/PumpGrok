@@ -477,7 +477,8 @@ class PaperAdapter(ExecutionAdapter):
                 source=ledger_source,
                 correlation_id=correlation_id,
             )
-        if not rpc_curve_price_allowed(curve_source=curve0.source):
+        # The source gate prices entries only: a stop-loss sell must still fill (INV-R-16).
+        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve0.source):
             raise await self._reject(
                 request,
                 request.decision_id,
@@ -594,7 +595,7 @@ class PaperAdapter(ExecutionAdapter):
                 source=ledger_source,
                 correlation_id=correlation_id,
             )
-        if not rpc_curve_price_allowed(curve_source=curve1.source):
+        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve1.source):
             self._inflight.discard(order_id)
             raise await self._reject(
                 request,

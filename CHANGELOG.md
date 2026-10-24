@@ -16,6 +16,10 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Equity uses one SOL-to-lamports rule (ROUND_HALF_UP) across scheduler, engine and read tools.
 - A corrupt reputation book leaves a durable degraded marker; the book is loaded at startup.
 - NetworkBlocked cannot be swallowed by broad except clauses in tests.
+- An exit latch restored from the ledger re-appends its HaltSet before any seat runs; every cycle
+  retries it until it lands.
+- The RPC entry gate refuses buys only; a stop-loss sell is not refused as ASSUMED-layout data.
+- A failed degraded-marker write refuses startup instead of starting with a healthy empty book.
 
 ## [Unreleased] - Gate trust hardening
 

@@ -318,6 +318,10 @@ class SeatTask:
         self._stale_raised: bool = False
 
         self._rebuild_exhaustion_latch()
+        if self.seat_id == "bot-06-exit" and self._observe_only.is_latched(self.seat_id):
+            # A latch rebuilt from the ledger must not leave buys open because the original
+            # halt write never landed: restore the protective halt before any seat runs.
+            self._append_exit_halt(self._correlation_id)
 
     def _rebuild_exhaustion_latch(self) -> None:
         """Re-latch an exhausted seat from the ledger after a restart.
@@ -389,6 +393,10 @@ class SeatTask:
         Returns ``"ok"`` or ``"crash"``. ``CancelledError`` (shutdown drain)
         propagates; every other failure feeds the restart policy.
         """
+        if self.seat_id == "bot-06-exit" and self._observe_only.is_latched(self.seat_id):
+            # EXIT owes its protective halt until it lands. A restored latch does not crash
+            # again, so the crash-path retry alone would never write it (day-keyed, idempotent).
+            self._append_exit_halt(ctx.correlation_id)
         started = self._clock.now()
         self.last_started_at = started
         outcome = "ok"
@@ -438,11 +446,8 @@ class SeatTask:
             self.not_before = now + self._policy.backoff_s(self._rng, now)
             return
         if self._observe_only.is_latched(self.seat_id):
-            # Already latched: the escalation and relay fired once on the rising
-            # edge and must not repeat. EXIT still owes its protective halt, so
-            # retry it on every failed cycle until it lands (day-keyed, idempotent).
-            if self.seat_id == "bot-06-exit":
-                self._append_exit_halt(ctx)
+            # Already latched: the escalation and relay fired once on the rising edge and
+            # must not repeat. EXIT's halt is retried at the start of every cycle instead.
             return
         # seq is contiguous from 1 (hash chain), so the row count is the head seq.
         self._observe_only.latch(
@@ -450,7 +455,7 @@ class SeatTask:
         )
         if self.seat_id == "bot-06-exit":
             # Halt first: a failed escalation write must not leave EXIT unhalted.
-            self._append_exit_halt(ctx)
+            self._append_exit_halt(ctx.correlation_id)
         append_escalation(
             self._store,
             self._clock,
@@ -462,7 +467,7 @@ class SeatTask:
         )
         await self._relay(KIND_RESTART_EXHAUSTED, f"{self.seat_id} restart budget exhausted")
 
-    def _append_exit_halt(self, ctx: SeatContext) -> None:
+    def _append_exit_halt(self, correlation_id: str) -> None:
         """Exit seat unmanaged: HaltSet(reason=manual) via the day idempotency."""
         ts_utc = format_ts_utc(self._clock.now())
         equity = self._initial_equity()
@@ -470,7 +475,7 @@ class SeatTask:
             self._store.append(
                 ts_utc=ts_utc,
                 source=self._source,
-                correlation_id=ctx.correlation_id,
+                correlation_id=correlation_id,
                 idempotency_key=halt_key("manual", ts_utc[:10]),
                 type="HaltSet",
                 payload={

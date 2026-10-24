@@ -131,3 +131,14 @@ def test_a_new_exhaustion_after_a_resume_latches_again(tmp_path: Path) -> None:
     _task(store, clock, latch)
 
     assert latch.is_latched(SEAT) is True
+
+
+def test_restored_exit_latch_appends_the_halt_before_any_cycle(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    _escalate(store, clock, KIND_RESTART_EXHAUSTED, "bot-06-exit")
+
+    _task(store, clock, ObserveOnly(), seat="bot-06-exit")
+
+    halts = store.read(types=["HaltSet"], limit=None)
+    assert [row["payload"]["detail"] for row in halts] == ["exit seat observe-only"]

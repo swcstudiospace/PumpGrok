@@ -157,3 +157,15 @@ async def test_exposure_after_partial_sell_matches_reducer_cost_basis(tmp_path: 
     out = await run_exposure(ExposureIn(mint=MINT), adapter._store, clock)
     assert out["per_token"] == [{"mint": MINT, "exposure_lamports": reducer_basis}]
     assert out["gross_exposure_lamports"] == reducer_basis
+
+
+async def test_rpc_sell_is_not_refused_by_the_entry_gate(tmp_path: Path) -> None:
+    """Entries only: an exit on an rpc snapshot is never refused by the source gate."""
+    adapter, clock = _harness(tmp_path, [_snap("fixture")] * 2 + [_snap("rpc")] * 8)
+    buy = _request(adapter, TICKET, side=Side.BUY, units=None)
+    bought = await _place(adapter, clock, buy, seat="bot-04-sniper")
+    sell = _request(adapter, TICKET, side=Side.SELL, units=bought.filled_units)
+    try:
+        await _place(adapter, clock, sell, seat="bot-06-exit")
+    except OrderRejectedError as exc:
+        assert exc.reason != "data_unavailable"
