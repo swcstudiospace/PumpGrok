@@ -60,8 +60,8 @@ jobs:
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - name: Use trusted scanner config from base ref
-        # The scanner configuration decides what blocks the PR, so the PR must not supply it.
-        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        # The scanner settings are restored from the base ref, so the PR cannot change what blocks it.
+        # PR-added source under ci/security stays in the tree and is scanned.
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -72,8 +72,7 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
             exit 1
           fi
-          rm -rf ci/security
-          git checkout "origin/$BASE_REF" -- ci/security/
+          git checkout "origin/$BASE_REF" -- ci/security/gitleaks.toml ci/security/bandit.ini ci/security/semgrep.yml
           echo "Trusted ci/security overlay from origin/$BASE_REF"
 
       - name: Gitleaks — scan only this PR's commits
@@ -82,12 +81,21 @@ jobs:
           BASE: ${{ github.event_name == 'push' && github.event.before || format('origin/{0}', github.base_ref || 'main') }}
         run: |
           set -euo pipefail
+          git fetch --no-tags origin "$BASE" 2>/dev/null || true
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            RANGE="$BASE..HEAD"
+          else
+            # A force-pushed main can leave the old tip unreachable. Scan the full history rather
+            # than guess a range: this is strictly broader, so no finding can be skipped.
+            echo "::warning::Base commit $BASE is not in this checkout; scanning the full history."
+            RANGE="HEAD"
+          fi
           curl -sSL -o gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
           tar xzf gitleaks.tar.gz gitleaks
           ./gitleaks detect --source . \
             --config ci/security/gitleaks.toml \
-            --log-opts="$BASE..HEAD" \
+            --log-opts="$RANGE" \
             --report-format sarif --report-path gitleaks.sarif \
             --exit-code 1 \
             -v
@@ -131,7 +139,7 @@ jobs:
 
       - name: Use trusted scanner config from base ref
         # The scanner configuration decides what blocks the PR, so the PR must not supply it.
-        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        # The scanner settings are restored from the base ref; PR-added source stays in the tree.
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -142,8 +150,7 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
             exit 1
           fi
-          rm -rf ci/security
-          git checkout "origin/$BASE_REF" -- ci/security/
+          git checkout "origin/$BASE_REF" -- ci/security/gitleaks.toml ci/security/bandit.ini ci/security/semgrep.yml
           echo "Trusted ci/security overlay from origin/$BASE_REF"
 
       - name: Semgrep — repo rules + registry security/secrets packs
@@ -156,13 +163,19 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          BASELINE=(--baseline-commit "$BASE")
+          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            # Unreachable base (force push): scan the whole tree rather than compare to nothing.
+            echo "::warning::Base commit $BASE is not in this checkout; scanning the whole tree."
+            BASELINE=()
+          fi
           semgrep \
             --config ci/security/semgrep.yml \
             --config p/security-audit \
             --config p/secrets \
             --sarif --output semgrep.sarif \
             --severity ERROR --error \
-            --baseline-commit "$BASE" \
+            "${BASELINE[@]}" \
             .
 
       - name: Upload SARIF artifact
@@ -204,7 +217,7 @@ jobs:
 
       - name: Use trusted scanner config from base ref
         # The scanner configuration decides what blocks the PR, so the PR must not supply it.
-        # ci/security is restored from the base ref after rm -rf, so PR-added files cannot survive.
+        # The scanner settings are restored from the base ref; PR-added source stays in the tree.
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -215,8 +228,7 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/security/. Land the trusted scanner config on $BASE_REF first."
             exit 1
           fi
-          rm -rf ci/security
-          git checkout "origin/$BASE_REF" -- ci/security/
+          git checkout "origin/$BASE_REF" -- ci/security/gitleaks.toml ci/security/bandit.ini ci/security/semgrep.yml
           echo "Trusted ci/security overlay from origin/$BASE_REF"
 
       - name: Bandit baseline — snapshot the base ref's own findings
@@ -233,20 +245,26 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
-          # RUNNER_TEMP plus the run id and attempt keeps the worktree path unique per run, so a
-          # worktree left registered by a cancelled run cannot make `git worktree add` fail later.
-          WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git worktree add --detach "$WORKTREE_DIR" "$BASE"
-          set +e
-          (cd "$WORKTREE_DIR" && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
-          baseline_ec=$?
-          set -e
-          git worktree remove --force "$WORKTREE_DIR"
-          # 0 = clean, 1 = findings: both are a successful baseline scan. Anything else means the
-          # baseline cannot be trusted, so fail closed rather than compare against nothing.
-          if [ "$baseline_ec" -gt 1 ]; then
-            echo "::error::Bandit baseline scan against origin/$BASE_REF failed (exit $baseline_ec) — refusing to compare against an untrustworthy baseline."
-            exit 1
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            # RUNNER_TEMP plus the run id and attempt keeps the worktree path unique per run, so a
+            # worktree left registered by a cancelled run cannot make `git worktree add` fail later.
+            WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git worktree add --detach "$WORKTREE_DIR" "$BASE"
+            set +e
+            (cd "$WORKTREE_DIR" && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
+            baseline_ec=$?
+            set -e
+            git worktree remove --force "$WORKTREE_DIR"
+            # 0 = clean, 1 = findings: both are a successful baseline scan. Anything else means the
+            # baseline cannot be trusted, so fail closed rather than compare against nothing.
+            if [ "$baseline_ec" -gt 1 ]; then
+              echo "::error::Bandit baseline scan against origin/$BASE_REF failed (exit $baseline_ec) — refusing to compare against an untrustworthy baseline."
+              exit 1
+            fi
+          else
+            # Unreachable base (force push): an empty baseline makes every HIGH finding count as new.
+            echo "::warning::Base commit $BASE is not in this checkout; no baseline, so every HIGH finding blocks."
+            echo '{"results": []}' > "$GITHUB_WORKSPACE/bandit-baseline.json"
           fi
           python3 -c "import json; json.load(open('bandit-baseline.json'))"
 
