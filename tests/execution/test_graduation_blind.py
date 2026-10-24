@@ -201,8 +201,8 @@ async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
     assert LAYOUT_STATUS == "ASSUMED"
     assert rpc_curve_price_allowed(curve_source="rpc") is False
     assert rpc_curve_price_allowed(curve_source="fixture") is True
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
-    adapter._curve_origin = "rpc"
+    rpc_snap = _snap(S0, T0).model_copy(update={"source": "rpc"})
+    adapter, clock = _harness(tmp_path, [rpc_snap, rpc_snap])
     request = OrderRequest(
         ticket_id="SOL-20260201-015",
         mint=MINT,

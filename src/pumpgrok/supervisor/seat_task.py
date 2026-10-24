@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -188,6 +188,23 @@ class RestartPolicy:
         return float(min(BACKOFF_CAP_S, 2.0**n) + rng.uniform(0.0, 1.0))
 
 
+def _resume_after(notes: Sequence[Mapping[str, Any]], seat: str, floor: int) -> bool:
+    """True when a human resume note for ``seat`` was appended after ledger sequence ``floor``."""
+    for event in notes:
+        if int(event.get("seq", 0)) <= floor:
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("note_kind") != "note":
+            continue
+        if str(payload.get("seat", "")) != seat:
+            continue
+        if str(payload.get("text", "")).startswith(f"{RESUME_PREFIX}{seat} by human:"):
+            return True
+    return False
+
+
 class ObserveOnly:
     """Desk-wide observe-only latch set (paper-engine.md 6.4, RISK-006).
 
@@ -245,23 +262,10 @@ class ObserveOnly:
             log.debug("resume fold skipped: %s", exc)
             return resumed
         for seat in list(self._latched):
-            floor = self._latched_after[seat]
-            for event in notes:
-                if int(event.get("seq", 0)) <= floor:
-                    continue
-                payload = event.get("payload")
-                if not isinstance(payload, dict):
-                    continue
-                if payload.get("note_kind") != "note":
-                    continue
-                if str(payload.get("seat", "")) != seat:
-                    continue
-                text = str(payload.get("text", ""))
-                if text.startswith(f"{RESUME_PREFIX}{seat} by human:"):
-                    del self._latched[seat]
-                    del self._latched_after[seat]
-                    resumed.append(seat)
-                    break
+            if _resume_after(notes, seat, self._latched_after[seat]):
+                del self._latched[seat]
+                del self._latched_after[seat]
+                resumed.append(seat)
         return resumed
 
 
@@ -309,6 +313,37 @@ class SeatTask:
         self.restarts = 0
         self.not_before: float | None = None
         self._stale_raised: bool = False
+
+        self._rebuild_exhaustion_latch()
+
+    def _rebuild_exhaustion_latch(self) -> None:
+        """Re-latch an exhausted seat from the ledger after a restart.
+
+        The latch lives in memory, so a restarted process would run an exhausted seat again.
+        The newest ``bot_restart_exhausted`` escalation for this seat latches it, unless a human
+        resume note was appended after that escalation (the same rule ``fold_resume`` applies).
+        """
+        try:
+            escalations = self._store.read(types=["Escalation"], limit=None)
+            notes = self._store.read(types=["JournalNote"], limit=None)
+        except Exception as exc:
+            log.debug("exhaustion latch rebuild skipped for %s: %s", self.seat_id, exc)
+            return
+        newest: Mapping[str, Any] | None = None
+        for event in escalations:
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("kind") != KIND_RESTART_EXHAUSTED:
+                continue
+            if payload.get("seat") == self.seat_id:
+                newest = event
+        if newest is None:
+            return
+        floor = int(newest.get("seq", 0))
+        if _resume_after(notes, self.seat_id, floor):
+            return
+        self._observe_only.latch(self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=floor)
 
     @property
     def timeout_s(self) -> float:

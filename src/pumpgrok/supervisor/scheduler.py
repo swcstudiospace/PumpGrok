@@ -34,7 +34,7 @@ from pumpgrok.core.bot import BotManifest
 from pumpgrok.core.ids import Clock, CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
-from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.engine.pipeline import BUY, CandidateVerdict, decide_replay, evaluate_candidates
@@ -270,6 +270,7 @@ class Supervisor:
         degraded: DegradedState | None = None,
         health_path: str | Path | None = None,
         risk: Any | None = None,
+        budget: RiskBudget | None = None,
         cycle_observer: Callable[[str, float, str], None] | None = None,
         seat_cadences: Mapping[str, float] | None = None,
     ) -> None:
@@ -289,6 +290,7 @@ class Supervisor:
         self._degraded = degraded if degraded is not None else DegradedState()
         self._health_path = Path(health_path) if health_path is not None else None
         self._risk = risk
+        self._budget = budget if budget is not None else RiskBudget()
         self.observe_only = ObserveOnly()
         self.tasks: dict[str, SeatTask] = {
             seat: SeatTask(
@@ -512,10 +514,9 @@ class Supervisor:
         """
         events = self._store.read(since_seq=1, limit=None)
         meta_equity = self._store.get_meta("initial_equity_lamports")
-        if meta_equity is not None:
-            initial = int(meta_equity)
-        else:
-            initial = RiskBudget().paper_equity_lamports
+        initial = (
+            int(meta_equity) if meta_equity is not None else budget_equity_lamports(self._budget)
+        )
         meta_source = self._store.get_meta("source")
         if meta_source:
             source = meta_source
@@ -1107,6 +1108,7 @@ def run_once_replay(
             degraded=degraded,
             health_path=health_path,
             risk=runtime.risk,
+            budget=budget,
             seat_cadences=FIXTURE_SEAT_CADENCES,
         )
         before = runtime.store.count()
@@ -1247,6 +1249,7 @@ def build_serve_replay(
             degraded=degraded,
             health_path=health_path,
             risk=runtime.risk,
+            budget=budget,
             cycle_observer=metrics.observe,
             seat_cadences=FIXTURE_SEAT_CADENCES,
         )

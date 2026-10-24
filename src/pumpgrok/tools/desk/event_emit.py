@@ -118,7 +118,8 @@ async def run_event_emit(
             "task_id": inp.task_id,
         }
     else:
-        body = {"seat": seat, **scrubbed}
+        caller = {k: v for k, v in scrubbed.items() if k not in ("seat", "source")}
+        body = {**caller, "seat": seat}
     journal_in = JournalAppendIn(
         kind=inp.kind,
         note_kind=inp.note_kind,

@@ -1,8 +1,8 @@
 """portfolio.exposure: current exposure from the folded ledger (TOOL-005).
 
 Equity and cash come from the current ledger fold through the shared views;
-open positions are counted from ``PositionOpened``/``PositionClosed`` events.
-per-token exposure comes from open-position cost basis; curve marks land in
+open positions and their per-mint cost basis come from the reducer fold, so
+partial sells reduce basis exactly as the ledger does. Curve marks land in
 Phase 4. An empty ledger yields zeros, never an exception.
 """
 
@@ -18,7 +18,7 @@ from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.ledger.views import cash_lamports, equity_lamports
+from pumpgrok.ledger.views import cash_lamports, equity_lamports, positions
 from pumpgrok.tools._common import MintStr, fold_current_state, meta_now
 
 __all__ = [
@@ -72,18 +72,11 @@ async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dic
     state = fold_current_state(store, clock)
     equity = equity_lamports(state)
     cash = cash_lamports(state)
-    per_token: dict[str, int] = {}
+    per_token = {mint: pos.cost_basis_lamports for mint, pos in positions(state).items()}
     trades_today = 0
     today = _today_utc(clock)
     for event in store.read(limit=None):
-        payload = event["payload"]
-        if event["type"] == "PositionOpened":
-            mint = str(payload.get("mint", ""))
-            per_token[mint] = per_token.get(mint, 0) + int(payload.get("cost_basis_lamports", 0))
-        elif event["type"] == "PositionClosed":
-            mint = str(payload.get("mint", ""))
-            per_token.pop(mint, None)
-        elif event["type"] == "FillRecorded" and str(event["ts_utc"]).startswith(today):
+        if event["type"] == "FillRecorded" and str(event["ts_utc"]).startswith(today):
             trades_today += 1
     if inp.mint is not None:
         per_token = {m: v for m, v in per_token.items() if m == inp.mint}

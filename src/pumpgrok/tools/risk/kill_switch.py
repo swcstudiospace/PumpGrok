@@ -193,6 +193,17 @@ async def execute_flatten(
                 )
             )
             continue
+        except Exception as exc:
+            # Any other failure is this position's alone: record it and keep closing the rest.
+            outcomes.append(
+                FlattenOutcome(
+                    mint=intent.mint,
+                    ticket_id=intent.ticket_id,
+                    status="not_flattened",
+                    detail=type(exc).__name__,
+                )
+            )
+            continue
         adapter_status = str(result.get("status", ""))
         if adapter_status == "closed":
             outcomes.append(

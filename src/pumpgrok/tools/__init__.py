@@ -26,6 +26,7 @@ from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
@@ -332,6 +333,9 @@ def build_operator_registry(
         ),
         get_reserves=curves.last.get,
     )
+    # R62: a missing file is an empty healthy book; a corrupt file quarantines
+    # to a degraded book, which refuses buys with reputation_degraded.
+    engine.set_reputation(ReputationBook.load(settings.ops.reputation_path, clock=active_clock))
     log.info(
         "operator registry effective budget=%s limits=%s",
         budget.model_dump(mode="json"),

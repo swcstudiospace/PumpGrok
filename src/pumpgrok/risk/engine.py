@@ -38,7 +38,7 @@ from pumpgrok.core.adapter import EXIT_RULE_REASONS, OrderRequest, Side
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import Clock, IdFactory, calling_seat
-from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
@@ -312,10 +312,9 @@ class RiskEngine:
     def _fold(self) -> LedgerState:
         events = self._store.read(since_seq=1, limit=None)
         meta_equity = self._store.get_meta("initial_equity_lamports")
-        if meta_equity is not None:
-            initial = int(meta_equity)
-        else:
-            initial = self._budget.paper_equity_lamports
+        initial = (
+            int(meta_equity) if meta_equity is not None else budget_equity_lamports(self._budget)
+        )
         meta_source = self._store.get_meta("source")
         if meta_source:
             source = meta_source
