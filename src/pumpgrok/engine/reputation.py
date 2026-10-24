@@ -157,8 +157,8 @@ class ReputationBook(BaseModel):
     ) -> None:
         """Persist the degraded state so the next process starts degraded too.
 
-        A failed write is logged, not raised: the in-memory book stays degraded and refuses
-        buys for this process. The loss of durability is then visible in the log.
+        A failed write raises: a process must not start healthy over a corrupt book, so the
+        operator registry refuses to build until the marker can be written.
         """
         payload = {
             "book": str(book_file),
@@ -169,11 +169,10 @@ class ReputationBook(BaseModel):
         try:
             atomic_write_json(marker, payload)
         except OSError as exc:
-            log.error(
-                "degraded marker %s not written (%s): degraded for this process only",
-                marker,
-                type(exc).__name__,
-            )
+            raise RuntimeError(
+                f"reputation degraded marker {marker} not written ({type(exc).__name__}); "
+                "refusing to start healthy over a corrupt book"
+            ) from exc
 
     def save(self, path: str | Path) -> None:
         """Atomically, like the pipeline state: half a file is worse than none."""
