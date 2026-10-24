@@ -2,6 +2,16 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - Gate trust hardening
+
+### Fixed
+
+- Gate overlays delete ci/gates, ci/security and ownership.yaml before restoring them from the base
+  ref; gate scripts run with python3 -P.
+- Scanner settings come from the base ref; push scans take their base from the event and fall back
+  to a broader scan when the base is unreachable.
+- check_rollback matches case-insensitively and recognises --mode=live.
+
 ## [Unreleased] - Phase 1: Foundation (2026-10-21)
 
 ### Added
