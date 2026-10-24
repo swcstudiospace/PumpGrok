@@ -68,6 +68,11 @@ install_job() {
       ;;
   esac
 
+  local prompt_path="${ROOT}/hermes/cron/prompts/${prompt_file}"
+  if [[ ! -f "${prompt_path}" ]]; then
+    echo "REFUSED: missing prompt ${prompt_path}; no cron job created for ${owner}" >&2
+    return 1
+  fi
   local prompt
   prompt="$(prompt_body "${prompt_file}")"
   echo "JOB owner=${owner} name=${name} schedule=${schedule} deliver=${deliver}"
@@ -104,6 +109,15 @@ if [[ ${REMOVE} -eq 1 ]]; then
   done
   exit 0
 fi
+
+# Refuse before creating any job if a prompt is missing: a header-only job
+# would otherwise be scheduled with no instructions.
+for prompt_name in scout-discover.md scout-pipeline.md risk-audit.md chief-pickup.md rug-watch.md chief-journal.md; do
+  if [[ ! -f "${ROOT}/hermes/cron/prompts/${prompt_name}" ]]; then
+    echo "REFUSED: missing cron prompt ${prompt_name}; no jobs installed" >&2
+    exit 1
+  fi
+done
 
 install_job scout "every 60m" "[bot:scout] discover" "bot-chat:chief" \
   "scout-discover.md" discovery-tools solana-market-data grokbot-pipeline hermes-cron-desk

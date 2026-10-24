@@ -41,7 +41,7 @@ import re
 import sqlite3
 import sys
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn, TextIO
@@ -1075,6 +1075,11 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
         expires = datetime.fromisoformat(str(args.expires).replace("Z", "+00:00"))
     except ValueError as exc:
         raise UsageError(f"bad --expires {args.expires!r}: want ISO-8601 UTC") from exc
+    if expires.tzinfo is None:
+        raise UsageError(f"bad --expires {args.expires!r}: want an offset or Z, not a naive time")
+    expires_utc = expires.astimezone(UTC)
+    if expires_utc <= _utc_now():
+        raise UsageError(f"bad --expires {args.expires!r}: expiry is in the past")
     key = os.environ.get("PUMPGROK_CONFIRMATION_KEY", "")
     if not key:
         _say(sys.stderr, "live confirm refused: PUMPGROK_CONFIRMATION_KEY is not set")
@@ -1090,7 +1095,7 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
         "config_hash": config_hash,
         "confirmed_by": by,
         "confirmed_at": confirmed_at,
-        "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at": expires_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "notional_cap_lamports": cap_lamports,
         "wallet_allowlist_sha256": hashlib.sha256(b"[]").hexdigest(),
         "statement": (
@@ -1156,6 +1161,16 @@ def _append_live_approval(by: str, cap_lamports: int, signature: str) -> None:
         store.close()
 
 
+def _report_date(raw: str | None, flag: str) -> str:
+    """YYYY-MM-DD for a report flag; today (UTC) when omitted. Refuses non-dates."""
+    if raw is None:
+        return _utc_now().strftime("%Y-%m-%d")
+    try:
+        return date.fromisoformat(raw).isoformat()
+    except ValueError as exc:
+        raise UsageError(f"bad {flag} {raw!r}: want a real date YYYY-MM-DD") from exc
+
+
 def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
     """Emit the daily or weekly ASCII paper report to stdout (PAPER-006).
 
@@ -1166,10 +1181,10 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
     ledger = Path.cwd() / PAPER_LEDGER_PATH
     mode = settings.effective_mode
     if args.daily:
-        day = str(args.day or _utc_now().strftime("%Y-%m-%d"))
+        day = _report_date(args.day, "--day")
         body = render_daily(DailyReport.build(ledger, day, mode=mode))
     else:
-        week = str(args.week or _utc_now().strftime("%Y-%m-%d"))
+        week = _report_date(args.week, "--week")
         body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd()))
     if args.out:
         target = Path(str(args.out))

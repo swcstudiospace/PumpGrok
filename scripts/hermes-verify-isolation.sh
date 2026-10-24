@@ -60,7 +60,7 @@ for child in proposals briefs leads research journal incidents positions watch; 
   [[ -d "${DESK}/${child}" ]] || err "desk child missing: ${DESK}/${child}"
 done
 [[ -f "${DESK}/desk.md" ]] || err "missing ${DESK}/desk.md"
-engagement="$(grep -Ei '^[[:space:]]*engagement:' "${DESK}/desk.md" 2>/dev/null | head -1 | sed -E 's/^[^:]*:[[:space:]]*//')"
+engagement="$(grep -Ei '^[[:space:]]*engagement:' "${DESK}/desk.md" 2>/dev/null | head -1 | sed -E 's/^[^:]*:[[:space:]]*//' || true)"
 if [[ "${engagement}" != "research" && "${engagement}" != "paper" ]]; then
   err "desk.md engagement is '${engagement:-missing}'; cron state machine is research/paper only"
 else
@@ -110,7 +110,7 @@ if command -v uv >/dev/null 2>&1; then
   if (
     cd "${STATUS_TMP}"
     for name in $(env | cut -d= -f1 | grep '^PUMPGROK_' || true); do unset "$name"; done
-    uv run --project "${ROOT}" pumpgrok state status --seat chief >/tmp/pumpgrok-desk-status.json
+    uv run --project "${ROOT}" pumpgrok state status --seat chief >"${STATUS_TMP}/status.json"
   ); then
     ok "pumpgrok state status"
   else
