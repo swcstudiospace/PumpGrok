@@ -45,7 +45,7 @@ doctor: sync     ## effective config, data sources, ledger, killswitch
 	$(UV) run pumpgrok doctor
 
 gates:           ## G-1..G-7 for BOT/TASK (stdlib + pyyaml only, like CI)
-	python3 ci/gates/run_all.py --bot $(BOT) --base origin/main --receipt .receipts/$(BOT)/$(TASK).json
+	python3 -P ci/gates/run_all.py --bot $(BOT) --base origin/main --receipt .receipts/$(BOT)/$(TASK).json
 
 prompts:         ## assemble prompts and regenerate agent templates
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh

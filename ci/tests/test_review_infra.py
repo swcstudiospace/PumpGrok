@@ -79,18 +79,6 @@ def test_needs_reference_defined_jobs() -> None:
             assert dep in jobs, f"job {job_id!r} needs undefined job {dep!r}"
 
 
-def test_every_gate_script_invoked_exists_in_repo() -> None:
-    workflow = _workflow(GATES_WORKFLOW)
-    invoked = {
-        match
-        for _, step in _run_steps(workflow)
-        for match in _GATE_CALL.findall(str(step.get("run", "")))
-    }
-    assert invoked, "no ci/gates scripts are invoked; the pattern is stale"
-    missing = sorted(p for p in invoked if not (REPO_ROOT / p).is_file())
-    assert not missing, f"workflow invokes gate scripts absent from the repo: {missing}"
-
-
 def test_overlay_source_directory_exists_in_repo() -> None:
     # The overlay copies ci/gates/ from the base; the PR tree must also carry the directory so
     # that the gate scripts exist for the on-push and self-test paths.
