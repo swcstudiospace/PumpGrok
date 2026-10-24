@@ -60,13 +60,13 @@ jobs:
       - name: Install gate dependencies
         run: python -m pip install pyyaml
 
-      # One-time waiver, decided by the repository owner in session (ask: archivewaiver). G-1,
-      # G-2 and G-5/6 attribute a change to one seat or read a receipt that a human planning
-      # change does not have. Only PR number 12 from this repository is waived; every other gate
-      # stays enforced. The waiver for PR 11 is removed, since it is merged. Remove this waiver
+      # One-time waiver, approved by the repository owner (ask: shipwaivers). G-1, G-2 and
+      # G-5/6 attribute a change to one seat or read a receipt that a human change does not
+      # have. Only PR number 13 from this repository is waived; every other gate stays
+      # enforced. The waiver for PR 12 is removed, since it is merged. Remove this waiver
       # after the merge.
       - name: Determine the acting bot
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         id: bot
         run: |
           # Convention: the branch name starts with the seat id, e.g.
@@ -84,11 +84,11 @@ jobs:
           echo "Acting bot: $BOT"
 
       - name: G-1 — Manifest self-check
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
@@ -98,7 +98,7 @@ jobs:
             --base "origin/$BASE_REF"
 
       - name: Locate the verification receipt
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         id: receipt
         env:
           BOT: ${{ steps.bot.outputs.bot }}
@@ -150,7 +150,7 @@ jobs:
           echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
 
       - name: G-2 — Verification receipt
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         env:
           RECEIPT: ${{ steps.receipt.outputs.path }}
           BOT: ${{ steps.bot.outputs.bot }}
@@ -182,7 +182,7 @@ jobs:
           fi
 
       - name: G-5/G-6 — Rollback and destructive operations
-        if: github.event.pull_request.number != 12 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 13 || github.event.pull_request.head.repo.full_name != github.repository
         env:
           RECEIPT: ${{ steps.receipt.outputs.path }}
         run: python3 -P ci/gates/check_rollback.py --receipt "$RECEIPT"
