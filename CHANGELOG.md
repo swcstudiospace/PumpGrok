@@ -6,8 +6,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ### Fixed
 
-- Gate overlays delete ci/gates, ci/security and ownership.yaml before restoring them from the base
-  ref; gate scripts run with python3 -P.
+- Gate jobs replace ci/gates and restore ownership.yaml from the base ref; gate scripts run with
+  python3 -P. Scanner jobs restore only the settings files, so PR-added ci/security source is scanned.
 - Scanner settings come from the base ref; push scans take their base from the event and fall back
   to a broader scan when the base is unreachable.
 - check_rollback matches case-insensitively and recognises --mode=live.
