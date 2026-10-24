@@ -3,7 +3,7 @@
 **Archived:** 2026-10-23
 **Status:** SHIPPED
 
-For current requirements, see `.planning/REQUIREMENTS.md`.
+This is the final requirements record for v2. The live `.planning/REQUIREMENTS.md` is recreated for the next milestone.
 
 ---
 

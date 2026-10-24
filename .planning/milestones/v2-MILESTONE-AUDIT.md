@@ -46,7 +46,7 @@ Verdict: passed. PAPER-007 was narrowed by owner decision on 2026-10-23 to the s
 
 | Phase | Name | Plans | Verification | Evidence |
 |---|---|---|---|---|
-| 1 | Foundation | 14/14 | passed | .planning/phases/01-foundation/01-VERIFICATION.md |
+| 1 | Foundation | 14/14 | passed | .planning/milestones/v2-phases/01-foundation/01-VERIFICATION.md |
 | 2 | Restructure | 5/5 | passed (re-verified 2026-10-23 at origin/main) | 02-VERIFICATION.md; CR-03 re-verified resolved |
 | 3 | Tools and Skills | 7/7 | passed | 03-VERIFICATION.md |
 | 4 | Paper Trading and Autonomy | 10/10 | passed; PAPER-007 narrowed by owner decision | 04-VERIFICATION.md |

@@ -4,7 +4,7 @@
 
 PumpGrok Desk v2 turns the existing pack (seats, skills, read-only tools, vendored dry-run engine) into an autonomous, paper-only Solana memecoin desk packaged as the Python 3.12 package `src/pumpgrok/`. The five phases follow the fixed plan (R37). Foundation builds the package, layered config, ownership, gates, contracts, the network-blocked test harness and a hash-chained ledger with a skip-only replay cycle. Restructure ports the read-only tools and the screening engine into the package while the vendor suite stays the oracle. Tools and Skills adds the typed dotted tool layer, least-privilege rosters, the desk gateway and the 35-skill set. Paper Trading and Autonomy adds the curve-faithful paper engine, risk engine, deterministic replay, supervisor, reports and the live-mode refusal, then retires the vendor tree. Hardening proves soak, fault injection, metrics, runbooks, the go-live gate and security evidence. Every phase checkpoint keeps `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` runnable.
 
-Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `.planning/REQUIREMENTS.md`).
+Coverage: all 71 v1 requirements map to exactly one phase (see Traceability in `.planning/milestones/v2-REQUIREMENTS.md`).
 
 ## Phases
 
