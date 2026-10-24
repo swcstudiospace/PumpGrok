@@ -81,8 +81,10 @@ jobs:
           BASE: ${{ github.event_name == 'push' && github.event.before || format('origin/{0}', github.base_ref || 'main') }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE" 2>/dev/null || true
-          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+          if ! git cat-file -e "$BASE^{commit}"; then
+            git fetch --no-tags origin "$BASE" || echo "::notice::Could not fetch $BASE by SHA."
+          fi
+          if git cat-file -e "$BASE^{commit}"; then
             RANGE="$BASE..HEAD"
           else
             # A force-pushed main can leave the old tip unreachable. Scan the full history rather
@@ -164,7 +166,7 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           BASELINE=(--baseline-commit "$BASE")
-          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+          if ! git cat-file -e "$BASE^{commit}"; then
             # Unreachable base (force push): scan the whole tree rather than compare to nothing.
             echo "::warning::Base commit $BASE is not in this checkout; scanning the whole tree."
             BASELINE=()
@@ -245,7 +247,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
-          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+          if git cat-file -e "$BASE^{commit}"; then
             # RUNNER_TEMP plus the run id and attempt keeps the worktree path unique per run, so a
             # worktree left registered by a cancelled run cannot make `git worktree add` fail later.
             WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
