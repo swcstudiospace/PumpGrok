@@ -55,7 +55,7 @@ TRADE_BLAST_RADIUS_RE = re.compile(r"^max_notional_sol=\d+(?:\.\d+)?$")
 
 # Deployments put the desk on a live path (G-5). Paper runs are not deployments.
 DEPLOY_PATTERNS = [
-    r"\bpumpgrok\s+run\b.*--mode\s+live\b",
+    r"\bpumpgrok\s+run\b.*--mode[\s=]+live\b",
     r"\bpumpgrok\s+(?:go-live|promote)\b",
     r"\bPUMPGROK_LIVE_ENABLE=(?:1|true)\b",
     r"\bPUMPGROK_MODE=live\b",
@@ -96,7 +96,7 @@ def find_matches(commands: list, patterns) -> list[tuple[int, str, str, str]]:
                 pattern, category, desc = entry
             else:
                 pattern, category, desc = entry, "deploy", "deployment"
-            if re.search(pattern, cmd_str):
+            if re.search(pattern, cmd_str, re.IGNORECASE):
                 hits.append((i, cmd_str, category, desc))
     return hits
 

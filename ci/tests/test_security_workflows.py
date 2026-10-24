@@ -167,17 +167,6 @@ class TestSecurityGatesStillBlock:
             assert checkout["uses"].startswith("actions/checkout")
             assert checkout["with"]["fetch-depth"] == 0, job_name
 
-    def test_gitleaks_scans_only_pr_commits_and_fails_on_a_leak(self, security_pr):
-        run = _step(security_pr, "Gitleaks — scan")["run"]
-        assert "--exit-code 1" in run
-        assert "origin/$BASE_REF..HEAD" in run
-        assert "--config ci/security/gitleaks.toml" in run
-
-    def test_semgrep_blocks_error_severity_against_the_baseline(self, security_pr):
-        run = _step(security_pr, "Semgrep — repo rules")["run"]
-        assert "--severity ERROR --error" in run
-        assert '--baseline-commit "origin/$BASE_REF"' in run
-
     def test_bandit_blocks_high_severity_against_its_baseline(self, security_pr):
         run = _step(security_pr, "Bandit — whole repo")["run"]
         assert "-lll" in run

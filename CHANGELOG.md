@@ -17,6 +17,16 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - A corrupt reputation book leaves a durable degraded marker; the book is loaded at startup.
 - NetworkBlocked cannot be swallowed by broad except clauses in tests.
 
+## [Unreleased] - Gate trust hardening
+
+### Fixed
+
+- Gate jobs replace ci/gates and restore ownership.yaml from the base ref; gate scripts run with
+  python3 -P. Scanner jobs restore only the settings files, so PR-added ci/security source is scanned.
+- Scanner settings come from the base ref; push scans take their base from the event and fall back
+  to a broader scan when the base is unreachable.
+- check_rollback matches case-insensitively and recognises --mode=live.
+
 ## [Unreleased] - Phase 1: Foundation (2026-10-21)
 
 ### Added
