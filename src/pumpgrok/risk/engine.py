@@ -866,6 +866,10 @@ class RiskEngine:
             raise _Fail("seat_may_trade", f"seat observe-only: {acting}")
         if "bot-02-risk" in self._observe_only and ctx.is_buy:
             raise _Fail("seat_may_trade", "risk seat latched: buys off desk-wide")
+        if "bot-06-exit" in self._observe_only and ctx.is_buy:
+            # Open positions are unmanaged while EXIT is latched: no new entries, even before
+            # its HaltSet is recorded.
+            raise _Fail("seat_may_trade", "exit seat latched: buys off desk-wide")
         if ctx.is_buy and acting != BUY_SEAT:
             raise _Fail("seat_may_trade", f"buys only from {BUY_SEAT}")
         if not ctx.is_buy and acting != SELL_SEAT:

@@ -20,6 +20,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
   retries it until it lands.
 - The RPC entry gate refuses buys only; a stop-loss sell is not refused as ASSUMED-layout data.
 - A failed degraded-marker write refuses startup instead of starting with a healthy empty book.
+- A kill-switch observation that races a human clear is dropped instead of re-engaging the switch.
+- Buys are refused desk-wide while the EXIT seat is latched, even before its HaltSet lands.
 
 ## [Unreleased] - Operator surface fixes
 

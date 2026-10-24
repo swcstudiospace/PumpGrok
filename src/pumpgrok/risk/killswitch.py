@@ -325,6 +325,9 @@ class KillSwitch:
         """Append ``KillSwitchSet`` on first observation, and again when a flatten escalates it."""
         if self._store is None:
             return None
+        # Read the epoch before the state: a clear that lands during the read leaves this state
+        # stale, and re-engaging on it would undo the clear.
+        epoch = self._clear_epoch()
         state = self.poll()
         if not state.active:
             return None
@@ -333,6 +336,9 @@ class KillSwitch:
             latest_flatten = bool(latest["payload"].get("flatten_requested", False))
             if latest_flatten or not state.flatten_requested:
                 return None
+        if self._clear_epoch() != epoch:
+            # A clear landed while this state was read: drop the stale state.
+            return None
         row: dict[str, Any] = {
             "ts_utc": ts_utc,
             "source": source,
@@ -342,7 +348,7 @@ class KillSwitch:
                 state.reason,
                 ts_utc[:10],
                 flatten=state.flatten_requested,
-                epoch=self._clear_epoch(),
+                epoch=epoch,
             ),
             "type": "KillSwitchSet",
             "payload": {

@@ -100,8 +100,11 @@ async def _place(
     request: OrderRequest,
     *,
     seat: str,
+    exit_reason: str | None = None,
 ) -> Fill:
-    task = asyncio.create_task(adapter.place(request, seat=seat, correlation_id="test"))
+    task = asyncio.create_task(
+        adapter.place(request, seat=seat, exit_reason=exit_reason, correlation_id="test")
+    )
     for _ in range(400):
         if task.done():
             break
@@ -160,12 +163,10 @@ async def test_exposure_after_partial_sell_matches_reducer_cost_basis(tmp_path: 
 
 
 async def test_rpc_sell_is_not_refused_by_the_entry_gate(tmp_path: Path) -> None:
-    """Entries only: an exit on an rpc snapshot is never refused by the source gate."""
+    """Entries only: a stop-loss exit on an rpc snapshot fills; the source gate is buy-only."""
     adapter, clock = _harness(tmp_path, [_snap("fixture")] * 2 + [_snap("rpc")] * 8)
     buy = _request(adapter, TICKET, side=Side.BUY, units=None)
     bought = await _place(adapter, clock, buy, seat="bot-04-sniper")
     sell = _request(adapter, TICKET, side=Side.SELL, units=bought.filled_units)
-    try:
-        await _place(adapter, clock, sell, seat="bot-06-exit")
-    except OrderRejectedError as exc:
-        assert exc.reason != "data_unavailable"
+    sold = await _place(adapter, clock, sell, seat="bot-06-exit", exit_reason="stop_loss")
+    assert sold.filled_units > 0

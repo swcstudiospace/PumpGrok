@@ -120,3 +120,29 @@ async def test_a_failing_close_is_logged_with_mint_and_class_and_detail_stays_th
     # The logged message is redacted: the secret-shaped value never reaches the log.
     assert SECRET not in caplog.text
     assert "xai-" + "*" * 32 in message
+
+
+def test_a_clear_landing_during_the_poll_is_not_undone_by_the_observation(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = _store(tmp_path)
+    ids = IdFactory(clock, random.Random(7))
+    latch = killswitch_file(tmp_path)
+    try:
+        ks = KillSwitch(clock, store=store, killswitch_path=latch, env={})
+        latch.write_text("operator stop", encoding="utf-8")
+        assert ks.observe(ts_utc=format_ts_utc(START), correlation_id="t") is not None
+        latch.unlink()
+
+        real_poll = ks.poll
+
+        def poll_while_a_clear_lands():
+            state = real_poll()
+            ks.request_clear(_human_clear(clock, ids), "all clear", ts_utc=format_ts_utc(START))
+            return state
+
+        ks.poll = poll_while_a_clear_lands
+        assert ks.observe(ts_utc=format_ts_utc(START), correlation_id="t") is None
+        assert len(store.read(types=["KillSwitchSet"], limit=None)) == 1
+        assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 1
+    finally:
+        store.close()
