@@ -1,13 +1,13 @@
 """Creator memory: the same deployer must not drain us twice in a row.
 
 The pipeline scores each launch from a clean slate, so without this book
-one deployer could rug us three times running — and look brand new every
+one deployer could rug us three times running - and look brand new every
 time. The auditor would not catch it either: it sees one token, not an
 address history.
 
 The reputation book closes this cheaply and without an LLM: an address
 whose token already closed deep in the red is rejected at ingress, before
-a single Grok call. Decisions rest only on our own closed trades — not an
+a single Grok call. Decisions rest only on our own closed trades - not an
 internet blocklist, not a heuristic, but a fact from our own log.
 
 Port of the retired oracle ``src/reputation.py``. All prose is
@@ -84,7 +84,27 @@ class ReputationBook(BaseModel):
 
     @classmethod
     def load(cls, path: str | Path, clock: Clock | None = None) -> ReputationBook:
+        """Load the book. A corrupt or marked book comes back degraded (refusing buys).
+
+        A corrupt file is quarantined beside itself, and a durable degraded marker
+        ``<stem>.degraded.json`` is written beside the book. The marker records the
+        quarantine path, the cause and the detection time. Every later load treats an
+        existing marker as degraded, even when the book file is missing, so a restarted
+        process cannot come back healthy and empty.
+
+        Nothing clears the marker automatically. A human clears the degraded state by
+        removing the marker, after restoring or rebuilding the book. The refusal logic
+        is unchanged: a degraded book refuses buys.
+        """
         file = Path(path)
+        marker = file.with_name(f"{file.stem}.degraded.json")
+        if marker.exists():
+            book = cls()
+            if clock is not None:
+                book._clock = clock
+            book.degraded = True
+            log.error("reputation book degraded by marker %s: remove it to clear", marker)
+            return book
         if not file.exists():
             book = cls()
             if clock is not None:
@@ -99,6 +119,7 @@ class ReputationBook(BaseModel):
                 book._clock = clock
             stamp = format_ts_utc(book._clock.now()).replace(":", "-")
             quarantine = file.with_name(f"{file.name}.corrupt-{stamp}")
+            moved_to: Path | None = None
             try:
                 file.rename(quarantine)
             except OSError as move_exc:
@@ -110,6 +131,7 @@ class ReputationBook(BaseModel):
                     type(move_exc).__name__,
                 )
             else:
+                moved_to = quarantine
                 log.error(
                     "reputation book %s unreadable (%s), quarantined to %s",
                     file,
@@ -117,10 +139,41 @@ class ReputationBook(BaseModel):
                     quarantine,
                 )
             book.degraded = True
+            cls._write_degraded_marker(
+                marker,
+                book_file=file,
+                quarantine=moved_to,
+                cause=type(exc).__name__,
+                now=book._clock.now(),
+            )
             return book
         if clock is not None:
             book._clock = clock
         return book
+
+    @staticmethod
+    def _write_degraded_marker(
+        marker: Path, *, book_file: Path, quarantine: Path | None, cause: str, now: float
+    ) -> None:
+        """Persist the degraded state so the next process starts degraded too.
+
+        A failed write is logged, not raised: the in-memory book stays degraded and refuses
+        buys for this process. The loss of durability is then visible in the log.
+        """
+        payload = {
+            "book": str(book_file),
+            "quarantine": str(quarantine) if quarantine is not None else None,
+            "cause": cause,
+            "detected_at": format_ts_utc(now),
+        }
+        try:
+            atomic_write_json(marker, payload)
+        except OSError as exc:
+            log.error(
+                "degraded marker %s not written (%s): degraded for this process only",
+                marker,
+                type(exc).__name__,
+            )
 
     def save(self, path: str | Path) -> None:
         """Atomically, like the pipeline state: half a file is worse than none."""

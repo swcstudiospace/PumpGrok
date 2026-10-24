@@ -6,9 +6,12 @@ closes every other position, and records the failed one as ``not_flattened``.
 
 from __future__ import annotations
 
+import logging
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
@@ -20,6 +23,8 @@ from pumpgrok.tools.risk.kill_switch import FlattenIntent, execute_flatten
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 MINT_A = "So11111111111111111111111111111111111111112"
 MINT_B = "So22222222222222222222222222222222222222222"
+KILL_LOGGER = "pumpgrok.tools.risk.kill_switch"
+SECRET = "xai-" + "A" * 32
 
 
 def _store(tmp_path: Path) -> LedgerStore:
@@ -90,3 +95,28 @@ async def test_a_non_pumpgrok_error_on_one_position_does_not_stop_the_flatten() 
         (MINT_A, "not_flattened", "RuntimeError"),
         (MINT_B, "closed", ""),
     ]
+
+
+async def test_a_failing_close_is_logged_with_mint_and_class_and_detail_stays_the_class(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger=KILL_LOGGER)
+    barrier = InflightBarrier()
+
+    async def close_position(*, mint: str, ticket_id: str, reason: str) -> dict[str, str]:
+        raise RuntimeError(f"close refused for key {SECRET}")
+
+    intents = [FlattenIntent(mint=MINT_A, ticket_id="T-A", token_units=5)]
+    result = await execute_flatten(lambda: intents, barrier=barrier, close_position=close_position)
+
+    assert [(o.mint, o.status, o.detail) for o in result.outcomes] == [
+        (MINT_A, "not_flattened", "RuntimeError")
+    ]
+    records = [r for r in caplog.records if r.name == KILL_LOGGER]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert MINT_A in message
+    assert "RuntimeError" in message
+    # The logged message is redacted: the secret-shaped value never reaches the log.
+    assert SECRET not in caplog.text
+    assert "xai-" + "*" * 32 in message

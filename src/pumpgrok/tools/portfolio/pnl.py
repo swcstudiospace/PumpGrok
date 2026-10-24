@@ -16,6 +16,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from pumpgrok.core.ids import Clock, ambient_correlation
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
@@ -78,7 +79,9 @@ def _window_start(window: Literal["day", "week", "all"], as_of: datetime) -> dat
     return datetime(first.year, first.month, first.day, tzinfo=UTC)
 
 
-async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
+async def run_pnl(
+    inp: PnlIn, store: LedgerStore, clock: Clock, *, budget: RiskBudget | None = None
+) -> dict[str, Any]:
     """Fold fills and closes into the window summary."""
     as_of = inp.as_of or datetime.fromtimestamp(clock.now(), UTC)
     if as_of.tzinfo is None:
@@ -110,7 +113,7 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
                 gross_profit += pnl
             elif pnl < 0:
                 gross_loss += -pnl
-    state = fold_current_state(store, clock)
+    state = fold_current_state(store, clock, budget)
     day_start = int(state.day_start_equity_lamports)
     peak = max(int(state.peak_equity_lamports), equity_lamports(state))
     daily_loss = max(-daily_pnl_fraction(state), Decimal("0"))
@@ -135,11 +138,11 @@ async def run_pnl(inp: PnlIn, store: LedgerStore, clock: Clock) -> dict[str, Any
     ).model_dump()
 
 
-def build_pnl_tool(store: LedgerStore, clock: Clock) -> Tool:
-    """Bind ``portfolio.pnl`` to one store and clock (no globals)."""
+def build_pnl_tool(store: LedgerStore, clock: Clock, *, budget: RiskBudget | None = None) -> Tool:
+    """Bind ``portfolio.pnl`` to one store, clock and budget (no globals)."""
 
     @tool(PNL_SPEC)
     async def _pnl(payload: PnlIn) -> dict[str, Any]:
-        return await run_pnl(payload, store, clock)
+        return await run_pnl(payload, store, clock, budget=budget)
 
     return _pnl

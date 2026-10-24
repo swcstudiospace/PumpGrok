@@ -33,6 +33,7 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.logging.redaction import redact_text
 from pumpgrok.risk.killswitch import InflightBarrier, env_engaged, kill_file_text
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools._common import meta_now
@@ -194,7 +195,14 @@ async def execute_flatten(
             )
             continue
         except Exception as exc:
-            # Any other failure is this position's alone: record it and keep closing the rest.
+            # Any other failure is this position's alone: log its cause, record the class and
+            # keep closing the rest. The message is redacted before it reaches the log.
+            log.warning(
+                "kill flatten close failed: mint=%s class=%s message=%s",
+                intent.mint,
+                type(exc).__name__,
+                redact_text(str(exc)),
+            )
             outcomes.append(
                 FlattenOutcome(
                     mint=intent.mint,

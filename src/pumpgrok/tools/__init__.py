@@ -199,8 +199,8 @@ def _register_ledger_and_risk(
     kill_switch_file = killswitch_file(data_dir)
     reg.register(build_ledger_read_tool(store, clock))
     reg.register(build_ledger_write_tool(store, clock))
-    reg.register(build_exposure_tool(store, clock))
-    reg.register(build_pnl_tool(store, clock))
+    reg.register(build_exposure_tool(store, clock, budget=budget))
+    reg.register(build_pnl_tool(store, clock, budget=budget))
     reg.register(build_check_limits_tool(store, budget, clock))
     reg.register(build_drawdown_tool(store, budget, clock))
     reg.register(build_halt_status_tool(store, kill_switch_file, clock, "paper"))
@@ -334,7 +334,8 @@ def build_operator_registry(
         get_reserves=curves.last.get,
     )
     # R62: a missing file is an empty healthy book; a corrupt file quarantines
-    # to a degraded book, which refuses buys with reputation_degraded.
+    # to a degraded book, which refuses buys with reputation_degraded. The degraded marker
+    # beside the book keeps that state across processes (see ReputationBook.load).
     engine.set_reputation(ReputationBook.load(settings.ops.reputation_path, clock=active_clock))
     log.info(
         "operator registry effective budget=%s limits=%s",

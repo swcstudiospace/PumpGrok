@@ -309,6 +309,11 @@ class Supervisor:
             )
             for seat in ROSTER
         }
+        # Restored latches (rebuilt from the ledger as each SeatTask is constructed) reach the
+        # risk engine now, before the first seat cycle, not only at the end of a tick. A failure
+        # propagates: a supervisor must not start with buys unlatched.
+        if self._risk is not None:
+            self._risk.set_observe_only(self.observe_only.seats())
         self._stop = asyncio.Event()
         self._relay_cursor = 0
         self._started_at = clock.now()

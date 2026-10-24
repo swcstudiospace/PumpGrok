@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import Field
 
 from pumpgrok.core.ids import Clock, ambient_correlation
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.ledger.store import LedgerStore
@@ -67,9 +68,11 @@ def _today_utc(clock: Clock) -> str:
     return datetime.fromtimestamp(clock.now(), UTC).strftime("%Y-%m-%d")
 
 
-async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dict[str, Any]:
-    """Fold the ledger into the exposure view."""
-    state = fold_current_state(store, clock)
+async def run_exposure(
+    inp: ExposureIn, store: LedgerStore, clock: Clock, *, budget: RiskBudget | None = None
+) -> dict[str, Any]:
+    """Fold the ledger into the exposure view; ``budget`` is the genesis equity fallback."""
+    state = fold_current_state(store, clock, budget)
     equity = equity_lamports(state)
     cash = cash_lamports(state)
     per_token = {mint: pos.cost_basis_lamports for mint, pos in positions(state).items()}
@@ -102,11 +105,13 @@ async def run_exposure(inp: ExposureIn, store: LedgerStore, clock: Clock) -> dic
     ).model_dump()
 
 
-def build_exposure_tool(store: LedgerStore, clock: Clock) -> Tool:
-    """Bind ``portfolio.exposure`` to one store and clock (no globals)."""
+def build_exposure_tool(
+    store: LedgerStore, clock: Clock, *, budget: RiskBudget | None = None
+) -> Tool:
+    """Bind ``portfolio.exposure`` to one store, clock and budget (no globals)."""
 
     @tool(EXPOSURE_SPEC)
     async def _exposure(payload: ExposureIn) -> dict[str, Any]:
-        return await run_exposure(payload, store, clock)
+        return await run_exposure(payload, store, clock, budget=budget)
 
     return _exposure

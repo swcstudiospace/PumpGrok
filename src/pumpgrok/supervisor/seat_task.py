@@ -1,6 +1,6 @@
 """Per-seat task wrapper: heartbeats, bounded restarts, observe-only latch.
 
-``SeatTask`` owns one seat's execution record. The wrapper — never the bot —
+``SeatTask`` owns one seat's execution record. The wrapper - never the bot -
 records ``(started_at, finished_at, ok, duration_s)`` so a seat cannot fake
 its own heartbeat (paper-engine.md 6.3). A cycle that raises, or that
 exceeds ``clock.timeout(max(30, 4 * cadence))``, counts as a crash and feeds
@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import sys
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -39,6 +40,8 @@ STALE_CADENCES = 3
 #: Escalation kinds this module appends.
 KIND_RESTART_EXHAUSTED = "bot_restart_exhausted"
 KIND_HEARTBEAT_STALE = "heartbeat_stale"
+#: Latch reason when the ledger cannot be read at construction (fail closed).
+KIND_LEDGER_READ_FAILED = "ledger_read_failed"
 #: Resume note prefix written by ``state resume`` (cli.py).
 RESUME_PREFIX = "resume "
 #: Clock skew budget: refuse appends when the clock trails the head by more.
@@ -322,12 +325,15 @@ class SeatTask:
         The latch lives in memory, so a restarted process would run an exhausted seat again.
         The newest ``bot_restart_exhausted`` escalation for this seat latches it, unless a human
         resume note was appended after that escalation (the same rule ``fold_resume`` applies).
+        An unreadable ledger latches the seat with ``ledger_read_failed`` instead: the restored
+        state is unknown, so the seat stays observe-only until a human resumes it.
         """
         try:
             escalations = self._store.read(types=["Escalation"], limit=None)
             notes = self._store.read(types=["JournalNote"], limit=None)
         except Exception as exc:
-            log.debug("exhaustion latch rebuild skipped for %s: %s", self.seat_id, exc)
+            log.error("exhaustion latch rebuild failed for %s: %s", self.seat_id, exc)
+            self._latch_unreadable_ledger()
             return
         newest: Mapping[str, Any] | None = None
         for event in escalations:
@@ -344,6 +350,19 @@ class SeatTask:
         if _resume_after(notes, self.seat_id, floor):
             return
         self._observe_only.latch(self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=floor)
+
+    def _latch_unreadable_ledger(self) -> None:
+        """Latch observe-only with ``ledger_read_failed`` when the ledger cannot be read.
+
+        ``fold_resume`` clears a latch only on a human resume note after its sequence floor,
+        which is the ledger head here. When the head is unknown too, ``sys.maxsize`` keeps the
+        latch for the life of this process, so no resume note can clear it early.
+        """
+        try:
+            floor = self._store.count()
+        except Exception:
+            floor = sys.maxsize
+        self._observe_only.latch(self.seat_id, KIND_LEDGER_READ_FAILED, after_seq=floor)
 
     @property
     def timeout_s(self) -> float:
