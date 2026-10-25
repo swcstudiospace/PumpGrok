@@ -9,8 +9,8 @@ fallback. Deterministic, no network.
 
 from __future__ import annotations
 
-import asyncio
 import ast
+import asyncio
 import inspect
 import re
 from pathlib import Path
@@ -45,9 +45,9 @@ def test_default_seed_never_leaves_replay() -> None:
             if isinstance(node, ast.ImportFrom) and node.module == "pumpgrok.replay.rng":
                 if any(a.name == "DEFAULT_SEED" for a in node.names):
                     offenders.append(f"{path.relative_to(SRC)}:{node.lineno}")
-            elif isinstance(node, ast.Name) and node.id == "DEFAULT_SEED":
-                offenders.append(f"{path.relative_to(SRC)}:{node.lineno}")
-            elif isinstance(node, ast.Attribute) and node.attr == "DEFAULT_SEED":
+            elif (isinstance(node, ast.Name) and node.id == "DEFAULT_SEED") or (
+                isinstance(node, ast.Attribute) and node.attr == "DEFAULT_SEED"
+            ):
                 offenders.append(f"{path.relative_to(SRC)}:{node.lineno}")
     assert offenders == []
 
@@ -60,10 +60,14 @@ def test_urandom_roots_are_only_ids_and_binding_key() -> None:
         rel = path.relative_to(SRC).as_posix()
         tree = _tree(path)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr == "urandom":
-                if isinstance(node.value, ast.Name) and node.value.id == "os":
-                    if rel not in allowed:
-                        offenders.append(f"{rel}:{node.lineno}")
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr == "urandom"
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "os"
+                and rel not in allowed
+            ):
+                offenders.append(f"{rel}:{node.lineno}")
     assert offenders == []
 
 
@@ -99,4 +103,4 @@ def test_approval_ids_are_shaped_but_not_seeded() -> None:
     """CLI approval ids keep the ``apr-<ULID>`` shape from the OS-entropy root."""
     for minted in (mint_approval_id(), _mint_approval_id()):
         assert minted.startswith("apr-")
-        assert re.match(ULID_RE, minted[len("apr-"):]) is not None
+        assert re.match(ULID_RE, minted[len("apr-") :]) is not None

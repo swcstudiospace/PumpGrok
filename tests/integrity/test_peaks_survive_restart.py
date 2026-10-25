@@ -62,6 +62,7 @@ def _open(store: LedgerStore, clock: FixtureClock) -> None:
         },
     )
 
+
 def _mark(store: LedgerStore, clock: FixtureClock, spot: str, key: str) -> None:
     mtm = 10 * int(spot)
     store.append(
@@ -178,9 +179,7 @@ def test_in_memory_progress_survives_a_stale_mark(tmp_path: Path) -> None:
 
         book = LedgerExitBook(CFG)
         book.sync(store)
-        signal = apply_price(
-            book.positions[MINT], 160 * PRICE_SCALE, CFG, START + 10.0
-        )
+        signal = apply_price(book.positions[MINT], 160 * PRICE_SCALE, CFG, START + 10.0)
         assert signal is None
         assert book.positions[MINT].peak_price == 160 * PRICE_SCALE
 
