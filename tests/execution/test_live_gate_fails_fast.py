@@ -212,7 +212,9 @@ def test_replay_ledger_is_refused_for_metrics(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)}
+    by_id = {
+        item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)
+    }
     assert by_id["min_paper_days"].met is False
     assert "replay ledger" in by_id["min_paper_days"].reason
     assert by_id["performance_thresholds"].met is False
@@ -256,7 +258,9 @@ def test_paper_metrics_ignore_replay_rows(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)}
+    by_id = {
+        item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)
+    }
     assert "replay ledger" in by_id["performance_thresholds"].reason
 
 

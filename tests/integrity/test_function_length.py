@@ -65,9 +65,7 @@ def test_orchestrators_fit_length_budget() -> None:
         spans = _function_spans(SRC / rel)
         for name in names:
             assert name in spans, f"{name} missing from {rel}"
-            assert spans[name] <= _MAX_LINES, (
-                f"{name} spans {spans[name]} lines (max {_MAX_LINES})"
-            )
+            assert spans[name] <= _MAX_LINES, f"{name} spans {spans[name]} lines (max {_MAX_LINES})"
 
 
 def test_stage_functions_exist() -> None:

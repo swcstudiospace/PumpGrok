@@ -30,7 +30,7 @@ def test_gate_paper_window_reads_the_shared_constant(
     store = LedgerStore(str(tmp_path / alt))
     store.close()
 
-    _, reason, _, _ = live_gate._paper_window(tmp_path)
+    _, reason, _, _ = live_gate._paper_window(tmp_path, "2026-08-01T10:00:00Z")
 
     # An empty ledger at the swapped path is read: the reason names that path and no other.
     assert reason == f"no source=paper events in {alt}"

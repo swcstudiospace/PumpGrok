@@ -40,6 +40,7 @@ def _paper_root(tmp_path: Path) -> Path:
                 "PositionClosed",
                 {
                     "mint": MINT,
+                    "source": "paper",
                     "price_exit": "0.00005800",
                     "proceeds_lamports": 203000000,
                     "realized_pnl_lamports": 3000000,
@@ -53,6 +54,7 @@ def _paper_root(tmp_path: Path) -> Path:
             "MarkToMarket",
             {
                 "ts_source": "curve",
+                "source": "paper",
                 "cash_lamports": 9000000000,
                 "equity_lamports": 11500000000,
                 "unrealized_lamports": 0,

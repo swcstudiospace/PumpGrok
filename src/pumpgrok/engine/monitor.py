@@ -38,6 +38,7 @@ from websockets.asyncio.client import connect
 from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Token
+from pumpgrok.replay.clock import Clock
 
 log = logging.getLogger(__name__)
 

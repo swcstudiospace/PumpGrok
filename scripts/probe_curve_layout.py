@@ -58,7 +58,9 @@ def _rpc_get_account(endpoint: str, account: str, commitment: str, timeout: floa
             "params": [account, {"encoding": "base64", "commitment": commitment}],
         }
     ).encode("utf-8")
-    request = urllib.request.Request(
+    if not endpoint.startswith("https://"):
+        raise ValueError("RPC endpoint must use https")
+    request = urllib.request.Request(  # noqa: S310 - scheme checked above
         endpoint, data=body, headers={"Content-Type": "application/json"}
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
@@ -96,8 +98,9 @@ def _decode_account(raw: bytes) -> dict:
     }
 
 
-def _write_assumed(out: Path, doc: Path, *, endpoint: str, account: str | None,
-                   commitment: str, error: str) -> None:
+def _write_assumed(
+    out: Path, doc: Path, *, endpoint: str, account: str | None, commitment: str, error: str
+) -> None:
     record = {
         "fixture": "bonding_curve_probe",
         "layout_status": "ASSUMED",
@@ -141,8 +144,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if account is None:
         _write_assumed(
-            out, doc,
-            endpoint=args.endpoint, account=None, commitment=args.commitment,
+            out,
+            doc,
+            endpoint=args.endpoint,
+            account=None,
+            commitment=args.commitment,
             error="no bonding-curve account configured; set BONDING_CURVE_ACCOUNT "
             "or pass --account <pubkey>; no RPC call made; layout stays ASSUMED",
         )
@@ -158,10 +164,13 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("curve account is not base64-encoded bytes")
         raw = base64.b64decode(data[0], validate=True)
         decoded = _decode_account(raw)
-    except Exception as exc:  # noqa: BLE001 - the exact text is the recorded artifact
+    except Exception as exc:  # the exact text is the recorded artifact
         _write_assumed(
-            out, doc,
-            endpoint=args.endpoint, account=account, commitment=args.commitment,
+            out,
+            doc,
+            endpoint=args.endpoint,
+            account=account,
+            commitment=args.commitment,
             error=f"{type(exc).__name__}: {exc}",
         )
         return 0

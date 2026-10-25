@@ -343,9 +343,7 @@ class SeatTask:
                         correlation_id=self._correlation_id,
                     )
                 except Exception as append_exc:
-                    log.warning(
-                        "escalation append failed for %s: %s", self.seat_id, append_exc
-                    )
+                    log.warning("escalation append failed for %s: %s", self.seat_id, append_exc)
 
     def _rebuild_exhaustion_latch(self) -> None:
         """Re-latch an exhausted seat from the ledger after a restart.

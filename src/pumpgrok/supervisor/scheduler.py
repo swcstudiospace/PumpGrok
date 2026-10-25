@@ -698,10 +698,7 @@ async def _replay_signal(
         return {"scoring": "skipped"}
     # Recorded latency is virtual time: only a FixtureClock advances. Under the
     # wall clock it lands on a scratch timeline, never on host time.
-    if isinstance(clock, FixtureClock):
-        latency_clock = clock
-    else:
-        latency_clock = FixtureClock(start=clock.now())
+    latency_clock = clock if isinstance(clock, FixtureClock) else FixtureClock(start=clock.now())
     request = llm_request_for(dataset_name, list(dataset_events))
     outcome = replay_llm.complete(request, latency_clock)
     return {"scoring": "llm", "outcome": outcome.outcome}

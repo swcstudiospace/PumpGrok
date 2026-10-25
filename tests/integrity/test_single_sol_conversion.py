@@ -38,9 +38,7 @@ def test_whole_and_fractional_sol() -> None:
 
 def test_every_entry_point_agrees() -> None:
     """CLI, approval phrase and budget equity share the one implementation."""
-    assert size_sol_to_lamports(Decimal("0.0000000015")) == sol_to_lamports(
-        Decimal("0.0000000015")
-    )
+    assert size_sol_to_lamports(Decimal("0.0000000015")) == sol_to_lamports(Decimal("0.0000000015"))
     assert _sol_to_lamports("0.0000000015") == sol_to_lamports(Decimal("0.0000000015"))
     budget = RiskBudget(paper_equity_sol=Decimal("10"))
     assert budget.paper_equity_lamports == sol_to_lamports(Decimal("10"))
