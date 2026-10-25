@@ -18,6 +18,7 @@ SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 
 BACKTEST_DIR = SRC / "backtest"
 PAPER_PATHS = [SRC / "execution" / "paper_adapter.py"]
+UPGRADE_DIR = SRC / "upgrade"
 
 LIVE_MODULE = "pumpgrok.execution.live"
 
@@ -43,19 +44,22 @@ def _live_imports(path: Path) -> list[str]:
 def _guarded_files() -> list[Path]:
     files = [path for path in sorted(BACKTEST_DIR.glob("*.py")) if path.is_file()]
     files.extend(path for path in PAPER_PATHS if path.is_file())
+    files.extend(
+        path for path in sorted(UPGRADE_DIR.rglob("*.py")) if "__pycache__" not in path.parts
+    )
     return files
 
 
 def test_no_backtest_or_paper_module_imports_live() -> None:
-    """Backtest, paper and (absent) upgrade paths never import the live package."""
+    """Backtest, paper and upgrade paths never import the live package."""
     assert BACKTEST_DIR.is_dir()
     for path in PAPER_PATHS:
         assert path.is_file(), path
+    assert UPGRADE_DIR.is_dir()
     offenders = []
     for path in _guarded_files():
         offenders.extend(_live_imports(path))
     assert offenders == []
-    assert not (SRC / "upgrade").exists(), "upgrade path appeared: extend this guard"
 
 
 def test_run_mode_live_once_exits_3(tmp_path, monkeypatch) -> None:
