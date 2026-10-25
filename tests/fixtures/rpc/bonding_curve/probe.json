@@ -1,0 +1,13 @@
+{
+  "fixture": "bonding_curve_probe",
+  "layout_status": "ASSUMED",
+  "endpoint": "https://api.mainnet-beta.solana.com",
+  "account": null,
+  "commitment": "confirmed",
+  "probed_at": "2026-10-25T00:00:00Z",
+  "context_slot": null,
+  "account_len": null,
+  "account_sha256": null,
+  "decoded": null,
+  "probe_error": "probe not run in this worktree: live network call deferred to the orchestrator after merge; run `uv run python scripts/probe_curve_layout.py` against the configured public RPC to refresh this fixture; layout stays ASSUMED"
+}
