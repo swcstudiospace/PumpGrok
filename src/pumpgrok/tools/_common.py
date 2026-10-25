@@ -13,6 +13,7 @@ from typing import Annotated
 
 from pydantic import Field
 
+from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.core.tool import RetryPolicy, ToolMeta
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
@@ -46,14 +47,23 @@ def meta_now(source: str, correlation_id: str | None, clock: Clock) -> ToolMeta:
     )
 
 
-def fold_current_state(store: LedgerStore, clock: Clock) -> LedgerState:
+def fold_current_state(
+    store: LedgerStore, clock: Clock, budget: RiskBudget | None = None
+) -> LedgerState:
     """Current ledger state: genesis from meta, then every event (same fold as the engine).
 
+    Genesis equity comes from the ``initial_equity_lamports`` meta; when that row is
+    absent it falls back to the configured ``budget`` (0 when no budget is given).
     Read tools use this instead of the newest snapshot, which can lag the
     ledger and never carried an ``equity_lamports`` key.
     """
     meta_equity = store.get_meta("initial_equity_lamports")
-    initial = int(meta_equity) if meta_equity is not None else 0
+    if meta_equity is not None:
+        initial = int(meta_equity)
+    elif budget is not None:
+        initial = budget_equity_lamports(budget)
+    else:
+        initial = 0
     source = store.get_meta("source") or "paper"
     day_utc = utcnow(clock).strftime("%Y-%m-%d")
     state = initial_state(source=source, initial_equity_lamports=initial, day_utc=day_utc)

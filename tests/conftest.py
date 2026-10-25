@@ -14,6 +14,7 @@ import pytest
 import websockets
 import websockets.asyncio.client
 
+import pumpgrok.engine.monitor
 from harness import NetworkBlocked
 
 _MESSAGE = "outbound network is blocked in tests; use httpx.MockTransport"
@@ -33,3 +34,4 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _blocked_async)
     monkeypatch.setattr(websockets.asyncio.client, "connect", _blocked_sync)
     monkeypatch.setattr(websockets, "connect", _blocked_sync)
+    monkeypatch.setattr(pumpgrok.engine.monitor, "connect", _blocked_sync)

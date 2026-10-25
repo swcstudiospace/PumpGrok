@@ -53,15 +53,21 @@ KILL_LINE_RE = re.compile(r"^KILL(?:\s+FLATTEN)?\s+(?P<reason>.+)$")
 SEAT_RE = re.compile(r"^bot-0[0-9]-[a-z-]+$")
 
 
-def kill_switch_key(origin: str, reason: str, day_utc: str, *, flatten: bool = False) -> str:
-    """Idempotency per (origin, reason, utc_day[, flatten]) for ``KillSwitchSet`` rows.
+def kill_switch_key(
+    origin: str, reason: str, day_utc: str, *, flatten: bool = False, epoch: int = 0
+) -> str:
+    """Idempotency per (origin, reason, utc_day[, flatten][, epoch]) for ``KillSwitchSet`` rows.
 
     A flatten escalation of an engaged switch is its own row, so it never collides with the
-    plain set. The plain key is unchanged, so rows written before escalation keep their keys.
+    plain set. ``epoch`` is the count of ``KillSwitchCleared`` rows already in the ledger, so a
+    re-engagement after an approved clear is its own row and never collides with the set that
+    was cleared. Epoch 0 leaves the key unchanged, so earlier rows keep their keys.
     """
     body = f"KillSwitchSet|{origin}|{reason}|{day_utc}"
     if flatten:
         body += "|flatten"
+    if epoch:
+        body += f"|epoch={epoch}"
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -319,6 +325,9 @@ class KillSwitch:
         """Append ``KillSwitchSet`` on first observation, and again when a flatten escalates it."""
         if self._store is None:
             return None
+        # Read the epoch before the state: a clear that lands during the read leaves this state
+        # stale, and re-engaging on it would undo the clear.
+        epoch = self._clear_epoch()
         state = self.poll()
         if not state.active:
             return None
@@ -327,12 +336,19 @@ class KillSwitch:
             latest_flatten = bool(latest["payload"].get("flatten_requested", False))
             if latest_flatten or not state.flatten_requested:
                 return None
+        if self._clear_epoch() != epoch:
+            # A clear landed while this state was read: drop the stale state.
+            return None
         row: dict[str, Any] = {
             "ts_utc": ts_utc,
             "source": source,
             "correlation_id": correlation_id,
             "idempotency_key": kill_switch_key(
-                state.source, state.reason, ts_utc[:10], flatten=state.flatten_requested
+                state.source,
+                state.reason,
+                ts_utc[:10],
+                flatten=state.flatten_requested,
+                epoch=epoch,
             ),
             "type": "KillSwitchSet",
             "payload": {
@@ -438,6 +454,11 @@ class KillSwitch:
             elif event["type"] == "KillSwitchCleared":
                 latest = None
         return latest
+
+    def _clear_epoch(self) -> int:
+        """Count of ``KillSwitchCleared`` rows; each clear starts a new set-key epoch."""
+        assert self._store is not None
+        return len(self._store.read(types=["KillSwitchCleared"], limit=None))
 
 
 class InflightBarrier:

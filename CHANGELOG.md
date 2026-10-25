@@ -2,6 +2,27 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - Audit fixes
+
+### Fixed
+
+- Escalation payloads keep the bound seat and source; caller keys cannot override them.
+- The key-bearing guard covers api_key, apikey, secret and password; endpoints must use TLS.
+- camelCase secret names and full PEM private key blocks are masked in logs.
+- A kill-switch re-engagement after a clear writes its own set row; flatten continues past
+  per-position failures and logs the cause through the redacted logger.
+- A restart-exhausted seat stays latched when the ledger is unreadable.
+- RPC curve prices are refused per snapshot source; exposure cost basis follows partial sells.
+- Equity uses one SOL-to-lamports rule (ROUND_HALF_UP) across scheduler, engine and read tools.
+- A corrupt reputation book leaves a durable degraded marker; the book is loaded at startup.
+- NetworkBlocked cannot be swallowed by broad except clauses in tests.
+- An exit latch restored from the ledger re-appends its HaltSet before any seat runs; every cycle
+  retries it until it lands.
+- The RPC entry gate refuses buys only; a stop-loss sell is not refused as ASSUMED-layout data.
+- A failed degraded-marker write refuses startup instead of starting with a healthy empty book.
+- A kill-switch observation that races a human clear is dropped instead of re-engaging the switch.
+- Buys are refused desk-wide while the EXIT seat is latched, even before its HaltSet lands.
+
 ## [Unreleased] - Operator surface fixes
 
 ### Fixed

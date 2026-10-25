@@ -26,7 +26,6 @@ def build_adapter(
     rng: random.Random,
     price_source: PriceSource | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
-    curve_origin: str = "fixture",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
     """Build the PaperAdapter for live-paper and replay runs.
@@ -52,6 +51,5 @@ def build_adapter(
         limits=limits,
         price_source=price_source,
         source=source,
-        curve_origin=curve_origin,
         p_drop=p_drop,
     )

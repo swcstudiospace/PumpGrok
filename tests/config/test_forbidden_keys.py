@@ -62,17 +62,19 @@ def test_execution_mode_env_refused(clean_env: None, monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.parametrize(
-    "query",
+    "planted_value",
     [
-        "?api-key=PLANTED-KEY-aaa111",
-        "?key=PLANTED-KEY-bbb222",
-        "?token=PLANTED-KEY-ccc333",
+        "https://hooks.example/notify?api-key=PLANTED-KEY-aaa111",
+        "https://hooks.example/notify?key=PLANTED-KEY-bbb222",
+        "https://hooks.example/notify?token=PLANTED-KEY-ccc333",
+        "https://hooks.example/notify?api_key=PLANTED-KEY-ddd444",
+        "https://hooks.example/notify?apikey=PLANTED-KEY-eee555",
+        "https://hooks.example/notify?ref=1&secret=PLANTED-KEY-fff666",
     ],
 )
 def test_key_bearing_url_refuses_without_echo(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch, query: str
+    clean_env: None, monkeypatch: pytest.MonkeyPatch, planted_value: str
 ) -> None:
-    planted_value = f"https://hooks.example/notify{query}"
     monkeypatch.setenv("PUMPGROK_ALERTS__WEBHOOK_URL", planted_value)
     with pytest.raises(ConfigError) as excinfo:
         load_settings()
@@ -80,6 +82,27 @@ def test_key_bearing_url_refuses_without_echo(
     assert "PUMPGROK_ALERTS__WEBHOOK_URL" in message
     assert planted_value not in message
     assert "PLANTED-KEY" not in message
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "field"),
+    [
+        ("PUMPGROK_GROK__BASE_URL", "http://api.example.test/v1", "grok.base_url"),
+        ("PUMPGROK_DATA__REST_URL", "http://frontend.example.test", "data.rest_url"),
+        ("PUMPGROK_DATA__WS_URL", "ws://feed.example.test/api", "data.ws_url"),
+        ("PUMPGROK_JUPITER__QUOTE_URL", "http://quote.example.test/order", "jupiter.quote_url"),
+        ("PUMPGROK_RPC__ENDPOINTS", '["http://rpc.example.test"]', "rpc.endpoints"),
+    ],
+)
+def test_plaintext_endpoint_refused_by_field(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch, name: str, value: str, field: str
+) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigError) as excinfo:
+        load_settings()
+    message = str(excinfo.value)
+    assert field in message
+    assert value not in message
 
 
 def test_bad_type_reports_loc_and_type_only(

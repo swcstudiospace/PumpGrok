@@ -115,7 +115,7 @@ def _payload_of(inp: JournalAppendIn, seat: str) -> tuple[str, dict[str, Any]]:
             "text": str(inp.body.get("text", "")),
             "refs": list(inp.body.get("refs", [])),
         }
-    return "Escalation", {"source": "paper", "seat": seat, **inp.body}
+    return "Escalation", {**inp.body, "source": "paper", "seat": seat}
 
 
 def _journal_file(journal_dir: Path, day: datetime) -> Path:

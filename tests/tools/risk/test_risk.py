@@ -95,7 +95,8 @@ async def test_drawdown_empty_ledger(tmp_path: Path) -> None:
     tool = build_drawdown_tool(store, RiskBudget(), FixtureClock(start=START))
     assert DRAWDOWN_SPEC.rate_limit_key == "ledger"
     out = await tool(DrawdownIn(window_hours=24))
-    assert out.peak_equity_lamports == 0
+    # CFG-02: read tools fall back to the configured budget when initial_equity is absent.
+    assert out.peak_equity_lamports == RiskBudget().paper_equity_lamports
     assert out.halted is False
     store.close()
 

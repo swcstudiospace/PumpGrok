@@ -21,19 +21,23 @@ REDACTED = "[redacted]"
 KEEP = 4
 
 # Key names that carry secrets: check_secrets.py SECRET_NAME_RE, plus the trading
-# names from FOUNDATION_STACK 5.3 (keypair, mnemonic, seed, wallet_secret).
+# names from FOUNDATION_STACK 5.3 (keypair, mnemonic, seed, wallet_secret) and the
+# auth names (authorization, passphrase, cookie). camelCase names are split first.
 SECRET_NAME_RE = re.compile(
     r"(?i)(?:^|[^A-Za-z0-9]|_)(?:secret|password|passwd|pwd|token|api[_-]?key|apikey|auth|"
-    r"credential|private[_-]?key|access[_-]?key|client[_-]?secret|encryption[_-]?key|"
-    r"keypair|mnemonic|seed|wallet[_-]?secret)"
+    r"authorization|passphrase|cookie|credential|private[_-]?key|access[_-]?key|"
+    r"client[_-]?secret|encryption[_-]?key|keypair|mnemonic|seed|wallet[_-]?secret)"
     r"(?:[^A-Za-z0-9]|_|$)"
 )
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 # Value shapes. The G-3 trading families are the synthetic-testable set from FOUNDATION_STACK
 # section 4; the last three are the precedent private_key, jwt and conn_string families.
 VALUE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern)
     for pattern in (
+        r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?"
+        r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)",  # private_key_block
         r"\b[1-9A-HJ-NP-Za-km-z]{86,88}\b",  # solana_base58_key
         r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]",  # solana_json_keypair
         r"(?i)helius(?:-rpc)?\.com/[^\s\"']*api-key=[A-Za-z0-9-]{20,}",  # helius_url_key
@@ -69,7 +73,9 @@ def redact_text(text: str) -> str:
 
 def redact_value(key: str | None, value: object) -> Any:
     """Redact one data value: secret-shaped keys lose their value; strings are scanned."""
-    if key is not None and SECRET_NAME_RE.search(key):
+    if key is not None and (
+        SECRET_NAME_RE.search(key) or SECRET_NAME_RE.search(_CAMEL_BOUNDARY_RE.sub("_", key))
+    ):
         return REDACTED
     if isinstance(value, str):
         return redact_text(value)

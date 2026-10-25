@@ -29,6 +29,8 @@ async def check_mint(mint: str, rpc: RpcClient) -> dict[str, Any]:
         decimals = info.get("decimals")
         supply = info.get("supply")
         is_initialized = info.get("isInitialized")
+        if decimals is None or is_initialized is None:
+            return {"ok": False, "error": "Mint account not found or not a token mint"}
         extensions = info.get("extensions") or []
 
         return {

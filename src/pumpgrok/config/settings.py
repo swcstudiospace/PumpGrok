@@ -30,6 +30,7 @@ import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, get_args
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import (
@@ -43,6 +44,13 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.risk.limits import EngineLimits
 
 
+def _require_scheme(url: str, schemes: tuple[str, ...]) -> str:
+    """Refuse a URL whose scheme is not one of ``schemes`` (TLS only; value never echoed)."""
+    if urlsplit(url).scheme.lower() not in schemes:
+        raise ValueError(f"URL must use {' or '.join(s + '://' for s in schemes)}")
+    return url
+
+
 class DataSettings(BaseModel):
     """Pump.fun REST plus PumpPortal websocket ingress (D8)."""
 
@@ -52,6 +60,16 @@ class DataSettings(BaseModel):
     ws_url: str = "wss://pumpportal.fun/api/data"
     ws_max_queue: int = Field(default=16, ge=1)
     request_timeout: float = 10.0
+
+    @field_validator("rest_url")
+    @classmethod
+    def _tls_rest_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https",))
+
+    @field_validator("ws_url")
+    @classmethod
+    def _tls_ws_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https", "wss"))
 
 
 class RpcSettings(BaseModel):
@@ -66,6 +84,13 @@ class RpcSettings(BaseModel):
     endpoints: list[str] = Field(default_factory=lambda: ["https://api.mainnet-beta.solana.com"])
     api_key: SecretStr = SecretStr("")
 
+    @field_validator("endpoints")
+    @classmethod
+    def _tls_endpoints(cls, v: list[str]) -> list[str]:
+        for endpoint in v:
+            _require_scheme(endpoint, ("https", "wss"))
+        return v
+
 
 class GrokSettings(BaseModel):
     """x.ai chat completions (R48). Secrets arrive via env only."""
@@ -78,6 +103,11 @@ class GrokSettings(BaseModel):
     fast_model: str = "grok-4.20-0309-non-reasoning"
     api_key: SecretStr = SecretStr("")
 
+    @field_validator("base_url")
+    @classmethod
+    def _tls_base_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https",))
+
 
 class JupiterSettings(BaseModel):
     """Jupiter Swap V2 quote endpoint, informational only (R44, R38)."""
@@ -85,6 +115,11 @@ class JupiterSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     quote_url: str = "https://api.jup.ag/swap/v2/order"
+
+    @field_validator("quote_url")
+    @classmethod
+    def _tls_quote_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https", "wss"))
 
 
 class FilterSettings(BaseModel):
@@ -208,10 +243,13 @@ EXEMPT_ENV_NAMES = frozenset({"PUMPGROK_REPLAY__SEED"})
 # through init kwargs (CLI --mode), top-level PUMPGROK_MODE, or TOML.
 REFUSED_ENV_NAMES = frozenset({"PUMPGROK_EXECUTION", "PUMPGROK_EXECUTION__MODE"})
 
-# A value shaped like a URL carrying a secret (api-key=, token=, key=).
-# The key= alternative requires a non-identifier char before it so that
-# innocent words containing "key" (e.g. monkey=) do not match.
-KEY_BEARING_VALUE_RE = re.compile(r"(?i)(?:api-key=|token=|(?<![A-Za-z_-])key=)")
+# A value shaped like a URL or argument carrying a secret: api-key=, api_key=,
+# apikey=, secret=, password=, token=, or a bare key= parameter. The bare key=
+# alternative requires a non-identifier char before it so that innocent words
+# containing "key" (e.g. monkey=) do not match.
+KEY_BEARING_VALUE_RE = re.compile(
+    r"(?i)(?:api[-_]?key=|secret=|password=|token=|(?<![A-Za-z_-])key=)"
+)
 
 
 class ConfigError(RuntimeError):
