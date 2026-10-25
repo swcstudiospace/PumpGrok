@@ -288,7 +288,7 @@ async def test_stop_writes_snapshot_export_and_stopped_health(
         captured.append(stop)
         installed.set()
 
-    monkeypatch.setattr(scheduler, "install_signal_handlers", _capture_stop)
+    monkeypatch.setattr(scheduler.serve, "install_signal_handlers", _capture_stop)
     ledger = tmp_path / "var" / "ledger.sqlite"
     health = tmp_path / "health.json"
 
