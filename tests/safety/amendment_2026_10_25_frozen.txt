@@ -51,3 +51,6 @@ BLIND is treated as KILL except for SAFE-4 and SAFE-8 while no paid RPC provider
 
 [project-strategy-row]
 New alpha and new signal families. Paper parameter evaluation and bounded promotion are in scope under clause 8 as amended on 2026-10-25.
+
+[risk-clause-3]
+3. Human must explicitly approve the exact ticket (token CA + size + max slippage) for every live spend. Simulated paper fills follow the autonomy level a human sets with `pumpgrok state autonomy`, recorded in the ledger.
