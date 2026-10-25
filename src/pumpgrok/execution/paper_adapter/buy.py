@@ -15,14 +15,16 @@ from pumpgrok.risk.engine import RiskDecision, order_hash_for
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 
+if TYPE_CHECKING:
+    from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.execution.paper_adapter.models import _InflightOrders
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.risk.engine import RiskEngine
+
+
 class _BuyMixin:
     if TYPE_CHECKING:
-        from pumpgrok.core.ids import Clock, IdFactory
-        from pumpgrok.execution.fees import FeeModel
-        from pumpgrok.execution.paper_adapter.models import _InflightOrders
-        from pumpgrok.ledger.store import LedgerStore
-        from pumpgrok.risk.engine import RiskEngine
-
         _active_places: set[str]
         _clock: Clock
         _fees: FeeModel

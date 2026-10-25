@@ -11,16 +11,18 @@ from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 
+if TYPE_CHECKING:
+    import random
+
+    from pumpgrok.core.errors import OrderRejectedError
+    from pumpgrok.core.ids import Clock
+    from pumpgrok.execution.paper_adapter.models import _InflightOrders
+    from pumpgrok.risk.engine import RiskEngine
+    from pumpgrok.risk.limits import EngineLimits
+
+
 class _ConfirmMixin:
     if TYPE_CHECKING:
-        import random
-
-        from pumpgrok.core.errors import OrderRejectedError
-        from pumpgrok.core.ids import Clock
-        from pumpgrok.execution.paper_adapter.models import _InflightOrders
-        from pumpgrok.risk.engine import RiskEngine
-        from pumpgrok.risk.limits import EngineLimits
-
         _cancelled: set[str]
         _clock: Clock
         _inflight: _InflightOrders

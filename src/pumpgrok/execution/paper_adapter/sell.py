@@ -13,13 +13,15 @@ from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.replay.clock import parse_ts_utc
 
 
+if TYPE_CHECKING:
+    from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.execution.paper_adapter.models import _InflightOrders
+    from pumpgrok.ledger.store import LedgerStore
+
+
 class _SellMixin:
     if TYPE_CHECKING:
-        from pumpgrok.core.ids import Clock, IdFactory
-        from pumpgrok.execution.fees import FeeModel
-        from pumpgrok.execution.paper_adapter.models import _InflightOrders
-        from pumpgrok.ledger.store import LedgerStore
-
         _clock: Clock
         _fees: FeeModel
         _ids: IdFactory

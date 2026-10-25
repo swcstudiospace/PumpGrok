@@ -9,12 +9,14 @@ from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell_out, spot
 
 
+if TYPE_CHECKING:
+    from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+
 class _QuoteMixin:
     if TYPE_CHECKING:
-        from pumpgrok.core.ids import Clock, IdFactory
-        from pumpgrok.execution.fees import FeeModel
-        from pumpgrok.execution.paper_adapter.models import CurveSnapshot
-
         _clock: Clock
         _fees: FeeModel
         _ids: IdFactory
