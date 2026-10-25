@@ -14,7 +14,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 - [ ] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
 - [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
-- [ ] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
+- [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
 - [ ] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
 - [ ] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
 
@@ -120,17 +120,17 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 **Deliverables**:
 
-- [ ] `src/pumpgrok/backtest/` new package: run manifest, holdout and walk-forward split, bounded metrics, and the holdout-aware harness that replaces the grid search (BT-01, BT-03, BT-05, BT-07)
-- [ ] Trial ledger with the 20-trial flag and 50-trial rejection in `src/pumpgrok/backtest/` (BT-04)
-- [ ] Per-fill result fields in `src/pumpgrok/replay/` (BT-02)
-- [ ] `backtest` verb in `src/pumpgrok/cli.py` with deterministic report output (BT-06)
-- [ ] `src/pumpgrok/engine/tune.py`: in-sample grid search removed; no second search engine remains (BT-07)
-- [ ] One shared result model for backtest and paper ledger trades (PAP-01)
-- [ ] Divergence check on the D7 defaults in `src/pumpgrok/backtest/` (PAP-02)
-- [ ] `tests/backtest/`, `tests/e2e/test_autonomous_paper_recorded.py` and the autonomous-paper verification on recorded datasets (PAP-03)
-- [ ] `CHANGELOG.md` before and after replay hash lines for Phase 8
+- [x] `src/pumpgrok/backtest/` new package: run manifest, holdout and walk-forward split, bounded metrics, and the holdout-aware harness that replaces the grid search (BT-01, BT-03, BT-05, BT-07)
+- [x] Trial ledger with the 20-trial flag and 50-trial rejection in `src/pumpgrok/backtest/` (BT-04)
+- [x] Per-fill result fields in `src/pumpgrok/replay/` (BT-02)
+- [x] `backtest` verb in `src/pumpgrok/cli.py` with deterministic report output (BT-06)
+- [x] `src/pumpgrok/engine/tune.py`: in-sample grid search removed; no second search engine remains (BT-07)
+- [x] One shared result model for backtest and paper ledger trades (PAP-01)
+- [x] Divergence check on the D7 defaults in `src/pumpgrok/backtest/` (PAP-02)
+- [x] `tests/backtest/`, `tests/e2e/test_autonomous_paper_recorded.py` and the autonomous-paper verification on recorded datasets (PAP-03)
+- [x] `CHANGELOG.md` before and after replay hash lines for Phase 8
 
-**Plans**: TBD
+**Plans**: 10 complete. 08-01 to 08-07 delivered the phase; 08-08 to 08-10 are a correction set that replaced the digest-scored evaluator (see 08-CORRECTION.md). Verification: `.planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md` (passed, 13 of 13 criteria).
 
 ### Phase 9: Bounded paper self-upgrade
 
@@ -201,6 +201,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 |-------|----------------|--------|-----------|
 | 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
 | 7. Documentation upgrade | 6/6 | Complete: verified 9/9 (07-VERIFICATION.md) | 2026-10-25 |
-| 8. Backtest and paper evaluation | 0/TBD | Not planned | - |
+| 8. Backtest and paper evaluation | 10/10 | Complete: verified 13/13 (08-VERIFICATION.md) | 2026-10-25 |
 | 9. Bounded paper self-upgrade | 0/TBD | Not planned | - |
 | 10. Live readiness, kept disabled | 0/TBD | Not planned | - |
