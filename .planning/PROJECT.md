@@ -75,7 +75,7 @@ Full v2 record: `.planning/milestones/v2-REQUIREMENTS.md` (71 of 71 complete) an
 - Paid RPC procurement or spend - no provider approved; user decision
 - PumpPortal trade-stream key - default no (R45); user decision
 - Multi-tenant, billing, SaaS packaging - spec non-goal; single-operator internal tool
-- New signal families or alpha research - only bounded parameter promotion is in scope; `engine/tune.py` grid search is replaced by the holdout-aware harness (BT-07), not extended
+- New alpha and new signal families. Paper parameter evaluation and bounded promotion are in scope under clause 8 as amended on 2026-10-25.
 - Engagement level `micro-live` - retired by R16; levels are `research | paper` only, `live` exists solely behind the disabled gate
 - Changing `~/src/repos/programming-desk/` itself - spec non-goal; it is mirrored in shape and names only, never imported or edited
 - Social posting, coordinated buying, volume tooling, wallet UI automation - forbidden by D7/R39; detection only, enforced by a static test
@@ -132,7 +132,7 @@ Full v2 record: `.planning/milestones/v2-REQUIREMENTS.md` (71 of 71 complete) an
 - **Process**: ASCII-only new docs (`scripts/check.sh` fails on emoji); constitutional strings keep their exact bytes (U+2013) in code - R7.
 - **Process**: GSD workflow with code review and verification per phase; one PR per batch on `bot-0N-<seat>/phase-<n>-<unit>` branches with a receipt and `python3 ci/gates/run_all.py` green; v3 phase branches are draft-only and nothing merges to main without approval (PRC-02).
 - **Process**: v2 checkpoint rule, kept for v3: `make lint`, `make typecheck`, `make test`, `./scripts/check.sh`, and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` completing one cycle on fixture data with no network - R37, SPE-18063. v3 adds a `.receipts/<seat>/<task>.json` receipt for each completion claim (PRC-01).
-- **Dependencies**: pump.fun frontend REST and PumpPortal WS are unofficial with heuristic field names; upstream payloads parse with `extra="ignore"` models, and a malformed payload yields `DataStale`/`BLIND` - upgrade plan section 8.1. BLIND constraint: holder checks SAFE-4 and SAFE-8 are advisory while no paid RPC provider is recorded (amendment approved 2026-10-25, applied in phase 9); all other BLIND results are KILL.
+- **Dependencies**: pump.fun frontend REST and PumpPortal WS are unofficial with heuristic field names; upstream payloads parse with `extra="ignore"` models, and a malformed payload yields `DataStale`/`BLIND` - upgrade plan section 8.1. BLIND is treated as KILL except for SAFE-4 and SAFE-8 while no paid RPC provider is recorded (amendment approved 2026-10-25).
 
 ## Key Decisions
 
