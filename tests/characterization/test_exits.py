@@ -17,6 +17,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
+
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.engine.exits import EXIT_REASONS, exit_signal, stop_loss_triggered
 from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
@@ -32,7 +33,6 @@ def _px(value: float) -> int:
 def _lamports(sol: float) -> int:
     """Test shorthand SOL to integer lamports."""
     return int((Decimal(str(sol)) * 1_000_000_000).to_integral_value(rounding=ROUND_HALF_UP))
-
 
 
 @pytest.fixture
@@ -96,7 +96,9 @@ def test_trailing_stop_fires_after_peak(exits: ExitsSettings) -> None:
 
 def test_trailing_ignores_price_below_entry(exits: ExitsSettings) -> None:
     """Below entry the stop-loss owns the position, not the trailing stop."""
-    signal = exit_signal(position(entry=1.0, peak=1.0, opened_at=1000.0), _px(0.8), exits, now=1100.0)
+    signal = exit_signal(
+        position(entry=1.0, peak=1.0, opened_at=1000.0), _px(0.8), exits, now=1100.0
+    )
     assert signal is None
 
 

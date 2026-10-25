@@ -19,7 +19,6 @@ import asyncio
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.engine.exits import ExitSignal
 from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
@@ -37,7 +36,6 @@ def _px(value: float) -> int:
 def _lamports(sol: float) -> int:
     """Test shorthand SOL to integer lamports."""
     return int((Decimal(str(sol)) * 1_000_000_000).to_integral_value(rounding=ROUND_HALF_UP))
-
 
 
 def position(

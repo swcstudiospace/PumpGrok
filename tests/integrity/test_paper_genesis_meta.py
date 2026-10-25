@@ -112,9 +112,7 @@ async def test_fresh_paper_ledger_reaches_exit_halt(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = LedgerStore(str(ledger))
     try:
-        task = SeatTask(
-            "bot-06-exit", 1.0, _ok, clock=clock, rng=make_rng(11), store=store
-        )
+        task = SeatTask("bot-06-exit", 1.0, _ok, clock=clock, rng=make_rng(11), store=store)
         task._append_exit_halt("test-correlation")
         halts = store.read(types=["HaltSet"], limit=None)
         assert len(halts) == 1

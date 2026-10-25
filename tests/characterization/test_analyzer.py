@@ -259,7 +259,10 @@ def test_snipers_counted_in_first_seconds() -> None:
 
 
 def test_single_wallet_kills_diversity() -> None:
-    trades = [Trade(wallet="one", is_buy=True, sol_amount=1_000_000_000, timestamp=NOW - i) for i in range(5)]
+    trades = [
+        Trade(wallet="one", is_buy=True, sol_amount=1_000_000_000, timestamp=NOW - i)
+        for i in range(5)
+    ]
     metrics = compute_metrics(token(), [], trades)
     assert metrics.wallet_diversity == 0.0
 

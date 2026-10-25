@@ -59,7 +59,9 @@ def test_evaluate_splits_kept_and_missed() -> None:
 
 
 def test_evaluate_rounds_pnl_to_micro() -> None:
-    candidates = [Candidate(mint="A", parts=(1.0, 1.0, 1.0, 1.0), bought=True, pnl_lamports=123_456_789)]
+    candidates = [
+        Candidate(mint="A", parts=(1.0, 1.0, 1.0, 1.0), bought=True, pnl_lamports=123_456_789)
+    ]
     assert evaluate(candidates, (0.25, 0.25, 0.25, 0.25), 0.5).kept_pnl == 123_456_789
 
 
