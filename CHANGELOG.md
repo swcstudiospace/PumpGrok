@@ -14,8 +14,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ### Verified
 
-- Phase 10: smoke-10m events.hash before: PHASE10_BEFORE_HASH
-- Phase 10: smoke-10m events.hash after: PHASE10_AFTER_HASH
+- Phase 10: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 10: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - No task in this phase changed replay bytes: the record and all phase proofs are docs and safety tests only, with no product code change.
 
 ## [Unreleased] - v3 Phase 9: bounded paper self-upgrade
