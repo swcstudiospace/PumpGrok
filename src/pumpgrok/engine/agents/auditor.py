@@ -11,10 +11,13 @@ confidence instead of excusing the token.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any, ClassVar
 
 from pumpgrok.engine.agents.base import JSON_ONLY, GrokAgent
 from pumpgrok.engine.models import AuditResult, Holder, Token, TokenMetrics, Trade
+
+LAMPORTS_PER_SOL = 1_000_000_000
 
 AUDITOR_PROMPT = f"""You are a forensic analyst of on-chain activity on
 pump.fun. You get the raw trades and the holder list of a new memecoin.
@@ -76,7 +79,7 @@ class AuditorAgent(GrokAgent):
                 {
                     "wallet": trade.wallet,
                     "side": "buy" if trade.is_buy else "sell",
-                    "sol": round(trade.sol_amount, 6),
+                    "sol": str(Decimal(trade.sol_amount) / LAMPORTS_PER_SOL),
                     "t": round(trade.timestamp - token.created_timestamp, 2)
                     if token.created_timestamp
                     else trade.timestamp,
