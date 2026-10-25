@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import Clock
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import halt_key
@@ -494,11 +495,25 @@ class SeatTask:
             log.warning("exit halt append failed: %s", exc)
 
     def _initial_equity(self) -> int:
+        """Recorded initial equity; missing or corrupt meta raises, never 0."""
         try:
             meta = self._store.get_meta("initial_equity_lamports")
-            return int(meta) if meta is not None else 0
-        except Exception:
-            return 0
+        except sqlite3.Error as exc:
+            raise CorruptState(
+                f"seat {self.seat_id}: cannot read initial_equity_lamports: {exc}"
+            ) from exc
+        if meta is None:
+            raise CorruptState(
+                f"seat {self.seat_id}: initial_equity_lamports meta is missing; "
+                "refusing a zero-equity default"
+            )
+        try:
+            return int(meta)
+        except (TypeError, ValueError) as exc:
+            raise CorruptState(
+                f"seat {self.seat_id}: corrupt initial_equity_lamports {meta!r}; "
+                "refusing a zero-equity default"
+            ) from exc
 
     async def check_stale(self, now: float) -> bool:
         """Edge-triggered heartbeat_stale escalation; True on the rising edge."""

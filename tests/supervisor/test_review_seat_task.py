@@ -32,6 +32,8 @@ def _store(tmp_path: Path) -> LedgerStore:
     recreate_ledger_db(path)
     store = LedgerStore(str(path))
     store.set_meta("source", "paper")
+    # Fail-closed contract (INT-02): the exit halt records this equity.
+    store.set_meta("initial_equity_lamports", "10000000000")
     return store
 
 

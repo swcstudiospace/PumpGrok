@@ -39,7 +39,10 @@ MINT = "B" * 44
 def _store(tmp_path: Path) -> LedgerStore:
     path = tmp_path / "ledger.sqlite"
     recreate_ledger_db(path)
-    return LedgerStore(str(path))
+    store = LedgerStore(str(path))
+    # Fail-closed contract (INT-02): shutdown and the exit halt record this equity.
+    store.set_meta("initial_equity_lamports", "10000000000")
+    return store
 
 
 def _ctx(store: LedgerStore, clock: FixtureClock, seat: str) -> SeatContext:

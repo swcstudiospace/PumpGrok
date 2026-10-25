@@ -40,6 +40,16 @@ class LedgerUnavailable(PumpgrokError):
     code = "ledger_unavailable"
 
 
+class CorruptState(PumpgrokError):
+    """A persisted ledger, equity, or peak value is missing or undecodable.
+
+    Fail closed: raise this, never substitute a silent default (zero equity,
+    a stale peak, an empty genesis). The seat crash path reports it.
+    """
+
+    code = "corrupt_state"
+
+
 class DataStale(PumpgrokError):
     code = "data_stale"
 

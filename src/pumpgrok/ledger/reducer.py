@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.ledger.events import MoneyInt, PriceDecimal
 
 
@@ -310,8 +311,10 @@ def _on_mtm(
             spot = str(mark.get("spot", "0"))
             try:
                 peak = max(Decimal(pos.price_peak), Decimal(spot))
-            except Exception:
-                peak = pos.price_peak
+            except (ArithmeticError, ValueError, TypeError) as exc:
+                raise CorruptState(
+                    f"corrupt mtm spot {spot!r} for {mint}: refusing to keep the old peak"
+                ) from exc
             positions[str(mint)] = pos.model_copy(
                 update={
                     "last_mtm_venue_fee_lamports": venue,
