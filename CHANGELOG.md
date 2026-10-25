@@ -4,10 +4,19 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ## [Unreleased] - v3 Phase 9: bounded paper self-upgrade
 
+### Added
+
+- UPG-01 adds content-hashed parameter sets within version-controlled bounds (src/pumpgrok/config/upgrade_bounds.toml). An out-of-bounds value fails with a typed error and is never clamped.
+- UPG-02 gates every promotion in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason.
+- UPG-03 records each active-set change as a ConfigChanged row with evidence under var/upgrade/promotions/, and restores the exact prior set in one operation.
+- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. It never writes an active-set row.
+- UPG-05 treats BLIND on SAFE-4 and SAFE-8 as advisory while no paid RPC provider is recorded (PUMPGROK_PAID_RPC_PROVIDER). Setting the provider restores the KILL contract.
+- UPG-06 applies the owner-approved constitution amendment of 2026-10-25 to the rules, the desk skill, the agent prompts and the risk policy, with a frozen oracle test. The risk seat alone carries the amended clause 3.
+
 ### Verified
 
-- Phase 9: smoke-10m events.hash before: PHASE9_BEFORE_HASH
-- Phase 9: smoke-10m events.hash after: PHASE9_AFTER_HASH
+- Phase 9: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 9: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 
 ## [Unreleased] - v3 Phase 8: backtest and paper evaluation
 
