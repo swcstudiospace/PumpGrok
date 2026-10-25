@@ -3,7 +3,8 @@
 The holdout-aware harness is the only importable search entry point:
 tuning never observes holdout stamps, above-20-trial searches flag
 ineligible, and above-50-trial searches raise the typed error through
-the harness.
+the harness. Scores are real replay lamports observed through
+evaluate_window calls, never digests.
 """
 
 from __future__ import annotations
@@ -18,18 +19,22 @@ import pytest
 import pumpgrok.backtest
 import pumpgrok.engine
 from pumpgrok.backtest import harness
+from pumpgrok.backtest.evaluate import CandidateParams, EvalWindow
 from pumpgrok.backtest.harness import HarnessResult, run_search
+from pumpgrok.backtest.manifest import param_set_hash
+from pumpgrok.backtest.split import holdout_split
 from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS, TooManyTrialsError
+from pumpgrok.core.idempotency import canonical_json
 
 
 def _space(count: int) -> list[dict[str, Any]]:
-    """Count distinct JSON-stable candidate parameter sets."""
-    return [{"level_bp": 100 + i, "window": 5 + (i % 3)} for i in range(count)]
+    """Count distinct valid candidate parameter sets (filter overrides)."""
+    return [{"filter": {"min_unique_buyers": 5 + i}} for i in range(count)]
 
 
-def _stamps(count: int = 100) -> tuple[float, ...]:
-    """Evenly spaced synthetic stamps with a clean pre-holdout region."""
-    return tuple(float(i) for i in range(count))
+def _identity_hash(candidate: dict[str, Any]) -> str:
+    """Parameter-set identity hash the harness records for one candidate."""
+    return param_set_hash(canonical_json(candidate).encode("utf-8"))
 
 
 def test_run_search_is_the_only_search_entry_point() -> None:
@@ -56,8 +61,7 @@ def test_run_search_signature_matches_contract() -> None:
     assert params[:4] == ["dataset", "space", "n_trials", "seed"]
 
 
-def test_small_search_stays_eligible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_small_search_stays_eligible(tmp_path: Path) -> None:
     result = run_search(
         "smoke",
         _space(5),
@@ -70,43 +74,39 @@ def test_small_search_stays_eligible(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.holdout_id == "smoke-holdout"
     assert result.trial_count == 5
     assert result.eligible_for_promotion is True
-    assert 0.0 <= result.holdout_score < 1.0
+    assert isinstance(result.best_net_lamports, int)
+    assert isinstance(result.holdout_net_lamports, int)
 
 
 def test_tuning_never_observes_holdout_stamps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    sentinel = 1.0e15
-    stamps = tuple(float(i) for i in range(80)) + (sentinel,) * 20
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: stamps)
-    seen: list[tuple[float, ...]] = []
-    real_score = harness._score_candidate
+    stamps = harness._load_stamps("smoke")
+    split = holdout_split(stamps, "smoke")
+    cutoff = split.holdout_start_ts
+    holdout_stamps = tuple(ts for ts in stamps if ts >= cutoff)
+    assert holdout_stamps, "smoke must hold stamps past the cutoff"
+    tuning_ids: list[str] = []
+    holdout_ids: list[str] = []
+    tuning_ranges: list[tuple[float, float]] = []
+    real_evaluate = harness.evaluate_window
 
     def spy(
-        params_hash: str,
+        dataset: str | Path,
+        params: CandidateParams,
+        *,
         seed: int,
-        folds: tuple[tuple[str, str], ...],
-        tuning_stamps: Any,
-        cutoff: float,
-    ) -> float:
-        seen.append(tuple(tuning_stamps))
-        return real_score(params_hash, seed, folds, tuning_stamps, cutoff)
+        ledger_path: str | Path,
+        window: EvalWindow,
+    ) -> int:
+        if window.window_id == split.holdout_id:
+            holdout_ids.append(window.window_id)
+        else:
+            tuning_ids.append(window.window_id)
+            tuning_ranges.append((window.start_ts, window.end_ts))
+        return real_evaluate(dataset, params, seed=seed, ledger_path=ledger_path, window=window)
 
-    holdout_calls: list[tuple[str, tuple[float, ...]]] = []
-    real_holdout = harness._evaluate_holdout
-
-    def holdout_spy(
-        params_hash: str,
-        seed: int,
-        holdout_id: str,
-        holdout_stamps: Any,
-        cutoff: float,
-    ) -> float:
-        holdout_calls.append((holdout_id, tuple(holdout_stamps)))
-        return real_holdout(params_hash, seed, holdout_id, holdout_stamps, cutoff)
-
-    monkeypatch.setattr(harness, "_score_candidate", spy)
-    monkeypatch.setattr(harness, "_evaluate_holdout", holdout_spy)
+    monkeypatch.setattr(harness, "evaluate_window", spy)
     result = run_search(
         "smoke",
         _space(5),
@@ -115,16 +115,15 @@ def test_tuning_never_observes_holdout_stamps(
         run_id="PROBE01",
         ledger_path=tmp_path / "trials.jsonl",
     )
-    assert seen, "tuning must score candidates over tuning folds"
-    assert all(sentinel not in batch for batch in seen)
-    assert all(len(batch) == 80 for batch in seen)
-    assert len(holdout_calls) == 1, "the winner is evaluated on holdout exactly once"
-    assert holdout_calls[0][0] == result.holdout_id == "smoke-holdout"
-    assert sentinel in holdout_calls[0][1]
+    assert tuning_ids, "tuning must score candidates over tuning folds"
+    for start_ts, end_ts in tuning_ranges:
+        assert end_ts <= cutoff, "tuning window reached past the cutoff"
+        assert not any(start_ts <= ts < end_ts for ts in holdout_stamps)
+    assert len(holdout_ids) == 1, "the winner is evaluated on holdout exactly once"
+    assert holdout_ids[0] == result.holdout_id == "smoke-holdout"
 
 
-def test_above_20_trials_flags_ineligible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_above_20_trials_flags_ineligible(tmp_path: Path) -> None:
     result = run_search(
         "smoke",
         _space(MAX_ELIGIBLE_TRIALS + 1),
@@ -137,10 +136,7 @@ def test_above_20_trials_flags_ineligible(tmp_path: Path, monkeypatch: pytest.Mo
     assert result.eligible_for_promotion is False
 
 
-def test_above_50_trials_raises_typed_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_above_50_trials_raises_typed_error(tmp_path: Path) -> None:
     path = tmp_path / "trials.jsonl"
     with pytest.raises(TooManyTrialsError, match="51"):
         run_search(
@@ -154,10 +150,7 @@ def test_above_50_trials_raises_typed_error(
     assert len(path.read_text(encoding="utf-8").splitlines()) == MAX_ALLOWED_TRIALS
 
 
-def test_identical_inputs_select_the_identical_winner(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_identical_inputs_select_the_identical_winner(tmp_path: Path) -> None:
     first = run_search(
         "smoke",
         _space(8),
@@ -175,6 +168,8 @@ def test_identical_inputs_select_the_identical_winner(
         ledger_path=tmp_path / "b.jsonl",
     )
     assert first == second
+    assert isinstance(first.best_net_lamports, int)
+    assert isinstance(first.holdout_net_lamports, int)
 
 
 def test_recorded_fixture_search_end_to_end(tmp_path: Path) -> None:
@@ -189,10 +184,37 @@ def test_recorded_fixture_search_end_to_end(tmp_path: Path) -> None:
     assert result.holdout_id == "smoke-10m-holdout"
     assert result.trial_count == 3
     assert result.eligible_for_promotion is True
+    assert result.best_net_lamports == 0
+    assert result.holdout_net_lamports == 0
 
 
-def test_bad_counts_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_all_zero_candidate_space_keeps_first_by_order(tmp_path: Path) -> None:
+    space = _space(3)
+    result = run_search(
+        "smoke-10m",
+        space,
+        3,
+        11,
+        run_id="ZERO01",
+        ledger_path=tmp_path / "a.jsonl",
+    )
+    assert result.best_net_lamports == 0
+    assert result.best_params_hash == _identity_hash(space[0])
+    flipped = list(reversed(space))
+    rerun = run_search(
+        "smoke-10m",
+        flipped,
+        3,
+        11,
+        run_id="ZERO02",
+        ledger_path=tmp_path / "b.jsonl",
+    )
+    assert rerun.best_net_lamports == 0
+    assert rerun.best_params_hash == _identity_hash(flipped[0])
+    assert rerun.best_params_hash != result.best_params_hash
+
+
+def test_bad_counts_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="at least 1"):
         run_search("smoke", _space(3), 0, 1, ledger_path=tmp_path / "a.jsonl")
     with pytest.raises(ValueError, match="passes the 2 candidates"):
@@ -201,8 +223,7 @@ def test_bad_counts_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         run_search("", _space(2), 1, 1, ledger_path=tmp_path / "c.jsonl")
 
 
-def test_float_candidate_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(harness, "_load_stamps", lambda dataset: _stamps())
+def test_float_candidate_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="JSON-stable"):
         run_search(
             "smoke",
