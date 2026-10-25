@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v3
 milestone_name: PumpGrok Desk v3
 status: in_progress
-stopped_at: Phase 7 wave 1 running; phase 6 blocked on owner decisions
-last_updated: "2026-10-25T14:15:03Z"
+stopped_at: Phase 7 complete and verified 9/9; phase 6 blocked on owner decisions; phase 8 next
+last_updated: "2026-10-25T14:54:33Z"
 last_activity: 2026-10-25
-last_activity_desc: Discovery recorded; phase 7 wave 1 dispatched; phase 6 blocked
-current_phase: 7
+last_activity_desc: Phase 7 verified 9/9 (07-VERIFICATION.md); phase 6 blocked; phase 8 next
+current_phase: 8
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   blocked_phases: 1
   total_plans: 15
-  completed_plans: 9
-  percent: 0
+  completed_plans: 15
+  percent: 20
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 ## Current Position
 
 - Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
-- Phase: 7 of 10 (Documentation upgrade), executing wave 1 (plans 07-01, 07-03, 07-04).
+- Phase: 8 of 10 (Backtest and paper evaluation), not started. Phase 7 complete: its verifier passed 9 of 9 criteria at HEAD 8e32f14 (.planning/phases/07-documentation-upgrade/07-VERIFICATION.md).
 - Phase 6: code complete on the integration branch; BLOCKED on owner decisions (see Pauses).
-- Phases 8-10: not planned.
+- Phase 8: next, not planned yet. Phases 9 and 10: not planned.
 - Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
-- Percent stays 0 until a phase completes. Known plans with SUMMARY files: 9 of 15 (phase 6 plans 01-09). Fix-up 06-01b is recorded but not counted. Phases 8-10 plan counts are TBD.
+- Percent 20 (1 of 5 phases complete). Known plans with SUMMARY files: 15 of 15 (phase 6 plans 01-09; phase 7 plans 01-06). Fix-up 06-01b is recorded but not counted. Phases 8-10 plan counts are TBD.
 
 ## Discovery (2026-10-25)
 
@@ -99,6 +99,8 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
   - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
   - OVERRIDE-C: manifest descriptions say ten-seat.
 - Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See 06-VERIFICATION.md.
+- Phase 7 gates at HEAD 8e32f14: lint, typecheck, full test, check.sh, verify_doc_commands.sh and the smoke replay exit 0. The smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, identical to Phase 6. Live run exits 3. Criterion 5 is narrowed to the offline subset and recorded as such.
+- Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -136,6 +138,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-25T14:15:03Z.
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected), then the phase 7 plans and SUMMARY files.
-- Next: merge and verify wave 1, then dispatch wave 2 (plan 07-02) on the merged head.
+- Last update: 2026-10-25T14:54:33Z, after Phase 7 verification.
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected) and .planning/phases/07-documentation-upgrade/07-VERIFICATION.md.
+- Next: plan and execute Phase 8 (backtest and paper evaluation). Phase 6 stays blocked until the owner answers the two pending decisions (approved_by, and the G-1/G-2 route).

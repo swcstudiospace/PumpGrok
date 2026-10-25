@@ -13,7 +13,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 ## Phases
 
 - [ ] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
-- [ ] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
+- [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
 - [ ] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
 - [ ] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
 - [ ] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
@@ -85,15 +85,15 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 **Deliverables**:
 
-- [ ] `CLAUDE.md` at the repository root: purpose, stack, layout, commands, architecture and data flow, conventions, GSD artifact locations, safety rules and known gaps, each bullet citing a file (DOC-01)
-- [ ] `AGENTS.md` trimmed: stale GSD research dump and placeholder blocks removed, rules index kept, commands verified, links `CLAUDE.md` instead of duplicating it (DOC-02)
-- [ ] `scripts/verify_doc_commands.sh`: runs the documented commands with their expected exit codes (DOC-02)
-- [ ] `README.md`, `ARCHITECTURE.md`, `SETUP.md`, `skills/replay-and-backtest/SKILL.md`, plugin version statements and `docs/VENDOR_PIN.md` corrected for every contradiction in the 2026-10-25 docs audit (DOC-03)
-- [ ] `tests/docs/` consistency tests and `tests/docs/test_historical_banners.py` (DOC-03, DOC-04)
-- [ ] Banner "Historical design record" on the design records under `docs/` (`docs/design/`, `docs/DISCOVERY.md`, `docs/MIGRATION_MAP.md`, `docs/upgrade-plan-desk-v2.md`); the set is fixed in `tests/docs/test_historical_banners.py` (DOC-04)
-- [ ] `CHANGELOG.md` entry for each documentation change, tagged with its DOC id, and the Phase 7 replay hash line (DOC-03)
+- [x] `CLAUDE.md` at the repository root: purpose, stack, layout, commands, architecture and data flow, conventions, GSD artifact locations, safety rules and known gaps, each bullet citing a file (DOC-01)
+- [x] `AGENTS.md` trimmed: stale GSD research dump and placeholder blocks removed, rules index kept, commands verified, links `CLAUDE.md` instead of duplicating it (DOC-02)
+- [x] `scripts/verify_doc_commands.sh`: runs the documented commands with their expected exit codes (DOC-02)
+- [x] `README.md`, `ARCHITECTURE.md`, `SETUP.md`, `skills/replay-and-backtest/SKILL.md`, plugin version statements and `docs/VENDOR_PIN.md` corrected for every contradiction in the 2026-10-25 docs audit (DOC-03)
+- [x] `tests/docs/` consistency tests and `tests/docs/test_historical_banners.py` (DOC-03, DOC-04)
+- [x] Banner "Historical design record" on the design records under `docs/` (`docs/design/`, `docs/DISCOVERY.md`, `docs/MIGRATION_MAP.md`, `docs/upgrade-plan-desk-v2.md`); the set is fixed in `tests/docs/test_historical_banners.py` (DOC-04)
+- [x] `CHANGELOG.md` entry for each documentation change, tagged with its DOC id, and the Phase 7 replay hash line (DOC-03)
 
-**Plans**: 6 planned (07-01 to 07-06); wave 1 running.
+**Plans**: 6 complete (07-01 to 07-06). Verification: `.planning/phases/07-documentation-upgrade/07-VERIFICATION.md` (passed, 9 of 9 criteria). Criterion 6 checks the vendor pin and a retirement statement, not a snapshot (OVERRIDE-D; the snapshot was deleted in Phase 4). Criterion 5 runs the offline subset; make targets, `run --serve` and `check.sh` are name-checked, not executed. Overrides A to D are recorded in the plan SUMMARY files.
 
 ### Phase 8: Backtest and paper evaluation
 
@@ -200,7 +200,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
-| 7. Documentation upgrade | 0/6 | In progress: wave 1 | - |
+| 7. Documentation upgrade | 6/6 | Complete: verified 9/9 (07-VERIFICATION.md) | 2026-10-25 |
 | 8. Backtest and paper evaluation | 0/TBD | Not planned | - |
 | 9. Bounded paper self-upgrade | 0/TBD | Not planned | - |
 | 10. Live readiness, kept disabled | 0/TBD | Not planned | - |
