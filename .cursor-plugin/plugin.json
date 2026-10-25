@@ -1,7 +1,7 @@
 {
   "name": "pumpgrok",
-  "description": "Eight-role Solana memecoin trading desk for Cursor. Loads agents/, skills/, and rules/ so the desk constitution, lifecycle, risk gate, and Jupiter execution protocol are available as skills and rules.",
-  "version": "1.0.0",
+  "description": "Ten-seat Solana memecoin trading desk for Cursor. Loads agents/, skills/, and rules/ so the desk constitution, lifecycle, risk gate, and Jupiter execution protocol are available as skills and rules.",
+  "version": "0.1.0",
   "author": {
     "name": "PumpGrok"
   },
