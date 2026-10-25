@@ -1,72 +1,117 @@
 ---
 gsd_state_version: "1.0"
 milestone: v3
-status: Defining roadmap
-last_updated: "2026-10-25"
+milestone_name: PumpGrok Desk v3
+status: in_progress
+stopped_at: Phase 7 wave 1 running; phase 6 blocked on owner decisions
+last_updated: "2026-10-25T14:15:03Z"
 last_activity: 2026-10-25
-last_activity_desc: Milestone v3 started
+last_activity_desc: Discovery recorded; phase 7 wave 1 dispatched; phase 6 blocked
+current_phase: 7
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  blocked_phases: 1
+  total_plans: 15
+  completed_plans: 9
   percent: 0
-current_phase: none
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-25)
-
-**Core value:** The desk runs autonomously in paper mode for 2-4 weeks and produces honest, replayable reports; no code path can move real funds.
-**Current focus:** Milestone v3 roadmap (pending approval)
+See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs autonomously in paper mode for 2-4 weeks and produces honest, replayable reports; no code path can move real funds.
 
 ## Current Position
 
-Phase: none (roadmap pending approval)
-Plan: none
-Status: Defining roadmap
-Last activity: 2026-10-25 - Milestone v3 started
+- Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
+- Phase: 7 of 10 (Documentation upgrade), executing wave 1 (plans 07-01, 07-03, 07-04).
+- Phase 6: code complete on the integration branch; BLOCKED on owner decisions (see Pauses).
+- Phases 8-10: not planned.
+- Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
+- Percent stays 0 until a phase completes. Known plans with SUMMARY files: 9 of 15 (phase 6 plans 01-09). Fix-up 06-01b is recorded but not counted. Phases 8-10 plan counts are TBD.
 
-## Performance Metrics
+## Discovery (2026-10-25)
 
-**Velocity:**
+- Milestone: v3 is the only open milestone. ROADMAP.md names it and MILESTONES.md lists v2 as shipped. No conflict.
+- Discrepancy resolved: this file and the ROADMAP progress table read "Not started" for phase 6 after phase 6 artifacts existed. Artifacts win; both files now reflect them.
+- Artifacts on disk: phase 6 has CONTEXT, PLAN 01-09, SUMMARY 01-09 plus 01b, and VERIFICATION (status gaps_found, corrected in that file). Phase 7 has CONTEXT and PLAN 01-06, with no SUMMARY. Phases 8-10 have no artifacts.
+- Gates, verified present in Makefile and pyproject.toml:
+  - format and lint: make lint (ruff check; ruff format --check)
+  - type check: make typecheck (mypy --strict src/)
+  - test: make test (pytest -q)
+  - repository check: ./scripts/check.sh
+  - replay smoke: uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke
+  - replay hash: uv run pumpgrok verify --fixture smoke-10m, run twice; hashes must match
+  - live refusal: uv run pumpgrok run --mode live --once; exit 3 required
+  - gateway: cd services/desk-gateway && uv run pytest -q
+  - gate runner: python3 ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-N.json (G-1 to G-7)
+  - dependency audit: make audit (pip-audit). Run at milestone close, not per phase.
+  - build: defined by Dockerfile and docker-compose.yml; no make target; not run per phase; manual.
+  - Absent gates: none. Format, lint, type check and test all exist.
+- TODO source: no tracked TODO file. Zero TODO, FIXME, HACK or XXX markers in src, tests, ci, scripts, services, skills, agents or contracts. TODO and FIXME text in docs/ and the v2 archive is historical design text, not active items. The TODO items are the session tracker, mapped below.
 
-- v3 plans completed: 0
-- v2 history: 5 phases, 44 plans, archived in .planning/MILESTONES.md
+## TODO mapping
 
-*Updated after each plan completion*
+| TODO item | Disposition |
+|---|---|
+| Close v2 open items: R65 bonding-curve probe | Phase 6 INT-10. Probe script added; records ASSUMED with the exact error. VERIFIED needs a bonding-curve account, which was not supplied. |
+| Close v2 open items: G-4 consumer acks | Human action outside code. Backlog (out of scope in REQUIREMENTS.md). |
+| Close v2 open items: Phase 3 pending human items | TOOL-002 naming accepted; bonding-curve layout stays ASSUMED (see R65). Backlog. |
+| Code quality: fix R28 float money in engine and other packages | Phase 6 INT-01 done on branch. Residual float constant CURVE_COMPLETION_SOL (engine/monitor.py:46) backlogged. |
+| Code quality: decompose oversized modules with replay hash unchanged | Phase 6 INT-08 covers three functions. Wider decomposition backlogged (not in v3 requirements). |
+| Create CLAUDE.md at repo root | Phase 7 DOC-01 (plan 07-01, wave 1). |
+| Upgrade AGENTS.md | Phase 7 DOC-02 (plan 07-02, wave 2). |
+| Upgrade README, ARCHITECTURE, SETUP, docs banners, CHANGELOG | Phase 7 DOC-03 and DOC-04 (plans 07-03 to 07-06). |
+| Autonomy: verify autonomous-paper level end to end on replay | Phase 8 PAP-03. |
+| Backtesting harness: holdout, walk-forward, trial count, byte-identical reports | Phase 8 BT-01 to BT-07. |
+| Paper evaluation: backtest-to-paper divergence check | Phase 8 PAP-01 to PAP-03. |
+| Strategy upgrade: propose-only candidates; auto-promotion after amendment | Phase 9 UPG-01 to UPG-06. |
+| Live path: keep disabled, verify gate tests | Phase 10 LIV-01 and LIV-02. |
 
-## Accumulated Context
+## Dependency levels and scheduling
 
-### Decisions
+- Level 0: phase 6. Complete in code; blocked on owner decisions.
+- Level 1: phase 7. Phase 8 also depends only on phase 6, but runs after phase 7 in ROADMAP numeric order. Both edit CHANGELOG.md, so they are serialized.
+- Level 2: phase 9 (depends on phase 8). Level 3: phase 10 (depends on phase 9).
+- Rule: sequential by phase number. Parallelism only inside a wave of file-disjoint plans. The orchestrator is the only writer of this file and ROADMAP.md.
 
-Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting v3:
+## Pauses and blockers (owner decisions)
 
-- [V3-1]: Constitution amendment approved 2026-10-25 as drafted; BLIND narrowed to SAFE-4 and SAFE-8; applied in phase 9 with its code
-- [V3-2]: Backtest data is self-recorded only
-- [V3-3]: Branch bot-00-chief/v2-closeout from origin/main; draft PRs only; no merge without approval
-- [V3-4]: Research skipped for v3; defaults D11 (max 50 trials), D12 (flag above 20), D13 (20 percent holdout), D7 divergence (2 pp or 0.5 Sharpe)
+1. Phase 6 receipt approved_by: you chose to hold it. Blocks phase 6 completion and the milestone PR. Phases 7-10 do not depend on it.
+2. G-1 and G-2 route for the milestone PR.
+   - A (recommended): a PR-bound owner waiver for G-1, G-2 and G-5/6, the mechanism .github/workflows/gates.yml uses for PR 14.
+   - B: a RISK-authored ownership change merged to main first, with its own receipt.
+   - The approved re-own to CHIEF cannot be done inside the PR. G-1 reads ownership.yaml from the PR checkout (ci/gates/check_ownership.py:26 and :236), so an edit would be checked against itself.
+   - G-1 covers every v3 path. Docs match `**/*.md`, which is owned by bot-02-risk.
+3. Tracker rows (ultrathink-kickoff, track complete): not run. They would create Notion and Linear rows for 7 issues and 52 sub-issues. Awaiting your yes or no.
+4. Ship: not invoked. The ultrathink done-check would fail on two rule gaps: latest verification is gaps_found, and the roadmap is incomplete (ultrathink src/ship/assess.ts:50-53).
 
-### Pending Todos
+## Decisions
 
-None yet.
+- Clarification q1 (live scope): settled by the approved v3 roadmap. Paper execution and risk code are in scope. Live stays refused (Phase 10). No live-adapter enablement.
+- Clarification q2 (commits): one local commit per verified unit on the integration branch. No push. No branch deletion (AGENTS.md).
+- Clarification q3 (pauses): pause only for categories a, b and c. Safe defaults otherwise.
+- Phase commands run as orchestrated gsd-planner, gsd-executor, gsd-plan-checker and gsd-verifier subagents, not flat Skill() calls. Artifacts follow GSD formats. Recorded deviation.
+- Phase 7 plan corrections, recorded in each SUMMARY:
+  - OVERRIDE-A: the README version is 0.1.0. Plan 07-03's "plugin pack stays 1.0.0" is superseded by criterion 6.
+  - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
+  - OVERRIDE-C: manifest descriptions say ten-seat.
+- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See 06-VERIFICATION.md.
 
-### Blockers/Concerns
+## Deferred and backlog (not in v3 requirements)
 
-Open decisions from the v2 audit (`.planning/milestones/v2-MILESTONE-AUDIT.md`), with resolutions:
+- engine/monitor.py:46 CURVE_COMPLETION_SOL is a float SOL constant that backs a characterization pin.
+- Codebase-wide module decomposition beyond INT-08's three functions.
+- Phase 3 human actions: G-4 consumer acknowledgements; live bonding-curve confirmation (needs an account).
+- Omega CI migration (commits 5b5d6a1 and 9772655): owner sign-off needed. Recorded in CHANGELOG under phase 6.
+- The PR 14 waiver in .github/workflows/gates.yml is stale, since PR 14 merged. Remove it in the same change as the milestone waiver.
+- Criterion 16 (draft PR) conflicts with the owner's ready-PR decision. Requirement text unchanged.
 
-- PumpPortal trade key: default applied, no key (R45). Resolved; the desk uses no trade-stream key.
-- Paid Solana RPC provider: none approved. Public endpoint only, no spend. Holder checks are advisory under the amendment (UPG-05).
-- BLIND holder rule: narrowed to SAFE-4 and SAFE-8 (amendment approved 2026-10-25, applied in phase 9). All other BLIND results remain KILL.
+## Deferred Items (carried from v2 audit)
 
-Observed data-source degradation to design around: pump.fun REST returns HTTP 530 / error 1016 on all tested paths (R47).
-
-## Deferred Items
-
-v2 audit tech_debt carried forward at v2 close (`.planning/milestones/v2-MILESTONE-AUDIT.md`). Status `deferred-to-v3` means a v3 requirement covers the item; `deferred-beyond-v3` means no v3 requirement covers it.
+v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTONE-AUDIT.md). Status `deferred-to-v3` means a v3 requirement covers the item; `deferred-beyond-v3` means none does.
 
 | Source | Item | Status | Maps to |
 |--------|------|--------|---------|
@@ -91,10 +136,6 @@ v2 audit tech_debt carried forward at v2 close (`.planning/milestones/v2-MILESTO
 
 ## Session Continuity
 
-Last session: 2026-10-25
-Stopped at: Milestone v3 requirements defined; roadmap pending approval
-Resume file: None
-
-## Operator Next Steps
-
-- Approve the v3 roadmap, then run /gsd-autonomous
+- Last update: 2026-10-25T14:15:03Z.
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected), then the phase 7 plans and SUMMARY files.
+- Next: merge and verify wave 1, then dispatch wave 2 (plan 07-02) on the merged head.

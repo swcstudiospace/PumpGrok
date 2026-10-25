@@ -62,7 +62,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [ ] `CHANGELOG.md` entries: the Phase 6 before and after replay hash lines, and the review of Omega CI runner migration commits 5b5d6a1 and 9772655 (PRC-01)
 - [ ] Phase branch and draft PR per AGENTS.md; no merge to main (PRC-02)
 
-**Plans**: TBD
+**Plans**: 9 planned (06-01 to 06-09) plus fix-up 06-01b; all have SUMMARY files. Phase blocked on owner decisions (see .planning/STATE.md).
 
 ### Phase 7: Documentation upgrade
 
@@ -93,7 +93,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [ ] Banner "Historical design record" on the design records under `docs/` (`docs/design/`, `docs/DISCOVERY.md`, `docs/MIGRATION_MAP.md`, `docs/upgrade-plan-desk-v2.md`); the set is fixed in `tests/docs/test_historical_banners.py` (DOC-04)
 - [ ] `CHANGELOG.md` entry for each documentation change, tagged with its DOC id, and the Phase 7 replay hash line (DOC-03)
 
-**Plans**: TBD
+**Plans**: 6 planned (07-01 to 07-06); wave 1 running.
 
 ### Phase 8: Backtest and paper evaluation
 
@@ -199,8 +199,8 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Integrity closure | 0 | Not started | - |
-| 7. Documentation upgrade | 0 | Not started | - |
-| 8. Backtest and paper evaluation | 0 | Not started | - |
-| 9. Bounded paper self-upgrade | 0 | Not started | - |
-| 10. Live readiness, kept disabled | 0 | Not started | - |
+| 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
+| 7. Documentation upgrade | 0/6 | In progress: wave 1 | - |
+| 8. Backtest and paper evaluation | 0/TBD | Not planned | - |
+| 9. Bounded paper self-upgrade | 0/TBD | Not planned | - |
+| 10. Live readiness, kept disabled | 0/TBD | Not planned | - |

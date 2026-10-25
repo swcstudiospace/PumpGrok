@@ -6,6 +6,8 @@
 **Status:** `gaps_found`
 **Score:** 15/17 success criteria PASS, 2 FAIL
 
+**Correction (2026-10-25, after e770602):** The score above is wrong. Criterion 17 (`run_all.py` exits 0) was counted as a pass without running the gate. Run now, it exits 1 with G-1 (67 foreign paths) and G-2 (`approved_by` missing). Criteria 1 and 11d were fixed at `e770602`: the full suite exits 0, and the LAYOUT_STATUS grep now matches the annotated assignment. Status remains `gaps_found` until the owner records the G-1/G-2 route and `approved_by`. Re-run this report after those decisions.
+
 ## Overall verdict
 
 The Phase 6 code goal is substantively achieved: integer money, fail-closed
