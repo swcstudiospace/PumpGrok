@@ -229,8 +229,8 @@ def test_rebuild_restores_book_from_ledger(tmp_path: Path) -> None:
         assert record.tokens_bought == 1
         assert record.closed == 1
         assert record.rugs == 1
-        assert record.worst_pnl_pct == -90.0
-        assert record.realized_pnl_sol == -90_000_000 / 1_000_000_000
+        assert record.worst_loss_pct == -90.0
+        assert record.realized_pnl_lamports == -90_000_000
 
         engine = _engine(store, clock, reputation=book)
         decision = engine.check(_buy(clock, ids), seat="bot-04-sniper")

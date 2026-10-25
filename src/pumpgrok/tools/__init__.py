@@ -317,6 +317,12 @@ def build_operator_registry(
     live = settings.effective_mode == "live"
     curves = _CachingPriceSource(price_source)
     budget = settings.risk
+    if store.get_meta("initial_equity_lamports") is None:
+        # Genesis equity for the paper ledger (INT-02): the same meta row the
+        # replay runtime writes, so a fresh paper ledger reaches shutdown and
+        # the exit-halt without a CorruptState. Never overwritten: history
+        # keeps the genesis it started with.
+        store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
     engine = RiskEngine(
         store=store,
         budget=budget,

@@ -50,7 +50,7 @@ def test_tick_maps_to_candidate_with_fixture_evidence() -> None:
     assert token.mint == ALPHA
     assert token.has_metadata
     assert token.unique_buyers == 12
-    assert token.sol_in_curve == 42.1
+    assert token.sol_in_curve == 42_100_000_000
     assert round(token.curve_progress, 3) == round(42.1 / 85.0, 3)
     assert token.created_timestamp == parse_ts_utc("2025-12-31T23:30:00.000Z")
 

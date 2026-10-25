@@ -51,8 +51,8 @@ class Token(BaseModel):
     # means the count was observed.
     unique_buyers: int | None = None
     curve_progress: float = 0.0  # 0..1, share of the curve already bought
-    market_cap_sol: float = 0.0
-    sol_in_curve: float = 0.0
+    market_cap_sol: int = 0  # lamports (INT-01: integer money)
+    sol_in_curve: int = 0  # lamports (INT-01: integer money)
 
     def age_seconds(self, now: float) -> float:
         if not self.created_timestamp:
@@ -75,7 +75,7 @@ class Holder(BaseModel):
 
     address: str
     amount: int = 0  # token base units
-    share: float = 0.0  # share of total supply, 0..1
+    share: float = 0.0  # ratio of total supply, 0..1 (a ratio, not money; stays float)
     is_creator: bool = False
 
 

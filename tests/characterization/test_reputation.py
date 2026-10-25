@@ -37,7 +37,7 @@ def book() -> ReputationBook:
 
 
 def rug(book: ReputationBook, creator: str = "C1", pct: float = -85.0) -> None:
-    book.record_close(creator, pnl_sol=-0.4, pnl_pct=pct, rug_loss_pct=60.0)
+    book.record_close(creator, pnl_lamports=-400_000_000, return_pct=pct, rug_loss_pct=60.0)
 
 
 # --- accounting -------------------------------------------------------------
@@ -56,15 +56,15 @@ def test_rug_blocks_next_token(book: ReputationBook) -> None:
 
 
 def test_moderate_loss_is_not_a_rug(book: ReputationBook) -> None:
-    book.record_close("C1", pnl_sol=-0.1, pnl_pct=-35.0, rug_loss_pct=60.0)
+    book.record_close("C1", pnl_lamports=-100_000_000, return_pct=-35.0, rug_loss_pct=60.0)
     assert book.creators["C1"].rugs == 0
     assert book.verdict("C1", block_after_rugs=1) is None
 
 
 def test_rug_threshold_boundary(book: ReputationBook) -> None:
-    book.record_close("C1", pnl_sol=-0.3, pnl_pct=-60.0, rug_loss_pct=60.0)
+    book.record_close("C1", pnl_lamports=-300_000_000, return_pct=-60.0, rug_loss_pct=60.0)
     assert book.creators["C1"].rugs == 1
-    book.record_close("C2", pnl_sol=-0.3, pnl_pct=-59.9, rug_loss_pct=60.0)
+    book.record_close("C2", pnl_lamports=-300_000_000, return_pct=-59.9, rug_loss_pct=60.0)
     assert book.creators["C2"].rugs == 0
 
 
@@ -83,24 +83,24 @@ def test_zero_disables_blocking(book: ReputationBook) -> None:
 def test_profit_does_not_erase_history(book: ReputationBook) -> None:
     """One good exit does not cancel an address that already rugged."""
     rug(book)
-    book.record_close("C1", pnl_sol=1.0, pnl_pct=50.0, rug_loss_pct=60.0)
+    book.record_close("C1", pnl_lamports=1_000_000_000, return_pct=50.0, rug_loss_pct=60.0)
     assert book.verdict("C1", block_after_rugs=1) is not None
-    assert book.creators["C1"].realized_pnl_sol == pytest.approx(0.6)
+    assert book.creators["C1"].realized_pnl_lamports == 600_000_000
 
 
 def test_counters_accumulate(book: ReputationBook) -> None:
     book.observe("C1")
     book.record_open("C1")
-    book.record_close("C1", pnl_sol=0.0, pnl_pct=0.0, rug_loss_pct=60.0)
+    book.record_close("C1", pnl_lamports=0, return_pct=0.0, rug_loss_pct=60.0)
     record = book.creators["C1"]
     assert (record.tokens_seen, record.tokens_bought, record.closed) == (1, 1, 1)
-    assert record.worst_pnl_pct == 0.0  # no losses seen
+    assert record.worst_loss_pct == 0.0  # no losses seen
 
 
 def test_worst_result_is_remembered(book: ReputationBook) -> None:
-    book.record_close("C1", pnl_sol=-0.1, pnl_pct=-20.0, rug_loss_pct=60.0)
-    book.record_close("C1", pnl_sol=-0.4, pnl_pct=-90.0, rug_loss_pct=60.0)
-    assert book.creators["C1"].worst_pnl_pct == -90.0
+    book.record_close("C1", pnl_lamports=-100_000_000, return_pct=-20.0, rug_loss_pct=60.0)
+    book.record_close("C1", pnl_lamports=-400_000_000, return_pct=-90.0, rug_loss_pct=60.0)
+    assert book.creators["C1"].worst_loss_pct == -90.0
 
 
 # --- disk --------------------------------------------------------------------

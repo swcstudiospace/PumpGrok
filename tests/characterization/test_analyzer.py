@@ -165,7 +165,7 @@ def test_parse_trade_normalizes_milliseconds() -> None:
     )
     assert trade.timestamp == pytest.approx(NOW - 10)
     assert not trade.is_buy
-    assert trade.sol_amount == 1.5
+    assert trade.sol_amount == 1_500_000_000
 
 
 def test_enrich_fills_only_missing_fields() -> None:
@@ -176,7 +176,7 @@ def test_enrich_fills_only_missing_fields() -> None:
     )
     assert tok.description == "already here"
     assert tok.twitter == "t"
-    assert tok.sol_in_curve == pytest.approx(30.0)
+    assert tok.sol_in_curve == 30_000_000_000
 
 
 # --- metrics -----------------------------------------------------------------
@@ -188,7 +188,7 @@ def healthy_trades(count: int = 30) -> list[Trade]:
         Trade(
             wallet=f"w{i % 20}",
             is_buy=True,
-            sol_amount=0.5 + (i % 7) * 0.05,
+            sol_amount=500_000_000 + (i % 7) * 50_000_000,
             timestamp=start + i * 10.0,
         )
         for i in range(count)
@@ -250,16 +250,16 @@ def test_veto_ignores_good_metrics() -> None:
 def test_snipers_counted_in_first_seconds() -> None:
     created = NOW - 600
     buys = [
-        Trade(wallet=f"s{i}", is_buy=True, sol_amount=1.0, timestamp=created + 5.0)
+        Trade(wallet=f"s{i}", is_buy=True, sol_amount=1_000_000_000, timestamp=created + 5.0)
         for i in range(8)
     ]
-    buys += [Trade(wallet="late", is_buy=True, sol_amount=1.0, timestamp=created + 500.0)]
+    buys += [Trade(wallet="late", is_buy=True, sol_amount=1_000_000_000, timestamp=created + 500.0)]
     metrics = compute_metrics(token(created_timestamp=created), [], buys)
     assert metrics.sniper_count == 8
 
 
 def test_single_wallet_kills_diversity() -> None:
-    trades = [Trade(wallet="one", is_buy=True, sol_amount=1.0, timestamp=NOW - i) for i in range(5)]
+    trades = [Trade(wallet="one", is_buy=True, sol_amount=1_000_000_000, timestamp=NOW - i) for i in range(5)]
     metrics = compute_metrics(token(), [], trades)
     assert metrics.wallet_diversity == 0.0
 

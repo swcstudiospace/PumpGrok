@@ -24,7 +24,7 @@ from typing import Any
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.engine.models import Token
-from pumpgrok.engine.monitor import CURVE_COMPLETION_SOL, passes_filter
+from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS, passes_filter
 from pumpgrok.replay.clock import parse_ts_utc
 
 #: Decisions the replay pipeline can report. ``buy`` means the candidate
@@ -34,8 +34,6 @@ BUY = "buy"
 
 #: Reason a candidate carries no buyer evidence; the checkpoint asserts it.
 DATA_UNAVAILABLE = "data_unavailable"
-
-LAMPORTS_PER_SOL = 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -82,11 +80,11 @@ def tick_to_candidate(event: Mapping[str, Any]) -> Token:
     mint = str(event.get("mint", ""))
     reserves = event.get("S")
     if isinstance(reserves, int) and not isinstance(reserves, bool):
-        sol_in_curve = reserves / LAMPORTS_PER_SOL
-        curve_progress = min(1.0, sol_in_curve / CURVE_COMPLETION_SOL)
+        sol_in_curve = reserves
+        curve_progress = min(1.0, sol_in_curve / CURVE_COMPLETION_LAMPORTS)
     else:
         # Unknown reserves read as a full curve, so the admission gate fails closed.
-        sol_in_curve = 0.0
+        sol_in_curve = 0
         curve_progress = 1.0
     return Token(
         mint=mint,

@@ -29,8 +29,8 @@ Adaptations from the oracle (deliberate):
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 from pumpgrok.ledger.export import DRY_RUN_TX, export_ledger
 from pumpgrok.ledger.store import LedgerStore
@@ -124,8 +124,8 @@ def test_buy_line_carries_vendor_keys(tmp_path: Path) -> None:
     assert line["type"] == "buy"
     assert line["mint"] == MINT
     assert line["symbol"] == ""
-    assert line["size_sol"] == round(200_000_000 / 1_000_000_000, 6)
-    assert line["entry_price"] == float("5.532e-5") / 1000.0
+    assert Decimal(line["size_sol"]) * 1_000_000_000 == 200_000_000
+    assert Decimal(line["entry_price"]) * 1000 == Decimal("5.532e-5")
     assert isinstance(line["ts"], float) and line["ts"] > 0
     assert line["seq"] == 1
 
@@ -193,8 +193,8 @@ def test_close_line_computes_vendor_fields(tmp_path: Path) -> None:
     (line,) = _export(tmp_path, [row])
     assert line["type"] == "close"
     assert line["mint"] == MINT
-    assert line["exit_price"] == float("6.2e-5") / 1000.0
-    assert line["pnl_sol"] == round(25_000_000 / 1_000_000_000, 6)
+    assert Decimal(line["exit_price"]) * 1000 == Decimal("6.2e-5")
+    assert Decimal(line["pnl_sol"]) * 1_000_000_000 == 25_000_000
     assert line["pnl_pct"] == float("12.5")
     assert line["hold_seconds"] == 300
     assert line["reason"] == "take_profit"
@@ -208,7 +208,7 @@ def test_close_loss_carries_negative_pnl(tmp_path: Path) -> None:
     )
     row = _envelope("PositionClosed", payload, "close-key-0002", "2026-01-01T00:00:03.000001Z")
     (line,) = _export(tmp_path, [row])
-    assert line["pnl_sol"] == round(-120_000_000 / 1_000_000_000, 6)
+    assert Decimal(line["pnl_sol"]) * 1_000_000_000 == -120_000_000
     assert line["pnl_pct"] == float("-30.0")
     assert line["reason"] == "stop_loss"
 
