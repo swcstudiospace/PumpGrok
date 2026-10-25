@@ -7,9 +7,11 @@ cannot pass one check and fail the other.
 
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from pumpgrok.core.units import sol_to_lamports
 
 
 class RiskBudget(BaseModel):
@@ -48,14 +50,10 @@ class RiskBudget(BaseModel):
         return self.max_trade_fraction > 0 and self.max_open_positions > 0
 
 
-LAMPORTS_PER_SOL = 1_000_000_000
-
-
 def budget_equity_lamports(budget: RiskBudget) -> int:
     """Configured paper equity in lamports, rounded half up (the one SOL-to-lamports rule).
 
     Every equity source (scheduler, engine, tools, the budget property) goes through here,
     so one configured value yields one lamport amount on every path.
     """
-    scaled = budget.paper_equity_sol * LAMPORTS_PER_SOL
-    return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+    return sol_to_lamports(budget.paper_equity_sol)

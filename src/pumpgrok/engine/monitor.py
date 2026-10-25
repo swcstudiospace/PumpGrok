@@ -30,14 +30,14 @@ import json
 import logging
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 
 from websockets.asyncio.client import connect
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
+from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Token
-from pumpgrok.replay.clock import Clock
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 CURVE_COMPLETION_SOL = 85.0
 
 # Same completion threshold in lamports (INT-01: reserves are integer money).
-CURVE_COMPLETION_LAMPORTS = 85 * 1_000_000_000
+CURVE_COMPLETION_LAMPORTS = sol_to_lamports(Decimal(85))
 
 # How long to keep a launch buffered while it never gains buyers.
 PENDING_TTL_SECONDS = 900.0
@@ -88,11 +88,7 @@ def _coerce_float(value: Any, default: float) -> float:
 def _coerce_lamports(value: Any, default: int) -> int:
     """Best-effort SOL amount to integer lamports, ROUND_HALF_UP. Default on garbage."""
     try:
-        scaled = Decimal(str(value)) * 1_000_000_000
-    except (ArithmeticError, ValueError, TypeError):
-        return default
-    try:
-        return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+        return sol_to_lamports(Decimal(str(value)))
     except (ArithmeticError, ValueError, TypeError):
         return default
 

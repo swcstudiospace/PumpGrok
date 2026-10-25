@@ -25,7 +25,6 @@ MintStr = Annotated[str, Field(pattern=MINT_RE)]
 
 SOLANA_RPC_SOURCE = "solana_rpc"
 
-LAMPORTS_PER_SOL = 1_000_000_000
 UNITS_PER_TOKEN = 1_000_000
 
 J4 = RetryPolicy(attempts=3, base_s=0.5, max_s=4.0)

@@ -19,16 +19,16 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pumpgrok.core.units import sol_to_lamports
+
 if TYPE_CHECKING:
     from pumpgrok.core.adapter import OrderRequest
     from pumpgrok.ledger.store import LedgerStore
-
-LAMPORTS_PER_SOL = 1_000_000_000
 
 TICKET_RE = re.compile(r"^SOL-\d{8}-\d{3}$")
 
@@ -151,7 +151,7 @@ def _sol_to_lamports(size_sol: str) -> int:
         raise ValueError(f"bad size {size_sol!r}: want a finite number")
     if size <= 0:
         raise ValueError(f"bad size {size_sol!r}: want a positive number")
-    return int((size * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
+    return sol_to_lamports(size)
 
 
 def parse_human_phrase(

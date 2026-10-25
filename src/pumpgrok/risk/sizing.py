@@ -36,8 +36,6 @@ vendor ``evaluate``        R34 id
 
 from __future__ import annotations
 
-LAMPORTS_PER_SOL = 1_000_000_000
-
 # Below this size a trade makes no sense: fees and tips would eat it.
 # Vendor MIN_TRADE_SOL = 0.01 (risk.py:36).
 MIN_TRADE_LAMPORTS = 10_000_000

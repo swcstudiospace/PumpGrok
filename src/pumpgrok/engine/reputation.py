@@ -45,9 +45,6 @@ log = logging.getLogger(__name__)
 # How many addresses to remember. Past that, evict the stalest.
 MAX_CREATORS = 50_000
 
-# Lamports per SOL: the ledger settles in lamports, and so does the book (INT-01).
-LAMPORTS_PER_SOL = 1_000_000_000
-
 
 class CreatorRecord(BaseModel):
     """What we know about one address from our own trades."""

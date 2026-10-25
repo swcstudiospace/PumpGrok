@@ -8,16 +8,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-LAMPORTS_PER_SOL = 1_000_000_000
+from pumpgrok.core.units import split_lamports
 
 
 def sol(lamports: int) -> str:
     """Render an integer lamport amount as SOL with 9 decimals (render time only)."""
     neg = "-" if lamports < 0 else ""
-    rest = abs(int(lamports))
-    return _SOL_TEMPLATE.format(
-        neg=neg, whole=rest // LAMPORTS_PER_SOL, frac=rest % LAMPORTS_PER_SOL
-    )
+    whole, frac = split_lamports(lamports)
+    return _SOL_TEMPLATE.format(neg=neg, whole=whole, frac=frac)
 
 
 def assert_ascii(body: str) -> str:

@@ -17,6 +17,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
+from pumpgrok.core.units import lamports_to_sol
 from pumpgrok.tools._common import J4, SOLANA_RPC_SOURCE, MintStr, meta_now
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
@@ -39,11 +40,8 @@ class Trade(BaseModel):
         """SOL per token for this movement (wrapper-boundary Decimal math)."""
         if self.token_units <= 0:
             return Decimal(0)
-        return (
-            Decimal(self.sol_lamports)
-            / Decimal(self.token_units)
-            * Decimal(1_000_000)
-            / Decimal(1_000_000_000)
+        return lamports_to_sol(
+            Decimal(self.sol_lamports) / Decimal(self.token_units) * Decimal(1_000_000)
         )
 
 
