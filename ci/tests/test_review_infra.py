@@ -186,7 +186,7 @@ def _loader_resolved_roster_paths() -> dict[str, PurePosixPath]:
     The index into parents[] is read from the loader source, so a change to either loader's
     path expression is caught here instead of silently drifting from the image layout.
     """
-    cli_src = (REPO_ROOT / "src" / "pumpgrok" / "cli.py").read_text(encoding="utf-8")
+    cli_src = (REPO_ROOT / "src" / "pumpgrok" / "cli" / "wiring.py").read_text(encoding="utf-8")
     proj_src = (REPO_ROOT / "src" / "pumpgrok" / "contracts" / "projection.py").read_text(
         encoding="utf-8"
     )
@@ -203,7 +203,7 @@ def _loader_resolved_roster_paths() -> dict[str, PurePosixPath]:
     assert proj_idx, "projection.default_contracts_dir() changed; update the check"
     assert 'repo_root / "contracts" / "tool-rosters"' in tools_src, "registry roster path changed"
 
-    cli_file = INSTALLED_SITE / "pumpgrok" / "cli.py"
+    cli_file = INSTALLED_SITE / "pumpgrok" / "cli" / "wiring.py"
     proj_file = INSTALLED_SITE / "pumpgrok" / "contracts" / "projection.py"
     return {
         "cli._repo_root": cli_file.parents[int(cli_idx.group(1))] / "contracts" / "tool-rosters",
