@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
@@ -14,6 +14,15 @@ from pumpgrok.risk.engine import RULE_EXIT_REASONS
 
 
 class _BatchMixin:
+    if TYPE_CHECKING:
+        from pumpgrok.ledger.store import LedgerStore
+        from pumpgrok.risk.engine import RiskEngine
+
+        _risk: RiskEngine
+        _store: LedgerStore
+
+        def _now_ts(self) -> str: ...
+
     async def _append_order_batch(
         self,
         request: OrderRequest,

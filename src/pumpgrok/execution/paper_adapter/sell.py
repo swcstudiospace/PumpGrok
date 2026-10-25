@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest
 from pumpgrok.core.errors import OrderRejectedError
@@ -14,6 +14,88 @@ from pumpgrok.replay.clock import parse_ts_utc
 
 
 class _SellMixin:
+    if TYPE_CHECKING:
+        from pumpgrok.core.ids import Clock, IdFactory
+        from pumpgrok.execution.fees import FeeModel
+        from pumpgrok.execution.paper_adapter.models import _InflightOrders
+        from pumpgrok.ledger.store import LedgerStore
+
+        _clock: Clock
+        _fees: FeeModel
+        _ids: IdFactory
+        _inflight: _InflightOrders
+        _last_price_ts: dict[str, float]
+        _last_reserves: dict[str, tuple[int, int]]
+        _store: LedgerStore
+
+        def _fold_state(self) -> Any: ...
+
+        def _now_ts(self) -> str: ...
+
+        def _fill_cap(self, s_lamports: int) -> int: ...
+
+        def _floor(self, size_lamports: int) -> int: ...
+
+        def _open_units(self, mint: str) -> int: ...
+
+        def _slippage_bps(self, request: OrderRequest) -> int: ...
+
+        @staticmethod
+        def _sell_units(request: OrderRequest, curve: CurveSnapshot) -> int: ...
+
+        async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+
+        async def _append_order_batch(
+            self,
+            request: OrderRequest,
+            *,
+            order_id: str,
+            quote_id: str,
+            out0: int,
+            threshold: int,
+            impact: Decimal,
+            ledger_source: str,
+            correlation_id: str,
+            seat: str | None = None,
+            exit_reason: str | None = None,
+            creator: str | None = None,
+        ) -> None: ...
+
+        async def _reject(
+            self,
+            request: OrderRequest,
+            decision_id: str,
+            reason: str,
+            detail: str,
+            *,
+            stage: str,
+            order_id: str | None = None,
+            quote_out: int = 0,
+            threshold: int = 0,
+            confirm_out: int = 0,
+            fees: int = 0,
+            source: str,
+            correlation_id: str,
+        ) -> OrderRejectedError: ...
+
+        def _repeat_outcome(
+            self, request: OrderRequest
+        ) -> Fill | OrderRejectedError | None: ...
+
+        async def _await_confirmation(
+            self,
+            request: OrderRequest,
+            *,
+            order_id: str,
+            forbid_complete: bool,
+            ledger_source: str,
+            correlation_id: str,
+            seat: str | None,
+            exit_reason: str | None,
+            creator: str | None,
+            owner: object,
+        ) -> tuple[CurveSnapshot, float, int | None]: ...
+
     async def _sell_targets(
         self,
         request: OrderRequest,

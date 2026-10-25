@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.curve_math import sell_out, spot
@@ -15,6 +15,28 @@ from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
 
 
 class _MarksMixin:
+    if TYPE_CHECKING:
+        from pumpgrok.core.ids import Clock, IdFactory
+        from pumpgrok.execution.fees import FeeModel
+        from pumpgrok.ledger.store import LedgerStore
+        from pumpgrok.risk.limits import EngineLimits
+
+        _clock: Clock
+        _fees: FeeModel
+        _frozen_marks: dict[str, int]
+        _ids: IdFactory
+        _last_price_ts: dict[str, float]
+        _last_reserves: dict[str, tuple[int, int]]
+        _limits: EngineLimits
+        _source: Literal["paper", "replay", "manual"]
+        _store: LedgerStore
+
+        def _fold_state(self) -> Any: ...
+
+        def _now_ts(self) -> str: ...
+
+        async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+
     async def close_on_graduation(
         self,
         mint: str,

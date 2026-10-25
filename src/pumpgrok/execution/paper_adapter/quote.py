@@ -1,9 +1,8 @@
 """Curve quotes and pure-math fill previews."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from pumpgrok.core.adapter import Quote, Side, SimulationResult
 from pumpgrok.core.errors import OrderRejectedError
@@ -11,6 +10,26 @@ from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell
 
 
 class _QuoteMixin:
+    if TYPE_CHECKING:
+        from pumpgrok.core.ids import Clock, IdFactory
+        from pumpgrok.execution.fees import FeeModel
+        from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+        _clock: Clock
+        _fees: FeeModel
+        _ids: IdFactory
+
+        async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+
+        def _fill_cap(self, s_lamports: int) -> int: ...
+
+        def _floor(self, size_lamports: int) -> int: ...
+
+        @staticmethod
+        def _sell_preview_units(
+            size_lamports: int | None, token_units: int | None, curve: CurveSnapshot
+        ) -> int: ...
+
     async def quote(
         self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
     ) -> Quote:
