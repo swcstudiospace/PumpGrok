@@ -18,9 +18,11 @@ import asyncio
 import contextlib
 import logging
 import signal
+import sqlite3
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import Clock
 from pumpgrok.ledger.export import export_ledger
 from pumpgrok.ledger.reducer import dump_state, initial_state, reduce
@@ -96,6 +98,28 @@ async def cancel_and_wait(task: asyncio.Task[Any] | None) -> None:
         await task
 
 
+def _shutdown_initial_equity(store: LedgerStore) -> int:
+    """Recorded genesis equity for the shutdown snapshot; never a silent 0."""
+    try:
+        meta = store.get_meta("initial_equity_lamports")
+    except sqlite3.Error as exc:
+        raise CorruptState(
+            f"shutdown snapshot: cannot read initial_equity_lamports: {exc}"
+        ) from exc
+    if meta is None:
+        raise CorruptState(
+            "shutdown snapshot: initial_equity_lamports meta is missing; "
+            "refusing a zero-equity genesis"
+        )
+    try:
+        return int(meta)
+    except (TypeError, ValueError) as exc:
+        raise CorruptState(
+            f"shutdown snapshot: corrupt initial_equity_lamports {meta!r}; "
+            "refusing a zero-equity genesis"
+        ) from exc
+
+
 async def shutdown(
     supervisor: Supervisor,
     *,
@@ -120,11 +144,15 @@ async def shutdown(
             meta_source = store.get_meta("source")
             genesis = initial_state(
                 source=meta_source or str(first.get("source", "paper")),
-                initial_equity_lamports=int(store.get_meta("initial_equity_lamports") or 0),
+                initial_equity_lamports=_shutdown_initial_equity(store),
                 day_utc=str(first.get("ts_utc", ""))[:10],
             )
         else:
-            genesis = initial_state(source="paper", initial_equity_lamports=0, day_utc="")
+            genesis = initial_state(
+                source="paper",
+                initial_equity_lamports=_shutdown_initial_equity(store),
+                day_utc="",
+            )
         state = genesis
         for event in head:
             state = reduce(state, event)
@@ -132,6 +160,8 @@ async def shutdown(
         body["meta"] = {"status": "stopped", "ts_utc": ts_utc}
         last_seq = int(head[-1]["seq"]) if head else 0
         store.write_snapshot(seq=last_seq, ts_utc=ts_utc, state=body)
+    except CorruptState:
+        raise
     except Exception as exc:
         log.warning("shutdown snapshot failed: %s", exc)
     try:

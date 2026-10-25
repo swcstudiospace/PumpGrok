@@ -32,7 +32,10 @@ from pumpgrok.tools.notify.notifier import Notifier
 def _store(tmp_path: Path) -> LedgerStore:
     path = tmp_path / "ledger.sqlite"
     recreate_ledger_db(path)
-    return LedgerStore(str(path))
+    store = LedgerStore(str(path))
+    # Fail-closed contract (INT-02): the exit halt records this equity.
+    store.set_meta("initial_equity_lamports", "10000000000")
+    return store
 
 
 def _ctx(store: LedgerStore, clock: FixtureClock, seat: str) -> SeatContext:

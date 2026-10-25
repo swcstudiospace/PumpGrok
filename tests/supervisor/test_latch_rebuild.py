@@ -29,7 +29,10 @@ SEAT = "bot-04-sniper"
 def _store(tmp_path: Path) -> LedgerStore:
     path = tmp_path / "ledger.sqlite"
     recreate_ledger_db(path)
-    return LedgerStore(str(path))
+    store = LedgerStore(str(path))
+    # Fail-closed contract (INT-02): the restored exit halt records this equity.
+    store.set_meta("initial_equity_lamports", "10000000000")
+    return store
 
 
 async def _ok(ctx: Any) -> dict[str, Any]:

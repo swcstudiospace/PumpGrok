@@ -17,6 +17,7 @@ from pumpgrok.core.bot import Bot, BotManifest, Schedule, ToolGrant
 from pumpgrok.core.correlation import child_span, is_child_span, root_of
 from pumpgrok.core.datasource import DataSource, Freshness, Health, HealthStatus
 from pumpgrok.core.errors import (
+    CorruptState,
     DataBlind,
     DataStale,
     LedgerUnavailable,
@@ -61,6 +62,7 @@ __all__ = [
     "BotManifest",
     "Clock",
     "CorrelationId",
+    "CorruptState",
     "DataBlind",
     "DataSource",
     "DataStale",
