@@ -1,0 +1,47 @@
+{
+  "task_id": "06-integrity-closure",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/phase-6-integrity",
+  "phase": "06-integrity-closure",
+  "plan": "06-01 to 06-09, plus fix-ups 06-01b, p6-fix1, p6-fix2 and the lint and collection commits",
+  "purpose": "PRC-01 phase gates for Phase 6 (INT-01 to INT-10, PRC-01). Receipt for the commits that carry the Phase 6 work.",
+  "status": "in-branch verification complete on the closing head; awaiting human review (approved_by) and the owner-approved ownership change for G-1",
+  "rollback_plan": "Run git revert -m 1 on each Phase 6 merge commit on bot-00-chief/phase-6-integrity, newest first, then rerun make test and uv run pumpgrok verify --fixture smoke-10m. Recovery takes about 10 minutes. No data migration is involved: the smoke-10m replay events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, and the live command exits 3 before any write, so no state is changed.",
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed! ruff format: 647 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 159 source files"},
+    {"cmd": "uv run pytest -q -rfE --tb=no", "exit_code": 0, "output_tail": "exit 0; progress lines only; no FAILED or ERROR lines; 2 skipped (pre-existing)"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "ok: 35 skills, 10 agents, 243 markdown files checked. PumpGrok repository structure looks healthy."},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "replay engine cycle complete"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "exit_code": 0, "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d verify=CONSISTENT (run twice, identical)"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "exit 3: live mode refused; nothing sent"},
+    {"cmd": "cd services/desk-gateway && uv run pytest -q", "exit_code": 0, "output_tail": "exit 0; desk-gateway suite passes"},
+    {"cmd": "uv run python scripts/probe_curve_layout.py", "exit_code": 0, "output_tail": "Status: ASSUMED. Error: no bonding-curve account configured; no RPC call made; layout stays ASSUMED"},
+    {"cmd": "python3 ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-6.json", "exit_code": 1, "output_tail": "G-1 FAIL (67 foreign paths, owner-approved re-assignment pending); G-3 PASS; G-4 PASS; G-5/G-6 PASS; G-7 PASS"}
+  ],
+  "claims": [
+    {"claim": "make lint passes on the closing head", "evidence_command_index": 0},
+    {"claim": "make typecheck passes on the closing head", "evidence_command_index": 1},
+    {"claim": "the full test suite passes with no failures on the closing head", "evidence_command_index": 2},
+    {"claim": "check.sh passes on the closing head", "evidence_command_index": 3},
+    {"claim": "the paper smoke replay completes on the fixture", "evidence_command_index": 4},
+    {"claim": "the smoke-10m replay events.hash equals the pre-edit baseline b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "evidence_command_index": 5},
+    {"claim": "live mode is refused with exit 3 and sends nothing", "evidence_command_index": 6, "expects_failure": true},
+    {"claim": "the desk-gateway suite passes", "evidence_command_index": 7},
+    {"claim": "the curve probe records ASSUMED with the exact error and makes no RPC call when no account is configured", "evidence_command_index": 8},
+    {"claim": "run_all reports G-1 blocked by the owner-approved ownership change (67 foreign paths), with G-3, G-4, G-5/G-6 and G-7 passing", "evidence_command_index": 9, "expects_failure": true}
+  ],
+  "unverified": [
+    "G-1 path ownership: 67 foreign paths remain until the owner-approved bot-02-risk ownership change is merged",
+    "INT-10 VERIFIED layout: no bonding-curve account was supplied, so no on-chain decode was performed",
+    "Omega CI runner pool ephemerality and the Trivy binary version are not verified in this repository",
+    "CURVE_COMPLETION_SOL float constant in engine/monitor.py is not converted in this phase",
+    "PRC-02 draft-only wording is superseded by the owner decision of 2026-10-25; requirement text is unchanged",
+    "Human review: approved_by is not set because no reviewer has approved this receipt yet"
+  ],
+  "carry_over": {
+    "G-1_ownership": "Owner decision 2026-10-25: re-own milestone paths to bot-00-chief. ownership.yaml is owned by bot-02-risk, so the re-assignment lands as a separate bot-02-risk change merged before the milestone PR.",
+    "omega_ci_review": "CHANGELOG records the review of 5b5d6a1 and 9772655. It reverses the no-self-hosted-runners stance and needs owner sign-off.",
+    "behaviour_change": "INT-02 construction latch: a seat whose genesis equity is unreadable now latches and escalates instead of raising out of the constructor."
+  }
+}
