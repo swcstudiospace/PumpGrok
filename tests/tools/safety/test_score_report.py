@@ -188,7 +188,8 @@ async def test_kill_on_top5_hard_veto() -> None:
     assert out.verdict_recommendation == "KILL"
 
 
-async def test_blind_never_raises_and_forces_kill() -> None:
+async def test_blind_never_raises_and_forces_kill(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUMPGROK_PAID_RPC_PROVIDER", "test-provider")
     reg, bot = _run_with(
         _handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in()
     )
@@ -197,6 +198,20 @@ async def test_blind_never_raises_and_forces_kill() -> None:
     assert statuses["top10_concentration"] == "blind"
     assert "top10_concentration" in out.blind_checks
     assert out.verdict_recommendation == "KILL"
+
+
+async def test_blind_holder_pair_is_advisory_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PUMPGROK_PAID_RPC_PROVIDER", raising=False)
+    reg, bot = _run_with(
+        _handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in()
+    )
+    out = await _call(reg, bot, _clear_in())
+    statuses = {c.id: c.status for c in out.checks}
+    assert statuses["top10_concentration"] == "blind"
+    assert "top10_concentration" in out.blind_checks
+    assert out.verdict_recommendation == "CLEAR"
 
 
 async def test_unknown_check_and_threshold_ids_are_refused() -> None:
