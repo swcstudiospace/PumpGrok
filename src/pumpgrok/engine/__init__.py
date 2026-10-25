@@ -1,4 +1,4 @@
-"""Screening engine: monitor, analyzer, scoring, reputation, exits, watcher, agents, pipeline, tune.
+"""Screening engine: monitor, analyzer, scoring, reputation, exits, watcher, agents, pipeline.
 
 Also edge-triggered alert transitions (``alerts``) for the supervisor.
 
