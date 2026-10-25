@@ -150,7 +150,7 @@ class ExitRules:
             return 0.0
         return float(spot(snapshot.s_lamports, snapshot.t_units))
 
-    async def _sell(self, position: ExitPosition, price: float, reason: str) -> None:
+    async def _sell(self, position: ExitPosition, price: int, reason: str) -> None:
         ticket = self._book.ticket(position.mint)
         result = await self._place_sell(position.mint, ticket, int(position.token_amount), reason)
         status = str(result["status"])

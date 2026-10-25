@@ -38,13 +38,14 @@ class ExitSignal(BaseModel):
     detail: str = ""
 
 
-def pnl_pct(position: ExitPosition, price: float) -> float:
+def pnl_pct(position: ExitPosition, price: int) -> float:
+    """PnL percent vs entry. Prices are PRICE_SCALE integers; the percent is a ratio."""
     if position.entry_price <= 0:
         return 0.0
     return (price - position.entry_price) / position.entry_price * 100.0
 
 
-def stop_loss_triggered(position: ExitPosition, price: float, stop_loss_pct: float) -> bool:
+def stop_loss_triggered(position: ExitPosition, price: int, stop_loss_pct: float) -> bool:
     if position.entry_price <= 0 or price <= 0 or stop_loss_pct <= 0:
         return False
     return -pnl_pct(position, price) >= stop_loss_pct
@@ -52,7 +53,7 @@ def stop_loss_triggered(position: ExitPosition, price: float, stop_loss_pct: flo
 
 def exit_signal(
     position: ExitPosition,
-    price: float,
+    price: int,
     cfg: ExitsSettings,
     now: float,
 ) -> ExitSignal | None:
@@ -97,7 +98,7 @@ def exit_signal(
 
 def apply_price(
     position: ExitPosition,
-    price: float,
+    price: int,
     cfg: ExitsSettings,
     now: float,
 ) -> ExitSignal | None:

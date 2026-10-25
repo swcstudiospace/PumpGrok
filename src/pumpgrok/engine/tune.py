@@ -19,6 +19,7 @@ import itertools
 import json
 import sys
 from collections.abc import Iterable, Mapping, Sequence
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -37,7 +38,7 @@ class Candidate(NamedTuple):
     mint: str
     parts: tuple[float, ...]
     bought: bool
-    pnl_sol: float | None
+    pnl_lamports: int | None
 
 
 class Outcome(NamedTuple):
@@ -45,14 +46,14 @@ class Outcome(NamedTuple):
 
     passed: int
     kept_trades: int
-    kept_pnl: float
+    kept_pnl: int
     lost_trades: int
-    lost_pnl: float
+    lost_pnl: int
 
     @property
-    def score(self) -> float:
-        """Higher is better: kept profit minus missed profit."""
-        return self.kept_pnl - max(0.0, self.lost_pnl)
+    def score(self) -> int:
+        """Higher is better: kept profit minus missed profit, in lamports."""
+        return self.kept_pnl - max(0, self.lost_pnl)
 
 
 def total(parts: tuple[float, ...], weights: tuple[float, ...]) -> float:
@@ -65,20 +66,20 @@ def evaluate(
 ) -> Outcome:
     """Split candidates into kept and missed at one threshold."""
     passed = kept = lost = 0
-    kept_pnl = lost_pnl = 0.0
+    kept_pnl = lost_pnl = 0
     for candidate in candidates:
         if total(candidate.parts, weights) >= threshold:
             passed += 1
-            if candidate.pnl_sol is not None:
+            if candidate.pnl_lamports is not None:
                 kept += 1
-                kept_pnl += candidate.pnl_sol
-        elif candidate.pnl_sol is not None:
+                kept_pnl += candidate.pnl_lamports
+        elif candidate.pnl_lamports is not None:
             lost += 1
-            lost_pnl += candidate.pnl_sol
-    return Outcome(passed, kept, round(kept_pnl, 6), lost, round(lost_pnl, 6))
+            lost_pnl += candidate.pnl_lamports
+    return Outcome(passed, kept, kept_pnl, lost, lost_pnl)
 
 
-def rank(row: tuple[Outcome, tuple[float, ...], float]) -> tuple[float, int, float]:
+def rank(row: tuple[Outcome, tuple[float, ...], float]) -> tuple[int, int, float]:
     """Sort key for (outcome, weights, threshold) rows.
 
     Ties break toward more kept trades, then away from single-component
@@ -114,18 +115,29 @@ def fmt_weights(weights: tuple[float, ...]) -> str:
     )
 
 
-def collect_pnl(records: Iterable[Mapping[str, Any]]) -> dict[str, float]:
-    """Sum closed-trade PnL per mint."""
-    pnl: dict[str, float] = {}
+def _pnl_to_lamports(value: Any) -> int:
+    """Trades-log PnL (SOL float or exact decimal string) to integer lamports (INT-01)."""
+    if value is None:
+        return 0
+    try:
+        scaled = Decimal(str(value)) * (10**9)
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        raise ValueError(f"bad pnl {value!r}") from exc
+    return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def collect_pnl(records: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Sum closed-trade PnL per mint, in integer lamports."""
+    pnl: dict[str, int] = {}
     for record in records:
         if record.get("type") == "close":
             mint = str(record.get("mint", ""))
-            pnl[mint] = pnl.get(mint, 0.0) + float(record.get("pnl_sol") or 0.0)
+            pnl[mint] = pnl.get(mint, 0) + _pnl_to_lamports(record.get("pnl_sol"))
     return pnl
 
 
 def candidate_from_record(
-    record: Mapping[str, Any], pnl: Mapping[str, float], seen: set[str]
+    record: Mapping[str, Any], pnl: Mapping[str, int], seen: set[str]
 ) -> Candidate | None:
     """One candidate from a scored record. None for closes and scoreless rows."""
     scores = record.get("scores")
@@ -138,7 +150,7 @@ def candidate_from_record(
     parts = tuple(float(scores.get(name) or 0.0) for name in COMPONENTS)
     bought = record.get("type") == "buy"
     realized = pnl.get(mint) if bought else None
-    return Candidate(mint=mint, parts=parts, bought=bought, pnl_sol=realized)
+    return Candidate(mint=mint, parts=parts, bought=bought, pnl_lamports=realized)
 
 
 def load_candidates(records: Iterable[Mapping[str, Any]]) -> list[Candidate]:
@@ -264,7 +276,7 @@ def run_report(log: str, step: float, top: int, weights: ScoringWeights) -> tupl
     candidates = load_candidates_from_path(Path(log))
     if not candidates:
         return [f"No scored records in {log}; nothing to tune."], 1
-    closed = [candidate for candidate in candidates if candidate.pnl_sol is not None]
+    closed = [candidate for candidate in candidates if candidate.pnl_lamports is not None]
     mix = current_weights(weights)
     lines = header_lines(log, candidates, closed, mix)
     lines += caution_lines(closed)

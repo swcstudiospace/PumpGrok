@@ -26,6 +26,7 @@ import itertools
 import logging
 import statistics
 from collections.abc import Callable
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 import httpx
@@ -157,8 +158,33 @@ def _safe_parse[T](parse: Callable[[dict[str, Any]], T], raw: dict[str, Any]) ->
         return None
 
 
+def _to_int_units(value: Any, *, per_unit: int) -> int:
+    """Provider decimal/float amount to integer units, ROUND_HALF_UP (INT-01).
+
+    Raises ValueError on unparseable input so ``_safe_parse`` skips the row.
+    """
+    try:
+        scaled = Decimal(str(value)) * per_unit
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        raise ValueError(f"bad amount {value!r}") from exc
+    try:
+        return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        raise ValueError(f"bad amount {value!r}") from exc
+
+
+def _to_lamports(value: Any) -> int:
+    """Provider SOL amount to integer lamports (INT-01)."""
+    return _to_int_units(value, per_unit=10**9)
+
+
+def _to_base_units(value: Any) -> int:
+    """Provider token amount to integer base units (INT-01)."""
+    return _to_int_units(value, per_unit=1)
+
+
 def parse_holder(raw: dict[str, Any]) -> Holder:
-    amount = float(raw.get("amount") or raw.get("balance") or 0.0)
+    amount = _to_base_units(raw.get("amount") or raw.get("balance") or 0)
     share = raw.get("share")
     if share is None:
         pct = raw.get("percentage")
@@ -182,8 +208,8 @@ def parse_trade(raw: dict[str, Any]) -> Trade:
         signature=raw.get("signature") or raw.get("tx"),
         wallet=str(raw.get("user") or raw.get("wallet") or raw.get("traderPublicKey") or ""),
         is_buy=bool(is_buy),
-        sol_amount=float(raw.get("sol_amount") or raw.get("solAmount") or 0.0),
-        token_amount=float(raw.get("token_amount") or raw.get("tokenAmount") or 0.0),
+        sol_amount=_to_lamports(raw.get("sol_amount") or raw.get("solAmount") or 0),
+        token_amount=_to_base_units(raw.get("token_amount") or raw.get("tokenAmount") or 0),
         timestamp=ts,
         slot=raw.get("slot"),
     )
@@ -281,9 +307,9 @@ def _wallet_diversity(buys: list[Trade]) -> float:
         return 0.0
     uniqueness = len(set(wallets)) / len(wallets)
 
-    volume: dict[str, float] = {}
+    volume: dict[str, int] = {}
     for t in buys:
-        volume[t.wallet] = volume.get(t.wallet, 0.0) + t.sol_amount
+        volume[t.wallet] = volume.get(t.wallet, 0) + t.sol_amount
     total = sum(volume.values())
     concentration = max(volume.values()) / total if total else 1.0
     return max(0.0, min(1.0, uniqueness * (1.0 - concentration)))

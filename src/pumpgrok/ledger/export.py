@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,16 @@ from pumpgrok.ledger.store import LedgerStore
 EXPORT_SEQ_KEY = "export_seq"
 LAMPORTS_PER_SOL = 1_000_000_000
 DRY_RUN_TX = "dry_run"
+
+
+def _sol_str(lamports: int | str) -> str:
+    """Integer lamports to an exact SOL decimal string (INT-01, no float division)."""
+    return str(Decimal(int(lamports)) / LAMPORTS_PER_SOL)
+
+
+def _price_str(value: Any) -> str:
+    """Scaled ledger price to an exact decimal price string (INT-01, no float division)."""
+    return str(Decimal(str(value if value is not None else 0)) / 1000)
 
 
 def _epoch(ts_utc: str) -> float:
@@ -101,8 +112,8 @@ def _buy_line(event: dict[str, Any]) -> dict[str, Any]:
         "mint": str(payload.get("mint", "")),
         "symbol": "",
         "name": "",
-        "size_sol": round(int(payload.get("filled_lamports", 0)) / LAMPORTS_PER_SOL, 6),
-        "entry_price": float(payload.get("price_avg", "0")) / 1000.0,
+        "size_sol": _sol_str(payload.get("filled_lamports", 0)),
+        "entry_price": _price_str(payload.get("price_avg", "0")),
         "tx_hash": DRY_RUN_TX,
         # Bare tx_hash keeps pumpgrok scout pipeline --candidates matching;
         # the unique paper ref rides alongside per paper-engine 964.
@@ -136,9 +147,9 @@ def _close_line(event: dict[str, Any]) -> dict[str, Any]:
         "mint": str(payload.get("mint", "")),
         "symbol": "",
         "creator": "",
-        "entry_price": 0.0,
-        "exit_price": float(payload.get("price_exit", "0")) / 1000.0,
-        "pnl_sol": round(int(payload.get("realized_pnl_lamports", 0)) / LAMPORTS_PER_SOL, 6),
+        "entry_price": "0",
+        "exit_price": _price_str(payload.get("price_exit", "0")),
+        "pnl_sol": _sol_str(payload.get("realized_pnl_lamports", 0)),
         "pnl_pct": float(payload.get("pnl_pct", "0")),
         "hold_seconds": int(payload.get("hold_seconds", 0)),
         "reason": str(payload.get("reason", "")),
