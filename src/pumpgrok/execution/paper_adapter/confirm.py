@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import OrderUnknownError
 from pumpgrok.execution.latency import draw_latency
@@ -10,6 +11,43 @@ from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 
 class _ConfirmMixin:
+    if TYPE_CHECKING:
+        import random
+
+        from pumpgrok.core.errors import OrderRejectedError
+        from pumpgrok.core.ids import Clock
+        from pumpgrok.execution.paper_adapter.models import _InflightOrders
+        from pumpgrok.risk.engine import RiskEngine
+        from pumpgrok.risk.limits import EngineLimits
+
+        _cancelled: set[str]
+        _clock: Clock
+        _inflight: _InflightOrders
+        _limits: EngineLimits
+        _owned_order: dict[object, str]
+        _p_drop: float
+        _risk: RiskEngine
+        _rng: random.Random
+
+        async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+
+        async def _reject(
+            self,
+            request: OrderRequest,
+            decision_id: str,
+            reason: str,
+            detail: str,
+            *,
+            stage: str,
+            order_id: str | None = None,
+            quote_out: int = 0,
+            threshold: int = 0,
+            confirm_out: int = 0,
+            fees: int = 0,
+            source: str,
+            correlation_id: str,
+        ) -> OrderRejectedError: ...
+
     async def _await_confirmation(
         self,
         request: OrderRequest,
