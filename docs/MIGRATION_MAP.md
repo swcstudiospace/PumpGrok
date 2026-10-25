@@ -1,3 +1,6 @@
+Historical design record
+This file describes the design at the time, not current behaviour.
+
 # MIGRATION_MAP - old-to-new module mapping and keep/move/replace decisions
 
 Tracker: SPE-17996 https://linear.app/swcstudio/issue/SPE-17996/n2-old-to-new-module-mapping-and-keepmovereplace-decisions | Notion https://app.notion.com/p/3ffbc1a0c7ae813290dfd11526829596?pvs=204

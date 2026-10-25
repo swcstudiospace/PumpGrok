@@ -1,3 +1,6 @@
+Historical design record
+This file describes the design at the time, not current behaviour.
+
 # DISCOVERY: both repos as they actually are
 
 Tracker: SPE-17995 https://linear.app/swcstudio/issue/SPE-17995/n1-discover-both-repos-as-they-actually-are | Notion https://app.notion.com/p/3ffbc1a0c7ae813a926ce74afa4a8a82?pvs=204

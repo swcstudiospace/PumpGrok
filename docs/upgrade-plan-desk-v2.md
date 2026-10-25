@@ -1,3 +1,6 @@
+Historical design record
+This file describes the design at the time, not current behaviour.
+
 # pumpgrok Desk v2 - Upgrade Plan (phased migration plan and GSD idea document)
 
 Tracker: SPE-18002 https://linear.app/swcstudio/issue/SPE-18002/n8-wave-ordered-execution-plan | Notion https://app.notion.com/p/3ffbc1a0c7ae8157b613fe1ff0b0bca2?pvs=204
