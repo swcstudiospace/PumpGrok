@@ -16,7 +16,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
 - [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
 - [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
-- [ ] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
+- [x] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
 
 ## Phase Details
 
@@ -185,12 +185,12 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 **Deliverables**:
 
-- [ ] `src/pumpgrok/execution/live/live_gate.py`: refusal output lists the nine preconditions (LIV-01)
-- [ ] `tests/safety/test_no_live_adapter_registered.py`, `tests/safety/test_import_graph_no_live.py`, `tests/safety/test_live_refusal_lists_nine.py` (LIV-01)
-- [ ] `docs/LIVE_READINESS.md`: deferred record of custody model, venue, legal review and nine-precondition evidence (LIV-02)
-- [ ] `CHANGELOG.md` v3 closeout entry and the Phase 10 replay hash line
+- [x] `src/pumpgrok/execution/live/live_gate.py`: refusal output lists the nine preconditions (LIV-01)
+- [x] `tests/safety/test_no_live_adapter_registered.py`, `tests/safety/test_import_graph_no_live.py`, `tests/safety/test_live_refusal_lists_nine.py` (LIV-01)
+- [x] `docs/LIVE_READINESS.md`: deferred record of custody model, venue, legal review and nine-precondition evidence (LIV-02)
+- [x] `CHANGELOG.md` v3 closeout entry and the Phase 10 replay hash line
 
-**Plans**: TBD
+**Plans**: 3 complete (10-01 to 10-03). Verification: `.planning/phases/10-live-readiness-kept-disabled/10-VERIFICATION.md` (passed, 8 of 8 criteria). Live stays refused: exit 3, no live adapter registered, no live import reachable from the guarded roots.
 
 ## Progress
 
@@ -203,4 +203,4 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | 7. Documentation upgrade | 6/6 | Complete: verified 9/9 (07-VERIFICATION.md) | 2026-10-25 |
 | 8. Backtest and paper evaluation | 10/10 | Complete: verified 13/13 (08-VERIFICATION.md) | 2026-10-25 |
 | 9. Bounded paper self-upgrade | 7/7 | Complete: verified 10/10 (09-VERIFICATION.md) | 2026-10-25 |
-| 10. Live readiness, kept disabled | 0/TBD | Not planned | - |
+| 10. Live readiness, kept disabled | 3/3 | Complete: verified 8/8 (10-VERIFICATION.md) | 2026-10-25 |

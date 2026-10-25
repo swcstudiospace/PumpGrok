@@ -22,40 +22,40 @@ Source: owner decisions of 2026-10-25 (see PROJECT.md Key Decisions V3-1..V3-4),
 
 ### Documentation (DOC)
 
-- [ ] DOC-01: CLAUDE.md at the repository root maps the codebase: purpose, stack, layout, commands, architecture and data flow, conventions, GSD artifact locations, safety rules and known gaps. Every statement cites a file.
-- [ ] DOC-02: AGENTS.md drops the stale GSD research dump and placeholder blocks, keeps the rules index, verifies every command, and links CLAUDE.md instead of duplicating it.
-- [ ] DOC-03: README, ARCHITECTURE, SETUP, skills/replay-and-backtest/SKILL.md, plugin version statements and docs/VENDOR_PIN.md match the code. Every contradiction from the 2026-10-25 docs audit is corrected, and each change appears in CHANGELOG.md.
-- [ ] DOC-04: Historical design records under docs/ carry a banner stating they describe the design at the time, not current behavior.
+- [x] DOC-01: CLAUDE.md at the repository root maps the codebase: purpose, stack, layout, commands, architecture and data flow, conventions, GSD artifact locations, safety rules and known gaps. Every statement cites a file.
+- [x] DOC-02: AGENTS.md drops the stale GSD research dump and placeholder blocks, keeps the rules index, verifies every command, and links CLAUDE.md instead of duplicating it.
+- [x] DOC-03: README, ARCHITECTURE, SETUP, skills/replay-and-backtest/SKILL.md, plugin version statements and docs/VENDOR_PIN.md match the code. Every contradiction from the 2026-10-25 docs audit is corrected, and each change appears in CHANGELOG.md.
+- [x] DOC-04: Historical design records under docs/ carry a banner stating they describe the design at the time, not current behavior.
 
 ### Backtesting (BT)
 
-- [ ] BT-01: Each replay or backtest run writes a run manifest containing the whole-dataset digest (every file in the dataset directory), the seed, the FilterSettings hash, the parameter-set hash and the code version. The run id derives from that manifest.
-- [ ] BT-02: Replay results expose per-fill price, venue fee, network cost, latency, filled fraction and outcome, not only the outcome.
-- [ ] BT-03: A holdout reserves the final 20 percent of a dataset's time window and is never used for tuning; walk-forward folds are used for tuning; each report names the split identifiers.
-- [ ] BT-04: Every parameter trial in a search is recorded. A search above 20 trials is flagged and ineligible for promotion; a search above 50 trials is rejected.
-- [ ] BT-05: Metrics are return, maximum drawdown from a running peak, a Sharpe-style ratio whose annualization is stated in code, win rate, trade count, exposure and turnover. Each metric states its inputs and assumptions, and no output uses expected-return language.
-- [ ] BT-06: A 'pumpgrok backtest' verb runs a parameter set over a recorded dataset with the holdout and writes a report containing fees, slippage, data window, trial count and holdout id. Two runs with identical inputs are byte-identical.
-- [ ] BT-07: The in-sample grid search in engine/tune.py is replaced by the holdout-aware harness; no second search engine remains.
+- [x] BT-01: Each replay or backtest run writes a run manifest containing the whole-dataset digest (every file in the dataset directory), the seed, the FilterSettings hash, the parameter-set hash and the code version. The run id derives from that manifest.
+- [x] BT-02: Replay results expose per-fill price, venue fee, network cost, latency, filled fraction and outcome, not only the outcome.
+- [x] BT-03: A holdout reserves the final 20 percent of a dataset's time window and is never used for tuning; walk-forward folds are used for tuning; each report names the split identifiers.
+- [x] BT-04: Every parameter trial in a search is recorded. A search above 20 trials is flagged and ineligible for promotion; a search above 50 trials is rejected.
+- [x] BT-05: Metrics are return, maximum drawdown from a running peak, a Sharpe-style ratio whose annualization is stated in code, win rate, trade count, exposure and turnover. Each metric states its inputs and assumptions, and no output uses expected-return language.
+- [x] BT-06: A 'pumpgrok backtest' verb runs a parameter set over a recorded dataset with the holdout and writes a report containing fees, slippage, data window, trial count and holdout id. Two runs with identical inputs are byte-identical.
+- [x] BT-07: The in-sample grid search in engine/tune.py is replaced by the holdout-aware harness; no second search engine remains.
 
 ### Paper evaluation (PAP)
 
-- [ ] PAP-01: Backtest results and paper ledger trades share one result schema, so they compare over the same window.
-- [ ] PAP-02: A divergence check uses the D7 defaults (2 percentage points absolute return gap, or 0.5 Sharpe gap) over the same window. A breach raises an alert and blocks promotion.
-- [ ] PAP-03: Autonomous paper operation is verified end to end on recorded datasets under the human-set autonomous-paper level, and manual-ticket never runs upgrades.
+- [x] PAP-01: Backtest results and paper ledger trades share one result schema, so they compare over the same window.
+- [x] PAP-02: A divergence check uses the D7 defaults (2 percentage points absolute return gap, or 0.5 Sharpe gap) over the same window. A breach raises an alert and blocks promotion.
+- [x] PAP-03: Autonomous paper operation is verified end to end on recorded datasets under the human-set autonomous-paper level, and manual-ticket never runs upgrades.
 
 ### Bounded upgrade (UPG)
 
-- [ ] UPG-01: Parameter sets are versioned by content hash. Declared bounds (ranges) live in version-controlled config, and the active set is recorded in the ledger.
-- [ ] UPG-02: A candidate is promoted only if it is within bounds, passes the holdout, keeps divergence within threshold, comes from a search of at most 20 trials, and runs under the human-set autonomous-paper level.
-- [ ] UPG-03: Each promotion records its evidence (candidate hash, backtest run id, holdout id, divergence result, trial count, bounds). One operation rolls back to the exact prior version, verified by a test.
-- [ ] UPG-04: An out-of-bounds or ineligible candidate is not promoted and produces a decision request for a human (escalation and journal note).
-- [ ] UPG-05: SAFE-4 and SAFE-8 report BLIND as advisory while no paid RPC provider is recorded, with the blind reason written into the verdict. All other BLIND results remain KILL. The rule reverts to required when a provider is recorded.
-- [ ] UPG-06: The constitution amendment approved on 2026-10-25 is applied exactly as approved: rules/pumpgrok-team.mdc (clauses 2 and 8, and the ten-role correction), agents/risk.md clause 10, regenerated prompts and agent files, docs/RISK_POLICY.md (row 8 and section 2.4), and .planning/PROJECT.md (BLIND constraint and strategy out-of-scope). generate-templates --check passes.
+- [x] UPG-01: Parameter sets are versioned by content hash. Declared bounds (ranges) live in version-controlled config, and the active set is recorded in the ledger.
+- [x] UPG-02: A candidate is promoted only if it is within bounds, passes the holdout, keeps divergence within threshold, comes from a search of at most 20 trials, and runs under the human-set autonomous-paper level.
+- [x] UPG-03: Each promotion records its evidence (candidate hash, backtest run id, holdout id, divergence result, trial count, bounds). One operation rolls back to the exact prior version, verified by a test.
+- [x] UPG-04: An out-of-bounds or ineligible candidate is not promoted and produces a decision request for a human (escalation and journal note).
+- [x] UPG-05: SAFE-4 and SAFE-8 report BLIND as advisory while no paid RPC provider is recorded, with the blind reason written into the verdict. All other BLIND results remain KILL. The rule reverts to required when a provider is recorded.
+- [x] UPG-06: The constitution amendment approved on 2026-10-25 is applied exactly as approved: rules/pumpgrok-team.mdc (clauses 2 and 8, and the ten-role correction), agents/risk.md clause 10, regenerated prompts and agent files, docs/RISK_POLICY.md (row 8 and section 2.4), and .planning/PROJECT.md (BLIND constraint and strategy out-of-scope). generate-templates --check passes.
 
 ### Live readiness (LIV)
 
-- [ ] LIV-01: Live stays refused. 'run --mode live' exits 3 listing the nine preconditions, no live adapter is registered, and an import-graph test shows no path from backtest, paper or upgrade modules to a live adapter.
-- [ ] LIV-02: A live-readiness record lists what a future decision requires (custody model, venue, legal review, nine-precondition evidence) and is recorded as deferred. No signing or custody code is added.
+- [x] LIV-01: Live stays refused. 'run --mode live' exits 3 listing the nine preconditions, no live adapter is registered, and an import-graph test shows no path from backtest, paper or upgrade modules to a live adapter.
+- [x] LIV-02: A live-readiness record lists what a future decision requires (custody model, venue, legal review, nine-precondition evidence) and is recorded as deferred. No signing or custody code is added.
 
 ### Process (PRC)
 
@@ -93,27 +93,27 @@ Which phases cover which requirements. Populated during roadmap creation (`.plan
 | INT-10 | Phase 6 Integrity closure | Pending |
 | PRC-01 | Phase 6 Integrity closure | Pending |
 | PRC-02 | Phase 6 Integrity closure | Pending |
-| DOC-01 | Phase 7 Documentation upgrade | Pending |
-| DOC-02 | Phase 7 Documentation upgrade | Pending |
-| DOC-03 | Phase 7 Documentation upgrade | Pending |
-| DOC-04 | Phase 7 Documentation upgrade | Pending |
-| BT-01 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-02 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-03 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-04 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-05 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-06 | Phase 8 Backtest and paper evaluation | Pending |
-| BT-07 | Phase 8 Backtest and paper evaluation | Pending |
-| PAP-01 | Phase 8 Backtest and paper evaluation | Pending |
-| PAP-02 | Phase 8 Backtest and paper evaluation | Pending |
-| PAP-03 | Phase 8 Backtest and paper evaluation | Pending |
-| UPG-01 | Phase 9 Bounded paper self-upgrade | Pending |
-| UPG-02 | Phase 9 Bounded paper self-upgrade | Pending |
-| UPG-03 | Phase 9 Bounded paper self-upgrade | Pending |
-| UPG-04 | Phase 9 Bounded paper self-upgrade | Pending |
-| UPG-05 | Phase 9 Bounded paper self-upgrade | Pending |
-| UPG-06 | Phase 9 Bounded paper self-upgrade | Pending |
-| LIV-01 | Phase 10 Live readiness, kept disabled | Pending |
-| LIV-02 | Phase 10 Live readiness, kept disabled | Pending |
+| DOC-01 | Phase 7 Documentation upgrade | Complete |
+| DOC-02 | Phase 7 Documentation upgrade | Complete |
+| DOC-03 | Phase 7 Documentation upgrade | Complete |
+| DOC-04 | Phase 7 Documentation upgrade | Complete |
+| BT-01 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-02 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-03 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-04 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-05 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-06 | Phase 8 Backtest and paper evaluation | Complete |
+| BT-07 | Phase 8 Backtest and paper evaluation | Complete |
+| PAP-01 | Phase 8 Backtest and paper evaluation | Complete |
+| PAP-02 | Phase 8 Backtest and paper evaluation | Complete |
+| PAP-03 | Phase 8 Backtest and paper evaluation | Complete |
+| UPG-01 | Phase 9 Bounded paper self-upgrade | Complete |
+| UPG-02 | Phase 9 Bounded paper self-upgrade | Complete |
+| UPG-03 | Phase 9 Bounded paper self-upgrade | Complete |
+| UPG-04 | Phase 9 Bounded paper self-upgrade | Complete |
+| UPG-05 | Phase 9 Bounded paper self-upgrade | Complete |
+| UPG-06 | Phase 9 Bounded paper self-upgrade | Complete |
+| LIV-01 | Phase 10 Live readiness, kept disabled | Complete |
+| LIV-02 | Phase 10 Live readiness, kept disabled | Complete |
 
 **Coverage:** v3 requirements: 34 total, 34 mapped, 0 unmapped
