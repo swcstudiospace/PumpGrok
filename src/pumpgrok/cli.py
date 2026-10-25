@@ -42,7 +42,7 @@ import sqlite3
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn, TextIO
 
@@ -63,6 +63,7 @@ from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
+from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.doctor import doctor_report
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
@@ -102,7 +103,6 @@ FORBIDDEN_OWNERS = frozenset({"sniper", "exit"})
 TICKET_RE = re.compile(r"^SOL-\d{8}-\d{3}$")
 APPROVAL_RE = re.compile(r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
 _BASE58 = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
-LAMPORTS_PER_SOL = 1_000_000_000
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -162,7 +162,7 @@ def _approval_id(value: str) -> str:
 
 def size_sol_to_lamports(size_sol: Decimal) -> int:
     """Convert a SOL size to lamports once, here, so every path shares one rounding."""
-    return int((size_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
+    return sol_to_lamports(size_sol)
 
 
 def _not_implemented(verb: str, intent: dict[str, Any] | None = None) -> int:
@@ -573,7 +573,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         live_enabled=settings.live.enabled,
     )
     if settings.effective_mode == "live":
-        preconditions = gate.evaluate()
+        preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
@@ -1091,7 +1091,7 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
     config_hash = hashlib.sha256(
         canonical_json(_jsonable(settings.model_dump(mode="json"))).encode("utf-8")
     ).hexdigest()
-    cap_lamports = int((cap_sol * LAMPORTS_PER_SOL).to_integral_value(rounding=ROUND_HALF_UP))
+    cap_lamports = sol_to_lamports(cap_sol)
     confirmed_at = _utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
     body = {
         "ledger_id": _ledger_id_or_none(),
@@ -1188,7 +1188,7 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
         body = render_daily(DailyReport.build(ledger, day, mode=mode))
     else:
         week = _report_date(args.week, "--week")
-        body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd()))
+        body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd(), now=week))
     if args.out:
         target = Path(str(args.out))
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -40,7 +40,6 @@ from pumpgrok.risk.killswitch import (
 )
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.risk.sizing import (
-    LAMPORTS_PER_SOL,
     MAX_SHARE_OF_REMAINING_BUDGET,
     MIN_TRADE_LAMPORTS,
     VENDOR_REASON_TO_R34,
@@ -54,7 +53,6 @@ __all__ = [
     "EXIT_SELL_REASONS",
     "EXIT_SKIP_STEPS",
     "FLOOR_HALTED_DAILY",
-    "LAMPORTS_PER_SOL",
     "MAX_SHARE_OF_REMAINING_BUDGET",
     "MIN_TRADE_LAMPORTS",
     "SEAT_RE",

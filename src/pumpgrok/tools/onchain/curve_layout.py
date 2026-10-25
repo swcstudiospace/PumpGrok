@@ -19,10 +19,8 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict
 
-from pumpgrok.tools._common import (
-    LAMPORTS_PER_SOL,
-    UNITS_PER_TOKEN,
-)
+from pumpgrok.core.units import lamports_to_sol, sol_to_lamports
+from pumpgrok.tools._common import UNITS_PER_TOKEN
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
@@ -36,7 +34,7 @@ LAYOUT_STATUS: Final[str] = "ASSUMED"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
 #: 85 SOL, the retired oracle ``src/monitor.py:30``). [ASSUMED] threshold.
-COMPLETION_SOL_LAMPORTS = 85 * LAMPORTS_PER_SOL
+COMPLETION_SOL_LAMPORTS = sol_to_lamports(Decimal(85))
 
 
 class CurveDecodeError(ValueError):
@@ -132,11 +130,10 @@ def curve_price_sol_per_token(state: CurveState) -> Decimal:
     here in :class:`Decimal` at the wrapper boundary; the vendor module keeps
     its float form untouched (characterization pins).
     """
-    return (
+    return lamports_to_sol(
         Decimal(state.virtual_sol_reserves_lamports)
         / Decimal(state.virtual_token_reserves_units)
         * Decimal(UNITS_PER_TOKEN)
-        / Decimal(LAMPORTS_PER_SOL)
     )
 
 

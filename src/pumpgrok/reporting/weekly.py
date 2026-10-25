@@ -71,6 +71,7 @@ class WeeklyReport:
         mode: str = "paper",
         autonomy: str = "autonomous-paper",
         root: Path | None = None,
+        now: str | None = None,
     ) -> ReportModel:
         monday = _iso_monday(day)
         days: list[str] = [monday]
@@ -117,7 +118,7 @@ class WeeklyReport:
                 status="OK" if item.met else "unmet",
                 reason=item.reason,
             )
-            for item in gate.evaluate()
+            for item in gate.evaluate(now=now if now is not None else day)
         )
 
         return ReportModel(

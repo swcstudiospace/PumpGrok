@@ -50,7 +50,7 @@ class LiveAdapterStub:
         self._ids = ids
 
     def _refuse(self, method: str) -> NoReturn:
-        unmet = self._gate.check()
+        unmet = self._gate.check(now=self._clock.utc_iso())
         attempt = self._ids.ulid()
         seat = current_seat() or FALLBACK_SEAT
         correlation = ambient_correlation() or CorrelationId(attempt)

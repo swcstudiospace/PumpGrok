@@ -16,16 +16,16 @@ from pathlib import Path
 from typing import Any
 
 from pumpgrok.core.idempotency import canonical_json
+from pumpgrok.core.units import lamports_to_sol
 from pumpgrok.ledger.store import LedgerStore
 
 EXPORT_SEQ_KEY = "export_seq"
-LAMPORTS_PER_SOL = 1_000_000_000
 DRY_RUN_TX = "dry_run"
 
 
 def _sol_str(lamports: int | str) -> str:
     """Integer lamports to an exact SOL decimal string (INT-01, no float division)."""
-    return str(Decimal(int(lamports)) / LAMPORTS_PER_SOL)
+    return str(lamports_to_sol(Decimal(int(lamports))))
 
 
 def _price_str(value: Any) -> str:

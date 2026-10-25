@@ -32,6 +32,7 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 
 EPOCH_START = 1767225600.0  # 2026-01-01T00:00:00Z
+NOW = "2026-10-20T00:00:00Z"
 MINT = "So11111111111111111111111111111111111111112"
 CID = "01J0000000000000000000000000"
 
@@ -85,7 +86,7 @@ def test_precondition_1_requires_live_enabled_flag(tmp_path: Path) -> None:
         root=tmp_path,
         live_enabled=False,
     )
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["mode_live"].met is False
     assert "[live] enabled" in by_id["mode_live"].reason
 
@@ -98,7 +99,7 @@ def test_precondition_1_met_when_mode_live_and_enabled(tmp_path: Path) -> None:
         root=tmp_path,
         live_enabled=True,
     )
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["mode_live"].met is True
     assert by_id["live_enable_env"].met is True
 
@@ -119,7 +120,7 @@ def test_live_gate_fails_fast_per_precondition(
         Precondition(number=index, id=name, met=(name != target), reason="patched")
         for index, name in enumerate(PRECONDITION_IDS, start=1)
     )
-    monkeypatch.setattr(LiveGate, "evaluate", lambda self: rows)
+    monkeypatch.setattr(LiveGate, "evaluate", lambda self, *, now: rows)
     code = main(["run", "--mode", "live", "--once"])
     assert code == 3
     err = capsys.readouterr().err
@@ -132,16 +133,16 @@ def test_live_gate_fails_fast_per_precondition(
 def test_paper_mode_never_evaluates_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A paper run never reaches LiveGate.evaluate, so no precondition is read."""
     gate = LiveGate(mode="paper", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    assert gate.check()[0] == "mode_live"
+    assert gate.check(now=NOW)[0] == "mode_live"
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
     smoke = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
     calls: list[LiveGate] = []
     real_evaluate = LiveGate.evaluate
 
-    def _spy(self: LiveGate) -> tuple[Precondition, ...]:
+    def _spy(self: LiveGate, *, now: str) -> tuple[Precondition, ...]:
         calls.append(self)
-        return real_evaluate(self)
+        return real_evaluate(self, now=now)
 
     monkeypatch.setattr(LiveGate, "evaluate", _spy)
     assert main(["run", "--mode", "paper", "--once", "--replay", str(smoke)]) == 0
@@ -184,7 +185,7 @@ def test_mature_paper_window_meets_days_and_thresholds(tmp_path: Path) -> None:
     finally:
         store.close()
     gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["min_paper_days"].met is True
     assert by_id["performance_thresholds"].met is True
 
@@ -211,7 +212,7 @@ def test_replay_ledger_is_refused_for_metrics(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate()}
+    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)}
     assert by_id["min_paper_days"].met is False
     assert "replay ledger" in by_id["min_paper_days"].reason
     assert by_id["performance_thresholds"].met is False
@@ -255,7 +256,7 @@ def test_paper_metrics_ignore_replay_rows(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate()}
+    by_id = {item.id: item for item in LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW)}
     assert "replay ledger" in by_id["performance_thresholds"].reason
 
 
@@ -384,7 +385,7 @@ def test_live_flag_requires_both_sources(tmp_path: Path, monkeypatch) -> None:
         root=tmp_path,
         live_enabled=settings.live.enabled,
     )
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["mode_live"].met is False
     assert "[live] enabled" in by_id["mode_live"].reason
     monkeypatch.delenv("PUMPGROK_CONFIG")
@@ -395,7 +396,7 @@ def test_live_flag_requires_both_sources(tmp_path: Path, monkeypatch) -> None:
 def test_adapter_precondition_always_unmet_in_this_release(tmp_path: Path) -> None:
     """INV-C-03: precondition (8) is structurally unmet; nothing ships."""
     gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["adapter_registered"].met is False
 
 
@@ -423,7 +424,7 @@ def test_live_gate_refuses_replay_source(tmp_path: Path) -> None:
     finally:
         store.close()
     gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["min_paper_days"].met is False
     assert "replay ledger" in by_id["min_paper_days"].reason
     assert by_id["performance_thresholds"].met is False
