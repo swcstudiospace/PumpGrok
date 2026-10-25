@@ -42,10 +42,7 @@ from pumpgrok.replay.clock import Clock
 
 log = logging.getLogger(__name__)
 
-# A pump.fun curve counts as filled at about 85 SOL in reserve.
-CURVE_COMPLETION_SOL = 85.0
-
-# Same completion threshold in lamports (INT-01: reserves are integer money).
+# A pump.fun curve counts as filled at about 85 SOL in reserve. Held as integer lamports (INT-01).
 CURVE_COMPLETION_LAMPORTS = sol_to_lamports(Decimal(85))
 
 # How long to keep a launch buffered while it never gains buyers.

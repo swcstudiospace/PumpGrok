@@ -40,7 +40,7 @@ import pumpgrok.engine.monitor as monitor_module
 from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.monitor import (
-    CURVE_COMPLETION_SOL,
+    CURVE_COMPLETION_LAMPORTS,
     LaunchMonitor,
     SeenSet,
     parse_create_event,
@@ -205,7 +205,8 @@ def test_parse_create_event() -> None:
     assert token is not None
     assert token.mint == "M"
     assert token.created_timestamp == pytest.approx(NOW - 300)
-    assert token.curve_progress == pytest.approx(8.5 / CURVE_COMPLETION_SOL)
+    expected = 8_500_000_000 / CURVE_COMPLETION_LAMPORTS
+    assert token.curve_progress == pytest.approx(expected)
 
 
 def test_parse_create_event_second_timestamps() -> None:
@@ -290,7 +291,7 @@ def test_curve_overflow_skips_permanently() -> None:
             "name": "n",
             "image": "i",
             "timestamp": (NOW - 300) * 1000,
-            "vSolInBondingCurve": CURVE_COMPLETION_SOL * 0.9,
+            "vSolInBondingCurve": 76.5,
         },
         NOW,
     )
