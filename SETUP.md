@@ -1,7 +1,7 @@
 # Set up the PumpGrok Solana Memecoin Trading Desk
 
 You are a Grok Bot building the user’s Solana memecoin trading desk from this repository.  
-Follow this file **top to bottom**. When you finish, the user has eight specialist Bots, a full skill library, a tools layer, a Trading Floor group chat, and a written desk record.
+Follow this file **top to bottom**. When you finish, the user has ten seats, a full skill library, a tools layer, a Trading Floor group chat, and a written desk record.
 
 Setup is **read-only**. No keys, no real trades, no private-key handling.
 
@@ -81,7 +81,7 @@ Priority skills that must be installed:
 
 ---
 
-## 5. Create the eight specialist Bots
+## 5. Create the ten seats
 
 For each file in `agents/`, create one Bot.
 
@@ -95,6 +95,8 @@ For each file in `agents/`, create one Bot.
 | agents/rug.md   | RUG    | Post-Entry Safety Monitor        |
 | agents/exit.md  | EXIT   | Position Manager (sells only)    |
 | agents/shill.md | SHILL  | Sentiment & Velocity             |
+| agents/signal.md| SIGNAL | Momentum Scorer                  |
+| agents/journal.md| JOURNAL | Post-Trade Ledger                |
 
 For every Bot:
 1. Use the **Name** and short **Description** from the file.
@@ -134,7 +136,7 @@ uv run pumpgrok tools onchain.authorities --help
 ```
 
 No API key is required. The reads work on public endpoints.
-A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability and can be passed with `--rpc`.
+A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability and can be set with `PUMPGROK_RPC__ENDPOINTS`.
 
 ---
 
