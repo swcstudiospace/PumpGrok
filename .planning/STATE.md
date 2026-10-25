@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v3
 milestone_name: PumpGrok Desk v3
 status: in_progress
-stopped_at: Phase 8 complete and verified 13/13; phase 6 blocked on owner decisions; phase 9 next
-last_updated: "2026-10-25T16:51:20Z"
+stopped_at: Phases 7-10 complete and verified; phase 6 blocked on owner decisions; milestone not shippable until resolved
+last_updated: "2026-10-25T18:18:40Z"
 last_activity: 2026-10-25
-last_activity_desc: Phase 8 verified 13/13 (08-VERIFICATION.md) after a correction set replaced the digest-scored evaluator; phase 9 next
-current_phase: 9
+last_activity_desc: Phases 7-10 verified (07, 08, 09, 10 VERIFICATION.md); phase 6 blocked on owner decisions; ship waits on phase 6
+current_phase: 6
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 4
   blocked_phases: 1
   total_plans: 25
   completed_plans: 25
-  percent: 40
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 ## Current Position
 
 - Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
-- Phase: 9 of 10 (Bounded paper self-upgrade), not started. Phase 8 complete: its independent verifier passed 13 of 13 criteria at code HEAD e6288de (.planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md).
+- Phase: 6 of 10 (Integrity closure) is the only open phase, blocked on owner decisions. Phases 7, 8, 9 and 10 are complete; each has an independent verifier report (07-VERIFICATION.md, 08-VERIFICATION.md, 09-VERIFICATION.md, 10-VERIFICATION.md).
 - Phase 6: code complete on the integration branch; BLOCKED on owner decisions (see Pauses).
-- Phase 9: next, not planned yet. Phase 10: not planned.
+- Phases 7 to 10: complete. Live stays refused (exit 3). Phase 6 gate state, owner decisions and the milestone PR are the remaining items.
 - Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
-- Percent 40 (2 of 5 phases complete). Known plans with SUMMARY files: 25 of 25 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10). Fix-up 06-01b is recorded but not counted. Phase 9 and 10 plan counts are TBD.
+- Percent 80 (4 of 5 phases complete). Known plans with SUMMARY files: 35 of 35 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10; phase 9 plans 01-07; phase 10 plans 01-03). Fix-up 06-01b is recorded but not counted.
 
 ## Discovery (2026-10-25)
 
@@ -140,6 +140,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-25T16:51:20Z, after Phase 8 verification.
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected), .planning/phases/07-documentation-upgrade/07-VERIFICATION.md and .planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md.
-- Next: plan and execute Phase 9 (bounded paper self-upgrade). Phase 6 stays blocked until the owner answers the two pending decisions (approved_by, and the G-1/G-2 route).
+- Last update: 2026-10-25T18:18:40Z, after Phase 10 verification.
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected) and the four VERIFICATION reports for phases 7 to 10.
+- Next: owner decisions (see Pauses): approved_by for the phase 6 receipt; G-1 and G-2 route (option A owner waiver or option B RISK ownership change). Then the phase 6 gate, the milestone audit, and ultrathink-ship. Tracker rows (Notion and Linear) remain unanswered.
