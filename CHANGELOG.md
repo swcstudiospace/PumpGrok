@@ -2,6 +2,25 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 8: backtest and paper evaluation
+
+### Added
+
+- BT-01 adds the backtest run manifest holding the whole-dataset digest, seed, FilterSettings hash, parameter-set hash and code version, with the run id derived from that manifest.
+- BT-02 exposes per-fill price, venue fee, network cost, latency, filled fraction and outcome on replay results.
+- BT-03 reserves the final 20 percent of a dataset time window as holdout, never used for tuning, with walk-forward folds over the pre-holdout region and named split identifiers.
+- BT-04 records every parameter trial; a search above 20 trials is flagged ineligible for promotion and above 50 trials is rejected with a typed error.
+- BT-05 bounds metrics to return, maximum drawdown from a running peak, a Sharpe-style ratio with annualization stated in code, win rate, trade count, exposure and turnover, with no expected-return language.
+- BT-06 adds the pumpgrok backtest verb running a parameter set over a recorded dataset with the holdout, printing a byte-identical deterministic report.
+- BT-07 replaces the engine grid search with the holdout-aware harness as the single search engine.
+- PAP-01 shares one result schema between backtest results and paper ledger trades over the same window.
+- PAP-02 checks divergence on the 2 percentage point absolute return gap and 0.5 Sharpe gap defaults, alerting and blocking promotion on breach.
+- PAP-03 verifies autonomous paper end to end on the recorded smoke and smoke-10m datasets at the human-set autonomous-paper level, with manual-ticket never running an upgrade and no backtest-to-live path.
+
+### Verified
+
+- Phase 8: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
 ## [Unreleased] - v3 Phase 7: documentation upgrade
 
 ### Changed
