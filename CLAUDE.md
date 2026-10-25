@@ -1,4 +1,4 @@
-# PumpGrok — codebase map
+# PumpGrok - codebase map
 
 ## Purpose
 
