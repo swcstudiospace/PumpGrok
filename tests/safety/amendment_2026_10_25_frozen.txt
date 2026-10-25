@@ -1,0 +1,53 @@
+# Frozen oracle for the constitution amendment approved 2026-10-25 (UPG-06).
+# Each [section] holds the exact approved wording of one amended clause.
+# Byte-exact: constitutional strings keep U+2013 dashes and U+201C/U+201D quotes.
+# Parsed by tests/safety/test_constitution_amendment.py: non-blank, non-comment
+# lines after a header up to the next blank line form the value verbatim.
+
+[rules-line-8-roles]
+Use the ten definitions under `agents/` as separate roles: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL.
+
+[rules-signal-bullet]
+- **SIGNAL** scores momentum and confidence from observed data; its output is evidence, never clearance.
+
+[rules-journal-bullet]
+- **JOURNAL** keeps the ledger of record and post-trade review; never authorises a trade.
+
+[rules-clause-2-append]
+Simulated paper fills are not sends. Their approval is the autonomy level a human sets with `pumpgrok state autonomy` (a ConfigChanged row with a human `by`). This clause governs live sends only.
+
+[rules-clause-8]
+8. **No live strategies and no return claims.** Live entries and exits run only on approved tickets under the written risk limits. Paper parameter sets may be proposed by evaluation tooling and promoted in paper only under the autonomy level a human has set to autonomous-paper, within bounds declared in version-controlled config, with evidence recorded in the ledger and a one-operation rollback. Reports state facts with their data window, costs and trial count. No output claims an expected return.
+
+[clause-8-body]
+Live entries and exits run only on approved tickets under the written risk limits. Paper parameter sets may be proposed by evaluation tooling and promoted in paper only under the autonomy level a human has set to autonomous-paper, within bounds declared in version-controlled config, with evidence recorded in the ledger and a one-operation rollback. Reports state facts with their data window, costs and trial count. No output claims an expected return.
+
+[skill-l24]
+   - A human must explicitly approve the exact ticket (token CA, size, max slippage) for every live spend. Simulated paper fills follow the autonomy level a human sets with `pumpgrok state autonomy`.
+
+[skill-l31]
+   - If required live data cannot be obtained, output `BLIND - cannot proceed`, except for SAFE-4 and SAFE-8 while no paid RPC provider is recorded (section 4 of this amendment).
+
+[skill-l32-roles]
+2. Roles: CHIEF (orchestrator, never trades), SCOUT (discovery only), RISK (absolute safety gate), WHALE (holder analysis), SNIPER (single-write buys only), RUG (safety monitor), EXIT (position manager, sells only), SHILL (social velocity and quality), SIGNAL (momentum and confidence), JOURNAL (ledger of record and post-trade review).
+
+[core-clause-10]
+10. If you cannot obtain live data for a required check → output “BLIND – cannot proceed” and stop. Exception while no paid RPC provider is recorded: holder-concentration (SAFE-4) and deployer-history (SAFE-8) checks report BLIND as advisory; the reason is written into the verdict and is not, by itself, a KILL.
+
+[core-clause-10-exception]
+Exception while no paid RPC provider is recorded: holder-concentration (SAFE-4) and deployer-history (SAFE-8) checks report BLIND as advisory; the reason is written into the verdict and is not, by itself, a KILL.
+
+[risk-policy-row-8-quote]
+"No live strategies and no return claims. Live entries and exits run only on approved tickets under the written risk limits. Paper parameter sets may be proposed by evaluation tooling and promoted in paper only under the autonomy level a human has set to autonomous-paper, within bounds declared in version-controlled config, with evidence recorded in the ledger and a one-operation rollback. Reports state facts with their data window, costs and trial count. No output claims an expected return."
+
+[risk-policy-2.4-heading]
+### 2.4 BLIND is KILL, except advisory holder checks while no paid RPC is recorded; blind positions are closed
+
+[risk-policy-2.4-paragraph]
+SAFE-4 (holder concentration) and SAFE-8 (deployer history) report BLIND as advisory while no paid RPC provider is recorded in .planning/STATE.md. The blind result and its reason are written into the safety verdict. Every other required check that reports BLIND still makes the token KILL for the session. Open positions keep the blind_flatten rule unchanged. The advisory exception ends when a provider is recorded.
+
+[project-blind-constraint]
+BLIND is treated as KILL except for SAFE-4 and SAFE-8 while no paid RPC provider is recorded (amendment approved 2026-10-25).
+
+[project-strategy-row]
+New alpha and new signal families. Paper parameter evaluation and bounded promotion are in scope under clause 8 as amended on 2026-10-25.
