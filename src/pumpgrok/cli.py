@@ -48,6 +48,12 @@ from typing import TYPE_CHECKING, Any, NoReturn, TextIO
 
 from pydantic import ValidationError
 
+from pumpgrok.backtest.harness import run_search
+from pumpgrok.backtest.manifest import build_manifest, filter_settings_hash, param_set_hash
+from pumpgrok.backtest.report import BacktestReport
+from pumpgrok.backtest.report import render as render_backtest
+from pumpgrok.backtest.split import holdout_split
+from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.config.settings import (
     ConfigError,
     Settings,
@@ -65,6 +71,7 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.doctor import doctor_report
+from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -72,7 +79,7 @@ from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.logging.json import setup_logging
 from pumpgrok.replay.clock import WallClock, format_ts_utc
-from pumpgrok.replay.fixtures import CorruptFixture
+from pumpgrok.replay.fixtures import CorruptFixture, event_epoch, load_dataset
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.reporting.daily import DailyReport
@@ -432,6 +439,9 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     report.add_argument("--day", default=None, help="report day YYYY-MM-DD (default today)")
     report.add_argument("--week", default=None, help="week Monday YYYY-MM-DD (default this week)")
     report.add_argument("--out", default=None, help="write markdown to this path as well")
+    backtest = verbs.add_parser("backtest", parents=[mode_option], help="run a backtest")
+    backtest.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to backtest")
+    backtest.add_argument("--params", default=None, metavar="PATH", help="parameter-set JSON file")
 
 
 def _add_scout(verbs: _VerbsAction, mode_option: _Parser) -> None:
@@ -1232,6 +1242,117 @@ def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
+def _backtest_dataset(raw: str) -> tuple[str, Path]:
+    """Resolve a backtest fixture name to its name and directory.
+
+    Names resolve under tests/fixtures/replay; a directory path resolves
+    only inside that tree. Anything else fails closed: the backtest path
+    never fetches an external dataset over the network (CONTEXT D-04).
+    """
+    fixtures_root = (_repo_root() / "tests" / "fixtures" / "replay").resolve()
+    candidate = Path(raw)
+    if candidate.is_dir():
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(fixtures_root)
+        except ValueError:
+            raise ConfigError([f"backtest dataset outside recorded fixtures: {raw!r}"]) from None
+        return (resolved.name, resolved)
+    bundled = fixtures_root / raw
+    if not bundled.is_dir():
+        raise ConfigError([f"unknown fixture dataset: {raw!r}"])
+    return (raw, bundled)
+
+
+def _backtest_params(raw: str | None) -> tuple[bytes, dict[str, Any]]:
+    """Read parameter-set file bytes plus the mapping, or desk defaults.
+
+    Absent means the desk default empty mapping. The file bytes are the
+    hash input (CONTEXT G-03); the mapping must be JSON-stable, so float
+    leaves fail closed instead of hashing ambiguously.
+    """
+    if raw is None:
+        return (canonical_json({}).encode("utf-8"), {})
+    try:
+        data = Path(raw).read_bytes()
+    except OSError as exc:
+        raise ConfigError([f"unreadable --params file: {raw!r}"]) from exc
+    try:
+        parsed: Any = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise UsageError(f"bad --params {raw!r}: want a JSON mapping file") from exc
+    if not isinstance(parsed, dict):
+        raise UsageError(f"bad --params {raw!r}: want a JSON mapping file")
+    return (data, parsed)
+
+
+def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
+    """Run one parameter set over the recorded dataset with the holdout (BT-06).
+
+    ``--fixture`` names a recorded dataset (CONTEXT G-02) and ``--params``
+    points at a parameter-set JSON file (CONTEXT G-03, desk defaults when
+    absent). The verb builds the run manifest, records one trial in the
+    trial ledger, and prints the deterministic Markdown report to stdout
+    (CONTEXT G-01). The ledger write is idempotent: rerunning identical
+    inputs rewrites the identical single trial, so reruns stay
+    byte-identical. Divergence comparison against the paper window runs at
+    the promotion gate over same-window MetricsReports via
+    divergence.check; this verb places no paper orders to compare.
+    """
+    fixture_name, dataset_dir = _backtest_dataset(str(args.fixture))
+    params_data, params = _backtest_params(args.params)
+    seed = settings.replay.seed
+    manifest = build_manifest(
+        fixture_name,
+        seed,
+        filter_settings_hash(settings.filter),
+        param_set_hash(params_data),
+    )
+    stamps = tuple(event_epoch(event) for event in load_dataset(dataset_dir).events)
+    split = holdout_split(stamps, fixture_name)
+    cutoff = split.holdout_start_ts
+    tuning_events = sum(1 for stamp in stamps if stamp < cutoff)
+    holdout_events = len(stamps) - tuning_events
+    run_dir = Path("var/backtest") / manifest.run_id
+    trials_path = run_dir / "trials.jsonl"
+    if trials_path.exists():
+        trials_path.unlink()
+    try:
+        harness_result = run_search(fixture_name, [params], 1, seed, run_id=manifest.run_id)
+    except TypeError as exc:
+        raise UsageError("bad --params file: want JSON-stable ints and strings") from exc
+    manifest_path = run_dir / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        canonical_json(manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
+    )
+    fees = FeeModel()
+    report = BacktestReport(
+        run_id=manifest.run_id,
+        dataset=fixture_name,
+        dataset_digest=manifest.dataset_digest,
+        seed=seed,
+        filter_settings_hash=manifest.filter_settings_hash,
+        param_set_hash=manifest.param_set_hash,
+        code_version=manifest.code_version,
+        holdout_id=split.holdout_id,
+        holdout_events=holdout_events,
+        tuning_events=tuning_events,
+        trial_count=harness_result.trial_count,
+        max_eligible_trials=MAX_ELIGIBLE_TRIALS,
+        max_allowed_trials=MAX_ALLOWED_TRIALS,
+        eligible_for_promotion=harness_result.eligible_for_promotion,
+        promotion_eligible=harness_result.eligible_for_promotion,
+        venue_fee_bps=VENUE_FEE_BPS,
+        base_fee_lamports=BASE_FEE_LAMPORTS,
+        network_cost_lamports=fees.network_cost(),
+        realized_slippage_bps_total=0,
+        realized_fees_lamports_total=0,
+    )
+    _say(sys.stdout, render_backtest(report))
+    return EXIT_OK
+
+
 def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
     return _not_implemented(f"replay {args.cmd}")
 
@@ -1254,9 +1375,9 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "killswitch": _killswitch,
     "ticket": _ticket_verb,
     "live": _live_verb,
-    "replay": _replay_verb,
     "verify": _verify_verb,
     "report": _report_verb,
+    "backtest": _backtest_verb,
 }
 
 
