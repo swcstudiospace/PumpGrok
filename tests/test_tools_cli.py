@@ -175,7 +175,7 @@ class TestPaperFillPath:
             params.setdefault("p_drop", 0.0)
             return real_registry(**params)  # type: ignore[arg-type]
 
-        monkeypatch.setattr(cli_mod, "build_operator_registry", _with_curves)
+        monkeypatch.setattr("pumpgrok.cli.wiring.build_operator_registry", _with_curves)
         seat = "bot-04-sniper" if side == "buy" else "bot-06-exit"
         store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
         try:
@@ -712,7 +712,10 @@ class TestCliRegressionSweep:
             assert flag in out
 
     def test_no_direct_tool_imports_in_cli(self) -> None:
-        text = (ROOT / "src" / "pumpgrok" / "cli.py").read_text(encoding="utf-8")
+        text = "".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((ROOT / "src" / "pumpgrok" / "cli").glob("*.py"))
+        )
         assert "build_operator_registry" in text
         assert not re.search(r"pumpgrok\.tools\.\w", text)
 

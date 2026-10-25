@@ -117,7 +117,7 @@ def test_constants_match_rule_file_bytes() -> None:
     for home in (
         REPO_ROOT / "src" / "pumpgrok" / "core" / "approvals.py",
         REPO_ROOT / "src" / "pumpgrok" / "ledger" / "tickets.py",
-        REPO_ROOT / "src" / "pumpgrok" / "cli.py",
+        REPO_ROOT / "src" / "pumpgrok" / "cli" / "codes.py",
     ):
         assert home.is_file(), f"ticket home missing: {home}"
         # Capture groups do not change the matched bytes; strip them so the
