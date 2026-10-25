@@ -80,9 +80,7 @@ class _BuyMixin:
             correlation_id: str,
         ) -> OrderRejectedError: ...
 
-        def _repeat_outcome(
-            self, request: OrderRequest
-        ) -> Fill | OrderRejectedError | None: ...
+        def _repeat_outcome(self, request: OrderRequest) -> Fill | OrderRejectedError | None: ...
 
         async def _await_confirmation(
             self,

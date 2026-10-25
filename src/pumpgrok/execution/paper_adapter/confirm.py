@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import OrderUnknownError
 from pumpgrok.execution.latency import draw_latency
