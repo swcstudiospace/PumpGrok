@@ -43,7 +43,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
   14. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b"` exits 0, and `grep -qE "Phase 6: smoke-10m events.hash before: [0-9a-f]{64}" CHANGELOG.md && grep -qF "Phase 6: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0; the before value is the events.hash printed on the phase branch before its first edit, and the after value is the hash this phase produces (INT-08 and the replay rule)
   15. `grep -qE "5b5d6a1" CHANGELOG.md && grep -qE "9772655" CHANGELOG.md` exits 0 (review of the Omega CI runner migration recorded, the v2 deferred item)
   16. `test "$(git branch --show-current | grep -cE '^bot-0[0-9]-[a-z-]+/phase-6-[a-z-]+$')" -eq 1` exits 0 and `gh pr list --head "$(git branch --show-current)" --json isDraft,mergedAt --jq 'all(.isDraft and .mergedAt == null)'` prints `true` (PRC-02)
-  17. `python3 ci/gates/run_all.py --bot bot-00-chief --receipt .receipts/chief/<task>.json` exits 0 for each completion claim in this phase (PRC-01)
+  17. `python3 ci/gates/run_all.py --bot bot-00-chief --receipt .receipts/bot-00-chief/phase-6.json` exits 0 for each completion claim in this phase (PRC-01)
 
 **Checkpoint**: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` completes one cycle, `uv run pumpgrok verify --fixture smoke-10m` prints the same events.hash on two runs, live stays refused with exit 3, and the canonical gate set is green.
 
