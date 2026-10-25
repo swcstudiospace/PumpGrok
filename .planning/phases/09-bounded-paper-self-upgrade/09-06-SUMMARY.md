@@ -3,8 +3,9 @@
 ## One-liner
 
 Owner-approved 2026-10-25 constitution amendment applied verbatim to all carriers
-with agents regenerated via make prompts, plus a frozen oracle and 10-test suite
-proving every amended clause byte-identical across carriers.
+with agents regenerated via make prompts, plus a frozen oracle and 12-test suite
+proving every amended clause byte-identical across carriers, including the
+RISK-only clause 3 override and content-based rule-file locators.
 
 ## Commits
 
@@ -12,6 +13,8 @@ proving every amended clause byte-identical across carriers.
   (Task 1, 25 files)
 - c5171d9 `test(09-06): frozen amendment oracle plus constitution test [UPG-06]`
   (Task 2, 2 files)
+- 54b2e0c `feat(09-06): risk-only clause 3 override via risk-audience section
+  [UPG-06]` (follow-up item A, 6 files)
 
 ## Files changed
 
@@ -29,59 +32,77 @@ Task 1 (amendment application):
 - .planning/PROJECT.md (BLIND constraint, strategy out-of-scope row)
 
 Task 2 (oracle and proof):
-- tests/safety/amendment_2026_10_25_frozen.txt (new, byte-exact oracle)
-- tests/safety/test_constitution_amendment.py (new, 10 tests)
+- tests/safety/amendment_2026_10_25_frozen.txt (byte-exact oracle, now also
+  holding the risk-only clause 3)
+- tests/safety/test_constitution_amendment.py (12 tests: 10 originals plus the
+  RISK clause 3 frozen check and the other-nine-seats scoping check)
+
+Follow-up item A (RISK-only clause 3 override):
+- prompts/_shared/core-directives.xml (new `security-constitution-risk`
+  section, audience `risk`, full 10-clause text with only clause 3 amended;
+  shared section line 15 byte-identical)
+- prompts/bot-02-risk.xml (`core` ref points at the risk-scoped section)
+- agents/risk.md and prompts-assembled/RISK.xml regenerated; the other nine
+  seat files and assembled files byte-identical (one-line diff each in the
+  two RISK files, verified)
+
+Follow-up item B (content-based rule-file locators):
+- tests/safety/test_constitution_constants.py (hardcoded rule-file line
+  numbers 28/30/34 replaced with `_rule_line_with` content lookups on the
+  stable markers "Human approval required", "UNKNOWN RESULT", "FLOOR HALTED";
+  every asserted property unchanged)
 
 ## Acceptance results (exit codes)
 
 - `python3 scripts/generate-templates.py --check` exits 0 (agents clean,
   10 agent files match prompts).
-- `uv run pytest -q tests/safety/test_constitution_amendment.py` exits 0
-  (10 passed).
-- `uv run ruff check` and `uv run ruff format --check` on the new test file:
-  clean (the .txt oracle is data, not Python, and is not ruff-scanned).
+- `uv run pytest -q tests/safety/test_constitution_constants.py
+  tests/safety/test_constitution_amendment.py` exits 0 (15 passed: 3 constants
+  + 12 amendment).
+- `uv run ruff check` and `uv run ruff format --check` on both touched Python
+  test files: clean (the .txt oracle is data, not Python, and is not
+  ruff-scanned).
 - Constitutional bytes verified: core-directives clause 10 keeps U+2192, U+201C,
   U+201D, U+2013 exact; appended prose is pure ASCII; every seat file carries the
-  exception with no hyphen substitution.
+  exception with no hyphen substitution; the new risk section differs from the
+  shared section by exactly the clause 3 line (mechanical diff), itself
+  byte-equal to amendment lines 52-54.
 
 ## Deviations from plan
 
-None that change scope. Four observations:
+None that change scope. Five observations:
 
-1. Amendment section 3 also drafts a risk-only clause 3 variant, but the plan
-   and CONTEXT scope the shared core-directives edit to clause 10 only, and the
-   plan's test compares only clause 10 in agents/risk.md. Applied as planned:
-   clause 3 in the shared core (and all seats) is unchanged. Changing it would
-   alter all ten seats through the shared generator source.
+1. Follow-up item A supersedes original observation 1: the approved amendment
+   section 3 clause 3 is now applied as a RISK-only override through the
+   generator's existing audience mechanism (new `security-constitution-risk`
+   section, audience `risk`; bot-02-risk.xml ref). Shared section line 15 is
+   byte-identical, so the other nine seats are unaffected (verified by diff).
 2. RISK_POLICY row 8 keeps its `:40` line-reference column as the amendment
    wrote it (amendment section 4 replaces only the quoted text). The clause 8
    text now lives on rules line 42 after the two mandated bullet insertions.
 3. Commit branch is `bot-00-chief/p9-06`, the assigned worktree branch created
    from cfdda59, not the generic `agent-*` namespace in the protocol text. It
    is not a protected branch and HEAD is attached; commits land only there.
-4. Test formatting fixed via Edit tool (two hunks) instead of `ruff format`
-   write, per the no-shell-edits rule.
+4. Test formatting fixed via Edit tool instead of `ruff format` write, per the
+   no-shell-edits rule.
+5. The interim `test_core_clause_10_matches_frozen` failure (two clause-10
+   matches after adding the risk section) was fixed by scoping the lookup to
+   each named core section; both sections are now checked against frozen.
 
-## Known collateral (out of scope, NOT fixed, reported per rule 4)
+## Resolved collateral (was reported, now fixed per follow-up item B)
 
-The two mandated SIGNAL/JOURNAL bullet lines shift every clause in
-rules/pumpgrok-team.mdc down by 2. The pre-existing
-tests/safety/test_constitution_constants.py hardcodes old line numbers and now
-fails (2 tests). That file is outside this plan's files_modified and the wave
-is file-disjoint, so it was left untouched:
-
-- `test_constants_match_rule_file_bytes`: `AssertionError: rule line 34
-  carries no backtick span` (FLOOR HALTED span moved 34 -> 36).
-- `test_rule_file_keeps_en_dashes`: `assert 0 >= 1` on new line 30
-  (UNKNOWN RESULT span moved 30 -> 32).
-
-Mechanical fix for the owning plan: bump the hardcoded rule-file line numbers
-28 -> 30, 30 -> 32, 34 -> 36. Same +2 staleness now affects doc line
-references to rules/pumpgrok-team.mdc (for example RISK_POLICY table Line
-column, ROSTER, FOUNDATION_STACK); doc corrections are Phase 7 DOC-03 per
-CONTEXT, not this amendment.
+The two mandated SIGNAL/JOURNAL bullet lines shifted every clause in
+rules/pumpgrok-team.mdc down by 2 and broke the hardcoded line numbers
+(28/30/34) in tests/safety/test_constitution_constants.py. Per follow-up
+item B the file now locates clauses by stable content markers
+("Human approval required", "UNKNOWN RESULT", "FLOOR HALTED") via the new
+`_rule_line_with` helper; every asserted property (backtick spans, en-dash
+presence, hyphen absence, engine constant equality, ticket patterns) is
+unchanged. Remaining +2 staleness in doc line references to
+rules/pumpgrok-team.mdc (RISK_POLICY table Line column, ROSTER,
+FOUNDATION_STACK) is Phase 7 DOC-03 per CONTEXT, not this amendment.
 
 ## Self-Check: PASSED
 
-All 8 key files found, both commits present in history, main checkout
+All key files found, all commits present in history, main checkout
 `git -C /root/src/repos/pumpgrok status --short` empty.

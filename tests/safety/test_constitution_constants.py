@@ -44,10 +44,16 @@ def _rule_lines() -> list[str]:
     return RULES.read_text(encoding="utf-8").splitlines()
 
 
-def _rule_backtick_span(line_no: int) -> str:
-    line = _rule_lines()[line_no - 1]
+def _rule_line_with(marker: str) -> str:
+    matches = [line for line in _rule_lines() if marker in line]
+    assert len(matches) == 1, f"rule file has {len(matches)} lines with {marker!r}"
+    return matches[0]
+
+
+def _rule_backtick_span(marker: str) -> str:
+    line = _rule_line_with(marker)
     spans = re.findall(r"`([^`]*)`", line)
-    assert spans, f"rule line {line_no} carries no backtick span"
+    assert spans, f"rule line with {marker!r} carries no backtick span"
     return spans[0]
 
 
@@ -97,12 +103,12 @@ def _pattern_literals(path: Path) -> list[str]:
 
 
 def test_constants_match_rule_file_bytes() -> None:
-    """INV-S-09: code constants equal the rule-file bytes exactly."""
-    floor_span = _rule_backtick_span(34)
+    floor_span = _rule_backtick_span("FLOOR HALTED")
     assert floor_span == f"FLOOR HALTED {EN_DASH} DAILY LOSS LIMIT", repr(floor_span)
-    unknown_line = _rule_lines()[30 - 1]
+    unknown_line = _rule_line_with("UNKNOWN RESULT")
     assert f"UNKNOWN RESULT {EN_DASH}" in unknown_line, repr(unknown_line)
-    assert EN_DASH in _rule_lines()[28 - 1] or "slippage" in _rule_lines()[28 - 1]
+    approval_line = _rule_line_with("Human approval required")
+    assert EN_DASH in approval_line or "slippage" in approval_line
 
     engine_value = _assigned_string(ENGINE, "FLOOR_HALTED_DAILY")
     assert engine_value == floor_span, (repr(engine_value), repr(floor_span))
@@ -121,7 +127,7 @@ def test_constants_match_rule_file_bytes() -> None:
 
     approvals_text = APPROVALS.read_text(encoding="utf-8")
     assert "approve <ticket> <mint> <size> <slippage>" in approvals_text
-    assert "mint" in _rule_lines()[28 - 1] and "slippage" in _rule_lines()[28 - 1]
+    assert "mint" in approval_line and "slippage" in approval_line
 
     budget_text = RISK_BUDGET.read_text(encoding="utf-8")
     assert 'Decimal("0.05")' in budget_text
@@ -145,8 +151,8 @@ def test_floor_constant_has_a_single_home() -> None:
 
 
 def test_rule_file_keeps_en_dashes() -> None:
-    """INV-S-09: rules :30 and :34 use U+2013, never a hyphen."""
-    lines = _rule_lines()
-    assert lines[30 - 1].count(EN_DASH) >= 1
-    assert lines[34 - 1].count(EN_DASH) >= 1
-    assert "`FLOOR HALTED - DAILY LOSS LIMIT`" not in lines[34 - 1]
+    """INV-S-09: the single-send and daily-loss clauses use U+2013, never a hyphen."""
+    assert _rule_line_with("UNKNOWN RESULT").count(EN_DASH) >= 1
+    floor_line = _rule_line_with("FLOOR HALTED")
+    assert floor_line.count(EN_DASH) >= 1
+    assert "`FLOOR HALTED - DAILY LOSS LIMIT`" not in floor_line
