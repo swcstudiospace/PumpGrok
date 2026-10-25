@@ -27,7 +27,7 @@ from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.cli.codes import EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.wiring import _repo_root
-from pumpgrok.config.settings import ConfigError
+from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.adapter import Fill, FillStatus
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel

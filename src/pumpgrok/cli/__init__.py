@@ -29,8 +29,6 @@ attempt -> verify chain.
 
 import logging
 
-log = logging.getLogger("pumpgrok.cli")
-
 from pumpgrok.cli.codes import (
     EXIT_CONFIG,
     EXIT_FIXTURE,
@@ -50,7 +48,10 @@ from pumpgrok.cli.validators import (
     _utc_now,
     size_sol_to_lamports,
 )
-from pumpgrok.cli.wiring import _unflattened_lines, build_operator_registry
+from pumpgrok.cli.wiring import _unflattened_lines
+from pumpgrok.tools import build_operator_registry
+
+log = logging.getLogger("pumpgrok.cli")
 
 __all__ = [
     "EXIT_CONFIG",
