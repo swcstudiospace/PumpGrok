@@ -10,10 +10,12 @@ correlation_id byte-for-byte. The `uuid` module is banned in src/pumpgrok.
 from __future__ import annotations
 
 import contextvars
+import os
 import random
 
 from pumpgrok.core.errors import PumpgrokError
-from pumpgrok.replay.clock import Clock
+from pumpgrok.replay.clock import Clock, WallClock
+from pumpgrok.replay.rng import make_rng
 
 __all__ = [
     "ULID_RE",
@@ -25,6 +27,7 @@ __all__ = [
     "bind_correlation",
     "calling_seat",
     "current_correlation",
+    "mint_approval_id",
     "next_span",
 ]
 
@@ -62,6 +65,20 @@ def _crockford(value: int, width: int) -> str:
         out.append(_CROCKFORD[value & 31])
         value >>= 5
     return "".join(reversed(out))
+
+
+def mint_approval_id(clock: Clock | None = None) -> str:
+    """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29).
+
+    The single approval-id entropy root (INT-05, D-06): seeded from OS
+    entropy so two mints in the same wall-clock millisecond -- or in two
+    processes -- still differ, which the fixed replay seed cannot
+    guarantee. Replay paths keep the seeded stream; only CLI-minted ids
+    draw OS entropy. The binding-key file is the only other os.urandom
+    root in src/pumpgrok.
+    """
+    seed = int.from_bytes(os.urandom(16), "big")
+    return f"apr-{IdFactory(clock if clock is not None else WallClock(), make_rng(seed)).ulid()}"
 
 
 class CorrelationId(str):

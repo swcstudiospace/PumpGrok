@@ -98,6 +98,8 @@ class ToolRegistry:
         self._tools: dict[str, Tool] = {}
         self._audit = audit_sink
         self._check_limits = limits_checker  # RiskEngine.check bound by cli.py
+        # INT-05: production composition roots always pass an explicit rng seeded
+        # from the composition-root seed; the default below is test-only.
         self._rng = rng if rng is not None else make_rng()
         self._limiters: dict[str, RateLimiter] = {}
 

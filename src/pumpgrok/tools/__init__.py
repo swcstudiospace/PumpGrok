@@ -283,6 +283,7 @@ def build_operator_registry(
     ledger_path: Path | None = None,
     price_source: PriceSource | None = None,
     p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
+    seed: int | None = None,  # composition-root seed (INT-05); defaults to settings.replay.seed
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
@@ -295,22 +296,24 @@ def build_operator_registry(
     production paper trading binds the RPC curve reader in Phase 4).
     ``p_drop`` fixes the confirmation-drop rate with a seeded stream
     (the CLI default ``0.0`` gives deterministic confirms; replay passes
-    seeded curves with an explicit rate). The seeded ``make_rng`` stream
-    keeps replay deterministic (paper-engine 4.2).
+    seeded curves with an explicit rate). ``seed`` is the explicit composition-root
+    seed (INT-05, D-06): every ``make_rng`` stream below derives from it, never
+    from the replay-module default seed.
     Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
     """
     active_clock = clock if clock is not None else WallClock()
+    active_seed = seed if seed is not None else settings.replay.seed
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     repo_root = Path(repo_root)
-    reg, _audits = build_registry(clock=active_clock, rng=make_rng())
+    reg, _audits = build_registry(clock=active_clock, rng=make_rng(active_seed))
     client = httpx.AsyncClient()
     rpc = RpcClient(
         list(settings.rpc.endpoints),
         client,
         active_clock,
-        make_rng(),
+        make_rng(active_seed),
         api_key=settings.rpc.api_key,
     )
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
@@ -326,7 +329,7 @@ def build_operator_registry(
     engine = RiskEngine(
         store=store,
         budget=budget,
-        ids=IdFactory(active_clock, make_rng()),
+        ids=IdFactory(active_clock, make_rng(active_seed)),
         clock=active_clock,
         limits=settings.limits,
         mode="live" if live else "paper",
@@ -352,9 +355,9 @@ def build_operator_registry(
         settings,
         store=store,
         risk=engine,
-        ids=IdFactory(active_clock, make_rng()),
+        ids=IdFactory(active_clock, make_rng(active_seed)),
         clock=active_clock,
-        rng=make_rng(),
+        rng=make_rng(active_seed),
         price_source=curves,
         p_drop=p_drop,
     )

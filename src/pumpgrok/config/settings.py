@@ -279,6 +279,8 @@ class ExecutionSettings(BaseModel):
 class ReplaySettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # INT-05: the composition-root default seed. Deliberately a literal, not an
+    # import of the replay-module seed constant, which must stay inside replay code.
     seed: int = 20260101
 
 
