@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from pumpgrok.core.adapter import OrderRequest
     from pumpgrok.core.approvals import ApprovalRecord
     from pumpgrok.core.ids import Clock

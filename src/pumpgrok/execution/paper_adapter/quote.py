@@ -8,7 +8,6 @@ from pumpgrok.core.adapter import Quote, Side, SimulationResult
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell_out, spot
 
-
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
     from pumpgrok.execution.fees import FeeModel

@@ -14,7 +14,6 @@ from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _BuyConfirmed
 from pumpgrok.risk.engine import RiskDecision, order_hash_for
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
-
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
     from pumpgrok.execution.fees import FeeModel

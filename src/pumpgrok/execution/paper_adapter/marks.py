@@ -13,7 +13,6 @@ from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
 
-
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
     from pumpgrok.execution.fees import FeeModel

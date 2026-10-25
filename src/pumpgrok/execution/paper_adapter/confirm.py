@@ -10,7 +10,6 @@ from pumpgrok.execution.latency import draw_latency
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
-
 if TYPE_CHECKING:
     import random
 

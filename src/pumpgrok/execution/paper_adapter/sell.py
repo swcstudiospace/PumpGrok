@@ -12,7 +12,6 @@ from pumpgrok.execution.curve_math import impact_sell, sell_out
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.replay.clock import parse_ts_utc
 
-
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
     from pumpgrok.execution.fees import FeeModel
