@@ -27,12 +27,12 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.risk.engine import (
-    _DECISION_CACHE_MAX,
     FLOOR_HALTED_DAILY,
     STEP_IDS,
     RiskEngine,
     order_hash_for,
 )
+from pumpgrok.risk.engine.constants import _DECISION_CACHE_MAX
 from pumpgrok.tools.risk.check_limits import R34_RULE_IDS
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()

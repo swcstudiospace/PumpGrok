@@ -22,7 +22,6 @@ minted autonomous approval, when applicable) that the adapter consumes.
 """
 
 from pumpgrok.risk.engine.constants import (
-    _DECISION_CACHE_MAX,
     BUY_SEAT,
     EXIT_SELL_REASONS,
     EXIT_SKIP_STEPS,
