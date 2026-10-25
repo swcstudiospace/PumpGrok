@@ -31,7 +31,7 @@ async def _ok(ctx: SeatContext) -> dict[str, Any]:
     return {"ok": True}
 
 
-def _compose(tmp_path: Path, name: str = "ledger.sqlite") -> Path:
+async def _compose(tmp_path: Path, name: str = "ledger.sqlite") -> Path:
     """Run the paper composition root over a fresh ledger; return its path."""
     ledger = tmp_path / name
     assert not ledger.exists()
@@ -44,13 +44,13 @@ def _compose(tmp_path: Path, name: str = "ledger.sqlite") -> Path:
         ledger_path=ledger,
         p_drop=0.0,
     )
-    asyncio.run(client.aclose())
+    await client.aclose()
     return ledger
 
 
 def test_paper_composition_records_genesis_equity(tmp_path: Path) -> None:
     """The fresh paper ledger carries the configured budget as genesis equity."""
-    ledger = _compose(tmp_path)
+    ledger = asyncio.run(_compose(tmp_path))
     expected = str(load_settings().risk.paper_equity_lamports)
     store = LedgerStore(str(ledger))
     try:
@@ -87,7 +87,7 @@ def test_paper_composition_never_overwrites_genesis(tmp_path: Path) -> None:
 
 async def test_fresh_paper_ledger_reaches_shutdown(tmp_path: Path) -> None:
     """Shutdown snapshots a fresh paper ledger instead of raising CorruptState."""
-    ledger = _compose(tmp_path)
+    ledger = await _compose(tmp_path)
     clock = FixtureClock(start=START)
     store = LedgerStore(str(ledger))
     try:
@@ -108,7 +108,7 @@ async def test_fresh_paper_ledger_reaches_shutdown(tmp_path: Path) -> None:
 
 async def test_fresh_paper_ledger_reaches_exit_halt(tmp_path: Path) -> None:
     """The exit seat's protective halt lands instead of raising CorruptState."""
-    ledger = _compose(tmp_path)
+    ledger = await _compose(tmp_path)
     clock = FixtureClock(start=START)
     store = LedgerStore(str(ledger))
     try:

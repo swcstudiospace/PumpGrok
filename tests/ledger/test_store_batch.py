@@ -7,6 +7,7 @@ import json
 import sqlite3
 import sys
 import threading
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -406,7 +407,7 @@ def test_export_resumes_without_duplicate_rows(tmp_path) -> None:
     trades = [json.loads(line) for line in trades_path.read_text(encoding="utf-8").splitlines()]
     assert [record["type"] for record in trades] == ["buy", "close", "skip"]
     assert trades[0]["tx_hash"] == "dry_run"
-    assert trades[0]["size_sol"] == round(200_000_000 / 1_000_000_000, 6)
+    assert Decimal(trades[0]["size_sol"]) == Decimal("0.2")
     assert trades[2]["reason"] == "slippage_exceeded"
     before = hashlib.sha256(trades_path.read_bytes()).hexdigest()
     second = export_ledger(store, journal_dir=journal_dir, trades_path=trades_path)
