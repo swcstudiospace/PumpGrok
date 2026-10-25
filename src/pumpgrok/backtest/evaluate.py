@@ -178,6 +178,13 @@ def fold_windows(stamps: Sequence[float], dataset: str, n_folds: int) -> FoldWin
     )
 
 
+def _int_field(payload: dict[str, object], name: str) -> int:
+    value = payload.get(name)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"FillRecorded row carries non-integer {name}")
+    return value
+
+
 def _net_lamports(ledger_path: Path) -> int:
     """Net realized lamports from one eval ledger, fail closed.
 
@@ -199,16 +206,9 @@ def _net_lamports(ledger_path: Path) -> int:
         if not isinstance(payload, dict):
             raise ValueError("FillRecorded row carries no payload mapping")
         side = payload.get("side")
-        filled = payload.get("filled_lamports")
-        venue_fee = payload.get("venue_fee_lamports")
-        network_cost = payload.get("network_cost_lamports")
-        for name, amount in (
-            ("filled_lamports", filled),
-            ("venue_fee_lamports", venue_fee),
-            ("network_cost_lamports", network_cost),
-        ):
-            if not isinstance(amount, int) or isinstance(amount, bool):
-                raise ValueError(f"FillRecorded row carries non-integer {name}")
+        filled = _int_field(payload, "filled_lamports")
+        venue_fee = _int_field(payload, "venue_fee_lamports")
+        network_cost = _int_field(payload, "network_cost_lamports")
         if side == "buy":
             buy_total += filled
         elif side == "sell":
