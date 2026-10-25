@@ -258,7 +258,7 @@ def render(report: BacktestReport) -> str:
     )
     trial_rows = sorted(
         {
-            "eligible_for_promotion": _bool(report.eligible_for_promotion),
+            "trial_limit_eligible": _bool(report.eligible_for_promotion),
             "max_allowed_trials": str(report.max_allowed_trials),
             "max_eligible_trials": str(report.max_eligible_trials),
             "trial_count": str(report.trial_count),
