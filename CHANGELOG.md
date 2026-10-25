@@ -2,6 +2,13 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 9: bounded paper self-upgrade
+
+### Verified
+
+- Phase 9: smoke-10m events.hash before: PHASE9_BEFORE_HASH
+- Phase 9: smoke-10m events.hash after: PHASE9_AFTER_HASH
+
 ## [Unreleased] - v3 Phase 8: backtest and paper evaluation
 
 ### Added
