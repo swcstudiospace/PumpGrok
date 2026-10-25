@@ -4,7 +4,7 @@ Maintainer map of this repository. PumpGrok is an instruction pack plus small re
 
 ## Overview
 
-PumpGrok turns a host agent runtime into an eight-role Solana memecoin trading desk.
+PumpGrok turns a host agent runtime into a ten-seat Solana memecoin trading desk.
 
 | Layer | What it is | What it is not |
 |-------|------------|----------------|
@@ -15,7 +15,7 @@ PumpGrok turns a host agent runtime into an eight-role Solana memecoin trading d
 | `vendor/grokbot-pumpfun/` | Vendored third-party screening engine (dry-run default; pinned upstream commit) | Part of the instruction pack; it never signs or sends |
 | Plugin manifests | How Cursor / Claude Code / Grok Build / Grok Bot discover the pack | A deployable service |
 
-There is no PumpGrok server, queue, or daemon in this tree. The process that “runs” the desk is the host (Grok Bot, Cursor, Claude Code, or Grok Build). Humans approve every spend by exact ticket ID. Only SNIPER may send buys; only EXIT may send sells.
+This tree runs no always-on services behind the desk. The process that “runs” the desk is the host (Grok Bot, Cursor, Claude Code, or Grok Build). The one long-running form is `pumpgrok run --mode paper --serve --replay <dataset>`: it replays a recorded dataset in a loop while serving read-only `/healthz` and `/metrics` (paper-only; the compose `pumpgrok` service runs this form). Humans approve every spend by exact ticket ID. Only SNIPER may send buys; only EXIT may send sells.
 
 ## System context
 
@@ -23,9 +23,10 @@ External systems named in skills or tools:
 
 | System | How PumpGrok uses it |
 |--------|----------------------|
-| Jupiter Swap API `https://api.jup.ag/swap/v2/order` | `market.price` quote-only read via the operator registry; never swap/send |
+| Jupiter Swap API `https://api.jup.ag/swap/v2/order` (`QUOTE_URL`; never `/execute`) | Informational exec-side quote only; never swap/send |
+| Solana bonding curve (on-chain reserves) | `market.price` spot read via `getAccountInfo` on the curve account (ASSUMED layout); the only price the fill model uses |
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
-| Optional `--rpc` URL | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
+| `PUMPGROK_RPC__ENDPOINTS` | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
 | x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Called only by operator-run processes of the vendored `vendor/grokbot-pumpfun` engine (see `skills/grokbot-pipeline`); never by the read-only tool registry |
 
@@ -57,7 +58,7 @@ flowchart LR
 
 ## Containers or processes
 
-Nothing in this repo is started as a service.
+Only one repo process ever runs as a service, and only on request: `pumpgrok run --mode paper --serve --replay <dataset>` replays a recorded dataset in a loop and serves read-only `/healthz` and `/metrics` (paper-only; the compose `pumpgrok` service runs this form). The one-shot `run --mode paper --once --replay <dataset>` form runs a single cycle and exits.
 
 | Runtime | How it is started | Responsibility |
 |---------|-------------------|----------------|
@@ -118,7 +119,7 @@ All tools: registry-resolved, JSON on stdout, fail closed (`ok: false` + error),
 
 | Tool id | Outbound call or write | Port module |
 |--------|------------------------|------|
-| `market.price` | GET Jupiter order API | `tools/market/price.py` |
+| `market.price` | RPC `getAccountInfo` on the bonding-curve account (ASSUMED layout); no Jupiter path in this module | `tools/market/price.py` |
 | `onchain.authorities` | RPC `getAccountInfo` jsonParsed | `tools/onchain/authorities.py` |
 | `onchain.priority_fee` | RPC `getRecentPrioritizationFees` | `tools/onchain/priority_fee.py` |
 | `onchain.top_holders` | RPC `getTokenLargestAccounts` | `tools/onchain/top_holders.py` |
@@ -200,7 +201,7 @@ This repository itself stores instruction files, plugin JSON, Python helpers, th
 
 | Mechanism | Where |
 |-----------|--------|
-| `--rpc` | `authority_check.py`, `priority_fee.py`, `holder_check.py` |
+| `PUMPGROK_RPC__ENDPOINTS` | `authority_check.py`, `priority_fee.py`, `holder_check.py` |
 | `--desk` | `paper_sim.py` (default `/workspace/trading-desk`) |
 | Quote params | `jupiter_quote.py` flags |
 | Desk record | `/workspace/trading-desk/desk.md` (engagement, public address, RPC note) |
@@ -239,5 +240,5 @@ Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep S
 ## Unknowns
 
 - Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
-- `jupiter-routing` shows `priority_fee --rpc/--percentile/--multiplier` (default 1.2); the retired fee-cap flag is removed.
+- `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
