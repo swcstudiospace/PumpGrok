@@ -21,6 +21,9 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 CLOCK_ALLOWLIST = frozenset({"replay/clock.py"})
 # The only module allowed to construct random.Random (paper-engine 4.2, make_rng).
 RNG_ALLOWLIST = frozenset({"replay/rng.py"})
+# The only modules allowed to draw OS entropy: the approval-id root and the
+# binding-key root (INT-05, D-06).
+URANDOM_ALLOWLIST = frozenset({"core/ids.py", "core/binding_key.py"})
 
 _CLOCK_PRIMITIVES = frozenset(
     {
@@ -80,6 +83,7 @@ def _scan_file(path: Path, rel: str) -> list[str]:
     aliases = _aliases(tree)
     clock_ok = rel in CLOCK_ALLOWLIST
     rng_ok = rel in RNG_ALLOWLIST
+    urandom_ok = rel in URANDOM_ALLOWLIST
     found: list[tuple[int, str]] = []
 
     def flag(line: int, reason: str) -> None:
@@ -101,6 +105,8 @@ def _scan_file(path: Path, rel: str) -> list[str]:
             flag(line, f"{tail} used outside replay/clock.py")
         elif _is_ambient_random(resolved):
             flag(line, f"ambient randomness {resolved} is banned")
+        elif resolved == "os.urandom" and not urandom_ok:
+            flag(line, "os.urandom used outside core/ids.py and core/binding_key.py")
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -114,6 +120,8 @@ def _scan_file(path: Path, rel: str) -> list[str]:
                     flag(node.lineno, f"{qualified} imported outside replay/clock.py")
                 if _is_ambient_random(qualified):
                     flag(node.lineno, f"ambient randomness {qualified} is banned")
+                if qualified == "os.urandom" and not urandom_ok:
+                    flag(node.lineno, "os.urandom used outside core/ids.py and core/binding_key.py")
         elif isinstance(node, (ast.Attribute, ast.Name)):
             resolved = _resolve(node, aliases)
             if resolved is not None:
@@ -142,6 +150,12 @@ def test_src_pumpgrok_has_no_forbidden_primitives() -> None:
 def test_clock_allowlist_is_exactly_the_replay_clock_module() -> None:
     assert frozenset({"replay/clock.py"}) == CLOCK_ALLOWLIST
     assert (SRC / "replay" / "clock.py").is_file()
+
+
+def test_urandom_allowlist_is_exactly_the_two_entropy_roots() -> None:
+    assert frozenset({"core/ids.py", "core/binding_key.py"}) == URANDOM_ALLOWLIST
+    assert (SRC / "core" / "ids.py").is_file()
+    assert (SRC / "core" / "binding_key.py").is_file()
 
 
 PROBES: list[tuple[str, str, bool]] = [
@@ -199,6 +213,15 @@ PROBES: list[tuple[str, str, bool]] = [
         "from pumpgrok.replay.clock import Clock\n\nCLOCK: Clock | None = None\n",
         False,
     ),
+    ("core/probe.py", "import os\n\nTOKEN = os.urandom(16)\n", True),
+    ("core/probe.py", "from os import urandom\n\nTOKEN = urandom(16)\n", True),
+    (
+        "core/probe.py",
+        "import os as _os\n\nTOKEN = _os.urandom(16)\n",
+        True,
+    ),
+    ("core/ids.py", "import os\n\nTOKEN = os.urandom(16)\n", False),
+    ("core/binding_key.py", "import os\n\nTOKEN = os.urandom(16)\n", False),
 ]
 
 

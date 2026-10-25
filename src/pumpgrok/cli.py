@@ -60,7 +60,7 @@ from pumpgrok.contracts.projection import short_to_seat
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import DataStale, PumpgrokError, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
-from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation, mint_approval_id
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool
 from pumpgrok.core.units import sol_to_lamports
@@ -260,6 +260,7 @@ async def _with_tools(
         repo_root=_repo_root(),
         settings=settings,
         ledger_path=PAPER_LEDGER_PATH,
+        seed=settings.replay.seed,
     )
     try:
         try:
@@ -644,13 +645,10 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
 def _mint_approval_id() -> str:
     """Mint one ``apr-<ULID>`` id for a CLI-recorded approval (R29).
 
-    Seeded from OS entropy: two mints in the same wall-clock millisecond --
-    or in two processes -- must still differ, which the fixed replay seed
-    cannot guarantee. Replay paths keep the seeded stream; only CLI-minted
-    ids draw OS entropy.
+    Thin wrapper over :func:`pumpgrok.core.ids.mint_approval_id`, the
+    single OS-entropy root for approval ids (INT-05, D-06).
     """
-    seed = int.from_bytes(os.urandom(16), "big")
-    return f"apr-{IdFactory(WallClock(), make_rng(seed)).ulid()}"
+    return mint_approval_id()
 
 
 _TRADE_UNAVAILABLE = (
@@ -716,7 +714,7 @@ def _halt_clear(by: str, reason: str, settings: Settings) -> int:
         engine = RiskEngine(
             store=store,
             budget=settings.risk,
-            ids=IdFactory(clock, make_rng()),
+            ids=IdFactory(clock, make_rng(settings.replay.seed)),
             clock=clock,
             limits=settings.limits,
         )
@@ -946,6 +944,7 @@ def _tools_schema(tool_id: str) -> int:
             repo_root=_repo_root(),
             settings=settings,
             ledger_path=PAPER_LEDGER_PATH,
+            seed=settings.replay.seed,
         )
         try:
             try:

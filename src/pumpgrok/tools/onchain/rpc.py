@@ -102,6 +102,8 @@ class RpcClient:
         self._endpoints = list(endpoints)
         self._client = client
         self._clock = clock
+        # INT-05: production composition roots always pass an explicit rng seeded
+        # from the composition-root seed; the default below is test-only.
         self._rng = rng if rng is not None else make_rng()
         self._api_key = api_key if api_key is not None else SecretStr("")
         self._timeout_seconds = timeout_seconds
