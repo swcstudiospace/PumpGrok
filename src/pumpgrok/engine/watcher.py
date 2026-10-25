@@ -66,8 +66,8 @@ class PositionWatcher:
     def __init__(
         self,
         book: PositionBook,
-        price_fn: Callable[[str], Awaitable[float]],
-        sell_fn: Callable[[ExitPosition, float, str], Awaitable[None]],
+        price_fn: Callable[[str], Awaitable[int]],
+        sell_fn: Callable[[ExitPosition, int, str], Awaitable[None]],
         clock: Clock,
     ) -> None:
         self.book = book
@@ -97,7 +97,7 @@ class PositionWatcher:
                 price = await self.price_fn(position.mint)
             except Exception as exc:
                 log.warning("no price for %s: %s", position.mint, exc)
-                price = 0.0
+                price = 0
             if price <= 0:
                 self._miss(position.mint)
                 continue
