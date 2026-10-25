@@ -20,6 +20,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Verified
 
 - Phase 8: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 8: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 8 correction: the first harness scored candidates with a hash digest. It was replaced before the phase closed: candidates now rank by net realized lamports from replayed fills, and the report shows measured fees, slippage and metrics. Per-fill fields are held in memory only, so the replay ledger bytes and the hash are unchanged.
 
 ## [Unreleased] - v3 Phase 7: documentation upgrade
 
