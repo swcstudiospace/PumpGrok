@@ -2,6 +2,22 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 10: live readiness, kept disabled
+
+### Added
+
+- LIV-01 refusal proof: `pumpgrok run --mode live --once` exits 3 with all nine preconditions in R21 order on stderr (tests/safety/test_live_refusal_lists_nine.py).
+- LIV-01 empty-registry proof: build_adapter returns a PaperAdapter only; no live adapter symbol or registry entry is exported (tests/safety/test_no_live_adapter_registered.py).
+- LIV-01 import-graph proof: no transitive import path from the backtest, paper-adapter, upgrade, supervisor, or CLI roots reaches the live adapter module (tests/safety/test_import_graph_no_live.py).
+- LIV-02 overlay-disabled proof: every overlay under src/pumpgrok/config/overlays ships with live disabled (tests/safety/test_live_disabled_overlays.py).
+- LIV-02 deferred record: docs/LIVE_READINESS.md records the custody model, the venue, the legal review, and the nine-precondition evidence, each with owner human and status deferred. The desk stays paper-only and claims no measured readiness.
+
+### Verified
+
+- Phase 10: smoke-10m events.hash before: PHASE10_BEFORE_HASH
+- Phase 10: smoke-10m events.hash after: PHASE10_AFTER_HASH
+- No task in this phase changed replay bytes: the record and all phase proofs are docs and safety tests only, with no product code change.
+
 ## [Unreleased] - v3 Phase 9: bounded paper self-upgrade
 
 ### Added
