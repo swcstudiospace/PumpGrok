@@ -22,10 +22,11 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from pumpgrok.config.settings import ExitsSettings
-from pumpgrok.engine.models import ExitPosition
+from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 from pumpgrok.engine.watcher import PositionWatcher
 from pumpgrok.execution.curve_math import spot
 from pumpgrok.ledger.reducer import initial_state, reduce
@@ -40,6 +41,11 @@ PlaceSell = Callable[[str, str, int, str], Awaitable[dict[str, Any]]]
 
 #: ``(mint, last_s, last_t)`` -> the PositionClosed row, or None when no position is open.
 GraduateClose = Callable[[str, int, int], Awaitable[dict[str, Any] | None]]
+
+
+def _scaled_price(lamports_per_token: Decimal) -> int:
+    """Lamports-per-token quote to the integer ``PRICE_SCALE`` price (INT-01)."""
+    return int((lamports_per_token * PRICE_SCALE).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 @dataclass(frozen=True)
@@ -106,7 +112,7 @@ class LedgerExitBook:
             seq = opened_seq.get(mint, 0)
             if (mint, seq) in self._held_out:
                 continue
-            entry = float(view.price_entry)
+            entry = _scaled_price(view.price_entry)
             prior = self._positions.get(mint)
             same_position = prior is not None and self._identity.get(mint) == seq
             peak = prior.peak_price if same_position and prior is not None else entry
@@ -114,7 +120,7 @@ class LedgerExitBook:
                 mint=mint,
                 entry_price=entry,
                 peak_price=peak,
-                token_amount=float(view.token_units),
+                token_amount=int(view.token_units),
                 opened_at=parse_ts_utc(view.opened_ts_utc),
             )
             identity[mint] = seq
@@ -144,11 +150,11 @@ class ExitRules:
         self._sold: list[RuleSell] = []
         self._watcher = PositionWatcher(self._book, self._price, self._sell, clock)
 
-    async def _price(self, mint: str) -> float:
+    async def _price(self, mint: str) -> int:
         snapshot = await self._curves.curve(mint)
         if snapshot is None or snapshot.t_units <= 0:
-            return 0.0
-        return float(spot(snapshot.s_lamports, snapshot.t_units))
+            return 0
+        return _scaled_price(spot(snapshot.s_lamports, snapshot.t_units))
 
     async def _sell(self, position: ExitPosition, price: int, reason: str) -> None:
         ticket = self._book.ticket(position.mint)
