@@ -11,6 +11,10 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - DOC-03 corrects README, ARCHITECTURE, SETUP, the replay skill and the four plugin manifests (version 0.1.0) to match the code, with docs/VENDOR_PIN.md recording the retired oracle.
 - DOC-04 banners historical design records, with consistency and banner tests under tests/docs.
 
+### Verified
+
+- Phase 7: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
 ## [Unreleased] - v3 Phase 6: integrity closure
 
 ### Changed
