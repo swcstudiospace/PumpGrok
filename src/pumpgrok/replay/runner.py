@@ -18,6 +18,7 @@ import logging
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -66,9 +67,14 @@ log = logging.getLogger(__name__)
 class ReplayTrade:
     """One order attempt a replay cycle made through the registry (G1).
 
-    ``outcome`` is the place tool's status (``filled``, ``rejected`` or
-    ``unknown``) and ``reason`` its catalog reason: ``ok`` on a fill, the risk
-    or adapter refusal otherwise.
+    ``outcome`` is the place tool's status (``filled``, ``partial``,
+    ``rejected`` or ``unknown``) and ``reason`` its catalog reason: ``ok`` on
+    a fill, the risk or adapter refusal otherwise.
+
+    Per-fill detail (BT-02) mirrors the FillRecorded row the same call wrote:
+    price, venue fee, network cost, latency and filled fraction. Money stays
+    integer base units; price and latency are Decimals. An attempt that never
+    filled keeps zeroed detail and names its outcome.
     """
 
     side: str
@@ -76,6 +82,11 @@ class ReplayTrade:
     outcome: str
     reason: str
     rule: str = ""
+    price_avg: Decimal = Decimal("0")
+    venue_fee_lamports: int = 0
+    network_cost_lamports: int = 0
+    latency_s: Decimal = Decimal("0")
+    filled_fraction: Decimal = Decimal("0")
 
 
 def format_trade(trade: ReplayTrade) -> str:

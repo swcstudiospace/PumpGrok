@@ -28,6 +28,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pumpgrok.backtest.results import FillDetail
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.bot import BotManifest
@@ -824,6 +825,68 @@ class _ReplayTrading:
     exit_place: Tool | None = None
     exits: ExitRules | None = None
     refresh_marks: Callable[[], Awaitable[None]] | None = None
+    store: LedgerStore | None = None
+
+
+def _fill_payload_for(
+    store: LedgerStore | None, *, decision_id: str = "", mint: str = "", side: str = ""
+) -> Mapping[str, Any] | None:
+    """Latest FillRecorded payload for one attempt, or None when it never filled.
+
+    A placed order names its decision id; a graduated force-close carries none,
+    so it matches the latest sell row for its mint instead. Event types are
+    unchanged; the caller reads the added integer fields off the same rows.
+    """
+    if store is None:
+        return None
+    match: Mapping[str, Any] | None = None
+    for row in store.read(limit=None):
+        if row.get("type") != "FillRecorded":
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if decision_id:
+            if str(payload.get("decision_id", "")) != decision_id:
+                continue
+        elif str(payload.get("mint", "")) != mint or str(payload.get("side", "")) != side:
+            continue
+        match = payload
+    return match
+
+
+def _replay_trade(
+    store: LedgerStore | None,
+    *,
+    side: str,
+    mint: str,
+    outcome: str,
+    reason: str,
+    rule: str = "",
+    decision_id: str = "",
+) -> ReplayTrade:
+    """One replay attempt with per-fill detail from its FillRecorded row (BT-02).
+
+    The place tool reports only status and reason, so the numbers come from the
+    ledger row the same call wrote. An attempt with no fill row (rejected,
+    unknown) keeps zeroed money fields and its outcome.
+    """
+    payload = _fill_payload_for(store, decision_id=decision_id, mint=mint, side=side)
+    if payload is None:
+        return ReplayTrade(side=side, mint=mint, outcome=outcome, reason=reason, rule=rule)
+    detail = FillDetail.from_ledger_payload(payload)
+    return ReplayTrade(
+        side=side,
+        mint=mint,
+        outcome=outcome,
+        reason=reason,
+        rule=rule,
+        price_avg=detail.price_avg,
+        venue_fee_lamports=detail.venue_fee_lamports,
+        network_cost_lamports=detail.network_cost_lamports,
+        latency_s=detail.latency_s,
+        filled_fraction=detail.filled_fraction,
+    )
 
 
 @dataclass
@@ -980,12 +1043,13 @@ async def _place_candidates(trading: _ReplayTrading) -> dict[str, Any]:
         if trading.refresh_marks is not None:
             await trading.refresh_marks()
         mint = candidate.token.mint
+        decision_id = trading.ids.ulid()
         payload = trading.place.spec.input_model.model_validate(
             {
                 "ticket_id": REPLAY_TICKET,
                 "mint": mint,
                 "side": "buy",
-                "decision_id": trading.ids.ulid(),
+                "decision_id": decision_id,
                 "size_lamports": REPLAY_BUY_LAMPORTS,
                 "max_slippage_bps": REPLAY_SLIPPAGE_BPS,
                 "approval_id": f"apr-{trading.ids.ulid()}",
@@ -996,7 +1060,16 @@ async def _place_candidates(trading: _ReplayTrading) -> dict[str, Any]:
         result = settled.model_dump(mode="json")
         outcome = str(result["status"])
         reason = str(result["reason"] or ("ok" if outcome == "filled" else ""))
-        trading.attempts.append(ReplayTrade(side="buy", mint=mint, outcome=outcome, reason=reason))
+        trading.attempts.append(
+            _replay_trade(
+                trading.store,
+                side="buy",
+                mint=mint,
+                outcome=outcome,
+                reason=reason,
+                decision_id=decision_id,
+            )
+        )
     return {"orders": len(trading.attempts)}
 
 
@@ -1022,12 +1095,13 @@ async def _place_rule_sell(
     """Submit one rule sell through the exit seat's granted ``exec.place`` (TOOL-009)."""
     if trading.exit_place is None:
         raise RuntimeError("exit seat has no granted exec.place")
+    decision_id = trading.ids.ulid()
     payload = trading.exit_place.spec.input_model.model_validate(
         {
             "ticket_id": ticket,
             "mint": mint,
             "side": "sell",
-            "decision_id": trading.ids.ulid(),
+            "decision_id": decision_id,
             "token_units": units,
             "max_slippage_bps": REPLAY_SLIPPAGE_BPS,
             "approval_id": f"apr-{trading.ids.ulid()}",
@@ -1040,7 +1114,15 @@ async def _place_rule_sell(
     outcome = str(result["status"])
     reason = str(result["reason"] or ("ok" if outcome == "filled" else ""))
     trading.attempts.append(
-        ReplayTrade(side="sell", mint=mint, outcome=outcome, reason=reason, rule=rule)
+        _replay_trade(
+            trading.store,
+            side="sell",
+            mint=mint,
+            outcome=outcome,
+            reason=reason,
+            rule=rule,
+            decision_id=decision_id,
+        )
     )
     return result
 
@@ -1086,6 +1168,7 @@ def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
         candidates=runtime.candidates,
         exit_place=exit_place,
         refresh_marks=refresh_marks,
+        store=runtime.store,
     )
 
     async def place_sell(mint: str, ticket: str, units: int, rule: str) -> dict[str, Any]:
@@ -1099,7 +1182,14 @@ def _replay_trading(runtime: ReplayRuntime) -> _ReplayTrading:
             )
         if row is not None:
             trading.attempts.append(
-                ReplayTrade(side="sell", mint=mint, outcome="filled", reason="ok", rule="graduated")
+                _replay_trade(
+                    trading.store,
+                    side="sell",
+                    mint=mint,
+                    outcome="filled",
+                    reason="ok",
+                    rule="graduated",
+                )
             )
         return row
 
