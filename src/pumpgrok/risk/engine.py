@@ -29,6 +29,7 @@ import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pumpgrok.core.adapter import EXIT_RULE_REASONS, OrderRequest, Side
 from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import Clock, IdFactory, calling_seat
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
@@ -478,9 +480,10 @@ class RiskEngine:
         }
 
     def evaluate_halts(self, *, source: str = "paper", correlation_id: str = "desk") -> str | None:
-        """Detect fresh daily-loss/drawdown breaches and append ``HaltSet``.
+        """Detect fresh daily-loss and drawdown breaches and append ``HaltSet``.
 
-        Returns the breach reason (``daily_loss``/``drawdown``) or ``None``.
+        Returns the breach reason (``daily_loss`` or ``drawdown``) or ``None``.
+        Raises ``CorruptState`` when day-start equity is not positive.
         Never clears: UTC rollover and the passage of time leave halts latched
         until the human halt-clear path appends ``HaltCleared`` (R5).
         """
@@ -526,10 +529,17 @@ class RiskEngine:
             return None
         day_start = int(state.day_start_equity_lamports)
         peak = int(state.peak_equity_lamports)
-        daily_limit = float(self._budget.daily_loss_halt_fraction)
+        if day_start <= 0:
+            raise CorruptState(
+                f"daily-loss check failed: day-start equity is {day_start}; "
+                "refusing to treat it as zero loss"
+            )
+        # Integer cross-multiplication: the loss in lamports over the day-start
+        # baseline meets the halt fraction without any float ratio.
+        loss_lamports = day_start - equity
+        limit = Fraction(str(self._budget.daily_loss_halt_fraction))
         drawdown_limit = float(self._budget.drawdown_halt_fraction)
-        daily_loss = (day_start - equity) / day_start if day_start > 0 else 0.0
-        if daily_loss >= daily_limit:
+        if loss_lamports * limit.denominator >= day_start * limit.numerator:
             with _suppress_integrity():
                 self._store.append(
                     **self._halt_row(
