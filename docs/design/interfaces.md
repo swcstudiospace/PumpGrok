@@ -1,3 +1,6 @@
+Historical design record
+This file describes the design at the time, not current behaviour.
+
 # interfaces - Core Python interfaces for the pumpgrok desk
 
 Tracker: SPE-17999 https://linear.app/swcstudio/issue/SPE-17999/n3-target-bot-roster-skill-manifests-tool-catalog-core-interfaces | Notion https://app.notion.com/p/3ffbc1a0c7ae8190b46ced6823fa3c90?pvs=204

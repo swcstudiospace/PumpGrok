@@ -2,6 +2,15 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 7: documentation upgrade
+
+### Changed
+
+- DOC-01 adds the CLAUDE.md codebase map at the repository root.
+- DOC-02 trims AGENTS.md to its rules, with the offline verify script scripts/verify_doc_commands.sh.
+- DOC-03 corrects README, ARCHITECTURE, SETUP, the replay skill and the four plugin manifests (version 0.1.0) to match the code, with docs/VENDOR_PIN.md recording the retired oracle.
+- DOC-04 banners historical design records, with consistency and banner tests under tests/docs.
+
 ## [Unreleased] - v3 Phase 6: integrity closure
 
 ### Changed
