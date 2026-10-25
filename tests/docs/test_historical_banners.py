@@ -30,6 +30,4 @@ FIXED_SET = (
 def test_file_begins_with_banner(relative: str) -> None:
     text = (REPO_ROOT / relative).read_text(encoding="utf-8")
     first = text.splitlines()[0].strip() if text else ""
-    assert first == BANNER_FIRST_LINE, (
-        f"{relative} first line is not the historical banner"
-    )
+    assert first == BANNER_FIRST_LINE, f"{relative} first line is not the historical banner"

@@ -80,9 +80,7 @@ def test_vendor_pin_carries_pin_and_retirement() -> None:
     assert HISTORICAL_PIN in text, (
         "docs/VENDOR_PIN.md no longer carries the historical provenance pin"
     )
-    assert "retir" in text.lower(), (
-        "docs/VENDOR_PIN.md carries no retirement statement"
-    )
+    assert "retir" in text.lower(), "docs/VENDOR_PIN.md carries no retirement statement"
 
 
 def _help_text(argv: list[str]) -> str:
@@ -93,7 +91,7 @@ def _help_text(argv: list[str]) -> str:
         shim = "import sys; from pumpgrok.cli import main; sys.exit(main())"
         cmd = [sys.executable, "-c", shim, *argv]
     proc = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=120, cwd=REPO_ROOT
+        cmd, check=False, capture_output=True, text=True, timeout=120, cwd=REPO_ROOT
     )
     assert proc.returncode == 0, f"help call {cmd} exited {proc.returncode}"
     return proc.stdout
@@ -120,6 +118,4 @@ def test_no_contradiction_strings_in_docs() -> None:
     for doc in COMMAND_DOCS:
         lowered = doc.read_text(encoding="utf-8").lower()
         for fragment in BANNED_FRAGMENTS:
-            assert fragment.lower() not in lowered, (
-                f"{doc.name} still carries {fragment!r}"
-            )
+            assert fragment.lower() not in lowered, f"{doc.name} still carries {fragment!r}"
