@@ -2,6 +2,33 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 6: integrity closure
+
+### Changed
+
+- Money crosses module boundaries as integer lamports or base units; Decimal is used only for ratios. Ledger export writes exact decimal strings (INT-01).
+- Missing or corrupt state fails closed with CorruptState instead of defaulting to zero, and a seat whose genesis equity is unreadable latches at construction (INT-02).
+- The daily-loss halt uses integer arithmetic; a non-positive start equity fails the check instead of reading as zero loss (INT-03).
+- One SOL-to-lamports conversion lives in core/units.py. The live gate takes now from its caller and reads no wall clock (INT-04, INT-06).
+- Randomness is confined to the approval-id and binding-key roots, enforced by the static guard. Production id and RNG factories take an explicit seed; DEFAULT_SEED stays in replay code (INT-05).
+- Long paper-adapter and replay-cycle functions are split into stage functions with unchanged behaviour (INT-08).
+- Trailing-stop peaks are restored from the ledger after a serve restart, through existing event types only (INT-09).
+- scripts/probe_curve_layout.py is a read-only curve layout probe. LAYOUT_STATUS stays ASSUMED, so entries stay fail-closed (INT-10). The probe ran with no account configured and made no RPC call.
+
+### Verified
+
+- The WR-07 replay ledger cleanup and the partial-sell venue fee scaling (INT-07) were already on main; regression tests were added.
+- Phase 6: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 6: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
+### Review: Omega CI runner migration (commits 5b5d6a1, 9772655)
+
+- Every job moved from GitHub-hosted runners to the self-hosted pool [self-hosted, linux, x64, omega-ci]. This reverses the earlier stance that self-hosted runners are not used, so it is a policy change and needs owner sign-off.
+- Fork pull requests are skipped on every job, so fork code never reaches the pool. Same-repository branches do run on it, so the trust boundary is who can push a branch.
+- Trivy moved from the SHA-pinned aquasecurity/trivy-action to the binary baked into the runner image. The binary is not version-pinned in the workflow, and its vulnerability database is fetched on every run.
+- Ephemerality of pool runners is not verified in this repository. Job-to-job state on a persistent runner is a risk until it is confirmed.
+- ci/tests/test_security_workflows.py no longer forbids self-hosted runners. Its Trivy severity, exit-code and ignore-unfixed assertions remain.
+
 ## [Unreleased] - Audit fixes
 
 ### Fixed
