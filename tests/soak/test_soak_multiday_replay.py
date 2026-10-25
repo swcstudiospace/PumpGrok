@@ -34,8 +34,8 @@ from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.scheduler import (
     DegradedState,
     Supervisor,
-    _replay_cycles,
 )
+from pumpgrok.supervisor.scheduler.replay_cycles import _replay_cycles
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "replay"
 REQUIRE_SOAK = os.environ.get("PUMPGROK_REQUIRE_SOAK") == "1"

@@ -24,7 +24,6 @@ from pumpgrok.supervisor.scheduler.degraded import (
     assert_no_skew,
     kill_switch_engaged,
 )
-from pumpgrok.supervisor.scheduler.replay_cycles import _replay_cycles
 from pumpgrok.supervisor.scheduler.replay_runtime import (
     DEFAULT_ROSTER_DIR,
     EXIT_SEAT,

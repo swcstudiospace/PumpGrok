@@ -34,9 +34,9 @@ from pumpgrok.supervisor.scheduler import (
     ROSTER,
     DegradedState,
     Supervisor,
-    _replay_cycles,
     serve_replay,
 )
+from pumpgrok.supervisor.scheduler.replay_cycles import _replay_cycles
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 REPO = Path(__file__).resolve().parents[2]
