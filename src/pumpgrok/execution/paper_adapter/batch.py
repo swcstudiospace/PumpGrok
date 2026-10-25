@@ -13,11 +13,13 @@ from pumpgrok.execution.paper_adapter.models import _at_iso, _rejection_from_row
 from pumpgrok.risk.engine import RULE_EXIT_REASONS
 
 
+if TYPE_CHECKING:
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.risk.engine import RiskEngine
+
+
 class _BatchMixin:
     if TYPE_CHECKING:
-        from pumpgrok.ledger.store import LedgerStore
-        from pumpgrok.risk.engine import RiskEngine
-
         _risk: RiskEngine
         _store: LedgerStore
 

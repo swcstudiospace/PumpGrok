@@ -14,13 +14,15 @@ from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
 
 
+if TYPE_CHECKING:
+    from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.risk.limits import EngineLimits
+
+
 class _MarksMixin:
     if TYPE_CHECKING:
-        from pumpgrok.core.ids import Clock, IdFactory
-        from pumpgrok.execution.fees import FeeModel
-        from pumpgrok.ledger.store import LedgerStore
-        from pumpgrok.risk.limits import EngineLimits
-
         _clock: Clock
         _fees: FeeModel
         _frozen_marks: dict[str, int]
