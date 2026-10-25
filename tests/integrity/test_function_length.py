@@ -1,7 +1,7 @@
 """Function-length guard for the INT-08 stage split (INT-08).
 
 ``_place_buy`` and ``_place_order`` (execution/paper_adapter/buy.py) plus
-``_replay_cycles`` (supervisor/scheduler.py) were split into stage
+``_replay_cycles`` (supervisor/scheduler/replay_cycles.py) were split into stage
 functions with unchanged public signatures and no behavior change. This
 module pins the split: each orchestrator is at most 60 lines (AST span,
 ``end_lineno - lineno``), and the extracted stage functions still exist.
@@ -20,7 +20,7 @@ _MAX_LINES = 60
 
 _ORCHESTRATORS = {
     "execution/paper_adapter/buy.py": ("_place_buy", "_place_order"),
-    "supervisor/scheduler.py": ("_replay_cycles",),
+    "supervisor/scheduler/replay_cycles.py": ("_replay_cycles",),
 }
 
 _STAGES = {
@@ -33,7 +33,7 @@ _STAGES = {
         "_buy_fill_rows",
         "_buy_settle",
     ),
-    "supervisor/scheduler.py": (
+    "supervisor/scheduler/replay_cycles.py": (
         "_replay_chief",
         "_replay_scout",
         "_replay_mark_open",
