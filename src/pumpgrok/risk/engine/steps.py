@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from fractions import Fraction
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pumpgrok.core.adapter import OrderRequest
+    from pumpgrok.core.approvals import ApprovalRecord
+    from pumpgrok.core.ids import Clock
     from pumpgrok.core.risk_budget import RiskBudget
+    from pumpgrok.engine.reputation import ReputationBook
     from pumpgrok.ledger.store import LedgerStore
     from pumpgrok.risk.limits import EngineLimits
 
@@ -32,9 +38,21 @@ class _EngineSteps:
         _store: LedgerStore
         _budget: RiskBudget
         _limits: EngineLimits
+        _clock: Clock
+        _mode: Literal["paper", "live"]
+        _autonomy: Literal["manual-ticket", "autonomous-paper"]
+        _reputation: ReputationBook | None
+        _live_check: Callable[[], list[str]] | None
+        _observe_only: frozenset[str]
+        _get_reserves: Callable[[str], tuple[int, int] | None] | None
 
         def _fold(self) -> LedgerState: ...
         def _now_ts(self) -> str: ...
+        def _mint_autonomous(
+            self, order: OrderRequest, exit_reason: str | None
+        ) -> ApprovalRecord: ...
+        def _creator_of(self, mint: str, state: LedgerState) -> str: ...
+        def _creator_open(self, creator: str, state: LedgerState) -> bool: ...
 
     def _halt_row(
         self,
