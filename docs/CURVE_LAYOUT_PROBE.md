@@ -1,7 +1,7 @@
 # Bonding-curve layout probe (INT-10, R65)
 
 Status: ASSUMED
-Error: probe not run in this worktree: live network call deferred to the orchestrator after merge; run `uv run python scripts/probe_curve_layout.py` against the configured public RPC to refresh this fixture; layout stays ASSUMED
+Error: no bonding-curve account configured; set BONDING_CURVE_ACCOUNT or pass --account <pubkey>; no RPC call made; layout stays ASSUMED
 
 Endpoint: https://api.mainnet-beta.solana.com
 Method: getAccountInfo (read-only, no keys)
