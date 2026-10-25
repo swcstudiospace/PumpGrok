@@ -17,37 +17,38 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 
 EPOCH_START = 1767225600.0  # 2026-01-01T00:00:00Z
+NOW = "2026-10-20T00:00:00Z"
 
 
 def test_gate_reports_nine_ids_in_order(tmp_path: Path) -> None:
     gate = LiveGate(mode="live", environ={}, root=tmp_path)
-    evaluated = gate.evaluate()
+    evaluated = gate.evaluate(now=NOW)
     assert tuple(item.id for item in evaluated) == PRECONDITION_IDS
     assert [item.number for item in evaluated] == list(range(1, 10))
     # R21/D4: row 1 needs [live] enabled=true; the mode flag alone leaves it unmet.
     assert evaluated[0].met is False
     assert evaluated[0].reason == "effective mode is live but [live] enabled is not true"
-    assert gate.check() == list(PRECONDITION_IDS)
+    assert gate.check(now=NOW) == list(PRECONDITION_IDS)
     enabled = LiveGate(mode="live", environ={}, root=tmp_path, live_enabled=True)
-    assert enabled.evaluate()[0].met is True
-    assert "mode_live" not in enabled.check()
+    assert enabled.evaluate(now=NOW)[0].met is True
+    assert "mode_live" not in enabled.check(now=NOW)
 
 
 def test_precondition_two_is_met_only_by_exact_env_value(tmp_path: Path) -> None:
     gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    assert gate.evaluate()[1].met is True
-    assert "live_enable_env" not in gate.check()
+    assert gate.evaluate(now=NOW)[1].met is True
+    assert "live_enable_env" not in gate.check(now=NOW)
     other = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "yes"}, root=tmp_path)
-    assert other.evaluate()[1].met is False
+    assert other.evaluate(now=NOW)[1].met is False
 
 
 def test_paper_mode_fails_precondition_one(tmp_path: Path) -> None:
     gate = LiveGate(mode="paper", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    assert gate.check()[0] == "mode_live"
+    assert gate.check(now=NOW)[0] == "mode_live"
 
 
 def test_refusal_block_lists_each_unmet_id(tmp_path: Path) -> None:
-    lines = refusal_lines(LiveGate(mode="live", environ={}, root=tmp_path).evaluate())
+    lines = refusal_lines(LiveGate(mode="live", environ={}, root=tmp_path).evaluate(now=NOW))
     assert lines[0].startswith("LIVE GATE: refusing to start in mode=live. 9 of 9")
     assert any(line.startswith("  [ ] 8 adapter_registered ") for line in lines)
     assert any(line.startswith("  [ ] 1 mode_live ") for line in lines)

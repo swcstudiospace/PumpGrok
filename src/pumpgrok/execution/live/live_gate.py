@@ -22,12 +22,11 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
-from pumpgrok.replay.clock import WallClock
 
 MIN_PAPER_DAYS = 14
 MIN_CLOSED_TRADES = 50
@@ -71,7 +70,13 @@ class LiveGate:
         self._root = root
         self._live_enabled = live_enabled
 
-    def evaluate(self) -> tuple[Precondition, ...]:
+    def evaluate(self, *, now: str) -> tuple[Precondition, ...]:
+        """Evaluate every precondition as of ``now``.
+
+        ``now`` is a YYYY-MM-DD date or an ISO-8601 timestamp (only the date
+        part is used). The caller reads its injected Clock; the gate never
+        reads wall time.
+        """
         confirmation = self._root / "var" / "live_confirmation.json"
         mode_live = self._mode == "live"
         live_flag = self._live_enabled is True
@@ -83,7 +88,7 @@ class LiveGate:
         else:
             mode_reason = f"effective mode is {self._mode}"
         env_enabled = self._environ.get("PUMPGROK_LIVE_ENABLE", "").strip() == "1"
-        days_met, days_reason, perf_met, perf_reason = _paper_window(self._root)
+        days_met, days_reason, perf_met, perf_reason = _paper_window(self._root, now)
         rows: tuple[tuple[bool, str], ...] = (
             (row1_met, mode_reason),
             (
@@ -110,12 +115,12 @@ class LiveGate:
             )
         )
 
-    def check(self) -> list[str]:
+    def check(self, *, now: str) -> list[str]:
         """Ids of every unmet precondition, in R21 order. Empty means the gate is open."""
-        return [item.id for item in self.evaluate() if not item.met]
+        return [item.id for item in self.evaluate(now=now) if not item.met]
 
 
-def _paper_window(root: Path) -> tuple[bool, str, bool, str]:
+def _paper_window(root: Path, now: str) -> tuple[bool, str, bool, str]:
     """Preconditions 3 and 4 from source=paper ledger events only.
 
     Read-only: guards the path and opens sqlite with ``mode=ro`` so the check
@@ -133,7 +138,7 @@ def _paper_window(root: Path) -> tuple[bool, str, bool, str]:
     if not paper:
         reason = f"no source=paper events in {PAPER_LEDGER_PATH}"
         return (False, reason, False, reason)
-    return (*_paper_days(paper), *_paper_perf(paper))
+    return (*_paper_days(paper, now), *_paper_perf(paper))
 
 
 def _read_gate_rows(ledger: Path) -> list[tuple[str, str, str, str]] | None:
@@ -155,10 +160,10 @@ def _read_gate_rows(ledger: Path) -> list[tuple[str, str, str, str]] | None:
         return None
 
 
-def _paper_days(paper: list[tuple[str, str, str]]) -> tuple[bool, str]:
+def _paper_days(paper: list[tuple[str, str, str]], now: str) -> tuple[bool, str]:
     """Precondition 3: elapsed UTC days since the first source=paper event."""
     first_day = str(paper[0][0])[:10]
-    today = datetime.fromtimestamp(WallClock().now(), UTC).strftime("%Y-%m-%d")
+    today = str(now)[:10]
     span = datetime.strptime(today, "%Y-%m-%d") - datetime.strptime(first_day, "%Y-%m-%d")
     days = max(0, span.days)
     reason = f"{days} of {MIN_PAPER_DAYS} days on source=paper events"

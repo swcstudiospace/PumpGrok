@@ -573,7 +573,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         live_enabled=settings.live.enabled,
     )
     if settings.effective_mode == "live":
-        preconditions = gate.evaluate()
+        preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
@@ -1188,7 +1188,7 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
         body = render_daily(DailyReport.build(ledger, day, mode=mode))
     else:
         week = _report_date(args.week, "--week")
-        body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd()))
+        body = render_weekly(WeeklyReport.build(ledger, week, mode=mode, root=Path.cwd(), now=week))
     if args.out:
         target = Path(str(args.out))
         target.parent.mkdir(parents=True, exist_ok=True)

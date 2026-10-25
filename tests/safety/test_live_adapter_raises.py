@@ -21,6 +21,7 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 
 EPOCH_START = 1767225600.0
+NOW = "2026-10-20T00:00:00Z"
 MINT = "So11111111111111111111111111111111111111112"
 
 
@@ -73,5 +74,5 @@ async def test_live_adapter_cancel_raises_and_audits(tmp_path: Path) -> None:
 def test_adapter_precondition_unmet_because_nothing_ships(tmp_path: Path) -> None:
     """INV-C-03: precondition (8) is unmet with no implementation."""
     gate = LiveGate(mode="live", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
-    by_id = {item.id: item for item in gate.evaluate()}
+    by_id = {item.id: item for item in gate.evaluate(now=NOW)}
     assert by_id["adapter_registered"].met is False
