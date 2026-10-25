@@ -227,10 +227,10 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
     token.creator = token.creator or info.get("creator")
     if info.get("market_cap") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            token.market_cap_sol = float(info["market_cap"])
+            token.market_cap_sol = _to_lamports(info["market_cap"])
     if info.get("virtual_sol_reserves") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            token.sol_in_curve = float(info["virtual_sol_reserves"]) / 1e9
+            token.sol_in_curve = _to_base_units(info["virtual_sol_reserves"])
     return token
 
 
