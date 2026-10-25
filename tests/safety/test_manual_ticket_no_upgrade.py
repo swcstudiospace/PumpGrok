@@ -2,8 +2,9 @@
 
 Under manual-ticket no parameter promotion, harness search or autonomy
 change is performed or persisted: a paper cycle leaves the level at
-manual-ticket, appends no autonomy ConfigChanged row, and writes no trial
-or backtest artifact. Offline only: recorded fixtures, no network.
+manual-ticket, appends no autonomy ConfigChanged row, writes no active-set
+record and no promotion evidence, and writes no trial or backtest
+artifact. Offline only: recorded fixtures, no network.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pumpgrok.cli import main
+from pumpgrok.ledger.active_set import read_active_set
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 
@@ -24,6 +26,15 @@ def _autonomy_changes(store: LedgerStore) -> list[dict]:
         for row in store.read(types=["ConfigChanged"], limit=None)
         if isinstance(row.get("payload"), dict)
         and "autonomy_level" in row["payload"].get("keys_changed", [])
+    ]
+
+
+def _active_set_changes(store: LedgerStore) -> list[dict]:
+    return [
+        row
+        for row in store.read(types=["ConfigChanged"], limit=None)
+        if isinstance(row.get("payload"), dict)
+        and "active_param_set" in row["payload"].get("keys_changed", [])
     ]
 
 
@@ -47,6 +58,9 @@ def test_manual_ticket_cycle_performs_no_upgrade(tmp_path, monkeypatch) -> None:
     try:
         assert read_autonomy(check) == "manual-ticket"
         assert _autonomy_changes(check) == []
+        assert read_active_set(check) is None
+        assert _active_set_changes(check) == []
+        assert not (tmp_path / "var" / "upgrade").exists()
     finally:
         check.close()
 
@@ -54,5 +68,6 @@ def test_manual_ticket_cycle_performs_no_upgrade(tmp_path, monkeypatch) -> None:
     replay_store = LedgerStore(str(replay_ledger))
     try:
         assert _autonomy_changes(replay_store) == []
+        assert _active_set_changes(replay_store) == []
     finally:
         replay_store.close()
