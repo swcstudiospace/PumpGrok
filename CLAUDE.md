@@ -9,7 +9,7 @@ approved or vetoed by risk before it reaches the paper fill path in
 
 - Ten supervised seats (`bot-00-chief` through `bot-09-journal`) are defined in `ownership.yaml` and rostered in `src/pumpgrok/supervisor/scheduler.py`.
 - Seat prompts live in `agents/*.md` (ten seat files plus `agents/README.md`).
-- The 35 tool skills live in `skills/*/` (35 directories, e.g. `skills/market-price/SKILL.md`).
+- The 35 tool skills live in `skills/*/` (35 directories, e.g. `skills/momentum-signals/SKILL.md`).
 - Package version is `0.1.0` per `pyproject.toml` (`version = "0.1.0"`).
 
 ## Stack
@@ -35,7 +35,7 @@ fixtures, and operator scripts sit alongside it at the repo root.
 - Execution and paper fills in `src/pumpgrok/execution/` (e.g. `src/pumpgrok/execution/paper_adapter.py`).
 - Risk engines and gates in `src/pumpgrok/risk/` (e.g. `src/pumpgrok/risk/engine.py`).
 - Replay clock, fixtures, and runner in `src/pumpgrok/replay/` (e.g. `src/pumpgrok/replay/runner.py`).
-- Seat prompts in `agents/` (ten `bot-*.md` files plus `agents/README.md`).
+- Seat prompts in `agents/` (ten role files such as `agents/risk.md` plus `agents/README.md`).
 - Tool skills in `skills/*/` (35 directories, each with `skills/<name>/SKILL.md`).
 - Generation rules in `rules/` (e.g. `rules/pumpgrok-team.mdc`).
 - Event and tool contracts in `contracts/` (`contracts/events/`, `contracts/tool-rosters/`).
@@ -60,7 +60,7 @@ here. Full gate bundle is `make check` (see `Makefile`).
 One supervisor tick drives ten seats in roster order; risk approves every order
 and paper fills settle against the curve account.
 
-- Ten-seat tick loop lives in `src/pumpgrok/supervisor/scheduler.py` (`TICK_S = 1`, seats `00..09` each in their own `asyncio.Task`).
+- Ten-seat tick loop lives in `src/pumpgrok/supervisor/scheduler.py`; due seats start in roster order each tick (`TICK_S = 1.0`, `src/pumpgrok/supervisor/scheduler.py:89-90`).
 - One-shot replay builds a `PaperAdapter` in `src/pumpgrok/supervisor/scheduler.py` (`run_once_replay`).
 - Pre-graduation fills come from bonding-curve reserves via `src/pumpgrok/execution/paper_adapter.py`, never from a quote.
 - `src/pumpgrok/tools/market/price.py` reads the curve account with `getAccountInfo` and decodes it with `src/pumpgrok/tools/onchain/curve_layout.py`; it has no Jupiter path.
@@ -93,7 +93,7 @@ Planning state and per-task evidence live outside the product tree.
 Paper-only by default; live mode refuses to start unless every precondition in
 `src/pumpgrok/cli.py` is met.
 
-- This release runs only `run --mode paper --once --replay <dir>` per `src/pumpgrok/cli.py`; any other `run` combination exits `EXIT_NOT_IMPLEMENTED` from `src/pumpgrok/cli.py`.
+- `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli.py`, `_run`, lines 581-596).
 - `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli.py` and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli.py`) when any precondition is unmet.
 - Secrets arrive only as `PUMPGROK_*` env vars per `src/pumpgrok/config/settings.py`; key-bearing endpoint values are refused at startup (see `RpcSettings` in `src/pumpgrok/config/settings.py`).
 - Paid-provider keys travel in `api_key` and are sent as a header, never embedded in endpoint URLs (see `src/pumpgrok/config/settings.py`).
