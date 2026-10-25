@@ -1,13 +1,14 @@
 # Vendor pin
 
-The screening engine under `vendor/grokbot-pumpfun/` is the grokbot-pumpfun engine, vendored as
-regular files (not a git submodule or gitlink) so that a clone of PumpGrok contains the source.
+The screening engine formerly under `vendor/grokbot-pumpfun/` was the grokbot-pumpfun engine,
+vendored as regular files (not a git submodule or gitlink). The tree was retired in Phase 4
+(STRUCT-006); the pin below is the historical provenance record of the retired oracle.
 
 - Upstream: https://github.com/zostaff/grokbot-pumpfun
 - Pin: `409e74c905faa0e9de42e918efe2c604f206856e` (branch `docs/english-markdown`)
 - License: MIT (`vendor/grokbot-pumpfun/LICENSE`)
-- Moved from: `vendor/grokbot-pumpfun/PUMPGROK.md` (MIGRATION_MAP row 86). The vendor tree itself
-  retires in a later batch (STRUCT-006), at which point this file is the only in-repo pin record.
+- Moved from: `vendor/grokbot-pumpfun/PUMPGROK.md` (MIGRATION_MAP row 86). The vendor tree was
+  retired in Phase 4 (STRUCT-006); this file is the only in-repo pin record, kept as the historical provenance record of the retired oracle.
 
 ## Desk rules that override upstream docs
 
