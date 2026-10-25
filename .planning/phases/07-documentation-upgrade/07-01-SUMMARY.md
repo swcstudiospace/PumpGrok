@@ -9,6 +9,7 @@ New root `CLAUDE.md` codebase map with the nine criterion-2 sections; every bull
 | Task | Commit | Files |
 | ---- | ------ | ----- |
 | Write root CLAUDE.md | d42bee4 | `CLAUDE.md` (new) |
+| Fix four source-check statements (Main follow-up) | 5c068e3 | `CLAUDE.md` (4 lines) |
 
 ## Changed files
 
@@ -16,7 +17,16 @@ New root `CLAUDE.md` codebase map with the nine criterion-2 sections; every bull
 
 ## Deviations
 
-None — plan executed exactly as written. Only `CLAUDE.md` touched (the plan's sole `files_modified` entry). No `scripts/verify_doc_commands.sh`, no `CHANGELOG.md`.
+None from the plan — only `CLAUDE.md` touched (the plan's sole `files_modified` entry). No `scripts/verify_doc_commands.sh`, no `CHANGELOG.md`.
+
+## Post-acceptance corrections (Main follow-up, commit 5c068e3)
+
+1. Line 12: `skills/market-price/SKILL.md` did not exist — replaced with `skills/momentum-signals/SKILL.md` (verified present).
+2. Line 38: `agents/` has no `bot-*.md` files (role names: `chief.md`, `risk.md`, …) — replaced with 'ten role files such as `agents/risk.md`'.
+3. Line 63: unsourced `asyncio.Task` clause — replaced with roster-order wording citing `TICK_S = 1.0`, `src/pumpgrok/supervisor/scheduler.py:89-90`.
+4. Line 96: 'runs only `--mode paper --once --replay`' was wrong (`--serve --replay` also supported) — replaced with the two-mode sentence citing `src/pumpgrok/cli.py` `_run` lines 581-596.
+
+Acceptance greps re-run after the fix: exit 0.
 
 ## Acceptance commands (exact, run from worktree root)
 
