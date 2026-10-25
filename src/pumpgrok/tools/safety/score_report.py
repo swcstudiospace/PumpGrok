@@ -5,7 +5,9 @@ top_holders, deployer_history, market.liquidity) and scores 0..100
 (100 = safest) with per-check reasons. Thresholds come from config
 (``SafetyThresholds``) with an optional caller override; any check without
 data returns ``blind``, never an exception. A blind check on a required
-id, or a hard top-5 veto, forces ``verdict_recommendation = KILL``.
+id, or a hard top-5 veto, forces ``verdict_recommendation = KILL``, except
+the SAFE-4/SAFE-8 holder pair stays advisory while no paid RPC provider is
+recorded (amendment 2026-10-25).
 Recommendation only: RISK issues the verdict from the journaled report.
 
 ``creator`` is caller-supplied (creation event): the mint account carries
@@ -39,6 +41,7 @@ from pumpgrok.tools.onchain.top_holders import TopHoldersIn, run_top_holders
 from pumpgrok.tools.safety.checks import (
     ADVISORY_IDS,
     CHECK_IDS,
+    HOLDER_ADVISORY_PAIR,
     REQUIRED_IDS,
     CheckId,
     CheckResult,
@@ -51,6 +54,7 @@ from pumpgrok.tools.safety.checks.readers import (
     check_token2022_extensions,
     check_top10_concentration,
 )
+from pumpgrok.tools.safety.provider import paid_rpc_provider_recorded
 
 _WARN_PENALTY = Decimal(10)
 _FAIL_PENALTY = Decimal(25)
@@ -81,13 +85,19 @@ class ScoreReportIn(ToolInput):
 
 
 class ScoreReportOut(ToolOutput):
-    """Scored report; ``blind_checks`` names every check without data."""
+    """Scored report; ``blind_checks`` names every check without data.
+
+    ``advisory_blind_checks`` names the SAFE-4/SAFE-8 holder pair while its
+    BLIND rows stay advisory (amendment 2026-10-25, no paid RPC recorded);
+    each such row keeps status blind with its reason in ``checks``.
+    """
 
     score: int = Field(ge=0, le=100)
     verdict_recommendation: Literal["CLEAR", "CONDITIONAL", "KILL"]
     hard_veto: bool
     checks: list[CheckResult]
     blind_checks: list[str] = Field(default_factory=list)
+    advisory_blind_checks: list[str] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
     thresholds_used: dict[str, float] = Field(default_factory=dict)
 
@@ -428,7 +438,19 @@ async def run_score_report(
     top = readings.top
     top5 = Decimal(str((top or {}).get("top5_share", "0")))
     hard_veto = bool(top is not None and top5 > Decimal(str(active.top5_share_veto)))
-    blind_required = [r.id for r in rows if r.status == "blind" and r.id in REQUIRED_IDS]
+    advisory_active = not paid_rpc_provider_recorded()
+    blind_required = [
+        r.id
+        for r in rows
+        if r.status == "blind"
+        and r.id in REQUIRED_IDS
+        and not (advisory_active and r.id in HOLDER_ADVISORY_PAIR)
+    ]
+    advisory_blind_checks = [
+        r.id
+        for r in rows
+        if r.status == "blind" and advisory_active and r.id in HOLDER_ADVISORY_PAIR
+    ]
     verdict = _verdict(score, hard_veto or bool(blind_required), active)
 
     out = {
@@ -437,6 +459,7 @@ async def run_score_report(
         "hard_veto": hard_veto,
         "checks": [r.model_dump() for r in rows],
         "blind_checks": [r.id for r in rows if r.status == "blind"],
+        "advisory_blind_checks": advisory_blind_checks,
         "evidence": [e.model_dump() for e in evidence],
         "thresholds_used": {k: float(getattr(active, k)) for k in _KNOWN_THRESHOLD_KEYS},
         "meta": meta_now(
