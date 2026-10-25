@@ -1,0 +1,64 @@
+# Upgrade bounds (UPG-01, D-07, G-02). Version-controlled: a value outside
+# these ranges is rejected with OutOfBoundsError, never clamped silently.
+#
+# The filter and exits range tables cover every tunable CandidateParams
+# accepts. Each entry names its key with an inclusive min and max. Bool
+# entries admit both values with min false and max true; the bool type
+# itself is the bound. min_total_score is deliberately absent: it is an
+# inert scoring knob that CandidateParams refuses, so it is not tunable.
+
+[filter.min_unique_buyers]
+min = 0
+max = 1000
+
+[filter.max_curve_progress]
+min = 0.0
+max = 1.0
+
+[filter.require_metadata]
+min = false
+max = true
+
+[filter.min_age_seconds]
+min = 0.0
+max = 86400.0
+
+[filter.max_risk_score]
+min = 0.0
+max = 10.0
+
+[filter.block_creator_after_rugs]
+min = 0
+max = 100
+
+[filter.rug_loss_pct]
+min = 0.0
+max = 100.0
+
+[filter.one_position_per_creator]
+min = false
+max = true
+
+[filter.forget_creators_after_days]
+min = 0.0
+max = 365.0
+
+[exits.stop_loss_pct]
+min = 0.0
+max = 100.0
+
+[exits.take_profit_pct]
+min = 0.0
+max = 1000.0
+
+[exits.trailing_stop_pct]
+min = 0.0
+max = 100.0
+
+[exits.max_hold_seconds]
+min = 0.0
+max = 604800.0
+
+[exits.stop_loss_poll_seconds]
+min = 1.0
+max = 3600.0
