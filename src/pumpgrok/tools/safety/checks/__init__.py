@@ -51,7 +51,13 @@ REQUIRED_IDS: frozenset[str] = frozenset(
     }
 )
 
+
 ADVISORY_IDS: frozenset[str] = frozenset({"transfer_tax", "honeypot", "bundler_cluster"})
+
+# Amendment 2026-10-25: SAFE-4 (top10_concentration) and SAFE-8
+# (deployer_history) report BLIND as advisory while no paid RPC provider is
+# recorded; every other required blind still forces KILL.
+HOLDER_ADVISORY_PAIR: frozenset[str] = frozenset({"top10_concentration", "deployer_history"})
 
 
 class CheckResult(BaseModel):
