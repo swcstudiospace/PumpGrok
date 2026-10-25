@@ -15,7 +15,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [ ] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
 - [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
 - [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
-- [ ] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
+- [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
 - [ ] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
 
 ## Phase Details
@@ -154,16 +154,16 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 **Deliverables**:
 
-- [ ] `src/pumpgrok/config/upgrade_bounds.toml`: declared bounds in version-controlled config (UPG-01)
-- [ ] `src/pumpgrok/upgrade/` new package: content-hashed parameter sets, the promotion gate, the evidence record, exact rollback and escalation (UPG-01 to UPG-04)
-- [ ] Ledger event for the active parameter set in `src/pumpgrok/ledger/` (UPG-01, UPG-03)
-- [ ] SAFE-4 and SAFE-8 advisory BLIND handling with the blind reason in the verdict, in `src/pumpgrok/risk/` (UPG-05)
-- [ ] Constitution amendment applied exactly as approved on 2026-10-25: `rules/pumpgrok-team.mdc`, `agents/risk.md`, regenerated prompts and agent files via `scripts/generate-templates.py`, `docs/RISK_POLICY.md`, `.planning/PROJECT.md` (UPG-06)
-- [ ] Frozen copy of the approved amendment text, used as the test oracle in `tests/safety/test_constitution_amendment.py` (UPG-06)
-- [ ] `tests/upgrade/` and `tests/safety/test_blind_advisory.py`
-- [ ] `CHANGELOG.md` before and after replay hash lines for Phase 9
+- [x] `src/pumpgrok/config/upgrade_bounds.toml`: declared bounds in version-controlled config (UPG-01)
+- [x] `src/pumpgrok/upgrade/` new package: content-hashed parameter sets, the promotion gate, the evidence record, exact rollback and escalation (UPG-01 to UPG-04)
+- [x] Ledger event for the active parameter set in `src/pumpgrok/ledger/` (UPG-01, UPG-03)
+- [x] SAFE-4 and SAFE-8 advisory BLIND handling with the blind reason in the verdict, in `src/pumpgrok/tools/safety/` (UPG-05)
+- [x] Constitution amendment applied exactly as approved on 2026-10-25: `rules/pumpgrok-team.mdc`, `agents/risk.md`, regenerated prompts and agent files via `scripts/generate-templates.py`, `docs/RISK_POLICY.md`, `.planning/PROJECT.md` (UPG-06)
+- [x] Frozen copy of the approved amendment text, used as the test oracle in `tests/safety/test_constitution_amendment.py` (UPG-06)
+- [x] `tests/upgrade/` and `tests/safety/test_blind_advisory.py`
+- [x] `CHANGELOG.md` before and after replay hash lines for Phase 9
 
-**Plans**: TBD
+**Plans**: 7 complete (09-01 to 09-07; 09-06 carries the risk-only clause 3 override and the content-based locators). Verification: `.planning/phases/09-bounded-paper-self-upgrade/09-VERIFICATION.md` (passed, 10 of 10 criteria).
 
 ### Phase 10: Live readiness, kept disabled
 
@@ -202,5 +202,5 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
 | 7. Documentation upgrade | 6/6 | Complete: verified 9/9 (07-VERIFICATION.md) | 2026-10-25 |
 | 8. Backtest and paper evaluation | 10/10 | Complete: verified 13/13 (08-VERIFICATION.md) | 2026-10-25 |
-| 9. Bounded paper self-upgrade | 0/TBD | Not planned | - |
+| 9. Bounded paper self-upgrade | 7/7 | Complete: verified 10/10 (09-VERIFICATION.md) | 2026-10-25 |
 | 10. Live readiness, kept disabled | 0/TBD | Not planned | - |
