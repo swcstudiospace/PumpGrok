@@ -103,11 +103,12 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
 - Phase 8 correction set: the first Phase 8 evaluator scored candidates with a SHA-256 digest of the seed, parameter hash and fold ids. No fills fed it, and the report showed zero fees and no metrics. That was a fabricated evaluator. The correction set (08-08 to 08-10, see 08-CORRECTION.md) replaced it with replayed net realized lamports, measured metrics, and conservative eligibility (promotion_eligible false without a passing paper comparison). The plan checker had not caught it; its checklist now includes a hash-as-score check.
 - Phase 8 result: smoke-10m replay hash unchanged (b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d). Per-fill fields are in memory only (G-10), so the ledger bytes did not change. Criterion 12's rationale wording is inaccurate; the recording obligation is met.
+- gsd-autonomous run defaults (graph ut-mvocrh76-02f3c9a9): q1 touched code plus mapped TODOs; q2 current milestone only; q3 defer unmapped TODOs; q4 only paths a phase names. Disclosure: the decomposition edited risk/engine and execution/paper_adapter, which are safety paths, under the TODO scope. The changes are moves only, with gates green. The owner should accept or revert them.
 
 ## Deferred and backlog (not in v3 requirements)
 
-- engine/monitor.py:46 CURVE_COMPLETION_SOL is a float SOL constant that backs a characterization pin.
-- Codebase-wide module decomposition beyond INT-08's three functions.
+- Resolved in this run: the float SOL completion constant is gone. monitor.py and its characterization test use integer lamports only (R28, commit 968a733).
+- Resolved in this run: the four oversized modules (paper_adapter, cli, scheduler, risk engine) are now packages, and no module in them exceeds 800 lines. Gates are green at 7a0b6eb with the replay hash unchanged, and no suppression marker was added. Other large modules were not decomposed.
 - Phase 3 human actions: G-4 consumer acknowledgements; live bonding-curve confirmation (needs an account).
 - Omega CI migration (commits 5b5d6a1 and 9772655): owner sign-off needed. Recorded in CHANGELOG under phase 6.
 - The PR 14 waiver in .github/workflows/gates.yml is stale, since PR 14 merged. Remove it in the same change as the milestone waiver.
@@ -140,6 +141,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-25T18:18:40Z, after Phase 10 verification.
+- Last update: 2026-10-25, after the gsd-autonomous run paused at Phase 6.
 - Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected) and the four VERIFICATION reports for phases 7 to 10.
-- Next: owner decisions (see Pauses): approved_by for the phase 6 receipt; G-1 and G-2 route (option A owner waiver or option B RISK ownership change). Then the phase 6 gate, the milestone audit, and ultrathink-ship. Tracker rows (Notion and Linear) remain unanswered.
+- Next: pending decisions for Phase 6 (BLOCKER_PAUSE): P6-ROUTE (G-1 route: route B RISK ownership change, or hold) and P6-APPROVED-BY (hold, no approver recorded). Milestone close and ultrathink-ship are blocked until Phase 6 is verified. Linear rows are skipped by owner decision; Notion rows exist for graph ut-mvocrh76-02f3c9a9.
