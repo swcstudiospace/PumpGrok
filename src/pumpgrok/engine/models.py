@@ -23,6 +23,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+#: Integer price scale (INT-01). Per-token prices are fractional lamports, so
+#: the engine carries them as integers: ``scaled = Decimal(price) * PRICE_SCALE``
+#: rounded half-up. Ratios (shares, PnL percent) stay float/Decimal.
+PRICE_SCALE = 10**9
+
 
 class Token(BaseModel):
     """A new token on the pump.fun bonding curve."""
@@ -69,7 +74,7 @@ class Holder(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     address: str
-    amount: float = 0.0
+    amount: int = 0  # token base units
     share: float = 0.0  # share of total supply, 0..1
     is_creator: bool = False
 
@@ -82,8 +87,8 @@ class Trade(BaseModel):
     signature: str | None = None
     wallet: str
     is_buy: bool = True
-    sol_amount: float = 0.0
-    token_amount: float = 0.0
+    sol_amount: int = 0  # lamports
+    token_amount: int = 0  # token base units
     timestamp: float = 0.0
     slot: int | None = None
 
@@ -252,6 +257,9 @@ class ExitPosition(BaseModel):
     Named apart from ``core/adapter.py`` ``Position`` on purpose: the
     adapter tracks integer base units and ledger marks, while this tracks
     the entry/peak prices the trailing stop needs.
+
+    Money is integer-only (INT-01): prices are ``PRICE_SCALE``-scaled
+    integers, ``sol_spent`` is lamports, ``token_amount`` is base units.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -259,10 +267,10 @@ class ExitPosition(BaseModel):
     mint: str
     symbol: str | None = None
     creator: str | None = None
-    entry_price: float = 0.0
-    peak_price: float = 0.0  # max since entry, for the trailing stop
-    sol_spent: float = 0.0
-    token_amount: float = 0.0
+    entry_price: int = 0  # scaled by PRICE_SCALE
+    peak_price: int = 0  # scaled by PRICE_SCALE; max since entry, for the trailing stop
+    sol_spent: int = 0  # lamports
+    token_amount: int = 0  # token base units
     opened_at: float = 0.0
     tx_hash: str = ""
     score: float = 0.0

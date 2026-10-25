@@ -8,6 +8,7 @@ book lands (Phase 4+).
 """
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import Field
@@ -36,7 +37,7 @@ class DeployerHistoryOut(ToolOutput):
     tokens_seen: int = Field(ge=0)
     tokens_bought: int = Field(ge=0)
     rugs: int = Field(ge=0)
-    worst_pnl_pct: float | None = None
+    worst_pnl_pct: Decimal | None = None
     is_known_bad: bool = False
     first_seen_at: datetime | None = None
     recent_signatures: list[str] = Field(default_factory=list)
