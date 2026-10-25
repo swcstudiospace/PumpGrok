@@ -8,30 +8,37 @@ Protocol (CONTEXT D-05, D-06, D-10 and G-05):
 
 - The holdout is the final HOLDOUT_FRACTION of the dataset time span; no
   tuning step may read it.
-- Tuning scores every candidate over walk-forward folds confined to the
-  pre-holdout region and records each trial in the TrialLedger.
+- Tuning scores every candidate over walk-forward fold windows confined to
+  the pre-holdout region and records each trial in the TrialLedger.
 - The winning set is evaluated on the holdout exactly once, for the record
-  only: the holdout score never feeds back into selection.
+  only: the holdout result never feeds back into selection.
 - Trial accounting follows the ledger rule: past MAX_ELIGIBLE_TRIALS the
   result flags ineligible for promotion; past MAX_ALLOWED_TRIALS recording
   raises TooManyTrialsError through this function.
 
-Scoring is a deterministic digest of (seed, parameter-set hash, fold ids),
-so identical inputs select the identical winner with no wall clock, no
-network and no holdout reads during tuning. Scores are selection mechanics,
-not performance claims: they carry no return, drawdown or forecast meaning.
+Scoring is real replay (correction D-C3, D-C4): each candidate mapping is
+validated by CandidateParams against the real FilterSettings and
+ExitsSettings models, replayed through the real engine and PaperAdapter over
+each pre-holdout fold window, and scored as the mean net realized lamports
+over the folds (filled SELL lamports minus filled BUY lamports minus venue
+fees and network costs from the FillRecorded rows; partial fills count at
+their recorded filled amount; zero trades score 0). Candidates are taken in
+space order with no shuffle and the best is tracked with strict
+greater-than, so ties keep the earlier candidate. Scores are measured
+returns over the replayed windows, never forecasts.
 """
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.backtest.manifest import _resolve_dataset_dir
-from pumpgrok.backtest.split import holdout_split, walk_forward_folds
+from pumpgrok.backtest.evaluate import CandidateParams, evaluate_window, fold_windows
+from pumpgrok.backtest.manifest import _resolve_dataset_dir, param_set_hash
+from pumpgrok.backtest.split import holdout_split
 from pumpgrok.backtest.trials import MAX_ELIGIBLE_TRIALS, TrialLedger
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import IdFactory
@@ -47,31 +54,34 @@ __all__ = [
 
 #: Candidate parameter sets to choose from. Each entry is one JSON-stable
 #: mapping (ints, strings, bools, None, lists, dicts; float leaves are
-#: rejected by canonical_json, so express ratios in basis points).
+#: rejected by canonical_json, so accepted knobs are ints and bools only)
+#: holding optional `filter` and `exits` override subsets validated by
+#: CandidateParams against the real settings models.
 ParamSpace = Sequence[Mapping[str, Any]]
-
-#: Scale mapping a 256-bit digest to a unit-interval score.
-_DIGEST_SCALE = float(1 << 256)
 
 
 @dataclass(frozen=True)
 class HarnessResult:
     """Outcome of one holdout-aware search.
 
-    best_params_hash is the sha256 of the winning set's canonical JSON.
-    holdout_id names the holdout window the winner was evaluated on once.
-    trial_count is the ledger size after this search recorded its trials.
+    best_params_hash is the parameter-set identity hash of the winning
+    set (param_set_hash over its canonical JSON). holdout_id names the
+    holdout window the winner was evaluated on once. trial_count is the
+    ledger size after this search recorded its trials.
     eligible_for_promotion is false when the ledger holds more than
-    MAX_ELIGIBLE_TRIALS trials. holdout_score is the deterministic digest
-    score of the winner on the holdout window, reported for completeness;
-    it is a selection record, not a performance claim.
+    MAX_ELIGIBLE_TRIALS trials. best_net_lamports is the mean net
+    realized lamports of the winner over the tuning folds;
+    holdout_net_lamports is the net realized lamports of the winner on
+    the holdout window, reported for completeness and never fed back
+    into selection. Both are measured returns, not performance claims.
     """
 
     best_params_hash: str
     holdout_id: str
     trial_count: int
     eligible_for_promotion: bool
-    holdout_score: float
+    holdout_net_lamports: int
+    best_net_lamports: int
 
 
 def _load_stamps(dataset: str) -> tuple[float, ...]:
@@ -82,58 +92,6 @@ def _load_stamps(dataset: str) -> tuple[float, ...]:
     """
     directory = _resolve_dataset_dir(dataset)
     return tuple(event_epoch(event) for event in load_dataset(directory).events)
-
-
-def _params_hash(params: Mapping[str, Any]) -> str:
-    """sha256 over the canonical JSON of one candidate parameter set."""
-    try:
-        raw = canonical_json(params)
-    except TypeError as err:
-        raise ValueError(f"candidate parameter set is not JSON-stable: {err}") from err
-    return sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _score_candidate(
-    params_hash: str,
-    seed: int,
-    folds: tuple[tuple[str, str], ...],
-    tuning_stamps: Sequence[float],
-    cutoff: float,
-) -> float:
-    """Mean digest score of one candidate over the tuning folds.
-
-    tuning_stamps must all sit below cutoff; a holdout stamp smuggled into
-    tuning trips the assert instead of leaking into selection. Fold ids name
-    pre-holdout windows only, so the digest reads no holdout data.
-    """
-    assert all(ts < cutoff for ts in tuning_stamps), "tuning observed a holdout stamp"
-    assert folds, "need at least one tuning fold"
-    total = 0.0
-    for train_id, test_id in folds:
-        digest = sha256(
-            f"{seed}|{params_hash}|{train_id}|{test_id}|{len(tuning_stamps)}".encode()
-        ).hexdigest()
-        total += int(digest, 16) / _DIGEST_SCALE
-    return total / len(folds)
-
-
-def _evaluate_holdout(
-    params_hash: str,
-    seed: int,
-    holdout_id: str,
-    holdout_stamps: Sequence[float],
-    cutoff: float,
-) -> float:
-    """Score the winning set on the holdout window, exactly once per search.
-
-    Every stamp must sit at or above cutoff; a tuning stamp here means the
-    windows were mixed up. The score is reported, never fed back into
-    selection, so tuning cannot peek at the holdout through this call.
-    """
-    assert all(ts >= cutoff for ts in holdout_stamps), "holdout window is mixed up"
-    assert holdout_stamps, "holdout window holds no stamps"
-    digest = sha256(f"{seed}|{params_hash}|{holdout_id}|{len(holdout_stamps)}".encode()).hexdigest()
-    return int(digest, 16) / _DIGEST_SCALE
 
 
 def _default_run_id(seed: int) -> str:
@@ -154,12 +112,15 @@ def run_search(
     """Tune over pre-holdout folds, then evaluate the winner on holdout once.
 
     dataset is a directory path or a recorded fixture name. space holds the
-    candidate parameter sets; n_trials of them are drawn in seed order and
+    candidate parameter sets; n_trials of them are taken in space order and
     every one is recorded in the TrialLedger, so n_trials past
     MAX_ALLOWED_TRIALS raises TooManyTrialsError and the fifty stored trials
     stay put. n_folds sets the walk-forward fold count over the pre-holdout
     region. run_id and ledger_path pin the ledger location (tests do); when
-    omitted a fresh ULID names a new ledger under var/backtest.
+    omitted a fresh ULID names a new ledger under var/backtest. seed drives
+    replay determinism inside each window evaluation. Each candidate is
+    validated by CandidateParams before it is recorded, so unknown keys and
+    scoring knobs fail closed with a validation error.
     """
     if not dataset:
         raise ValueError("dataset must be a non-empty path or fixture name")
@@ -177,26 +138,49 @@ def run_search(
         "tuning and holdout must partition the dataset"
     )
     assert all(ts < cutoff for ts in tuning_stamps), "tuning read the holdout window"
-    folds = walk_forward_folds(stamps, dataset, n_folds)
+    windows = fold_windows(stamps, dataset, n_folds)
     ledger = TrialLedger(
         run_id=run_id if run_id is not None else _default_run_id(seed),
         path=ledger_path,
     )
-    rng = make_rng(seed)
-    order = list(range(len(candidates)))
-    rng.shuffle(order)
-    scored: list[tuple[float, str]] = []
-    for position in order[:n_trials]:
-        params_hash = _params_hash(candidates[position])
-        ledger.record_trial(params_hash)
-        scored.append(
-            (_score_candidate(params_hash, seed, folds, tuning_stamps, cutoff), params_hash)
+    best_params_hash = ""
+    best_params: CandidateParams | None = None
+    best_mean = 0
+    with tempfile.TemporaryDirectory(prefix="pumpgrok-search-") as scratch:
+        scratch_path = Path(scratch)
+        for position in range(n_trials):
+            mapping = candidates[position]
+            try:
+                raw = canonical_json(mapping)
+            except TypeError as err:
+                raise ValueError(f"candidate parameter set is not JSON-stable: {err}") from err
+            params = CandidateParams(**dict(mapping))
+            params_hash = param_set_hash(raw.encode("utf-8"))
+            ledger.record_trial(params_hash)
+            total = 0
+            for fold_index, window in enumerate(windows.folds):
+                assert window.end_ts <= cutoff, "tuning observed a holdout stamp"
+                total += evaluate_window(
+                    dataset,
+                    params,
+                    seed=seed,
+                    ledger_path=scratch_path / f"trial-{position}-fold-{fold_index}.sqlite",
+                    window=window,
+                )
+            mean = total // len(windows.folds)
+            if best_params is None or mean > best_mean:
+                best_mean = mean
+                best_params_hash = params_hash
+                best_params = params
+        assert best_params is not None, "need at least one scored candidate"
+        assert all(ts >= cutoff for ts in holdout_stamps), "holdout window is mixed up"
+        holdout_net = evaluate_window(
+            dataset,
+            best_params,
+            seed=seed,
+            ledger_path=scratch_path / "holdout.sqlite",
+            window=windows.holdout,
         )
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    best_params_hash = scored[0][1]
-    holdout_score = _evaluate_holdout(
-        best_params_hash, seed, split.holdout_id, holdout_stamps, cutoff
-    )
     eligible = all(verdict.eligible_for_promotion for verdict in ledger.trials)
     assert eligible == (len(ledger) <= MAX_ELIGIBLE_TRIALS), "ledger verdicts disagree"
     return HarnessResult(
@@ -204,5 +188,6 @@ def run_search(
         holdout_id=split.holdout_id,
         trial_count=len(ledger),
         eligible_for_promotion=eligible,
-        holdout_score=holdout_score,
+        holdout_net_lamports=holdout_net,
+        best_net_lamports=best_mean,
     )
