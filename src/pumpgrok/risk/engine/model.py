@@ -123,4 +123,3 @@ class _suppress_integrity:
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
         return isinstance(exc, (sqlite3.IntegrityError, LedgerInconsistent))
-

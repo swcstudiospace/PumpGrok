@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from pumpgrok.core.adapter import OrderRequest, Quote, Side, SimulationResult
+from pumpgrok.core.adapter import Quote, Side, SimulationResult
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.execution.curve_math import buy_out, impact_buy, impact_sell, sell_out, spot
 

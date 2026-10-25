@@ -11,7 +11,6 @@ from pumpgrok.ledger.reducer import LedgerState
 from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import parse_ts_utc
-
 from pumpgrok.risk.engine.constants import (
     BUY_SEAT,
     FLOOR_HALTED_DAILY,

@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.cli.codes import APPROVAL_RE, TICKET_RE, _BASE58
+from pumpgrok.cli.codes import _BASE58, APPROVAL_RE, TICKET_RE
 from pumpgrok.cli.errors import UsageError
 from pumpgrok.core.ids import mint_approval_id
 from pumpgrok.core.units import sol_to_lamports

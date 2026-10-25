@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.ids import Clock, IdFactory
-from pumpgrok.engine.pipeline import BUY, decide_replay
+from pumpgrok.engine.pipeline import decide_replay
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import FixtureClock

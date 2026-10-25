@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pumpgrok.core.adapter import OrderRequest, Side
-from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
+from pumpgrok.core.errors import OrderUnknownError
 from pumpgrok.execution.latency import draw_latency
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed

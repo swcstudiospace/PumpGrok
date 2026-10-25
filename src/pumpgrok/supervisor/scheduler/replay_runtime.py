@@ -32,7 +32,6 @@ from pumpgrok.tools import build_registry
 from pumpgrok.tools.exec.place import build_place_tool
 from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
 
-
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
 
 REPLAY_TICKET = "SOL-20260101-001"

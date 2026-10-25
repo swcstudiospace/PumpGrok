@@ -9,10 +9,10 @@ import sys
 from typing import Any, NoReturn, TextIO
 
 from pumpgrok.cli.codes import (
+    _EXIT_BY_CODE,
     EXIT_CONFIG,
     EXIT_NOT_IMPLEMENTED,
     FORBIDDEN_OWNERS,
-    _EXIT_BY_CODE,
 )
 
 log = logging.getLogger("pumpgrok.cli")
@@ -25,6 +25,8 @@ class UsageError(Exception):
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         raise UsageError(message)
+
+
 def _say(stream: TextIO, *lines: str) -> None:
     for line in lines:
         stream.write(line + "\n")

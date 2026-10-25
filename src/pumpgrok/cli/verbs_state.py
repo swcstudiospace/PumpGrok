@@ -11,16 +11,22 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+
 from pumpgrok.cli.codes import (
+    _TRADE_UNAVAILABLE,
     DATASET_NAME_RE,
     EXIT_CONFIG,
     EXIT_LIVE,
     EXIT_NOT_IMPLEMENTED,
     EXIT_OK,
-    _TRADE_UNAVAILABLE,
 )
-from pumpgrok.cli.errors import UsageError, _not_implemented, _refuse_forbidden_seat, _say, _tool_error
+from pumpgrok.cli.errors import (
+    UsageError,
+    _not_implemented,
+    _refuse_forbidden_seat,
+    _say,
+    _tool_error,
+)
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
@@ -30,6 +36,7 @@ from pumpgrok.cli.wiring import (
 )
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.tool import Tool
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
@@ -42,7 +49,6 @@ from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
-from pumpgrok.core.ids import IdFactory
 
 log = logging.getLogger("pumpgrok.cli")
 

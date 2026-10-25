@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from collections.abc import Callable, Sequence
 
-from pumpgrok.cli.backtest import _backtest_verb, _replay_verb
-from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER, _FIND_ONLY_ROUTES
+from pumpgrok.cli.backtest import _backtest_verb
+from pumpgrok.cli.codes import _FIND_ONLY_ROUTES, EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.parsing import build_parser
 from pumpgrok.cli.verbs_ops import _doctor_verb, _live_verb, _report_verb, _verify_verb
@@ -22,7 +21,7 @@ from pumpgrok.config.settings import (
     load_settings,
     refuse_cli_secrets,
 )
-from pumpgrok.core.errors import LedgerInconsistent
+from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.logging.json import setup_logging
 from pumpgrok.replay.fixtures import CorruptFixture
 
