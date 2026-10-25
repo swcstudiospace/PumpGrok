@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from fractions import Fraction
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pumpgrok.core.risk_budget import RiskBudget
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.risk.limits import EngineLimits
 
 from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import calling_seat
@@ -23,6 +27,14 @@ from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, hal
 
 class _EngineSteps:
     """The 19 R34 step checks plus halt detection."""
+
+    if TYPE_CHECKING:
+        _store: LedgerStore
+        _budget: RiskBudget
+        _limits: EngineLimits
+
+        def _fold(self) -> LedgerState: ...
+        def _now_ts(self) -> str: ...
 
     def _halt_row(
         self,
