@@ -90,7 +90,7 @@ def _decode_account(raw: bytes) -> dict:
     return {
         "discriminator_hex": disc.hex(),
         "virtual_sol_reserves_lamports": vsol,
-        "virtual_token_reserves_units": vtok,
+        "virtual_token_reserves_units": vtok,  # pragma: allowlist secret: on-chain reserve count
         "real_sol_reserves_lamports": rsol,
         "real_token_reserves_units": rtok,
         "total_supply_units": supply,
