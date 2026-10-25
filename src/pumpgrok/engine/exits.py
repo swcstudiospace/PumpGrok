@@ -17,12 +17,12 @@ Deliberate divergences from the oracle:
 - Detail strings are English ASCII (``from entry``, ``from peak``).
 """
 
-from __future__ import annotations
+from decimal import Decimal, ROUND_HALF_UP
 
 from pydantic import BaseModel, ConfigDict
 
 from pumpgrok.config.settings import ExitsSettings
-from pumpgrok.engine.models import ExitPosition
+from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 
 # Rule order is priority order. Stop-loss first, profit second, trailing
 # third, time last: a runner closes on take-profit, not on the timer.
@@ -112,3 +112,18 @@ def apply_price(
     """
     position.peak_price = max(position.peak_price, price)
     return exit_signal(position, price, cfg, now)
+
+
+def restore_peak(entry_price: int, ledger_peak: Decimal) -> int:
+    """Peak to track after a restart, from the ledger fold. Pure.
+
+    The serve loop writes the running peak into each ``MarkToMarket`` row's
+    ``spot`` (the reducer ratchets ``price_peak`` from it, existing R32 type,
+    no new event), so a fresh book re-learns the peak from the fold instead
+    of from the next curve read. Never below entry: a position that never
+    printed above entry restarts with the entry peak. Conversion matches
+    ``_scaled_price`` (half-up); an undecodable peak raises instead of
+    silently defaulting.
+    """
+    scaled = int((ledger_peak * PRICE_SCALE).to_integral_value(rounding=ROUND_HALF_UP))
+    return max(entry_price, scaled)

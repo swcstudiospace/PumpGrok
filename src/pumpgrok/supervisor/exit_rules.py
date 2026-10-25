@@ -14,8 +14,11 @@ A position is identified by its opening ``PositionOpened`` sequence, not only it
 mint. A re-entry in the same mint therefore starts a new position with a fresh entry
 and peak; it never inherits the peak of the trade it replaced.
 
-Peaks for the trailing stop live in memory for the run. A restart re-learns them
-from the next curve read; the vendor persisted them to disk.
+Peaks for the trailing stop ratchet in memory during the run and persist
+through the ``MarkToMarket`` rows the serve loop writes (the reducer ratchets
+``price_peak`` from each row's ``spot``; existing R32 type, no new event). A
+restart restores them from the ledger fold in ``sync`` before the first exit
+check, so the trailing stop does not re-learn from the next curve read.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from pumpgrok.config.settings import ExitsSettings
+from pumpgrok.engine.exits import restore_peak
 from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 from pumpgrok.engine.watcher import PositionWatcher
 from pumpgrok.execution.curve_math import spot
@@ -60,7 +64,7 @@ class RuleSell:
 
 @dataclass
 class LedgerExitBook:
-    """``PositionBook`` over the ledger: open paper positions, peaks kept in memory."""
+    """``PositionBook`` over the ledger, peaks restored from the fold on restart."""
 
     exits: ExitsSettings
     _positions: dict[str, ExitPosition] = field(default_factory=dict)
@@ -83,7 +87,7 @@ class LedgerExitBook:
         return self.exits.stop_loss_poll_seconds
 
     def persist(self) -> None:
-        """Peaks stay in memory; nothing is written. See the module docstring."""
+        """No direct write: peaks persist through the serve loop's ``MarkToMarket`` rows."""
 
     def ticket(self, mint: str) -> str:
         return self._tickets[mint]
@@ -95,8 +99,11 @@ class LedgerExitBook:
     def sync(self, store: LedgerStore) -> None:
         """Rebuild the open positions from the ledger, one tracked position per mint.
 
-        The peak carries over only while the opening sequence is unchanged. Entry,
-        amount, opening time and ticket are refreshed from the ledger on every pass.
+        The peak carries over only while the opening sequence is unchanged; a fresh
+        track (restart, or a re-entry after a close) restores the peak persisted in
+        the fold's ``MarkToMarket`` spots via ``restore_peak`` before the first
+        exit check runs. Entry, amount, opening time and ticket are refreshed
+        from the ledger on every pass.
         """
         state = initial_state(source="replay", initial_equity_lamports=0, day_utc="")
         opened_seq: dict[str, int] = {}
@@ -113,9 +120,13 @@ class LedgerExitBook:
             if (mint, seq) in self._held_out:
                 continue
             entry = _scaled_price(view.price_entry)
+            persisted = restore_peak(entry, view.price_peak)
             prior = self._positions.get(mint)
             same_position = prior is not None and self._identity.get(mint) == seq
-            peak = prior.peak_price if same_position and prior is not None else entry
+            if same_position and prior is not None:
+                peak = max(prior.peak_price, persisted)
+            else:
+                peak = persisted
             fresh[mint] = ExitPosition(
                 mint=mint,
                 entry_price=entry,
