@@ -1,3 +1,6 @@
+Historical design record
+This file describes the design at the time, not current behaviour.
+
 # Paper Engine, Ledger, Replay, Risk, Supervisor and Live Gate Design
 
 Tracker: SPE-17998 https://linear.app/swcstudio/issue/SPE-17998/n4-paper-engine-ledger-replay-riskbreakers-supervisor-live-gate-design | Notion https://app.notion.com/p/3ffbc1a0c7ae81fd8a30fb490682c0c2?pvs=204
