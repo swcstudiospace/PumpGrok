@@ -143,9 +143,7 @@ def test_negative_start_equity_fails_the_check(tmp_path: Path) -> None:
     store = _store(tmp_path, "start-negative.sqlite", str(EQUITY))
     try:
         engine = _engine(store, clock)
-        state = initial_state(
-            source="paper", initial_equity_lamports=-1000, day_utc="2026-10-21"
-        )
+        state = initial_state(source="paper", initial_equity_lamports=-1000, day_utc="2026-10-21")
         with pytest.raises(CorruptState, match="day-start equity"):
             engine._detect_breach(
                 state,

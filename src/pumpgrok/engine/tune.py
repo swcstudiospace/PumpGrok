@@ -19,7 +19,7 @@ import itertools
 import json
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, NamedTuple
 

@@ -61,9 +61,7 @@ def _mark(seq: int, ts_utc: str, spot: str) -> dict[str, Any]:
 def test_corrupt_mtm_spot_raises_instead_of_keeping_old_peak() -> None:
     """A corrupt mark spot raises; a valid one still moves the peak."""
     ts_utc = "2026-10-21T00:00:00+00:00"
-    state = initial_state(
-        source="paper", initial_equity_lamports=EQUITY, day_utc="2026-10-21"
-    )
+    state = initial_state(source="paper", initial_equity_lamports=EQUITY, day_utc="2026-10-21")
     state = reduce(state, _opened(1, ts_utc))
     marked = reduce(state, _mark(2, ts_utc, "150"))
     assert marked.positions[MINT].price_peak == Decimal("150")
@@ -96,9 +94,7 @@ def test_missing_and_corrupt_seat_equity_meta_raise(tmp_path: Path) -> None:
 
 
 def _supervisor(store: LedgerStore, clock: FixtureClock) -> Supervisor:
-    return Supervisor(
-        store=store, clock=clock, rng=make_rng(11), cycles=dict.fromkeys(ROSTER, _ok)
-    )
+    return Supervisor(store=store, clock=clock, rng=make_rng(11), cycles=dict.fromkeys(ROSTER, _ok))
 
 
 async def test_missing_genesis_equity_meta_raises_at_shutdown(tmp_path: Path) -> None:

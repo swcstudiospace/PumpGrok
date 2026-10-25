@@ -23,9 +23,7 @@ from pumpgrok.ledger.store import LedgerStore
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 
-MONEY_KEYWORDS = frozenset(
-    {"lamport", "equity", "fee", "pnl", "cost", "price", "size", "balance"}
-)
+MONEY_KEYWORDS = frozenset({"lamport", "equity", "fee", "pnl", "cost", "price", "size", "balance"})
 
 
 def _is_money_name(name: str) -> bool:
@@ -68,16 +66,12 @@ def _scan_file(path: Path) -> list[str]:
                 found.append(f"{rel}:{node.lineno}: {name} annotated as float")
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for arg in (
-                list(node.args.posonlyargs)
-                + list(node.args.args)
-                + list(node.args.kwonlyargs)
+                list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
             ):
                 if arg.arg in {"self", "cls"} or arg.annotation is None:
                     continue
                 if _is_money_name(arg.arg) and _mentions_float(arg.annotation):
-                    found.append(
-                        f"{rel}:{arg.lineno}: {node.name}({arg.arg}) annotated as float"
-                    )
+                    found.append(f"{rel}:{arg.lineno}: {node.name}({arg.arg}) annotated as float")
     return found
 
 
@@ -85,9 +79,7 @@ def test_no_float_money_annotations() -> None:
     violations: list[str] = []
     for path in sorted(SRC.rglob("*.py")):
         violations.extend(_scan_file(path))
-    assert not violations, "float money fields under src/pumpgrok:\n" + "\n".join(
-        violations
-    )
+    assert not violations, "float money fields under src/pumpgrok:\n" + "\n".join(violations)
 
 
 MINT = "Mint1111CATS1111111111111111111111111111111"

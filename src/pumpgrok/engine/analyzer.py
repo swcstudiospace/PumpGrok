@@ -26,7 +26,7 @@ import itertools
 import logging
 import statistics
 from collections.abc import Callable
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import httpx
