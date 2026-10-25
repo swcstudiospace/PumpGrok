@@ -32,7 +32,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RULES = REPO_ROOT / "rules" / "pumpgrok-team.mdc"
-ENGINE = REPO_ROOT / "src" / "pumpgrok" / "risk" / "engine.py"
+ENGINE = REPO_ROOT / "src" / "pumpgrok" / "risk" / "engine" / "constants.py"
 APPROVALS = REPO_ROOT / "src" / "pumpgrok" / "core" / "approvals.py"
 RISK_BUDGET = REPO_ROOT / "src" / "pumpgrok" / "core" / "risk_budget.py"
 
@@ -147,7 +147,7 @@ def test_floor_constant_has_a_single_home() -> None:
                     isinstance(t, ast.Name) and t.id == "FLOOR_HALTED_DAILY" for t in node.targets
                 ):
                     definers.append(path.relative_to(REPO_ROOT).as_posix())
-    assert definers == ["src/pumpgrok/risk/engine.py"], definers
+    assert definers == ["src/pumpgrok/risk/engine/constants.py"], definers
 
 
 def test_rule_file_keeps_en_dashes() -> None:
