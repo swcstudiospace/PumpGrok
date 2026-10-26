@@ -1,3 +1,10 @@
+---
+phase: 08-backtest-and-paper-evaluation
+verified: 2026-10-26T07:32:36Z
+status: passed
+score: 13/13
+head: da6c071
+---
 # Phase 8 Verification Report: Backtest and paper evaluation
 
 Status: passed
@@ -132,3 +139,32 @@ Judgment: the recording obligation is fully satisfied. Both runs are stable, bot
 - Nothing material remains unverified. Static import-scan portions of test_single_search_engine.py and test_no_backtest_to_live_path.py were read, not executed here, but both files also execute behavior and the full suite is green in /tmp/f8_test.log.
 - Live exit code 3 is taken from the orchestrator log /tmp/f8_live.log content plus the brief; the command was not rerun per the brief rules.
 - Fixture-level trade behavior on smoke-10m holdout shows zero trades with honest not-applicable rendering; this is the fixtures producing no holdout entries under defaults, not a defect, and the evaluator test pins nonzero scoring on the full smoke window.
+
+## Re-verification at HEAD da6c071
+
+Re-checked every Phase 8 success criterion (ROADMAP.md lines 98-116, 13 criteria) at HEAD da6c071 by reading code, tests, docs, and the gate logs from the last full gate chain run at HEAD 7a0b6eb. The only commits between 7a0b6eb and da6c071 are docs-only (.planning/ROADMAP.md status cells, .planning/STATE.md), confirmed by git diff stat showing 2 files changed, both under .planning. No source, test, or CHANGELOG file changed, so the gate logs apply unchanged at this HEAD.
+
+Gate evidence: /tmp/h_lint.log (make lint exit 0, ruff format check clean), /tmp/h_type.log (mypy success, 204 source files), /tmp/h_test.log (uv run pytest -q, all dots with 2 skips, no failures), /tmp/h_check.log (scripts/check.sh ok), /tmp/h_vdc.log (verify_doc_commands pass=2 skip=9 fail=0), /tmp/h_smoke.log (smoke replay exit 0), /tmp/h_live.log (live refusal, 9 of 9 preconditions unmet, exit 3 per brief).
+
+| Criterion | PASS or FAIL | Evidence |
+| --- | --- | --- |
+| 1. lint, typecheck, test, check.sh exit 0, paper smoke replay exit 0 | PASS | /tmp/h_lint.log, /tmp/h_type.log, /tmp/h_test.log, /tmp/h_check.log, /tmp/h_smoke.log all exit 0 |
+| 2. test_run_manifest.py exits 0; manifest holds whole-dataset digest, seed, FilterSettings hash, param-set hash, code version; one byte changes run id | PASS | tests/backtest/test_run_manifest.py exists; suite green in /tmp/h_test.log; src/pumpgrok/backtest/manifest.py hashes every file in dataset dir (per-file sha256 joined then hashed), records filter_settings_hash, param_set_hash, code_version, run_id derived from manifest |
+| 3. test_replay_result_fields.py exits 0; each fill carries price, venue fee, network cost, latency, filled fraction, outcome | PASS | tests/backtest/test_replay_result_fields.py exists; suite green; src/pumpgrok/replay/runner.py ReplayTrade carries price_avg, venue_fee_lamports, network_cost_lamports, latency_s, filled_fraction, outcome |
+| 4. test_holdout_split.py exits 0; holdout is final 20 percent, no tuning reads it, report names split ids | PASS | tests/backtest/test_holdout_split.py exists; suite green; src/pumpgrok/backtest/split.py HOLDOUT_FRACTION = 0.20; harness asserts tuning stamps below cutoff |
+| 5. test_trial_limits.py exits 0; above 20 trials flagged ineligible, above 50 rejected with typed error | PASS | tests/backtest/test_trial_limits.py exists; suite green; src/pumpgrok/backtest/trials.py MAX_ELIGIBLE_TRIALS = 20, MAX_ALLOWED_TRIALS = 50, TooManyTrialsError raised past 50 |
+| 6. test_metrics.py exits 0; annualiz grep exits 0 with annualization stated; no expected-return grep exits 0 | PASS | tests/backtest/test_metrics.py exists; suite green; metrics.py states ANNUALIZATION_DAYS_PER_YEAR = 365 with annualization comments; grep for expected-return language over backtest and reporting returns nothing (exit 1, so negated check exits 0) |
+| 7. backtest smoke-10m twice byte-identical; report names holdout, trial, slippage, fees | PASS | Prior orchestrator double run exit 0 per body; src/pumpgrok/backtest/report.py render uses sorted keys and no wall-clock values; report.py names holdout_id, trial counts with both limits, realized slippage and fee totals |
+| 8. no grid or itertools.product in engine or backtest; test_single_search_engine exits 0 | PASS | grep for grid or itertools.product over src/pumpgrok/engine and src/pumpgrok/backtest returns nothing (exit 1, so negated check exits 0); src/pumpgrok/engine/tune.py absent; tests/backtest/test_single_search_engine.py exists; suite green |
+| 9. test_shared_result_schema.py exits 0; one result model, same-window compare | PASS | tests/backtest/test_shared_result_schema.py exists; suite green; src/pumpgrok/backtest/results.py SharedResult with compare rejecting foreign windows and mismatched fills |
+| 10. test_divergence.py exits 0; 2pp return gap and 0.5 Sharpe gap alert and block on D7 defaults | PASS | tests/backtest/test_divergence.py exists; suite green; src/pumpgrok/backtest/divergence.py ABSOLUTE_RETURN_GAP_PP = 2.0, SHARPE_GAP = 0.5, blocks_promotion on at-or-past thresholds, enforce returns 1 when blocked |
+| 11. e2e autonomous paper plus manual-ticket tests exit 0 | PASS | tests/e2e/test_autonomous_paper_recorded.py and tests/safety/test_manual_ticket_no_upgrade.py exist; suite green in /tmp/h_test.log |
+| 12. verify smoke-10m twice stable; CHANGELOG before and after hash lines | PASS | CHANGELOG.md lines 54-55 record before and after hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d with identical values; line 56 correction bullet discloses per-fill fields are memory-only so ledger bytes and hash unchanged; see wording note below |
+| 13. run --mode live --once exits 3 | PASS | /tmp/h_live.log shows live refusal with 9 of 9 preconditions unmet, exit 3 per brief; no transaction attempted |
+
+Notes:
+- Criterion 12 wording: the prose rationale says the result schema changes replay output, but per-fill fields are memory-only so the hash is unchanged. The recording obligation (both hashes recorded, values matching measured runs) is fully satisfied and the CHANGELOG states this honestly. Wording mismatch only, no code or honesty gap. Unchanged from the body section J.
+- The body references src/pumpgrok/cli.py; at this HEAD the CLI lives in the src/pumpgrok/cli/ package (src/pumpgrok/cli/backtest.py holds _backtest_verb, _paper_gate, _evaluate_holdout). Refactor move only; all named functions verified present.
+- If the only evidence for a criterion were an older commit, the docs-only diff since 7a0b6eb confirms nothing the criteria cover changed after the gate chain.
+
+Verdicts changed from the body: none. The body verdict was passed (13 of 13); re-verification confirms passed (13 of 13).

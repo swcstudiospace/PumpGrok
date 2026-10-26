@@ -1,3 +1,10 @@
+---
+phase: 07-documentation-upgrade
+verified: 2026-10-26T07:32:18Z
+status: passed
+score: 9/9
+head: da6c071
+---
 # Phase 7 Verification: Documentation upgrade
 
 Status: passed. All nine roadmap success criteria verified against the tree at
@@ -137,3 +144,27 @@ project-end, workflow-start and workflow-end verbatim.
 ## Gaps
 
 None. No gaps_found list. Status passed.
+
+## Re-verification at HEAD da6c071
+
+Re-checked every Phase 7 roadmap success criterion at HEAD da6c071 by reading
+evidence only: grep, file reads, git show, and the gate logs from the last
+full gate chain run at HEAD 7a0b6eb, which includes all code changes so far.
+No gate was rerun. Later commits after Phase 7 touch only CHANGELOG replay
+hash lines for Phases 8 to 10 and Phase 10 closeout docs; none alter the
+Phase 7 artifacts checked below.
+
+| Num | Criterion | Result | Evidence at HEAD da6c071 |
+|-----|-----------|--------|--------------------------|
+| 1 | make lint, typecheck, test, check.sh exit 0; paper replay exits 0 | PASS | /tmp/h_lint.log: ruff All checks passed, 787 files formatted clean. /tmp/h_type.log: mypy Success no issues in 204 source files. /tmp/h_test.log: full pytest to 100 percent, zero FAILED matches. /tmp/h_check.log: ok 35 skills, 10 agents, 309 markdown files, repository healthy. /tmp/h_vdc.log: PASS one-shot paper replay on smoke fixture exit 0. /tmp/h_smoke.log: smoke replay trades filled 2 not_filled 1, exit 0. |
+| 2 | CLAUDE.md carries at least 9 named section headings | PASS | grep -cE for the nine heading alternatives in CLAUDE.md returns 9. |
+| 3 | Every CLAUDE.md bullet cites a backticked path | PASS | Bullet-line pipeline on CLAUDE.md filtered for lines without a backtick returns no output. |
+| 4 | AGENTS.md shorter than origin/main, links CLAUDE.md, no placeholder | PASS | AGENTS.md 133 lines vs origin/main 423 lines; one CLAUDE.md pointer; placeholder count 0. |
+| 5 | verify_doc_commands.sh exits 0 | PASS | /tmp/h_vdc.log tail: pass=2 skip=9 fail=0; the two PASS lines are the one-shot paper replay and doctor; skips labeled, serve never executed. |
+| 6 | tests/docs green: versions, VENDOR_PIN, CLI verbs, contradictions | PASS | tests/docs holds test_changelog_phases.py, test_doc_consistency.py, test_historical_banners.py, test_runbook_commands.py; full suite exit 0 in /tmp/h_test.log covers them. pyproject version 0.1.0 matches plugin manifests; docs/VENDOR_PIN.md carries pin 409e74c905faa0e9de42e918efe2c604f206856e. |
+| 7 | Historical banner test green; records begin with the banner | PASS | All five fixed-set files begin with first line Historical design record: docs/DISCOVERY.md, docs/MIGRATION_MAP.md, docs/upgrade-plan-desk-v2.md, docs/design/interfaces.md, docs/design/paper-engine.md. |
+| 8 | CHANGELOG carries at least 4 DOC-01 to DOC-04 tags | PASS | grep -cE DOC-0[1-4] in CHANGELOG.md returns 4. |
+| 9 | Replay hash unchanged; Phase 7 hash line with same value | PASS | CHANGELOG.md Phase 7 after-hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d equals Phase 6 after-hash and the smoke-10m hash on both runs in the gate evidence; later phases record the same value. |
+
+Verdicts changed from the body: none. All nine criteria remain PASS.
+Body verdict was passed 9 of 9; re-verification confirms passed 9 of 9.

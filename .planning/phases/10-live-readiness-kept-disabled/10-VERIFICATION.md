@@ -1,3 +1,11 @@
+---
+phase: 10-live-readiness-kept-disabled
+verified: 2026-10-26T07:32:31Z
+status: passed
+score: 8/8
+head: da6c071
+---
+
 # Phase 10 Verification: Live readiness, kept disabled
 
 status: passed
@@ -116,3 +124,24 @@ Covered in the criteria table above: criteria 1, 6, and 8 are gate-level and res
 
 - Nothing material remains unverified. The smoke-10m verify-command equality on both runs is attested by the gate record naming hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs; the provided /tmp/g10_smoke.log holds the paper replay run output rather than the verify hash lines, so the equality itself was not re-observed in a log file. It is corroborated by the CHANGELOG before and after lines carrying that same hash and by the zero product-code diff in the Phase 10 range, which leaves no mechanism for the hash to differ.
 - Human spot-check on a fresh checkout that run --mode live exits 3 and the readiness record is present and deferred is recommended at release time but is not required to close this phase, since the committed tests pin both facts.
+
+## Re-verification at HEAD da6c071
+
+Re-checked every Phase 10 success criterion from ROADMAP.md against the
+current HEAD by reading evidence. No gates were rerun. Gate evidence is
+cited from the last full gate chain logs run at HEAD 7a0b6eb. Diff
+7a0b6eb to da6c071 touches only .planning/ROADMAP.md and .planning/STATE.md
+status cells, so no code, test, or record drifted since the gates ran.
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | lint, typecheck, test, check.sh each exit 0; paper replay exits 0 | PASS | /tmp/h_lint.log exit 0, ruff All checks passed, 787 files formatted; /tmp/h_type.log exit 0, mypy Success no issues in 204 source files; /tmp/h_test.log exit 0, full pytest run to 100 percent with no failures; /tmp/h_check.log exit 0, ok 35 skills 10 agents 309 markdown files; /tmp/h_vdc.log pass 2 skip 9 fail 0; /tmp/h_smoke.log exit 0, trades filled 2 not_filled 1 |
+| 2 | run --mode live --once exits 3; gate and refusal tests pass; stderr names all nine preconditions | PASS | /tmp/h_live.log exit 3 with LIVE GATE header, nine ordered precondition lines 1 to 9, and closing paper-mode line; tests/safety/test_live_refusal_lists_nine.py and tests/execution/test_live_gate_fails_fast.py both exist; EXIT_LIVE equals 3 at src/pumpgrok/cli/codes.py line 13 |
+| 3 | test_no_live_adapter_registered.py exits 0 | PASS | tests/safety/test_no_live_adapter_registered.py exists with refusal, registry, and gate-reason tests; covered by /tmp/h_test.log exit 0 full suite |
+| 4 | test_import_graph_no_live.py exits 0; no path from backtest, paper or upgrade modules to a live adapter | PASS | tests/safety/test_import_graph_no_live.py exists as AST reachability closure test over guarded roots; covered by /tmp/h_test.log exit 0 full suite |
+| 5 | live disabled in every overlay | PASS | python tomllib loop over src/pumpgrok/config/overlays/dev.toml, live.toml, paper.toml each asserts live.enabled is False, exit 0 |
+| 6 | tests/safety exits 0; signing and custody AST guard passes; no signing or custody code added | PASS | /tmp/h_test.log exit 0 covers tests/safety including test_no_signing_outside_live_stub.py; word-boundary grep for sign, signing, HMAC, ed25519, private key over src/pumpgrok/execution/live returns no match; no venue client import and no socket open under src/pumpgrok/execution/live |
+| 7 | docs/LIVE_READINESS.md exists with deferred status and custody, venue, legal, nine markers | PASS | File exists; grep status deferred matches; custody 8 hits, venue 9 hits, legal 5 hits, nine 9 hits; LIV-02 deferred record present |
+| 8 | smoke-10m verify hash stable on both runs and recorded in CHANGELOG Phase 10 after line; output unchanged from Phase 9 | PASS | CHANGELOG.md lines 17 and 18 carry Phase 10 before and after hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, identical to Phase 9 lines 34 and 35 and to the brief expected hash; zero product-code drift 7a0b6eb to da6c071 leaves no mechanism for hash change |
+
+Changed verdicts: none. The body records 8 of 8 PASS and the re-verification confirms 8 of 8 PASS.

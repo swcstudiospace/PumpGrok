@@ -1,3 +1,11 @@
+---
+phase: 06-integrity-closure
+verified: 2026-10-26T07:33:16Z
+status: gaps_found
+score: 16/17
+head: da6c071
+---
+
 # Phase 6 Integrity Closure — Verification Report
 
 **Branch:** `bot-00-chief/phase-6-integrity`
@@ -112,3 +120,41 @@ Full-suite JUnit: `tests="2104" errors="0" failures="1" skipped="2"`.
   greps, `git show`, or the named test files run directly.
 
 _Verifier: Phase6Verify · 2026-10-25_
+
+## Re-verification at HEAD da6c071
+
+Re-checked all 17 Phase 6 success criteria (ROADMAP.md Phase Details) at HEAD
+da6c071 on 2026-10-26. Gate evidence: /tmp/h_lint.log exit 0, /tmp/h_type.log
+exit 0, /tmp/h_test.log exit 0 (full suite, no failure lines),
+/tmp/h_check.log exit 0, /tmp/h_vdc.log exit 0, /tmp/h_smoke.log exit 0,
+/tmp/h_live.log live refusal exit 3. Those logs were recorded at HEAD 7a0b6eb.
+Commits 7a0b6eb to da6c071 are docs-only (b3e542c STATE.md, f8a09c9 STATE.md,
+da6c071 ROADMAP.md), so code evidence carries forward. No gates re-run.
+
+| # | Criterion | Verdict | Evidence at HEAD |
+|---|---|---|---|
+| 1 | PRC-01 gate quartet: lint, typecheck, test, check.sh exit 0 | PASS | h_lint, h_type, h_test, h_check logs all exit 0; Gap 1 fixed: .gitignore line 14 allowlists phase-6.json (e770602); only docs commits since the gate run |
+| 2 | INT-01 integer money, no float fields | PASS | tests/integrity/test_money_types.py present; float-money grep 0 matches at HEAD |
+| 3 | INT-02 fail-closed state errors | PASS | test names cover corrupt peak, seat equity meta, genesis equity; file in green suite |
+| 4 | INT-03 integer daily-loss halt, non-positive start fails | PASS | test_zero_start_equity_fails_the_check and test_negative_start_equity_fails_the_check present; green suite |
+| 5 | INT-04 single SOL conversion in core | PASS | test_single_sol_conversion.py present; 1_000_000_000 grep 0 matches outside src/pumpgrok/core |
+| 6 | INT-05 RNG roots confined | PASS | os.urandom 0 matches outside core ids and binding_key; DEFAULT_SEED 0 matches outside replay |
+| 7 | INT-06 live gate injected clock only | PASS | wall-clock grep in live_gate.py 0 matches; test file present; green suite |
+| 8 | INT-07 lineage fixes with pre-fix-failing tests | PASS | Both regression tests present and green; fix code per body row 8b, unchanged since (docs-only commits after); pre-fix-fails half not re-run at HEAD, closing-head evidence stands |
+| 9 | INT-08 stage-split length limits | PASS | test_function_length.py present with budget and stage-existence tests; green suite |
+| 10 | INT-09 peaks survive restart | PASS | Persist and restore tests present; green suite |
+| 11 | INT-10 read-only probe, ASSUMED with exact error | PASS | docs/CURVE_LAYOUT_PROBE.md Status ASSUMED with exact Error line; send grep 0; LAYOUT_STATUS ASSUMED grep exits 0 at HEAD |
+| 12 | Live stays refused, exit 3 | PASS | h_live.log refusal text, exit 3 |
+| 13 | Paper replay completes | PASS | h_smoke.log exit 0 |
+| 14 | smoke-10m hash stable, CHANGELOG before and after lines | PASS | Both verify runs hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d per brief, equal to CHANGELOG after-hash; before and after lines grepped in CHANGELOG.md at HEAD |
+| 15 | Omega runner review commits recorded | PASS | 5b5d6a1 and 9772655 both grepped in CHANGELOG.md at HEAD |
+| 16 | Phase branch plus draft PR | PASS | Branch bot-00-chief/phase-6-integrity matches the required pattern at HEAD; gh PR check needs network, draft status per prior recorded evidence and owner note |
+| 17 | run_all.py exits 0 for each completion claim | FAIL | Receipt records exit 1: G-1 foreign paths (67 at receipt time, 170 per current STATE.md) and approved_by absent; STATE.md still lists both as owner-blocked |
+
+Verdicts changed from the body above:
+
+- Criterion 1: FAIL to PASS. Gap 1 (receipt allowlist) fixed at e770602; h_test.log shows the full suite exit 0.
+- Criterion 11: FAIL to PASS. Gap 2 (LAYOUT_STATUS grep) fixed at e770602; the roadmap pattern now allows the annotated assignment and the grep exits 0 at HEAD.
+- Criterion 17: PASS-with-note to FAIL. The body Correction already admits the pass was counted without running the gate; the receipt proves exit 1 and G-1/G-2 remain owner-blocked.
+
+Status stays gaps_found on criterion 17 alone, which needs owner action, not code changes.

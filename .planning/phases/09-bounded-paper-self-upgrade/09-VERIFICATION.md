@@ -1,3 +1,11 @@
+---
+phase: 09-bounded-paper-self-upgrade
+verified: 2026-10-26T07:33:17Z
+status: passed
+score: 10/10
+head: da6c071
+---
+
 # Phase 9 Verification Report: Bounded paper self-upgrade
 
 Status: passed
@@ -113,3 +121,22 @@ M2. Risk-only clause 3 via security-constitution-risk section audience risk in p
 ## Not verified
 
 Nothing outstanding. Per-file test counts were not re-derived from the dot-only /tmp/g9_test.log; whole-suite exit 0 at HEAD 41df27c is the evidence, and reruns were forbidden by the brief.
+
+## Re-verification at HEAD da6c071
+
+Re-checked every Phase 9 success criterion at HEAD da6c071 by reading code, tests, docs and the gate logs from the last full gate chain run at HEAD 7a0b6eb (/tmp/h_lint.log, /tmp/h_type.log, /tmp/h_test.log, /tmp/h_check.log, /tmp/h_vdc.log, /tmp/h_smoke.log, /tmp/h_live.log). No gate rerun. Commits 7a0b6eb..da6c071 touch docs and planning records only; git log over src/pumpgrok/upgrade, tests/upgrade, tests/safety/test_blind_advisory.py, tests/safety/test_constitution_amendment.py, src/pumpgrok/config/upgrade_bounds.toml, src/pumpgrok/tools/safety, rules/pumpgrok-team.mdc, agents/risk.md, docs/RISK_POLICY.md, .planning/PROJECT.md and CHANGELOG.md is empty in that range, so the gate evidence still covers the Phase 9 code. Smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, equal as the roadmap allows.
+
+| # | Criterion | PASS or FAIL | Evidence |
+|---|-----------|--------------|----------|
+| 1 | lint, typecheck, test, check.sh green, paper smoke one cycle | PASS | /tmp/h_lint.log ruff check plus format check exit 0; /tmp/h_type.log mypy 204 source files exit 0; /tmp/h_test.log full pytest suite exit 0; /tmp/h_check.log 35 skills 10 agents 309 markdown files exit 0; /tmp/h_vdc.log PASS paper once exit 0 and PASS doctor exit 0 |
+| 2 | param-set hash plus active-set ledger tests green, bounds TOML parses | PASS | tests/upgrade/test_param_set_hash.py and tests/upgrade/test_active_set_ledger.py present; src/pumpgrok/config/upgrade_bounds.toml present with filter and exits range tables; full suite exit 0 in /tmp/h_test.log |
+| 3 | promotion gate blocks five cases | PASS | tests/upgrade/test_promotion_gate.py present with 10 tests: pass, out-of-bounds, above-20-trials, below-autonomy, failed holdout, negative holdout, divergence breach, first-failure order, winner binding, empty run id; full suite exit 0 |
+| 4 | promotion evidence record | PASS | tests/upgrade/test_promotion_evidence.py present with 7 tests; src/pumpgrok/upgrade/evidence.py writes var/upgrade/promotions/HASH.json plus desk JournalNote; full suite exit 0 |
+| 5 | exact rollback round trip | PASS | tests/upgrade/test_rollback_exact.py test_promote_then_rollback_round_trip asserts restored hash equals prior hash and ledger order SET_A SET_B SET_A; full suite exit 0 |
+| 6 | escalation, no promotion | PASS | tests/upgrade/test_escalation.py present with 3 tests: out-of-bounds escalates, over-trial-count escalates, eligible verdict escalates nothing and raises; src/pumpgrok/upgrade/escalate.py writes Escalation row plus JournalNote and no active-set row; full suite exit 0 |
+| 7 | SAFE-4 and SAFE-8 BLIND advisory, rest KILL, revert on provider | PASS | tests/safety/test_blind_advisory.py present with 6 tests: provider signal, holder advisory without provider, deployer advisory without provider, required blind still KILL, holder revert to KILL with provider, deployer revert to KILL with provider; src/pumpgrok/tools/safety/provider.py reads PUMPGROK_PAID_RPC_PROVIDER with empty or unset meaning none recorded; full suite exit 0 |
+| 8 | generate-templates check plus amendment oracle test | PASS | Makefile check target runs scripts/generate-templates.py --check; tests/safety/test_constitution_amendment.py present with 12 tests covering rules clauses 2 and 8, ten-role correction, agents/risk.md clause 10, docs/RISK_POLICY.md row 8 and section 2.4, .planning/PROJECT.md BLIND constraint, frozen oracle plus risk-only clause 3; /tmp/h_check.log exit 0; full suite exit 0 |
+| 9 | replay before and after hashes recorded | PASS | CHANGELOG.md Phase 9 before line and after line both carry b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, equal as allowed; /tmp/h_smoke.log shows the paper replay cycle completing with filled trades |
+| 10 | live refused with upgrade modules present | PASS | /tmp/h_live.log refuses mode live with 9 of 9 preconditions unmet and no transaction attempted, exit 3 per gate record; tests/upgrade/test_no_live_imports.py proves no import path from upgrade to a live adapter; full suite exit 0 |
+
+Verdicts changed from the body: none. The body verdict passed at 10 of 10 criteria is confirmed at HEAD da6c071, score 10/10.
