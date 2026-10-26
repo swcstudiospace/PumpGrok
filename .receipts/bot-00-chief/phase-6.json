@@ -66,7 +66,7 @@
     {
       "cmd": "uv run python scripts/probe_curve_layout.py (recorded before round 1; no account configured, so the probe path is unchanged)",
       "exit_code": 0,
-      "output_tail": "G-1 FAIL (171 foreign-owned paths); G-2, G-3, G-4, G-5/G-6, G-7 PASS; CI waiver covers G-1, G-2, G-5/6 for the phase PR only"
+      "output_tail": "Status: ASSUMED. Error: no bonding-curve account configured; no RPC call made; layout stays ASSUMED"
     },
     {
       "cmd": "python3 ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-6.json",
