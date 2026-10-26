@@ -104,6 +104,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - Phase 8 correction set: the first Phase 8 evaluator scored candidates with a SHA-256 digest of the seed, parameter hash and fold ids. No fills fed it, and the report showed zero fees and no metrics. That was a fabricated evaluator. The correction set (08-08 to 08-10, see 08-CORRECTION.md) replaced it with replayed net realized lamports, measured metrics, and conservative eligibility (promotion_eligible false without a passing paper comparison). The plan checker had not caught it; its checklist now includes a hash-as-score check.
 - Phase 8 result: smoke-10m replay hash unchanged (b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d). Per-fill fields are in memory only (G-10), so the ledger bytes did not change. Criterion 12's rationale wording is inaccurate; the recording obligation is met.
 - gsd-autonomous run defaults (graph ut-mvocrh76-02f3c9a9): q1 touched code plus mapped TODOs; q2 current milestone only; q3 defer unmapped TODOs; q4 only paths a phase names. Disclosure: the decomposition edited risk/engine and execution/paper_adapter, which are safety paths, under the TODO scope. The changes are moves only, with gates green. The owner should accept or revert them.
+- Phase 6 routing decision: G-1 showed 170 foreign paths on the 223-commit branch (RISK 128, sniper 13, signal 12, rug 9, journal 3, scout 3, exit 2). The decomposition contributed 26: cli 10 and risk engine 6 owned by bot-02-risk, and paper_adapter 10 owned by bot-04-sniper. Route B as written (re-own all to CHIEF) was declined, because CHIEF never trades. The owner chose Hold, and Phase 6 stays gaps_found. The owner had already accepted the decomposition.
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -143,4 +144,4 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 - Last update: 2026-10-25, after the gsd-autonomous run paused at Phase 6.
 - Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected) and the four VERIFICATION reports for phases 7 to 10.
-- Next: pending decisions for Phase 6 (BLOCKER_PAUSE): P6-ROUTE (G-1 route: route B RISK ownership change, or hold) and P6-APPROVED-BY (hold, no approver recorded). Milestone close and ultrathink-ship are blocked until Phase 6 is verified. Linear rows are skipped by owner decision; Notion rows exist for graph ut-mvocrh76-02f3c9a9.
+- Next: Phase 6 is on owner hold (P6-ROUTE: Hold; P6-APPROVED-BY: hold). Milestone close and ultrathink-ship stay blocked. To reopen, the owner decides routing per seat through docs/cross-bot-protocol.md, and names an approver for approved_by.
