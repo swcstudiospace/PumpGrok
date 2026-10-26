@@ -105,6 +105,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - Phase 8 result: smoke-10m replay hash unchanged (b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d). Per-fill fields are in memory only (G-10), so the ledger bytes did not change. Criterion 12's rationale wording is inaccurate; the recording obligation is met.
 - gsd-autonomous run defaults (graph ut-mvocrh76-02f3c9a9): q1 touched code plus mapped TODOs; q2 current milestone only; q3 defer unmapped TODOs; q4 only paths a phase names. Disclosure: the decomposition edited risk/engine and execution/paper_adapter, which are safety paths, under the TODO scope. The changes are moves only, with gates green. The owner should accept or revert them.
 - Phase 6 routing decision: G-1 showed 170 foreign paths on the 223-commit branch (RISK 128, sniper 13, signal 12, rug 9, journal 3, scout 3, exit 2). The decomposition contributed 26: cli 10 and risk engine 6 owned by bot-02-risk, and paper_adapter 10 owned by bot-04-sniper. Route B as written (re-own all to CHIEF) was declined, because CHIEF never trades. The owner chose Hold, and Phase 6 stays gaps_found. The owner had already accepted the decomposition.
+- Ship readiness format (2026-10-26): ultrathink-ship reads phase completion from the YAML frontmatter status of each *-VERIFICATION.md and ignores body text. The v3 reports for phases 6-10 were re-verified at da6c071 and rewritten with that frontmatter (commit d542c72). The earlier 0/5 count was this format gap, not a verification failure. Assess now reports completedPhases 4 of 5, with Phase 6 as the only gap.
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -142,6 +143,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-25, after the gsd-autonomous run paused at Phase 6.
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (corrected) and the four VERIFICATION reports for phases 7 to 10.
-- Next: Phase 6 is on owner hold (P6-ROUTE: Hold; P6-APPROVED-BY: hold). Milestone close and ultrathink-ship stay blocked. To reopen, the owner decides routing per seat through docs/cross-bot-protocol.md, and names an approver for approved_by.
+- Last update: 2026-10-26, after the ship assess re-check (completedPhases 4 of 5; Phase 6 open).
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (re-verified at da6c071, gaps_found 16/17) and the four VERIFICATION reports for phases 7 to 10 (re-verified, passed).
+- Next: owner decision on Phase 6 closure. Option A: hold (no PR, nothing pushed). Option B: a PR-bound CI waiver for G-1 and G-2 only, with a named approver for approved_by, and Phase 6 closed with that deviation recorded. Ship assess gap: roadmap incomplete 4 of 5 (Phase 6 only). Re-check 2026-10-26: G-1 still shows 170 foreign paths on the 226-commit branch; G-2 fails on approved_by.
