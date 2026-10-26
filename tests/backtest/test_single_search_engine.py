@@ -21,10 +21,8 @@ import pumpgrok.engine
 from pumpgrok.backtest import harness
 from pumpgrok.backtest.evaluate import CandidateParams, EvalWindow
 from pumpgrok.backtest.harness import HarnessResult, run_search
-from pumpgrok.backtest.manifest import param_set_hash
 from pumpgrok.backtest.split import holdout_split
 from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS, TooManyTrialsError
-from pumpgrok.core.idempotency import canonical_json
 
 
 def _space(count: int) -> list[dict[str, Any]]:
@@ -34,7 +32,7 @@ def _space(count: int) -> list[dict[str, Any]]:
 
 def _identity_hash(candidate: dict[str, Any]) -> str:
     """Parameter-set identity hash the harness records for one candidate."""
-    return param_set_hash(canonical_json(candidate).encode("utf-8"))
+    return CandidateParams(**candidate).content_hash
 
 
 def test_run_search_is_the_only_search_entry_point() -> None:
@@ -98,6 +96,7 @@ def test_tuning_never_observes_holdout_stamps(
         seed: int,
         ledger_path: str | Path,
         window: EvalWindow,
+        **kwargs: object,
     ) -> int:
         if window.window_id == split.holdout_id:
             holdout_ids.append(window.window_id)

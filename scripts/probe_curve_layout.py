@@ -9,7 +9,8 @@ little-endian u64 reserve counters, one-byte completion flag).
 Read-only by construction: stdlib ``urllib`` POST of a single ``getAccountInfo``
 body, no keys loaded, no wallet, no signing path. On success the decoded
 layout is written to ``tests/fixtures/rpc/bonding_curve/probe.json`` and
-``docs/CURVE_LAYOUT_PROBE.md`` records ``Status: VERIFIED``. On any failure
+``docs/CURVE_LAYOUT_PROBE.md`` records ``Status: VERIFIED`` only when the account is owned by the
+expected program and carries the expected discriminator. On any failure
 (unreachable network, unknown account, undecodable bytes) the script exits 0,
 keeps ``LAYOUT_STATUS`` ASSUMED, writes ``probe.json`` carrying the exact
 error text verbatim, and writes the doc with ``Status: ASSUMED`` plus an
@@ -42,6 +43,11 @@ DEFAULT_DOC = REPO_ROOT / "docs" / "CURVE_LAYOUT_PROBE.md"
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 _EXPECTED_SIZE = _CURVE_STRUCT.size
+
+# Owner and discriminator a bonding-curve account must carry before its bytes
+# are trusted. Both match tests/fixtures/rpc/bonding_curve/layout.json.
+EXPECTED_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
 
 
 def _now_utc() -> str:
@@ -96,6 +102,16 @@ def _decode_account(raw: bytes) -> dict:
         "total_supply_units": supply,
         "complete": bool(complete),
     }
+
+
+def _check_identity(value: dict, raw: bytes) -> None:
+    """Raise unless the account is owned by the expected program with its discriminator."""
+    owner = value.get("owner")
+    if owner != EXPECTED_PROGRAM_ID:
+        raise ValueError(f"account owner {owner!r} != expected program {EXPECTED_PROGRAM_ID}")
+    disc = raw[:8].hex()
+    if disc != EXPECTED_DISCRIMINATOR_HEX:
+        raise ValueError(f"account discriminator {disc} != expected {EXPECTED_DISCRIMINATOR_HEX}")
 
 
 def _write_assumed(
@@ -163,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(data, list) or len(data) != 2 or data[1] != "base64":
             raise ValueError("curve account is not base64-encoded bytes")
         raw = base64.b64decode(data[0], validate=True)
+        _check_identity(value, raw)
         decoded = _decode_account(raw)
     except Exception as exc:  # the exact text is the recorded artifact
         _write_assumed(

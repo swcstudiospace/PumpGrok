@@ -11,23 +11,32 @@ The manifest bytes are deterministic for identical inputs (sorted keys),
 so the same promotion always writes the same file. Hashes are identity
 only: they name the exact set and run and never act as a score, a metric,
 or a verdict.
+
+A hash names one manifest, so a second record of different evidence at that path
+raises PromotionEvidenceConflict and the first record survives intact.
+
+The manifest is created with an exclusive open, never a check-then-write, so
+two concurrent recorders cannot overwrite each other. A lost race compares
+bytes: identical bytes are a no-op, different bytes raise.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pumpgrok.backtest.divergence import DivergenceVerdict
-from pumpgrok.core.atomic_write import atomic_write_json
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.upgrade.bounds import Bounds
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
 
 __all__ = [
+    "PromotionEvidenceConflict",
     "bounds_snapshot",
     "promotion_manifest_path",
     "promotion_note_text",
@@ -38,6 +47,12 @@ __all__ = [
 PROMOTIONS_DIR = Path("var/upgrade/promotions")
 
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
+
+
+class PromotionEvidenceConflict(PumpgrokError):
+    """Different evidence already sits at this candidate hash's manifest path."""
+
+    code = "promotion_evidence_conflict"
 
 
 def promotion_note_text(candidate_hash: str, manifest_name: str) -> str:
@@ -69,6 +84,28 @@ def promotion_manifest_path(candidate_hash: str, promotions_dir: Path | str | No
     return directory / f"{candidate_hash}.json"
 
 
+def _manifest_bytes(manifest: dict[str, Any]) -> bytes:
+    """Manifest bytes: JSON with indent 2, UTF-8, no trailing newline."""
+    return json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _create_exclusive(path: Path, data: bytes) -> None:
+    """Create path with data; raise FileExistsError if it already exists.
+
+    The exclusive open is the only existence check, so two recorders cannot
+    both create the file. A failed write removes the partial file.
+    """
+    with path.open("xb") as fh:
+        try:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        except BaseException:
+            fh.close()
+            path.unlink(missing_ok=True)
+            raise
+
+
 def record_promotion(
     store: LedgerStore,
     *,
@@ -89,7 +126,9 @@ def record_promotion(
     divergence result, trial count, and bounds snapshot. The JournalNote
     (seat desk, note_kind note) references the manifest file. Inputs fail
     closed: a malformed hash, an empty run or holdout id, or a trial count
-    below 1 raises ValueError and writes nothing.
+    below 1 raises ValueError and writes nothing. A manifest path already holding
+    different evidence raises PromotionEvidenceConflict and leaves the first record
+    untouched; re-recording identical evidence rewrites nothing.
     """
     if not isinstance(candidate_hash, str) or not _HASH_RE.fullmatch(candidate_hash):
         raise ValueError("candidate_hash must be a 64-hex content hash")
@@ -116,9 +155,18 @@ def record_promotion(
     }
     path = promotion_manifest_path(candidate_hash, promotions_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(path, manifest)
-    stored = json.loads(path.read_text(encoding="utf-8"))
-    assert stored == manifest, "manifest must round-trip through JSON"
+    data = _manifest_bytes(manifest)
+    try:
+        _create_exclusive(path, data)
+    except FileExistsError:
+        if path.read_bytes() != data:
+            raise PromotionEvidenceConflict(
+                f"promotion evidence for {candidate_hash} already recorded at {path} "
+                "with different content",
+                path=str(path),
+                candidate_hash=candidate_hash,
+                run_id=run_id,
+            ) from None
     store.append(
         ts_utc=ts_utc,
         source=source,

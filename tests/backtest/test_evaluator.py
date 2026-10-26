@@ -1,8 +1,9 @@
 """Window evaluator on the recorded fixtures (BT-03, BT-07).
 
 Desk-default overrides score the smoke full window as the ledger-derived
-SELL filled lamports total minus BUY filled lamports total minus all venue
-fees and network costs, identical across runs, with no sign assumption.
+net recorded cash change: the sum of FillRecorded cash_delta_lamports (every
+venue fee and network cost already inside it) minus the sum of OrderRejected
+fees_lamports, identical across runs, with no sign assumption.
 Every smoke-10m window scores an honest zero with no fills. Unknown keys
 and scoring-only knobs raise validation errors. Offline only, tmp ledgers
 under tmp_path, no network, no wall clock.
@@ -49,22 +50,20 @@ def _ledger_math(ledger_path: Path) -> tuple[int, int]:
     """Independent net lamports and fill count from one ledger's fills."""
     store = LedgerStore(ledger_path)
     try:
-        rows = store.read(types=["FillRecorded"], limit=None)
+        fills = store.read(types=["FillRecorded"], limit=None)
+        rejections = store.read(types=["OrderRejected"], limit=None)
     finally:
         store.close()
-    buy_total = 0
-    sell_total = 0
-    fee_total = 0
-    for row in rows:
+    cash_total = 0
+    for row in fills:
         payload = row["payload"]
         assert isinstance(payload, dict)
-        if payload["side"] == "buy":
-            buy_total += int(payload["filled_lamports"])
-        else:
-            assert payload["side"] == "sell"
-            sell_total += int(payload["filled_lamports"])
-        fee_total += int(payload["venue_fee_lamports"]) + int(payload["network_cost_lamports"])
-    return sell_total - buy_total - fee_total, len(rows)
+        cash_total += int(payload["cash_delta_lamports"])
+    for row in rejections:
+        payload = row["payload"]
+        assert isinstance(payload, dict)
+        cash_total -= int(payload["fees_lamports"])
+    return cash_total, len(fills)
 
 
 def test_desk_defaults_score_matches_ledger_math(tmp_path: Path) -> None:

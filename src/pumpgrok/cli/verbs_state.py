@@ -39,6 +39,7 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.tool import Tool
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
+from pumpgrok.ledger.active_set import read_active_param_set
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
@@ -49,8 +50,26 @@ from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
+from pumpgrok.tools import ensure_paper_genesis
+from pumpgrok.upgrade.params import ParamSet
 
 log = logging.getLogger("pumpgrok.cli")
+
+
+def operator_active_set(settings: Settings) -> ParamSet | None:
+    """Active param set recorded in the operator ledger, or ``None`` when none was.
+
+    The ledger is opened only when it exists, so a run that never recorded a set
+    creates nothing. A recorded set that fails verification raises CorruptState.
+    """
+    if not PAPER_LEDGER_PATH.exists():
+        return None
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        ensure_paper_genesis(store, settings.risk)
+        return read_active_param_set(store)
+    finally:
+        store.close()
 
 
 def _run(args: argparse.Namespace, settings: Settings) -> int:
@@ -105,6 +124,7 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             exits=settings.exits,
             budget=settings.risk,
             limits=settings.limits,
+            active_set=operator_active_set(settings),
         )
     )
 
@@ -121,6 +141,7 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
         exits=settings.exits,
         budget=settings.risk,
         limits=settings.limits,
+        active_set=operator_active_set(settings),
     )
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     _say(sys.stdout, *(format_trade(trade) for trade in result.trades))
@@ -152,10 +173,11 @@ def _paper(args: argparse.Namespace, settings: Settings) -> int:
     return _run_wired(verb, args.seat, settings, ("exec.simulate", "exec.place"), use)
 
 
-def _set_autonomy(policy: str, by: str) -> int:
+def _set_autonomy(policy: str, by: str, settings: Settings) -> int:
     """Append the ``ConfigChanged`` + ``JournalNote`` pair for a level change."""
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     try:
+        ensure_paper_genesis(store, settings.risk)
         previous = read_autonomy(store)
         ts_utc = format_ts_utc(WallClock().now())
         store.append_batch(
@@ -182,6 +204,7 @@ def _halt_clear(by: str, reason: str, settings: Settings) -> int:
     verb = "state halt --clear"
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     try:
+        ensure_paper_genesis(store, settings.risk)
         clock = WallClock()
         engine = RiskEngine(
             store=store,
@@ -207,10 +230,11 @@ def _halt_clear(by: str, reason: str, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _resume(target: str, by: str) -> int:
+def _resume(target: str, by: str, settings: Settings) -> int:
     """Record a seat resume from observe-only (paper-engine.md 6.4, R22)."""
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     try:
+        ensure_paper_genesis(store, settings.risk)
         ts_utc = format_ts_utc(WallClock().now())
         store.append(
             ts_utc=ts_utc,
@@ -244,7 +268,7 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
         except UsageError as exc:
             _say(sys.stderr, f"usage error: {exc}")
             return EXIT_CONFIG
-        return _resume(target, by)
+        return _resume(target, by, settings)
     refused = _refuse_forbidden_seat(args.seat, verb)
     if refused is not None:
         return refused
@@ -257,17 +281,18 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
         by = _human_by(args.by, verb)
 
         async def _autonomy_use(_tools: list[Tool]) -> int:
-            return _set_autonomy(args.policy, by)
+            return _set_autonomy(args.policy, by, settings)
 
         return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _autonomy_use)
     return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _call_use(verb, 0, {}))
 
 
-def _killswitch_clear(by: str, reason: str) -> int:
+def _killswitch_clear(by: str, reason: str, settings: Settings) -> int:
     """Append ``KillSwitchCleared`` plus the ``killswitch_clear`` approval."""
     verb = "killswitch clear"
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     try:
+        ensure_paper_genesis(store, settings.risk)
         clock = WallClock()
         switch = KillSwitch(
             clock,
@@ -299,7 +324,7 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
         # Human-only (R22): the ledger KillSwitchCleared + ApprovalRecord.
         # No seat: the human identity in --by is the authorization.
         by = _human_by(args.by, verb)
-        return _killswitch_clear(by, args.reason)
+        return _killswitch_clear(by, args.reason, settings)
     if args.cmd == "set":
         return _run_wired(
             verb,
@@ -326,10 +351,10 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
 
 def _ticket_verb(args: argparse.Namespace, settings: Settings) -> int:
     """Allocate and list paper tickets over the canonical ledger (R29, R33)."""
-    del settings
     verb = f"ticket {args.cmd}"
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     try:
+        ensure_paper_genesis(store, settings.risk)
         ts_utc = format_ts_utc(WallClock().now())
         if args.cmd == "next":
             ticket_id = allocate_ticket(

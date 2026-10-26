@@ -24,6 +24,7 @@ from pumpgrok.cli.validators import (
     _report_date,
     _utc_now,
 )
+from pumpgrok.cli.verbs_state import operator_active_set
 from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
@@ -36,6 +37,7 @@ from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 from pumpgrok.supervisor.scheduler import run_once_replay
+from pumpgrok.tools import ensure_paper_genesis
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -111,15 +113,16 @@ def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
     tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(tmp, target)
-    _append_live_approval(by, cap_lamports, record["signature"])
+    _append_live_approval(by, cap_lamports, record["signature"], settings)
     _say(sys.stdout, json.dumps({"confirmation_record": str(target), "config_hash": config_hash}))
     return EXIT_OK
 
 
-def _append_live_approval(by: str, cap_lamports: int, signature: str) -> None:
+def _append_live_approval(by: str, cap_lamports: int, signature: str, settings: Settings) -> None:
     """Append ApprovalRecorded(kind=live_gate) with the confirmation signature."""
     store = LedgerStore(PAPER_LEDGER_PATH)
     try:
+        ensure_paper_genesis(store, settings.risk)
         now = _utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
         store.append(
             ts_utc=now,
@@ -191,6 +194,7 @@ def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
             exits=settings.exits,
             budget=settings.risk,
             limits=settings.limits,
+            active_set=operator_active_set(settings),
         )
     except (DataStale, ReplayMissingRecord) as exc:
         _say(sys.stderr, f"replay failed: {exc.code}: {exc.message}")

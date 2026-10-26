@@ -433,9 +433,11 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
 # PUMPGROK_* names read outside the Settings model: PUMPGROK_LOG_JSON by the
 # logging setup (honoured only under the dev profile), PUMPGROK_LIVE_ENABLE
 # by the live gate (precondition 2; env-only, never a TOML key),
-# PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22), and
+# PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22),
 # PUMPGROK_TELEGRAM_TOKEN by the Telegram notify sink (env-only and optional:
-# unset means Telegram is not configured and never blocks startup).
+# unset means Telegram is not configured and never blocks startup), and
+# PUMPGROK_PAID_RPC_PROVIDER by the safety provider (env-only and optional:
+# unset or empty means no paid RPC provider is recorded).
 NON_SETTING_ENV_NAMES = frozenset(
     {
         "PUMPGROK_PROFILE",
@@ -445,6 +447,7 @@ NON_SETTING_ENV_NAMES = frozenset(
         "PUMPGROK_KILLSWITCH",
         "PUMPGROK_CONFIRMATION_KEY",
         "PUMPGROK_TELEGRAM_TOKEN",  # pragma: allowlist secret: env var name, not a credential
+        "PUMPGROK_PAID_RPC_PROVIDER",
     }
 )
 

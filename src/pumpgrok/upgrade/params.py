@@ -12,42 +12,13 @@ read it as quality.
 
 from __future__ import annotations
 
-import hashlib
-from decimal import Decimal
 from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from pumpgrok.backtest.evaluate import CandidateParams
-from pumpgrok.core.idempotency import canonical_json
+from pumpgrok.backtest.candidate import CandidateParams
 
 __all__ = ["ParamSet"]
-
-
-def _normalized_leaf(value: Any) -> Any:
-    """Map one override leaf onto a canonical_json scalar.
-
-    Floats normalize through Decimal so the hash input stays deterministic
-    while canonical_json keeps rejecting raw float leaves.
-    """
-    if isinstance(value, (bool, int, str, Decimal)):
-        return value
-    if isinstance(value, float):
-        return Decimal(repr(value))
-    if isinstance(value, list):
-        return [_normalized_leaf(item) for item in value]
-    if isinstance(value, dict):
-        if not all(isinstance(key, str) for key in value):
-            raise TypeError("override mapping keys must be str")
-        return {key: _normalized_leaf(item) for key, item in value.items()}
-    raise TypeError(f"override leaf of type {type(value).__name__} is not supported")
-
-
-def _normalized_mapping(mapping: dict[str, Any] | None) -> dict[str, Any]:
-    """Normalize one override mapping: None and {} both mean no overrides."""
-    if not mapping:
-        return {}
-    return {key: _normalized_leaf(value) for key, value in mapping.items()}
 
 
 class ParamSet(BaseModel):
@@ -80,8 +51,4 @@ class ParamSet(BaseModel):
         Identity only: the digest names the exact set and never acts as
         a score, a metric, or a verdict.
         """
-        payload: dict[str, Any] = {
-            "exits": _normalized_mapping(self.exits),
-            "filter": _normalized_mapping(self.filter),
-        }
-        return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+        return self.candidate().content_hash

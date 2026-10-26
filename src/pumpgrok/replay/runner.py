@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.errors import DataStale
@@ -35,6 +35,9 @@ from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, CorruptFixture,
 from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import DEFAULT_SEED, make_rng
 from pumpgrok.replay.sources import FixtureEventSource
+
+if TYPE_CHECKING:
+    from pumpgrok.upgrade.params import ParamSet
 
 __all__ = [
     "CYCLE_SEAT",
@@ -148,8 +151,17 @@ def run_replay(
     *,
     seed: int = DEFAULT_SEED,
     ledger_path: str | Path | None = None,
+    active_set: ParamSet | None = None,
 ) -> ReplayResult:
-    """Replay one fixture dataset into a fresh hash-chained ledger."""
+    """Replay one fixture dataset into a fresh hash-chained ledger.
+
+    When ``active_set`` is given, its candidate's filter settings replace ``filter_cfg``
+    before the checkpoint verdict is judged, as ``open_replay_runtime`` does for the
+    paper timeline. Exit settings never reach this verdict, so only the filter is applied.
+    ``None`` leaves the replay unchanged.
+    """
+    if active_set is not None:
+        filter_cfg = active_set.candidate().filter_settings()
     source_dir = Path(dataset_dir)
     dataset = load_dataset(source_dir)  # verifies every listed digest first
     if not dataset.events:

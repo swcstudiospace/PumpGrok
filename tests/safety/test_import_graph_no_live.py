@@ -115,6 +115,10 @@ def _imports_of(module: str, path: Path) -> set[str]:
             if node.module:
                 target = f"{base}.{node.module}" if level else node.module
                 deps.add(target)
+                # from pkg import child: a child module is an edge; _resolve drops non-modules.
+                for item in node.names:
+                    if item.name != "*":
+                        deps.add(f"{target}.{item.name}")
             elif level:
                 for item in node.names:
                     if item.name != "*":
@@ -261,6 +265,7 @@ def test_live_package_holds_no_network_client() -> None:
 IMPORT_PROBES: list[tuple[str, bool]] = [
     ("import pumpgrok.execution.live.live_adapter\n", True),
     ("from pumpgrok.execution.live.live_adapter import LiveAdapterStub\n", True),
+    ("from pumpgrok.execution.live import live_adapter as adapter\n", True),
     ("from pumpgrok.execution.live.live_gate import LiveGate\n", False),
     ("from pumpgrok.backtest.evaluate import CandidateParams\n", False),
 ]
@@ -285,7 +290,10 @@ def test_import_probe_resolves_to_quarantine(tmp_path: Path, source: str, flagge
     """Import extraction resolves adapter imports, not gate or backtest imports."""
     package = tmp_path / "mod.py"
     package.write_text(source, encoding="utf-8")
-    modules = {"pumpgrok.execution.live.live_adapter": package}
+    modules = {
+        "pumpgrok.execution.live": package,
+        "pumpgrok.execution.live.live_adapter": package,
+    }
     deps = _imports_of("pumpgrok.guard", package)
     hits = {dep for dep in deps if _resolve(dep, modules) == QUARANTINE_MODULE}
     assert bool(hits) is flagged, deps

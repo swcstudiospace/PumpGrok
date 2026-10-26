@@ -102,6 +102,19 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Criterion 16: the phase pull request is ready for review, not draft. It merges to main through ultrathink-ship after CI is green and Greptile reaches 5/5 with no open threads.
 - The 2026-10-25 re-own decision is superseded. The paths stay foreign-owned until a follow-up change, and the waiver stays on main until a cleanup change removes it.
 
+### Review fixes (PR 16, Greptile round 1)
+
+- Paper ledger: the genesis equity is written once, when a paper ledger is first opened by a CLI verb or the composition root. A ledger with events but no genesis now fails closed with CorruptState instead of taking the configured budget as its base.
+- Active sets: recording stores the overrides under their content hash in the operator ledger. Paper runs and the checkpoint verdict apply the restored filter and exits. The candidate type moved to backtest/candidate.py to break an import cycle; evaluate re-exports it.
+- Backtests: a candidate hash equals its ParamSet hash, so the gate accepts real search winners. Net scoring counts each fee once (recorded cash changes minus refused-attempt fees). Folds are cut on distinct timestamps and raise ValueError when there are too few. The holdout is replayed once per backtest. Identical backtests cannot run at once (run-directory lock). Float parameters are a usage error (exit 1).
+- Backtest identity: the report identifies the evaluated filter, exits, risk budget and limits. Backtests evaluate the desk-default risk budget and limits, not the operator's configured overlay; that is recorded as a decision.
+- Promotion evidence: a second record with different content at the same candidate hash raises PromotionEvidenceConflict. The manifest is created with an exclusive open.
+- Startup: PUMPGROK_PAID_RPC_PROVIDER is a registered non-setting name.
+- Docs and checks: the CLAUDE.md codebase map names current modules; verify_doc_commands.sh rejects shell operators before execution; the curve probe records VERIFIED only for the expected program owner and account discriminator; the analyzer SOL conversion uses core.units.
+- Tests: the import-graph check walks child modules; the autonomy e2e test checks the policy gate directly.
+
+Follow-ups, not changed in this cycle: default-genesis fallbacks remain in execution/paper_adapter (_fold_state), ledger/reconcile (_genesis) and a supervisor docstring; the replay runtime still fixes autonomy to autonomous-paper; a forced-close fill uses a placeholder decision id until core/adapter.py accepts an empty decision id; the CI waiver is removed by a cleanup change after the merge.
+
 ## [Unreleased] - Audit fixes
 
 ### Fixed

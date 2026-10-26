@@ -10,19 +10,31 @@ fixtures, no network, no wall clock.
 
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pumpgrok.cli import main
+from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
+from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.engine.model import RiskDecision
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 SMOKE_10M = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke-10m")
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
+EQUITY = 10_000_000_000
+TICKET = "SOL-20260201-001"
+MINT = "So11111111111111111111111111111111111111112"
+S0 = 42_000_000_000
+T0 = 764_000_000_000_000
+SIZE = 200_000_000
 
 
 def _set_level(store: LedgerStore, policy: str, clock: FixtureClock) -> None:
@@ -45,6 +57,34 @@ def _paper_store(tmp_path: Path) -> LedgerStore:
     return LedgerStore(str(var_dir / "ledger.sqlite"))
 
 
+def _gate_verdict(store: LedgerStore, clock: FixtureClock) -> RiskDecision:
+    """Gate verdict for one buy with no approval, at the ledger's autonomy level."""
+    if store.get_meta("initial_equity_lamports") is None:
+        store.set_meta("initial_equity_lamports", str(EQUITY))
+        store.set_meta("source", "paper")
+    ids = IdFactory(clock, random.Random(41))
+    engine = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=ids,
+        clock=clock,
+        autonomy=read_autonomy(store),
+        get_reserves=lambda _mint: (S0, T0),
+        env={},
+    )
+    order = OrderRequest(
+        ticket_id=TICKET,
+        mint=MINT,
+        side="buy",
+        decision_id=ids.ulid(),
+        size_lamports=SIZE,
+        max_slippage_bps=100,
+        approval_id=f"apr-{ids.ulid()}",
+        correlation_id="pap03-gate",
+    )
+    return engine.check(order, seat="bot-04-sniper")
+
+
 def test_autonomous_paper_runs_on_smoke(tmp_path, monkeypatch, capsys) -> None:
     """PAP-03: human-set autonomous-paper fills on the smoke dataset."""
     monkeypatch.chdir(tmp_path)
@@ -52,8 +92,14 @@ def test_autonomous_paper_runs_on_smoke(tmp_path, monkeypatch, capsys) -> None:
     store = _paper_store(tmp_path)
     try:
         assert read_autonomy(store) == "manual-ticket"
+        # The replay sandbox fixes its own level, so the human policy gate is checked here.
+        held = _gate_verdict(store, clock)
+        assert held.passed is False
+        assert held.reason == "approval_missing"
         _set_level(store, "autonomous-paper", clock)
         assert read_autonomy(store) == "autonomous-paper"
+        released = _gate_verdict(store, clock)
+        assert released.reason != "approval_missing"
     finally:
         store.close()
 
@@ -88,6 +134,8 @@ def test_autonomous_paper_runs_on_smoke_10m(tmp_path, monkeypatch, capsys) -> No
     clock = FixtureClock(start=START)
     store = _paper_store(tmp_path)
     try:
+        store.set_meta("initial_equity_lamports", str(EQUITY))
+        store.set_meta("source", "paper")
         _set_level(store, "autonomous-paper", clock)
         assert read_autonomy(store) == "autonomous-paper"
     finally:

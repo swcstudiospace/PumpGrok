@@ -22,6 +22,7 @@ import httpx
 import pumpgrok.execution
 from pumpgrok.core.adapter import ExecutionAdapter, OrderRequest
 from pumpgrok.core.binding_key import load_or_create_binding_key
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
@@ -83,7 +84,12 @@ if TYPE_CHECKING:
     from pumpgrok.execution.paper_adapter import CurveSnapshot, PriceSource
 
 
-__all__ = ["build_operator_registry", "build_registry", "register_read_tools"]
+__all__ = [
+    "build_operator_registry",
+    "build_registry",
+    "ensure_paper_genesis",
+    "register_read_tools",
+]
 
 
 log = logging.getLogger(__name__)
@@ -274,6 +280,29 @@ class _CachingPriceSource:
         return snapshot
 
 
+def ensure_paper_genesis(store: LedgerStore, budget: RiskBudget) -> None:
+    """Write the paper genesis equity on a new ledger; fail closed on history without it.
+
+    The genesis meta row is ``initial_equity_lamports``. A ledger that already has
+    it is left alone. A ledger with events but no genesis raises CorruptState: the
+    configured budget may differ from the one the ledger started with, so
+    substituting it would silently change the base for balances and risk checks.
+    A new, empty ledger gets its genesis from the budget (INT-02): the same meta
+    row the replay runtime writes, so a fresh paper ledger reaches shutdown and
+    the exit-halt without a CorruptState. Never overwritten: history keeps the
+    genesis it started with.
+    """
+    if store.get_meta("initial_equity_lamports") is not None:
+        return
+    history = store.count()
+    if history > 0:
+        raise CorruptState(
+            "paper ledger has events but no initial_equity_lamports genesis",
+            events=history,
+        )
+    store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
+
+
 def build_operator_registry(
     *,
     data_dir: Path,
@@ -320,12 +349,7 @@ def build_operator_registry(
     live = settings.effective_mode == "live"
     curves = _CachingPriceSource(price_source)
     budget = settings.risk
-    if store.get_meta("initial_equity_lamports") is None:
-        # Genesis equity for the paper ledger (INT-02): the same meta row the
-        # replay runtime writes, so a fresh paper ledger reaches shutdown and
-        # the exit-halt without a CorruptState. Never overwritten: history
-        # keeps the genesis it started with.
-        store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
+    ensure_paper_genesis(store, budget)
     engine = RiskEngine(
         store=store,
         budget=budget,

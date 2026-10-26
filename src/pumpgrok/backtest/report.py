@@ -5,7 +5,7 @@ keys, fixed integer formatting, plain decimal formatting, and no
 wall-clock timestamps. The report names the data window from recorded
 event timestamps, the holdout id and split ids, the trial count with
 both limits, realized slippage and fee totals summed from holdout
-fills, the BT-05 window metrics with their inputs and assumptions, the
+fills and refused attempts, the BT-05 window metrics with their inputs and assumptions, the
 promotion eligibility flag with its reason, and the paper comparison
 section when a paper ledger was supplied.
 
@@ -52,8 +52,10 @@ class BacktestReport:
     ids plus the holdout id; holdout_events and tuning_events count
     recorded ticks on each side of the cutoff. trial_count is the
     ledger size after this run recorded its trial. Fee schedule fields
-    quote the desk fee model; realized totals are summed from holdout
-    fills. Metric fields carry the BT-05 window summary, with
+    quote the desk fee model; realized totals sum holdout fills plus the fees of
+    refused attempts, each fee counted once. filter_settings_hash identifies the
+    full evaluated configuration: filter, exits, risk budget and limits. Metric
+    fields carry the BT-05 window summary, with
     trade-needing ratios as None on zero-trade windows. Paper fields
     carry the same-window paper summary when a paper ledger was
     supplied, else None. promotion_reason states why promotion is or
@@ -288,6 +290,10 @@ def render(report: BacktestReport) -> str:
     parts: list[str] = ["# PumpGrok backtest report\n"]
     parts.append("## Run\n")
     parts.extend(f"{key}: {value}\n" for key, value in run_rows)
+    parts.append(
+        "note: filter_settings_hash identifies the full evaluated configuration: "
+        "filter, exits, risk budget and limits\n"
+    )
     parts.append("## Data window\n")
     parts.extend(f"{key}: {value}\n" for key, value in window_rows)
     parts.append("## Trials\n")
@@ -314,8 +320,9 @@ def render(report: BacktestReport) -> str:
     parts.append("## Fees\n")
     parts.extend(f"{key}: {value}\n" for key, value in fee_rows)
     parts.append(
-        "note: realized total is venue plus network costs summed over "
-        "holdout fills; schedule fields quote the desk fee model\n"
+        "note: realized total is venue plus network costs summed over holdout "
+        "fills, plus fees paid by refused attempts (OrderRejected); each fee "
+        "counts once; schedule fields quote the desk fee model\n"
     )
     parts.append("## Verdict\n")
     parts.append(f"promotion_eligible: {_bool(report.promotion_eligible)}\n")

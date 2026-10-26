@@ -3,21 +3,23 @@
 Each candidate parameter set is applied as validated settings overrides and
 replayed through the real engine and PaperAdapter over a stamp-range slice of
 a recorded dataset. The tuning objective is net realized lamports over the
-window: SELL filled lamports minus BUY filled lamports minus all venue fees
-and network costs from the FillRecorded rows. Partial fills count at their
-recorded filled amount. A window with no fills scores 0, which is an honest
-zero, never an error marker.
+window: the net recorded cash change of the eval ledger, the sum of
+FillRecorded cash_delta_lamports (every venue fee and network cost already
+sits inside that delta) minus OrderRejected fees_lamports. Partial fills
+count at their recorded filled amount. A window with no fills scores 0,
+which is an honest zero, never an error marker.
 
 Score inputs are replay outputs only: candidate overrides, the recorded
 events in the window, and the seed. No digest, random draw, or wall-clock
 reading acts as a score. Identity digests appear only through the manifest
 helpers, never as scores. The module is deterministic: identical inputs give
-identical scores. New money stays integer base units; Decimal appears only
-inside the ledger rows this module reads, never in its arithmetic.
+identical scores. New money stays integer base units; the ledger rows this
+module reads carry integer lamports, and no Decimal enters its arithmetic.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tempfile
@@ -26,13 +28,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
-
+from pumpgrok.backtest.candidate import (
+    CandidateParams,
+    ScoringKnobError,
+    _reject_scoring_knobs,
+)
 from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, param_set_hash
 from pumpgrok.backtest.split import holdout_split, walk_forward_folds
-from pumpgrok.config.settings import ExitsSettings, FilterSettings
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, event_epoch, load_dataset
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.scheduler import run_once_replay
 
 __all__ = [
@@ -40,90 +46,11 @@ __all__ = [
     "EvalWindow",
     "FoldWindows",
     "ScoringKnobError",
+    "_reject_scoring_knobs",
     "evaluate_window",
+    "evaluated_settings_hash",
     "fold_windows",
 ]
-
-#: Tunable names the replay never consults, so accepting them would be a
-#: hollow knob. ScoringWeights fields (audit, narrative, timing, metrics),
-#: the ScoringSettings container names (weights, timing_cache_seconds), and
-#: min_total_score, which lives on FilterSettings but decide_token never
-#: reads: it consults only passes_filter, so the knob is inert in replay.
-_SCORING_KNOBS = frozenset(
-    {
-        "audit",
-        "narrative",
-        "timing",
-        "metrics",
-        "weights",
-        "timing_cache_seconds",
-        "min_total_score",
-    }
-)
-
-
-class ScoringKnobError(ValueError):
-    """A candidate tunable names a scoring knob the replay never consults."""
-
-
-def _reject_scoring_knobs(section: str, mapping: Mapping[str, Any]) -> None:
-    """Refuse scoring knobs inside one override mapping, fail closed."""
-    for key in mapping:
-        if key in _SCORING_KNOBS:
-            raise ScoringKnobError(
-                f"scoring knob {key!r} in {section!r} is not tunable: "
-                "the replay consults only passes_filter, so the knob is inert"
-            )
-
-
-class CandidateParams(BaseModel):
-    """One candidate parameter set: filter and exits overrides only.
-
-    Both mappings are optional; absent means desk defaults. Each provided
-    mapping is validated by constructing the real FilterSettings or
-    ExitsSettings model, so unknown fields fail. Any other top-level key,
-    including scoring weights, fails through extra forbidden. Scoring knobs
-    wherever they appear, including min_total_score inside filter, fail
-    through the explicit blocklist with a typed validation error. Pydantic
-    surfaces validator ValueError subclasses as ValidationError.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    filter: dict[str, Any] | None = None
-    exits: dict[str, Any] | None = None
-
-    @field_validator("filter")
-    @classmethod
-    def _check_filter(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Blocklist scoring knobs, then validate against FilterSettings."""
-        if value is None:
-            return None
-        _reject_scoring_knobs("filter", value)
-        FilterSettings(**value)
-        return value
-
-    @field_validator("exits")
-    @classmethod
-    def _check_exits(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Blocklist scoring knobs, then validate against ExitsSettings."""
-        if value is None:
-            return None
-        _reject_scoring_knobs("exits", value)
-        ExitsSettings(**value)
-        return value
-
-    def filter_settings(self) -> FilterSettings:
-        """Desk defaults with the candidate filter overrides applied."""
-        if self.filter is None:
-            return FilterSettings()
-        return FilterSettings(**dict(self.filter))
-
-    def exits_settings(self) -> ExitsSettings:
-        """Desk defaults with the candidate exits overrides applied."""
-        if self.exits is None:
-            return ExitsSettings()
-        return ExitsSettings(**dict(self.exits))
 
 
 @dataclass(frozen=True)
@@ -150,27 +77,35 @@ class FoldWindows:
 def fold_windows(stamps: Sequence[float], dataset: str, n_folds: int) -> FoldWindows:
     """Pre-holdout fold test windows plus the holdout range with its id.
 
-    Fold geometry follows the split module block rule: the pre-holdout
-    stamps keep their input order and are cut into N + 1 contiguous blocks;
-    fold K tests block K + 1. Window ids reuse the walk_forward_folds test
-    ids, and the holdout window carries the holdout id over stamps at or
-    past the holdout cutoff. Validation (dataset name, fold count,
-    pre-holdout depth) reuses holdout_split and walk_forward_folds, so bad
-    inputs raise there instead of yielding an empty or holdout-reading
-    window. Every returned window holds at least one stamp.
+    Fold geometry follows the split module block rule, applied to the sorted
+    distinct pre-holdout timestamps: they are cut into N + 1 contiguous blocks
+    and fold K tests block K + 1. Stamps that share an instant never straddle
+    two folds, so every fold window holds at least one stamp. Window ids reuse
+    the walk_forward_folds test ids, and the holdout window carries the holdout
+    id over stamps at or past the holdout cutoff. Validation (dataset name, fold
+    count, pre-holdout depth) reuses holdout_split and walk_forward_folds; fewer
+    than N + 1 distinct pre-holdout timestamps raises here rather than yielding
+    an empty window.
     """
     pairs = walk_forward_folds(stamps, dataset, n_folds)
     split = holdout_split(stamps, dataset)
     cutoff = split.holdout_start_ts
-    pre = [stamp for stamp in stamps if stamp < cutoff]
-    total = len(pre)
+    distinct = sorted({stamp for stamp in stamps if stamp < cutoff})
+    total = len(distinct)
+    if total < n_folds + 1:
+        msg = f"need at least {n_folds + 1} distinct pre-holdout timestamps for {n_folds} folds"
+        raise ValueError(f"{msg}, found {total}")
     folds: list[EvalWindow] = []
     for position in range(1, n_folds + 1):
         start_pos = (position * total) // (n_folds + 1)
         end_pos = ((position + 1) * total) // (n_folds + 1)
-        end_ts = pre[end_pos] if end_pos < total else cutoff
+        end_ts = distinct[end_pos] if end_pos < total else cutoff
         folds.append(
-            EvalWindow(window_id=pairs[position - 1][1], start_ts=pre[start_pos], end_ts=end_ts)
+            EvalWindow(
+                window_id=pairs[position - 1][1],
+                start_ts=distinct[start_pos],
+                end_ts=end_ts,
+            )
         )
     return FoldWindows(
         folds=tuple(folds),
@@ -181,42 +116,78 @@ def fold_windows(stamps: Sequence[float], dataset: str, n_folds: int) -> FoldWin
 def _int_field(payload: dict[str, object], name: str) -> int:
     value = payload.get(name)
     if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"FillRecorded row carries non-integer {name}")
+        raise ValueError(f"ledger row carries non-integer {name}")
     return value
 
 
-def _net_lamports(ledger_path: Path) -> int:
-    """Net realized lamports from one eval ledger, fail closed.
+def _payload_mapping(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
+    """Payload mapping of one eval ledger row, fail closed."""
+    payload = row.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError(f"{kind} row carries no payload mapping")
+    return payload
 
-    SELL filled lamports minus BUY filled lamports minus every venue fee and
-    network cost on the FillRecorded rows, in ledger order. Rows without a
-    payload mapping, non-integer money fields, or an unknown side raise
-    instead of scoring a guess. A ledger with no fills nets 0.
+
+def _net_lamports(ledger_path: Path) -> int:
+    """Net recorded cash change in lamports from one eval ledger, fail closed.
+
+    Sums FillRecorded cash_delta_lamports, which already carries every fee: a
+    BUY debits filled plus network cost (its venue fee sits inside filled), and
+    a SELL credits proceeds already net of venue fee and network cost. Each
+    OrderRejected fees_lamports is then deducted, as the ledger cash equation
+    does, so no fee is counted twice. Rows without a payload mapping, a
+    non-integer cash field, or an unknown side raise instead of scoring a
+    guess. A ledger with no fills nets 0.
     """
     store = LedgerStore(ledger_path)
     try:
-        rows = store.read(types=["FillRecorded"], limit=None)
+        fills = store.read(types=["FillRecorded"], limit=None)
+        rejections = store.read(types=["OrderRejected"], limit=None)
     finally:
         store.close()
-    buy_total = 0
-    sell_total = 0
-    fee_total = 0
-    for row in rows:
-        payload = row.get("payload")
-        if not isinstance(payload, dict):
-            raise ValueError("FillRecorded row carries no payload mapping")
+    cash_total = 0
+    for row in fills:
+        payload = _payload_mapping(row, "FillRecorded")
         side = payload.get("side")
-        filled = _int_field(payload, "filled_lamports")
-        venue_fee = _int_field(payload, "venue_fee_lamports")
-        network_cost = _int_field(payload, "network_cost_lamports")
-        if side == "buy":
-            buy_total += filled
-        elif side == "sell":
-            sell_total += filled
-        else:
+        if side not in ("buy", "sell"):
             raise ValueError(f"FillRecorded row carries unknown side {side!r}")
-        fee_total += venue_fee + network_cost
-    return sell_total - buy_total - fee_total
+        cash_total += _int_field(payload, "cash_delta_lamports")
+    for row in rejections:
+        payload = _payload_mapping(row, "OrderRejected")
+        cash_total -= _int_field(payload, "fees_lamports")
+    return cash_total
+
+
+def _effective_budget(budget: RiskBudget | None) -> RiskBudget:
+    """Risk budget the replay evaluates: the caller's, else the replay default."""
+    return budget if budget is not None else RiskBudget()
+
+
+def _effective_limits(limits: EngineLimits | None) -> EngineLimits:
+    """Engine limits the replay evaluates: the caller's, else the replay default."""
+    return limits if limits is not None else EngineLimits()
+
+
+def evaluated_settings_hash(
+    params: CandidateParams,
+    *,
+    risk_budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
+) -> str:
+    """sha256 identity of every setting one evaluation replays.
+
+    Covers the effective filter and exits (desk defaults with the candidate
+    overrides) plus the risk budget and engine limits, each resolved exactly
+    as evaluate_window resolves them. Identity only: never a score.
+    """
+    payload = {
+        "exits": params.exits_settings().model_dump(mode="json"),
+        "filter": params.filter_settings().model_dump(mode="json"),
+        "limits": _effective_limits(limits).model_dump(mode="json"),
+        "risk_budget": _effective_budget(risk_budget).model_dump(mode="json"),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def evaluate_window(
@@ -226,6 +197,8 @@ def evaluate_window(
     seed: int,
     ledger_path: str | Path,
     window: EvalWindow,
+    risk_budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> int:
     """Replay one stamp-range slice under candidate overrides, score lamports.
 
@@ -237,8 +210,10 @@ def evaluate_window(
     and the shape is enforced by FixtureManifest validation on load), then
     replayed with run_once_replay under the candidate overrides and the
     explicit caller-supplied ledger path, never the default replay path.
-    Returns net realized lamports from the eval ledger; partial fills count
-    at their recorded filled amount; zero trades score 0. Raises when the
+    risk_budget and limits go to run_once_replay unchanged; omitted means the replay default.
+    Returns the net recorded cash change of the eval ledger in lamports (see
+    _net_lamports); partial fills count at their recorded filled amount;
+    zero trades score 0. Raises when the
     window holds no events. Deterministic for identical inputs.
     """
     if isinstance(seed, bool) or not isinstance(seed, int):
@@ -290,6 +265,8 @@ def evaluate_window(
             seed=seed,
             ledger_path=Path(ledger_path),
             exits=params.exits_settings(),
+            budget=_effective_budget(risk_budget),
+            limits=_effective_limits(limits),
         )
     finally:
         shutil.rmtree(stage, ignore_errors=True)

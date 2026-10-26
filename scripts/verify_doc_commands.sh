@@ -30,6 +30,12 @@ CLAUDE_MD="$ROOT/CLAUDE.md"
 AGENTS_MD="$ROOT/AGENTS.md"
 MAKEFILE="$ROOT/Makefile"
 
+# Shell metacharacters never reach bash -c: no operators, substitution,
+# redirection, quoting, globbing, or grouping. Documented forms are exact.
+PLAIN_ARGS_RE='^[A-Za-z0-9_./:=,+@ -]+$'
+HELP_FORM_RE='^(uv run )?pumpgrok( [A-Za-z0-9_.-]+)* --help$'
+REPLAY_FORM_RE='^uv run pumpgrok run --mode paper --once --replay [A-Za-z0-9_./-]+$'
+
 pass=0
 skip=0
 fail=0
@@ -110,6 +116,10 @@ disposition() { # $1 = raw candidate line
     fi
     cmd="$raw"
     [[ -z "$cmd" ]] && return 0
+    if [[ ! "$cmd" =~ $PLAIN_ARGS_RE ]]; then
+        fail_line "$cmd" "shell operator or metacharacter; documented commands are plain argument lists and are never passed to a shell"
+        return 0
+    fi
 
     # Deduplicate across both files (./scripts/check.sh is in both).
     if [[ "$SEEN" == *"
@@ -165,14 +175,20 @@ $cmd
         uv\ run\ pumpgrok\ run\ --mode\ paper\ --once\ --replay\ *)
             dirpath="${cmd##*--replay }"
             dirpath="${dirpath%% *}"
-            if [[ -d "$ROOT/$dirpath" ]]; then
+            if [[ ! "$cmd" =~ $REPLAY_FORM_RE ]]; then
+                fail_line "$cmd" "not the documented one-shot replay form"
+            elif [[ -d "$ROOT/$dirpath" ]]; then
                 run_cmd "$cmd" "$expected"
             else
                 fail_line "$cmd" "fixture directory missing: $dirpath"
             fi
             ;;
         *--help*)
-            run_cmd "$cmd" "$expected"
+            if [[ "$cmd" =~ $HELP_FORM_RE ]]; then
+                run_cmd "$cmd" "$expected"
+            else
+                fail_line "$cmd" "--help line is not a documented offline argument list"
+            fi
             ;;
         *curl*|*wget*|*ssh*)
             fail_line "$cmd" "network access is forbidden in doc verification"

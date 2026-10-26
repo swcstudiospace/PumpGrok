@@ -7,7 +7,7 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pumpgrok.backtest.results import FillDetail
 from pumpgrok.config.settings import ExitsSettings
@@ -31,6 +31,9 @@ from pumpgrok.supervisor.exit_rules import ExitRules
 from pumpgrok.tools import build_registry
 from pumpgrok.tools.exec.place import build_place_tool
 from pumpgrok.tools.risk.kill_switch import build_kill_switch_tool
+
+if TYPE_CHECKING:
+    from pumpgrok.upgrade.params import ParamSet
 
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
 
@@ -181,6 +184,7 @@ def open_replay_runtime(
     exits: ExitsSettings | None = None,
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
+    active_set: ParamSet | None = None,
 ) -> ReplayRuntime:
     """Open one offline replay sandbox over the dataset's ledger (G1, G7).
 
@@ -191,7 +195,14 @@ def open_replay_runtime(
     grant. The sandbox runs under ``autonomous-paper``: a buy under
     ``manual-ticket`` needs a human approval that a replay never has. Risk still
     checks every order.
+
+    When ``active_set`` is given, its candidate's filter and exits settings replace
+    ``filter_cfg`` and ``exits``; when it is None the sandbox is unchanged.
     """
+    if active_set is not None:
+        candidate = active_set.candidate()
+        filter_cfg = candidate.filter_settings()
+        exits = candidate.exits_settings()
     dataset = load_dataset(Path(dataset_dir))
     target = (
         Path(ledger_path)

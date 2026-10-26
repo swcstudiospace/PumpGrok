@@ -32,6 +32,7 @@ from typing import Any
 import httpx
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
+from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
 
 log = logging.getLogger(__name__)
@@ -174,8 +175,15 @@ def _to_int_units(value: Any, *, per_unit: int) -> int:
 
 
 def _to_lamports(value: Any) -> int:
-    """Provider SOL amount to integer lamports (INT-01)."""
-    return _to_int_units(value, per_unit=10**9)
+    """Provider SOL amount to integer lamports (INT-01).
+
+    Parsing stays here; the conversion is the shared ``core.units`` helper so
+    provider amounts cannot drift from approvals and budgets.
+    """
+    try:
+        return sol_to_lamports(Decimal(str(value)))
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        raise ValueError(f"bad amount {value!r}") from exc
 
 
 def _to_base_units(value: Any) -> int:

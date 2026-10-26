@@ -8,7 +8,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.core.ids import Clock
@@ -34,6 +34,9 @@ from pumpgrok.supervisor.scheduler.replay_runtime import (
 )
 from pumpgrok.supervisor.scheduler.supervisor import ROSTER, TICK_S, Supervisor
 
+if TYPE_CHECKING:
+    from pumpgrok.upgrade.params import ParamSet
+
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
 
 
@@ -48,6 +51,7 @@ def run_once_replay(
     exits: ExitsSettings | None = None,
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
+    active_set: ParamSet | None = None,
 ) -> ReplayResult:
     """AUTO-006: replay verdict, then one full recorded timeline, offline.
 
@@ -59,7 +63,9 @@ def run_once_replay(
     or veto each order. The result lists each attempt, the final ledger sequence, and the
     hash of the completed, verified chain.
     """
-    result = run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
+    result = run_replay(
+        dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, active_set=active_set
+    )
     runtime = open_replay_runtime(
         dataset_dir,
         filter_cfg,
@@ -69,11 +75,15 @@ def run_once_replay(
         exits=exits,
         budget=budget,
         limits=limits,
+        active_set=active_set,
     )
     try:
         trading = _replay_trading(runtime)
         rng = make_rng(seed)
         degraded = DegradedState()
+        seat_filter = filter_cfg
+        if active_set is not None:
+            seat_filter = active_set.candidate().filter_settings()
         cycles = _replay_cycles(
             clock=runtime.clock,
             rng=rng,
@@ -83,7 +93,7 @@ def run_once_replay(
             dataset_events=list(runtime.dataset.events),
             replay_llm=load_llm_records(Path(dataset_dir)),
             dataset_name=runtime.dataset.manifest.dataset,
-            filter_cfg=filter_cfg,
+            filter_cfg=seat_filter,
             trading=trading,
         )
         supervisor = Supervisor(
@@ -182,6 +192,7 @@ def build_serve_replay(
     exits: ExitsSettings | None = None,
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
+    active_set: ParamSet | None = None,
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
@@ -190,7 +201,7 @@ def build_serve_replay(
     the health body carries ``ledger_source=replay`` (never live data). The
     returned store stays open; the caller closes it after the serve loop.
     """
-    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
+    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, active_set=active_set)
     runtime = open_replay_runtime(
         dataset_dir,
         filter_cfg,
@@ -200,11 +211,15 @@ def build_serve_replay(
         exits=exits,
         budget=budget,
         limits=limits,
+        active_set=active_set,
     )
     store = runtime.store
     try:
         trading = _replay_trading(runtime)
         degraded = DegradedState()
+        seat_filter = filter_cfg
+        if active_set is not None:
+            seat_filter = active_set.candidate().filter_settings()
         cycles = _replay_cycles(
             clock=runtime.clock,
             rng=make_rng(seed),
@@ -214,7 +229,7 @@ def build_serve_replay(
             dataset_events=list(runtime.dataset.events),
             replay_llm=load_llm_records(Path(dataset_dir)),
             dataset_name=runtime.dataset.manifest.dataset,
-            filter_cfg=filter_cfg,
+            filter_cfg=seat_filter,
             trading=trading,
         )
 
@@ -293,6 +308,7 @@ async def serve_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     pace_s: float = SERVE_PACE_S,
+    active_set: ParamSet | None = None,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
@@ -316,6 +332,7 @@ async def serve_replay(
         exits=exits,
         budget=budget,
         limits=limits,
+        active_set=active_set,
     )
     server = HealthServer(
         supervisor.clock,

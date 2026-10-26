@@ -26,6 +26,7 @@ from pumpgrok.cli import main
 from pumpgrok.config.settings import load_settings
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution.paper_adapter import CurveSnapshot
 from pumpgrok.ledger.store import LedgerStore
@@ -339,6 +340,7 @@ class TestServedVerbCoverage:
         monkeypatch.chdir(tmp_path)
         store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
         try:
+            store.set_meta("initial_equity_lamports", str(RiskBudget().paper_equity_lamports))
             flags = self._buy_flags(store, side="buy", size_sol="0.2")
         finally:
             store.close()
@@ -361,6 +363,7 @@ class TestServedVerbCoverage:
         for side in ("buy", "sell"):
             store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
             try:
+                store.set_meta("initial_equity_lamports", str(RiskBudget().paper_equity_lamports))
                 flags = self._buy_flags(store, side=side, size_sol="0.2")
             finally:
                 store.close()

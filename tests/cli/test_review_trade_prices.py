@@ -18,6 +18,7 @@ import pytest
 from pumpgrok.cli import main
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
@@ -34,6 +35,7 @@ def _seed_approved_trade(tmp_path: Path, side: str) -> tuple[str, str]:
     ts_utc = format_ts_utc(clock.now())
     store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
     try:
+        store.set_meta("initial_equity_lamports", str(RiskBudget().paper_equity_lamports))
         ticket_id = allocate_ticket(
             store,
             ts_utc=ts_utc,
