@@ -200,7 +200,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
-| 7. Documentation upgrade | 6/6 | Complete: verified 9/9 (07-VERIFICATION.md) | 2026-10-25 |
-| 8. Backtest and paper evaluation | 10/10 | Complete: verified 13/13 (08-VERIFICATION.md) | 2026-10-25 |
-| 9. Bounded paper self-upgrade | 7/7 | Complete: verified 10/10 (09-VERIFICATION.md) | 2026-10-25 |
-| 10. Live readiness, kept disabled | 3/3 | Complete: verified 8/8 (10-VERIFICATION.md) | 2026-10-25 |
+| 7. Documentation upgrade | 6/6 | Complete | 2026-10-25 |
+| 8. Backtest and paper evaluation | 10/10 | Complete | 2026-10-25 |
+| 9. Bounded paper self-upgrade | 7/7 | Complete | 2026-10-25 |
+| 10. Live readiness, kept disabled | 3/3 | Complete | 2026-10-25 |
