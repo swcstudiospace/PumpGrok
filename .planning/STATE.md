@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v3
 milestone_name: PumpGrok Desk v3
 status: in_progress
-stopped_at: Phases 7-10 complete and verified; phase 6 blocked on owner decisions; milestone not shippable until resolved
-last_updated: "2026-10-25T18:18:40Z"
-last_activity: 2026-10-25
-last_activity_desc: Phases 7-10 verified (07, 08, 09, 10 VERIFICATION.md); phase 6 blocked on owner decisions; ship waits on phase 6
+stopped_at: Phase 6 closed 2026-10-26 with owner-approved deviations; ship in progress (PR not yet merged).
+last_updated: "2026-10-26T12:00:22Z"
+last_activity: 2026-10-26
+last_activity_desc: Phase 6 closure records written (PROJECT V3-5); ship PR pending.
 current_phase: 6
 progress:
   total_phases: 5
-  completed_phases: 4
-  blocked_phases: 1
+  completed_phases: 5
+  blocked_phases: 0
   total_plans: 25
   completed_plans: 25
-  percent: 80
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 ## Current Position
 
 - Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
-- Phase: 6 of 10 (Integrity closure) is the only open phase, blocked on owner decisions. Phases 7, 8, 9 and 10 are complete; each has an independent verifier report (07-VERIFICATION.md, 08-VERIFICATION.md, 09-VERIFICATION.md, 10-VERIFICATION.md).
-- Phase 6: code complete on the integration branch; BLOCKED on owner decisions (see Pauses).
-- Phases 7 to 10: complete. Live stays refused (exit 3). Phase 6 gate state, owner decisions and the milestone PR are the remaining items.
+- Phase: 6 of 10 (Integrity closure) closed 2026-10-26 with owner-approved deviations. Phases 7, 8, 9 and 10 are complete; each has an independent verifier report (07-VERIFICATION.md, 08-VERIFICATION.md, 09-VERIFICATION.md, 10-VERIFICATION.md).
+- Phase 6: closed on the integration branch (PROJECT V3-5). The phase PR and the merge through ultrathink-ship are the remaining steps.
+- Phases 7 to 10: complete. Live stays refused (exit 3). Remaining: the Phase 6 PR through ultrathink-ship, then the milestone close, which has not started.
 - Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
-- Percent 80 (4 of 5 phases complete). Known plans with SUMMARY files: 35 of 35 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10; phase 9 plans 01-07; phase 10 plans 01-03). Fix-up 06-01b is recorded but not counted.
+- Percent 100 (5 of 5 phases complete). Known plans with SUMMARY files: 35 of 35 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10; phase 9 plans 01-07; phase 10 plans 01-03). Fix-up 06-01b is recorded but not counted.
 
 ## Discovery (2026-10-25)
 
@@ -72,21 +72,17 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Dependency levels and scheduling
 
-- Level 0: phase 6. Complete in code; blocked on owner decisions.
+- Level 0: phase 6. Closed 2026-10-26 with owner-approved deviations; the phase PR is pending.
 - Level 1: phase 7. Phase 8 also depends only on phase 6, but runs after phase 7 in ROADMAP numeric order. Both edit CHANGELOG.md, so they are serialized.
 - Level 2: phase 9 (depends on phase 8). Level 3: phase 10 (depends on phase 9).
 - Rule: sequential by phase number. Parallelism only inside a wave of file-disjoint plans. The orchestrator is the only writer of this file and ROADMAP.md.
 
 ## Pauses and blockers (owner decisions)
 
-1. Phase 6 receipt approved_by: you chose to hold it. Blocks phase 6 completion and the milestone PR. Phases 7-10 do not depend on it.
-2. G-1 and G-2 route for the milestone PR.
-   - A (recommended): a PR-bound owner waiver for G-1, G-2 and G-5/6, the mechanism .github/workflows/gates.yml uses for PR 14.
-   - B: a RISK-authored ownership change merged to main first, with its own receipt.
-   - The approved re-own to CHIEF cannot be done inside the PR. G-1 reads ownership.yaml from the PR checkout (ci/gates/check_ownership.py:26 and :236), so an edit would be checked against itself.
-   - G-1 covers every v3 path. Docs match `**/*.md`, which is owned by bot-02-risk.
-3. Tracker rows (ultrathink-kickoff, track complete): not run. They would create Notion and Linear rows for 7 issues and 52 sub-issues. Awaiting your yes or no.
-4. Ship: not invoked. The ultrathink done-check would fail on two rule gaps: latest verification is gaps_found, and the roadmap is incomplete (ultrathink src/ship/assess.ts:50-53).
+1. Phase 6 receipt approved_by: resolved 2026-10-26. approved_by is human:SomeRandmGuyy, the approver the owner selected.
+2. G-1 and G-2 route: resolved 2026-10-26. Route A chosen: a PR-bound owner waiver for G-1, G-2 and G-5/6 in .github/workflows/gates.yml, for the phase PR only (criterion 17). Route B and the re-own to CHIEF were declined. The 170 foreign-owned paths stay foreign-owned until a follow-up change.
+3. Tracker rows: Linear rows stay skipped (owner decision: free issue quota exceeded). ultrathink-kickoff track complete was not run, because it would create Linear rows. Notion rows exist.
+4. Ship: invoked after the closure records. The two rule gaps (verification status and roadmap completion) are cleared by the records. The phase PR is the remaining step.
 
 ## Decisions
 
@@ -106,6 +102,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - gsd-autonomous run defaults (graph ut-mvocrh76-02f3c9a9): q1 touched code plus mapped TODOs; q2 current milestone only; q3 defer unmapped TODOs; q4 only paths a phase names. Disclosure: the decomposition edited risk/engine and execution/paper_adapter, which are safety paths, under the TODO scope. The changes are moves only, with gates green. The owner should accept or revert them.
 - Phase 6 routing decision: G-1 showed 170 foreign paths on the 223-commit branch (RISK 128, sniper 13, signal 12, rug 9, journal 3, scout 3, exit 2). The decomposition contributed 26: cli 10 and risk engine 6 owned by bot-02-risk, and paper_adapter 10 owned by bot-04-sniper. Route B as written (re-own all to CHIEF) was declined, because CHIEF never trades. The owner chose Hold, and Phase 6 stays gaps_found. The owner had already accepted the decomposition.
 - Ship readiness format (2026-10-26): ultrathink-ship reads phase completion from the YAML frontmatter status of each *-VERIFICATION.md and ignores body text. The v3 reports for phases 6-10 were re-verified at da6c071 and rewritten with that frontmatter (commit d542c72). The earlier 0/5 count was this format gap, not a verification failure. Assess now reports completedPhases 4 of 5, with Phase 6 as the only gap.
+- Owner closure 2026-10-26: Phase 6 closes with two owner-approved deviations (PROJECT V3-5). approved_by human:SomeRandmGuyy. Criterion 17: CI waiver for the phase PR only. Criterion 16: ready PR merged on green CI and Greptile 5/5. Squash merge (ship default).
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -143,6 +140,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-26, after the ship assess re-check (completedPhases 4 of 5; Phase 6 open).
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (re-verified at da6c071, gaps_found 16/17) and the four VERIFICATION reports for phases 7 to 10 (re-verified, passed).
-- Next: owner selected the PR-bound CI waiver route (2026-10-26). Blocked on two items. (1) The approver name for approved_by has not been given. (2) Ship has no waiver path: src/ship/assess.ts line 62 requires completedPhases equal to phaseCount, and a phase counts only when its VERIFICATION status is passed. Recording Phase 6 as passed-with-waiver is the owner's decision and must be labeled as a deviation, because criterion 17 still exits 1 locally. Then: open the PR, add a PR-number-bound waiver to .github/workflows/gates.yml (remove the stale PR 14 entry in the same change), wait for green CI, Greptile 5/5, merge through ship. Ship assess gap now: roadmap incomplete 4 of 5 (Phase 6 only).
+- Last update: 2026-10-26, after the Phase 6 closure records (receipt, verification, PROJECT V3-5, requirements, roadmap, CHANGELOG).
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (passed, owner closure). The ship PR is the only remaining step.
+- Next: ultrathink-ship. Open the ready PR into main, add the PR-number waiver to .github/workflows/gates.yml, run the Greptile loop capped at three fix cycles, then merge only through ultrathink-ship. Then verify main and record with ultrathink-sync.

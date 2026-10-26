@@ -56,13 +56,13 @@ Full v2 record: `.planning/milestones/v2-REQUIREMENTS.md` (71 of 71 complete) an
 
 <!-- Current scope. One line per requirement family; the individual ids live in .planning/REQUIREMENTS.md. -->
 
-- [ ] INT (10 requirements, INT-01..010): integer money across module boundaries, fail-closed corrupt or missing state, integer daily-loss halt, one SOL-to-lamports conversion, id and RNG composition roots, injected-clock live gate, two feature-lineage review fixes, stage-function splits, persisted trailing-stop peaks, bonding-curve layout probe
+- [x] INT (10 requirements, INT-01..010): integer money across module boundaries, fail-closed corrupt or missing state, integer daily-loss halt, one SOL-to-lamports conversion, id and RNG composition roots, injected-clock live gate, two feature-lineage review fixes, stage-function splits, persisted trailing-stop peaks, bonding-curve layout probe
 - [ ] DOC (4 requirements, DOC-01..004): `CLAUDE.md` codebase map, `AGENTS.md` cleanup and command verification, docs contradictions from the 2026-10-25 audit corrected, historical design banners
 - [ ] BT (7 requirements, BT-01..007): run manifests with whole-dataset digest, per-fill replay detail, holdout and walk-forward split, trial recording with 20 and 50 trial limits, bounded metrics, `pumpgrok backtest` verb with byte-identical reports, holdout-aware harness replaces the grid search
 - [ ] PAP (3 requirements, PAP-01..03): one result schema for backtest and paper trades, divergence check on the D7 defaults, autonomous paper verified end to end on recorded datasets
 - [ ] UPG (6 requirements, UPG-01..06): content-hashed parameter sets within version-controlled bounds, promotion gate (bounds, holdout, divergence, at most 20 trials, autonomous-paper level), evidence record with exact one-operation rollback, escalation for ineligible candidates, SAFE-4 and SAFE-8 advisory BLIND, constitution amendment applied
 - [ ] LIV (2 requirements, LIV-01..02): live stays refused (exit 3, no live adapter, import-graph test), live-readiness record deferred with no signing or custody code
-- [ ] PRC (2 requirements, PRC-01..02): phase gates and receipts for every completion claim, phase branches and draft-only PRs with no merge to main without approval
+- [x] PRC (2 requirements, PRC-01..02): phase gates and receipts for every completion claim, phase branches and draft-only PRs with no merge to main without approval. Closed 2026-10-26 with owner-approved deviations (V3-5).
 
 ### Out of Scope
 
@@ -173,8 +173,9 @@ Full v2 record: `.planning/milestones/v2-REQUIREMENTS.md` (71 of 71 complete) an
 | V2-O3: PAPER-007 narrowed: the manual-ticket standing `exit_rule` approval path is a deferred follow-up, not part of v2 | Owner decision from the v2 audit, 2026-10-23 ("narrow PAPER-007, then archive v2") | Decided |
 | V3-1: Constitution amendment approved 2026-10-25 as drafted, with BLIND narrowed to SAFE-4 and SAFE-8 (holder concentration and deployer history) while no paid RPC provider is recorded; clause 8 permits paper-only, bounded, reversible promotion under the human-set autonomous-paper level; live trading stays disabled | Owner approval 2026-10-25. Applied in phase 9 together with its code (UPG-05, UPG-06), not in the planning step | Pending (phase 9) |
 | V3-2: Backtest data is self-recorded only; no external history | Owner decision 2026-10-25; data policy D8 and AF-10 | Decided |
-| V3-3: Branch bot-00-chief/v2-closeout from origin/main; feat/grokbot-desk-merge untouched; draft PRs only; no merge without approval | Owner decision 2026-10-25 (PRC-02) | Decided |
+| V3-3: Branch bot-00-chief/v2-closeout from origin/main; feat/grokbot-desk-merge untouched; draft PRs only; no merge without approval | Owner decision 2026-10-25 (PRC-02); draft clause superseded for the Phase 6 PR by V3-5 | Decided |
 | V3-4: Research skipped for v3 (repo-grounded audits completed 2026-10-25). Defaults apply: D11 max 50 trials per search, D12 flag above 20 trials, D13 final 20 percent holdout; D7 divergence defaults 2 percentage points absolute return gap or 0.5 Sharpe gap | Owner approval 2026-10-25 | Decided |
+| V3-5: Phase 6 closes 2026-10-26 with two owner-approved deviations (approved_by human:SomeRandmGuyy). Criterion 17: G-1 (170 foreign-owned paths) and G-2 are waived in CI for the Phase 6 pull request only, through a PR-number condition in .github/workflows/gates.yml; run_all.py still exits 1 locally on G-1. Criterion 16: the phase pull request is ready for review, not draft, and merges to main through ultrathink-ship after CI is green and Greptile reaches 5/5 with no open threads, using squash. The 2026-10-25 re-own decision is superseded; the 170 paths stay foreign-owned until a follow-up change, and the waiver stays on main until a cleanup change removes it. | Owner decision 2026-10-26; approved_by human:SomeRandmGuyy | Decided |
 
 ## Evolution
 
@@ -199,4 +200,4 @@ and implemented by workflows/transition.md and workflows/complete-milestone.md.
 **v3 note (2026-10-25):** v3 phase numbering continues from v2's five phases, so phase 9 is the phase that applies the constitution amendment (V3-1). Each v3 phase closes with the PRC-01 gate set and a receipt per completion claim. As each v3 family completes, move its items from Active to Validated with the phase reference, and move any requirement the amendment or audits invalidate to Out of Scope with its reason.
 
 ---
-*Last updated: 2026-10-25 after v3 milestone definition*
+*Last updated: 2026-10-26 after the Phase 6 closure decision (V3-5)*

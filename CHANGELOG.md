@@ -95,6 +95,13 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Ephemerality of pool runners is not verified in this repository. Job-to-job state on a persistent runner is a risk until it is confirmed.
 - ci/tests/test_security_workflows.py no longer forbids self-hosted runners. Its Trivy severity, exit-code and ignore-unfixed assertions remain.
 
+### Owner closure (2026-10-26)
+
+- Phase 6 closes with two owner-approved deviations (PROJECT V3-5; approved_by human:SomeRandmGuyy).
+- Criterion 17: G-1 (170 foreign-owned paths) and G-2 are waived in CI for the Phase 6 pull request only, through a PR-number condition in .github/workflows/gates.yml. run_all.py still exits 1 locally on G-1.
+- Criterion 16: the phase pull request is ready for review, not draft. It merges to main through ultrathink-ship after CI is green and Greptile reaches 5/5 with no open threads.
+- The 2026-10-25 re-own decision is superseded. The paths stay foreign-owned until a follow-up change, and the waiver stays on main until a cleanup change removes it.
+
 ## [Unreleased] - Audit fixes
 
 ### Fixed

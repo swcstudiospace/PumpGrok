@@ -12,7 +12,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 ## Phases
 
-- [ ] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
+- [x] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
 - [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
 - [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
 - [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
@@ -49,20 +49,20 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 **Deliverables**:
 
-- [ ] `src/pumpgrok/ledger/export.py`, `src/pumpgrok/engine/models.py`, `src/pumpgrok/engine/analyzer.py`, `src/pumpgrok/engine/exits.py`, `src/pumpgrok/engine/reputation.py`, `src/pumpgrok/engine/tune.py`: integer money, Decimal for ratios only, and the static guard `tests/integrity/test_money_types.py` (INT-01)
-- [ ] `src/pumpgrok/ledger/reducer.py`, `src/pumpgrok/supervisor/seat_task.py`, `src/pumpgrok/supervisor/lifecycle.py`: typed fail-closed errors in place of silent defaults, with regression tests (INT-02)
-- [ ] Daily-loss halt in `src/pumpgrok/risk/`: integer arithmetic and a failed check for non-positive day-start equity (INT-03)
-- [ ] One SOL-to-lamports conversion in `src/pumpgrok/core/`, used by `src/pumpgrok/core/risk_budget.py`, the CLI and `src/pumpgrok/core/approvals.py`; the copy in `src/pumpgrok/reporting/render.py` removed (INT-04)
-- [ ] `src/pumpgrok/core/ids.py` and `src/pumpgrok/core/binding_key.py` as the only `os.urandom` roots; `DEFAULT_SEED` in `src/pumpgrok/replay/rng.py` confined to replay; guard in `tests/integrity/test_rng_roots.py` (INT-05)
-- [ ] `src/pumpgrok/execution/live/live_gate.py` reads time only through the injected clock (INT-06)
-- [ ] WR-07 (commit 4c19fd9, replay ledger removed on failed append or verify) and the ledger-mark venue-fee fix (commit 76975bb) re-applied on the phase branch. Neither is an ancestor of origin/main (checked 2026-10-25; both sit on `feat/grokbot-desk-merge`, which stays untouched per V3-3). Regression tests in `tests/integrity/` (INT-07)
-- [ ] `src/pumpgrok/execution/paper_adapter.py` (`_place_buy`, `_place_order`) and `src/pumpgrok/supervisor/scheduler.py` (`_replay_cycles`) split into stage functions with unchanged behaviour (INT-08)
-- [ ] Trailing-stop peak persistence and restore in `src/pumpgrok/engine/exits.py` and `src/pumpgrok/risk/engine.py` (INT-09)
-- [ ] `scripts/probe_curve_layout.py` (read-only) and `docs/CURVE_LAYOUT_PROBE.md`; `LAYOUT_STATUS` in `src/pumpgrok` set to match the probe result; entries fail closed while ASSUMED (INT-10)
-- [ ] `CHANGELOG.md` entries: the Phase 6 before and after replay hash lines, and the review of Omega CI runner migration commits 5b5d6a1 and 9772655 (PRC-01)
-- [ ] Phase branch and draft PR per AGENTS.md; no merge to main (PRC-02)
+- [x] `src/pumpgrok/ledger/export.py`, `src/pumpgrok/engine/models.py`, `src/pumpgrok/engine/analyzer.py`, `src/pumpgrok/engine/exits.py`, `src/pumpgrok/engine/reputation.py`, `src/pumpgrok/engine/tune.py`: integer money, Decimal for ratios only, and the static guard `tests/integrity/test_money_types.py` (INT-01)
+- [x] `src/pumpgrok/ledger/reducer.py`, `src/pumpgrok/supervisor/seat_task.py`, `src/pumpgrok/supervisor/lifecycle.py`: typed fail-closed errors in place of silent defaults, with regression tests (INT-02)
+- [x] Daily-loss halt in `src/pumpgrok/risk/`: integer arithmetic and a failed check for non-positive day-start equity (INT-03)
+- [x] One SOL-to-lamports conversion in `src/pumpgrok/core/`, used by `src/pumpgrok/core/risk_budget.py`, the CLI and `src/pumpgrok/core/approvals.py`; the copy in `src/pumpgrok/reporting/render.py` removed (INT-04)
+- [x] `src/pumpgrok/core/ids.py` and `src/pumpgrok/core/binding_key.py` as the only `os.urandom` roots; `DEFAULT_SEED` in `src/pumpgrok/replay/rng.py` confined to replay; guard in `tests/integrity/test_rng_roots.py` (INT-05)
+- [x] `src/pumpgrok/execution/live/live_gate.py` reads time only through the injected clock (INT-06)
+- [x] WR-07 (commit 4c19fd9, replay ledger removed on failed append or verify) and the ledger-mark venue-fee fix (commit 76975bb) re-applied on the phase branch. Neither is an ancestor of origin/main (checked 2026-10-25; both sit on `feat/grokbot-desk-merge`, which stays untouched per V3-3). Regression tests in `tests/integrity/` (INT-07)
+- [x] `src/pumpgrok/execution/paper_adapter.py` (`_place_buy`, `_place_order`) and `src/pumpgrok/supervisor/scheduler.py` (`_replay_cycles`) split into stage functions with unchanged behaviour (INT-08)
+- [x] Trailing-stop peak persistence and restore in `src/pumpgrok/engine/exits.py` and `src/pumpgrok/risk/engine.py` (INT-09)
+- [x] `scripts/probe_curve_layout.py` (read-only) and `docs/CURVE_LAYOUT_PROBE.md`; `LAYOUT_STATUS` in `src/pumpgrok` set to match the probe result; entries fail closed while ASSUMED (INT-10)
+- [x] `CHANGELOG.md` entries: the Phase 6 before and after replay hash lines, and the review of Omega CI runner migration commits 5b5d6a1 and 9772655 (PRC-01)
+- [x] Phase branch and draft PR per AGENTS.md; no merge to main (PRC-02)
 
-**Plans**: 9 planned (06-01 to 06-09) plus fix-up 06-01b; all have SUMMARY files. Phase blocked on owner decisions (see .planning/STATE.md).
+**Plans**: 9 planned (06-01 to 06-09) plus fix-up 06-01b; all have SUMMARY files. Phase closed 2026-10-26 with owner-approved deviations (see .planning/phases/06-integrity-closure/06-VERIFICATION.md, Owner closure).
 
 ### Phase 7: Documentation upgrade
 
@@ -199,7 +199,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Blocked: owner decisions (G-1, G-2, approved_by) | - |
+| 6. Integrity closure | 9/9 (+ fix-up 06-01b) | Complete | 2026-10-26 |
 | 7. Documentation upgrade | 6/6 | Complete | 2026-10-25 |
 | 8. Backtest and paper evaluation | 10/10 | Complete | 2026-10-25 |
 | 9. Bounded paper self-upgrade | 7/7 | Complete | 2026-10-25 |

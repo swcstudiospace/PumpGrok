@@ -9,16 +9,16 @@ Source: owner decisions of 2026-10-25 (see PROJECT.md Key Decisions V3-1..V3-4),
 
 ### Integrity (INT)
 
-- [ ] INT-01: Money crosses every module boundary as integer lamports or base units; Decimal appears only for ratios. The float money fields in ledger/export.py, engine/models.py, engine/analyzer.py, engine/exits.py, engine/reputation.py and engine/tune.py are converted, and a static test rejects float money fields under src/pumpgrok.
-- [ ] INT-02: Corrupt or missing state fails closed with a typed error, never a silent default: the ledger peak skip in ledger/reducer.py, _initial_equity returning 0 in supervisor/seat_task.py, and genesis equity 'or 0' in supervisor/lifecycle.py each raise and have a regression test.
-- [ ] INT-03: The daily-loss halt uses integer arithmetic, and a non-positive day-start equity is a failed check, not zero loss.
-- [ ] INT-04: The SOL-to-lamports conversion has one implementation in core/ used by risk_budget, cli and approvals; the other copies are removed.
-- [ ] INT-05: os.urandom is allowed only at the approval-id and binding-key composition roots, enforced by the static guard; production id and RNG factories never fall back to the replay seed DEFAULT_SEED.
-- [ ] INT-06: The live gate reads time only through the injected clock (R27); gate evaluation is byte-identical under a fixture clock.
-- [ ] INT-07: Two feature-lineage review fixes are closed or proven present: a failed replay append or verify removes the replay ledger (WR-07, commit 4c19fd9), and the stored venue fee on the ledger-mark fallback scales with remaining units after a partial sell (commit 76975bb). Each has a regression test that fails before the fix.
-- [ ] INT-08: The longest functions are split into stage functions with unchanged behavior: paper_adapter _place_buy (about 224 lines), _place_order (about 95) and scheduler _replay_cycles (about 112). Replay ledger hashes are unchanged, or any intentional change is recorded in CHANGELOG with before and after hashes.
-- [ ] INT-09: Trailing-stop peaks survive a serve restart (v2 tech debt: peaks are held in memory).
-- [ ] INT-10: The bonding-curve layout is probed read-only against live mainnet accounts (R65). The result is recorded as VERIFIED with decoded fixtures, or as ASSUMED with the exact probe error. While ASSUMED, entries stay fail-closed.
+- [x] INT-01: Money crosses every module boundary as integer lamports or base units; Decimal appears only for ratios. The float money fields in ledger/export.py, engine/models.py, engine/analyzer.py, engine/exits.py, engine/reputation.py and engine/tune.py are converted, and a static test rejects float money fields under src/pumpgrok.
+- [x] INT-02: Corrupt or missing state fails closed with a typed error, never a silent default: the ledger peak skip in ledger/reducer.py, _initial_equity returning 0 in supervisor/seat_task.py, and genesis equity 'or 0' in supervisor/lifecycle.py each raise and have a regression test.
+- [x] INT-03: The daily-loss halt uses integer arithmetic, and a non-positive day-start equity is a failed check, not zero loss.
+- [x] INT-04: The SOL-to-lamports conversion has one implementation in core/ used by risk_budget, cli and approvals; the other copies are removed.
+- [x] INT-05: os.urandom is allowed only at the approval-id and binding-key composition roots, enforced by the static guard; production id and RNG factories never fall back to the replay seed DEFAULT_SEED.
+- [x] INT-06: The live gate reads time only through the injected clock (R27); gate evaluation is byte-identical under a fixture clock.
+- [x] INT-07: Two feature-lineage review fixes are closed or proven present: a failed replay append or verify removes the replay ledger (WR-07, commit 4c19fd9), and the stored venue fee on the ledger-mark fallback scales with remaining units after a partial sell (commit 76975bb). Each has a regression test that fails before the fix.
+- [x] INT-08: The longest functions are split into stage functions with unchanged behavior: paper_adapter _place_buy (about 224 lines), _place_order (about 95) and scheduler _replay_cycles (about 112). Replay ledger hashes are unchanged, or any intentional change is recorded in CHANGELOG with before and after hashes.
+- [x] INT-09: Trailing-stop peaks survive a serve restart (v2 tech debt: peaks are held in memory).
+- [x] INT-10: The bonding-curve layout is probed read-only against live mainnet accounts (R65). The result is recorded as VERIFIED with decoded fixtures, or as ASSUMED with the exact probe error. While ASSUMED, entries stay fail-closed.
 
 ### Documentation (DOC)
 
@@ -59,8 +59,8 @@ Source: owner decisions of 2026-10-25 (see PROJECT.md Key Decisions V3-1..V3-4),
 
 ### Process (PRC)
 
-- [ ] PRC-01: Each phase closes with make lint, make typecheck, make test, ./scripts/check.sh, the replay smoke command, and a .receipts/<seat>/<task>.json receipt for each completion claim.
-- [ ] PRC-02: Phase branches follow AGENTS.md (bot-0N-<seat>/phase-<n>-<unit>), PRs are draft only, and nothing merges to main without approval.
+- [x] PRC-01: Each phase closes with make lint, make typecheck, make test, ./scripts/check.sh, the replay smoke command, and a .receipts/<seat>/<task>.json receipt for each completion claim.
+- [x] PRC-02: Phase branches follow AGENTS.md (bot-0N-<seat>/phase-<n>-<unit>), PRs are draft only, and nothing merges to main without approval. Closed 2026-10-26 with owner-approved deviations: ready PR and squash merge after green CI and Greptile 5/5 (PROJECT V3-5).
 
 ## Out of Scope
 
@@ -81,18 +81,18 @@ Which phases cover which requirements. Populated during roadmap creation (`.plan
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INT-01 | Phase 6 Integrity closure | Pending |
-| INT-02 | Phase 6 Integrity closure | Pending |
-| INT-03 | Phase 6 Integrity closure | Pending |
-| INT-04 | Phase 6 Integrity closure | Pending |
-| INT-05 | Phase 6 Integrity closure | Pending |
-| INT-06 | Phase 6 Integrity closure | Pending |
-| INT-07 | Phase 6 Integrity closure | Pending |
-| INT-08 | Phase 6 Integrity closure | Pending |
-| INT-09 | Phase 6 Integrity closure | Pending |
-| INT-10 | Phase 6 Integrity closure | Pending |
-| PRC-01 | Phase 6 Integrity closure | Pending |
-| PRC-02 | Phase 6 Integrity closure | Pending |
+| INT-01 | Phase 6 Integrity closure | Complete |
+| INT-02 | Phase 6 Integrity closure | Complete |
+| INT-03 | Phase 6 Integrity closure | Complete |
+| INT-04 | Phase 6 Integrity closure | Complete |
+| INT-05 | Phase 6 Integrity closure | Complete |
+| INT-06 | Phase 6 Integrity closure | Complete |
+| INT-07 | Phase 6 Integrity closure | Complete |
+| INT-08 | Phase 6 Integrity closure | Complete |
+| INT-09 | Phase 6 Integrity closure | Complete |
+| INT-10 | Phase 6 Integrity closure | Complete |
+| PRC-01 | Phase 6 Integrity closure | Complete |
+| PRC-02 | Phase 6 Integrity closure | Complete |
 | DOC-01 | Phase 7 Documentation upgrade | Complete |
 | DOC-02 | Phase 7 Documentation upgrade | Complete |
 | DOC-03 | Phase 7 Documentation upgrade | Complete |

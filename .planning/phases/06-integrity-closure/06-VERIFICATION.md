@@ -1,9 +1,9 @@
 ---
 phase: 06-integrity-closure
 verified: 2026-10-26T07:33:16Z
-status: gaps_found
-score: 16/17
-head: da6c071
+status: passed
+score: 16/17 met; criterion 17 owner-waived for the phase PR (PROJECT V3-5)
+head: 404e0f6
 ---
 
 # Phase 6 Integrity Closure — Verification Report
@@ -11,12 +11,16 @@ head: da6c071
 **Branch:** `bot-00-chief/phase-6-integrity`
 **Closing head verified:** `8af2322`
 **Verified:** 2026-10-25
-**Status:** `gaps_found`
-**Score:** 15/17 success criteria PASS, 2 FAIL
+**Status:** `passed` (owner closure 2026-10-26, see Owner closure)
+**Score:** 16/17 met; criterion 17 owner-waived (see Owner closure)
 
 **Correction (2026-10-25, after e770602):** The score above is wrong. Criterion 17 (`run_all.py` exits 0) was counted as a pass without running the gate. Run now, it exits 1 with G-1 (67 foreign paths) and G-2 (`approved_by` missing). Criteria 1 and 11d were fixed at `e770602`: the full suite exits 0, and the LAYOUT_STATUS grep now matches the annotated assignment. Status remains `gaps_found` until the owner records the G-1/G-2 route and `approved_by`. Re-run this report after those decisions.
 
+**Superseded (2026-10-26):** the Correction above no longer holds. The owner closure below records the G-1/G-2 route, approved_by and the final status.
+
 ## Overall verdict
+
+**Superseded (2026-10-26):** the two literal failures below are resolved at 404e0f6. Criterion 1: the full suite exits 0 (the receipt allowlist fix is at e770602). Criterion 11: the LAYOUT_STATUS grep matches the annotated assignment. Criterion 17 is owner-waived for the phase PR (see Owner closure). The text below is the pre-closure assessment and is kept as written.
 
 The Phase 6 code goal is substantively achieved: integer money, fail-closed
 state, integer daily-loss halt, single SOL conversion, RNG roots, injected
@@ -83,7 +87,7 @@ decision 2026-10-25).
 
 Requirement coverage: INT-01–INT-10 and PRC-01 evidenced above; PRC-02
 branch naming verified (16a), draft-wording superseded (16b note).
-Full-suite JUnit: `tests="2104" errors="0" failures="1" skipped="2"`.
+Full-suite JUnit: `tests="2104" errors="0" failures="1" skipped="2"`. (Historical: recorded before e770602. Superseded by the final gate run at 404e0f6, where make test exits 0.)
 
 ## Gaps (actionable, not known-opens)
 
@@ -148,13 +152,25 @@ da6c071 ROADMAP.md), so code evidence carries forward. No gates re-run.
 | 13 | Paper replay completes | PASS | h_smoke.log exit 0 |
 | 14 | smoke-10m hash stable, CHANGELOG before and after lines | PASS | Both verify runs hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d per brief, equal to CHANGELOG after-hash; before and after lines grepped in CHANGELOG.md at HEAD |
 | 15 | Omega runner review commits recorded | PASS | 5b5d6a1 and 9772655 both grepped in CHANGELOG.md at HEAD |
-| 16 | Phase branch plus draft PR | PASS | Branch bot-00-chief/phase-6-integrity matches the required pattern at HEAD; gh PR check needs network, draft status per prior recorded evidence and owner note |
-| 17 | run_all.py exits 0 for each completion claim | FAIL | Receipt records exit 1: G-1 foreign paths (67 at receipt time, 170 per current STATE.md) and approved_by absent; STATE.md still lists both as owner-blocked |
+| 16 | Phase branch plus draft PR | DEVIATION (owner-approved) | Branch name matches at HEAD (grep count 1). No draft PR was opened; the jq check prints true on an empty PR list, so it was vacuous. Owner decision V3-5 supersedes the draft clause: ready PR, merged on green CI and Greptile 5/5. |
+| 17 | run_all.py exits 0 for each completion claim | WAIVED (owner-approved, CI only) | Local run_all.py exits 1 on G-1 (170 foreign-owned paths) at 404e0f6; G-2 passes under --strict with approved_by human:SomeRandmGuyy. CI waives G-1, G-2 and G-5/6 for the phase PR only (.github/workflows/gates.yml). Owner decision V3-5. |
 
 Verdicts changed from the body above:
 
 - Criterion 1: FAIL to PASS. Gap 1 (receipt allowlist) fixed at e770602; h_test.log shows the full suite exit 0.
 - Criterion 11: FAIL to PASS. Gap 2 (LAYOUT_STATUS grep) fixed at e770602; the roadmap pattern now allows the annotated assignment and the grep exits 0 at HEAD.
 - Criterion 17: PASS-with-note to FAIL. The body Correction already admits the pass was counted without running the gate; the receipt proves exit 1 and G-1/G-2 remain owner-blocked.
+- Criterion 16: DEVIATION (owner closure 2026-10-26). No draft PR was opened, and the earlier PASS was vacuous.
+- Criterion 17: WAIVED (owner closure 2026-10-26), CI only. Local exit stays 1 on G-1.
 
-Status stays gaps_found on criterion 17 alone, which needs owner action, not code changes.
+Status stays gaps_found on criterion 17 alone, which needs owner action, not code changes. Superseded by the owner closure of 2026-10-26 below.
+
+## Owner closure (2026-10-26)
+
+**Correction to the body (2026-10-26):** the body's notes that a 2026-10-25 owner decision superseded the draft-only PR wording (criterion 16b and the PRC-02 notes) do not match PROJECT.md V3-3, which records that date as draft PRs only. The decision that supersedes it is V3-5, dated 2026-10-26.
+
+DECISION: Phase 6 closes 2026-10-26 with two owner-approved deviations (approved_by human:SomeRandmGuyy). Criterion 17: G-1 (170 foreign-owned paths) and G-2 are waived in CI for the Phase 6 pull request only, through a PR-number condition in .github/workflows/gates.yml; run_all.py still exits 1 locally on G-1. Criterion 16: the phase pull request is ready for review, not draft, and merges to main through ultrathink-ship after CI is green and Greptile reaches 5/5 with no open threads, using squash. The 2026-10-25 re-own decision is superseded; the 170 paths stay foreign-owned until a follow-up change, and the waiver stays on main until a cleanup change removes it.
+
+Gate evidence at 404e0f6: make lint, make typecheck, make test, make audit, ./scripts/check.sh and ./scripts/verify_doc_commands.sh exit 0; smoke replay exits 0 with smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on two runs; live exits 3; desk-gateway pytest exits 0. run_all.py exits 1 with G-1 FAIL only (170 foreign-owned paths), while G-2 passes under --strict (approved_by set), and G-3, G-4, G-5/G-6 and G-7 pass. Scanners with CI-equivalent settings: Semgrep 1.182.1 reports 0 findings over 224 targets; Bandit 1.9.4 reports 0 new HIGH findings against origin/main; Gitleaks 8.21.2 reports 0 leaks over origin/main..HEAD (182 commits); Trivy 0.76.1 filesystem scan at HIGH and CRITICAL reports 0 findings (the CI binary is not version-pinned).
+
+Not verified locally: the required CI status checks on the PR head and the Greptile review are open until the PR runs; neither was observed in this closure.
