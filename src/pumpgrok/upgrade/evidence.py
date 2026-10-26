@@ -15,9 +15,10 @@ or a verdict.
 A hash names one manifest, so a second record of different evidence at that path
 raises PromotionEvidenceConflict and the first record survives intact.
 
-The manifest is created with an exclusive open, never a check-then-write, so
-two concurrent recorders cannot overwrite each other. A lost race compares
-bytes: identical bytes are a no-op, different bytes raise.
+The manifest is published by hard-linking a fully written temporary file to
+its final path. The link fails if the path exists, so two concurrent recorders
+cannot overwrite each other, and no reader ever sees a partial manifest. A lost
+race compares bytes: identical bytes are a no-op, different bytes raise.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -90,20 +92,24 @@ def _manifest_bytes(manifest: dict[str, Any]) -> bytes:
 
 
 def _create_exclusive(path: Path, data: bytes) -> None:
-    """Create path with data; raise FileExistsError if it already exists.
+    """Publish data at path; raise FileExistsError if path already exists.
 
-    The exclusive open is the only existence check, so two recorders cannot
-    both create the file. A failed write removes the partial file.
+    The bytes are written and fsynced to a uniquely named temporary file in the
+    same directory, so the final path never holds a partial manifest. That file
+    is then hard-linked to path: link raises FileExistsError when path exists,
+    so nothing is ever replaced. The temporary name is removed on every path; a
+    crash before the link leaves only that temporary file.
     """
-    with path.open("xb") as fh:
-        try:
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        except BaseException:
-            fh.close()
-            path.unlink(missing_ok=True)
-            raise
+        os.link(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def record_promotion(

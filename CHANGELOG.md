@@ -112,6 +112,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Startup: PUMPGROK_PAID_RPC_PROVIDER is a registered non-setting name.
 - Docs and checks: the CLAUDE.md codebase map names current modules; verify_doc_commands.sh rejects shell operators before execution; the curve probe records VERIFIED only for the expected program owner and account discriminator; the analyzer SOL conversion uses core.units.
 - Tests: the import-graph check walks child modules; the autonomy e2e test checks the policy gate directly.
+- Round 2: the holdout and the paper window share one end rule (the next float after the last holdout ledger row, including settling orders), so both sides count the same fills. The report's window_end_utc is that last holdout row. An empty holdout ledger is a ConfigError.
+- Round 2: promotion evidence is published by a hard link from a complete temporary file in the same directory, so a reader never sees a partial manifest. Manifests are created with owner-only mode (0600).
 
 Follow-ups, not changed in this cycle: default-genesis fallbacks remain in execution/paper_adapter (_fold_state), ledger/reconcile (_genesis) and a supervisor docstring; the replay runtime still fixes autonomy to autonomous-paper; a forced-close fill uses a placeholder decision id until core/adapter.py accepts an empty decision id; the CI waiver is removed by a cleanup change after the merge.
 

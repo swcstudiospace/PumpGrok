@@ -9,6 +9,7 @@ and temp promotions dir, no network.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,40 @@ def test_exclusive_create_race_keeps_first_bytes(tmp_path, monkeypatch) -> None:
             _record(store, promotions_dir, run_id="RUNID-SECOND", trial_count=7)
 
         assert path.read_bytes() == racer_bytes
+        assert len(store.read(types=["JournalNote"], limit=None)) == 0
+    finally:
+        store.close()
+
+
+def test_record_publishes_complete_json_and_no_temp_files(tmp_path) -> None:
+    """The final manifest parses as JSON and no temporary file is left behind."""
+    promotions_dir = tmp_path / "promotions"
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        path = _record(store, promotions_dir)
+        assert json.loads(path.read_bytes())["candidate_hash"] == PARAMS.content_hash
+        assert sorted(entry.name for entry in promotions_dir.iterdir()) == [path.name]
+    finally:
+        store.close()
+
+
+def test_failed_write_leaves_no_final_manifest(tmp_path, monkeypatch) -> None:
+    """A write that fails before publication leaves no manifest and no temp file."""
+    promotions_dir = tmp_path / "promotions"
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        path = evidence_module.promotion_manifest_path(PARAMS.content_hash, promotions_dir)
+
+        def failing_fsync(fd: int) -> None:
+            raise OSError("simulated disk failure")
+
+        monkeypatch.setattr(evidence_module.os, "fsync", failing_fsync)
+
+        with pytest.raises(OSError, match="simulated disk failure"):
+            _record(store, promotions_dir)
+
+        assert not path.exists()
+        assert list(promotions_dir.iterdir()) == []
         assert len(store.read(types=["JournalNote"], limit=None)) == 0
     finally:
         store.close()

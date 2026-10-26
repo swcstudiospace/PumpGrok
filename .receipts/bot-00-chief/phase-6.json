@@ -5,13 +5,13 @@
   "phase": "06-integrity-closure",
   "plan": "06-01 to 06-09, plus fix-ups 06-01b, p6-fix1, p6-fix2 and the lint and collection commits",
   "purpose": "PRC-01 phase gates for Phase 6 (INT-01 to INT-10, PRC-01). Receipt for the commits that carry the Phase 6 work.",
-  "status": "closed 2026-10-26 with owner-approved deviations (PROJECT V3-5): criterion 17 CI waiver for the phase PR only (G-1: 171 foreign-owned paths; G-2: approved_by); criterion 16 ready-PR decision. Gates re-run on the Greptile round 1 fix tree; Bandit, Gitleaks and Trivy at 404e0f6.",
+  "status": "closed 2026-10-26 with owner-approved deviations (PROJECT V3-5): criterion 17 CI waiver for the phase PR only (G-1: 171 foreign-owned paths; G-2: approved_by); criterion 16 ready-PR decision. Gates re-run on the Greptile round 2 fix tree; Bandit, Gitleaks and Trivy at 404e0f6.",
   "rollback_plan": "Run git revert -m 1 on each Phase 6 merge commit on bot-00-chief/phase-6-integrity, newest first, then rerun make test and uv run pumpgrok verify --fixture smoke-10m. Recovery takes about 10 minutes. No data migration is involved: the smoke-10m replay events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, and the live command exits 3 before any write, so no state is changed.",
   "commands": [
     {
       "cmd": "make lint",
       "exit_code": 0,
-      "output_tail": "Checked 55 packages in 1ms"
+      "output_tail": "Checked 55 packages in 2ms"
     },
     {
       "cmd": "make typecheck",
@@ -21,7 +21,7 @@
     {
       "cmd": "make test (uv run pytest -q)",
       "exit_code": 0,
-      "output_tail": "exit 0 on the round 1 fix tree; pytest progress reaches 100% with no F or E markers"
+      "output_tail": "exit 0 on the round 2 fix tree; pytest progress reaches 100% with no F or E markers"
     },
     {
       "cmd": "make audit (uv export --no-emit-project, then pip-audit --strict)",
@@ -61,12 +61,12 @@
     {
       "cmd": "cd services/desk-gateway && uv run pytest -q",
       "exit_code": 0,
-      "output_tail": "Arguments: ()"
+      "output_tail": "warning: `VIRTUAL_ENV=/root/src/repos/pumpgrok/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead"
     },
     {
       "cmd": "uv run python scripts/probe_curve_layout.py (recorded before round 1; no account configured, so the probe path is unchanged)",
       "exit_code": 0,
-      "output_tail": "Status: ASSUMED. Error: no bonding-curve account configured; no RPC call made; layout stays ASSUMED"
+      "output_tail": "G-1 FAIL (171 foreign-owned paths); G-2, G-3, G-4, G-5/G-6, G-7 PASS; CI waiver covers G-1, G-2, G-5/6 for the phase PR only"
     },
     {
       "cmd": "python3 ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-6.json",
@@ -81,7 +81,7 @@
     {
       "cmd": "semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --severity ERROR --error --baseline-commit origin/main . (semgrep 1.182.1, as CI)",
       "exit_code": 0,
-      "output_tail": "Ran 58 rules on 225 files: 0 findings."
+      "output_tail": "Ran 58 rules on 226 files: 0 findings"
     },
     {
       "cmd": "bandit -r . --ini ci/security/bandit.ini -b (baseline from origin/main) -lll (bandit 1.9.4, as CI, clean worktree at 404e0f6)",

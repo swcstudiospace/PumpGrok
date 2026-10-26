@@ -17,18 +17,25 @@ import pytest
 
 import pumpgrok.backtest.evaluate as evaluate_module
 import pumpgrok.backtest.harness as harness_module
-from pumpgrok.backtest.evaluate import CandidateParams, evaluated_settings_hash
+import pumpgrok.cli.backtest as cli_backtest
+from pumpgrok.backtest.evaluate import CandidateParams, _net_lamports, evaluated_settings_hash
 from pumpgrok.backtest.manifest import dataset_digest
+from pumpgrok.backtest.split import holdout_split
 from pumpgrok.cli import main
 from pumpgrok.cli.backtest import (
     _backtest_dataset,
+    _Dataset,
+    _evaluate_holdout,
     _fills_from_rows,
+    _paper_gate,
     _paper_window,
     _rejection_fees,
     _window_curve,
 )
 from pumpgrok.ledger.reducer import LedgerState, initial_state
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
+from pumpgrok.replay.fixtures import event_epoch, load_dataset
 
 REPO = Path(__file__).resolve().parents[2]
 _GENESIS_EQUITY = 1_000_000
@@ -37,6 +44,8 @@ _MINT = "So11111111111111111111111111111111111111112"
 _ULID_BUY = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 _ULID_SELL = "01BX5ZZKBKACTAV9WEVGEMMVRY"
 _ULID_DECISION = "01CP4Y3KW7W6CNMS3Z0AF8V0SA"
+_SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
+_ROUND1_RUN = "ROUND1-HOLDOUT"
 
 
 def _genesis() -> LedgerState:
@@ -125,10 +134,10 @@ def test_purchase_is_not_a_loss_and_a_losing_sale_is_one() -> None:
     assert _window_curve(_genesis(), rows) == (_GENESIS_EQUITY, _GENESIS_EQUITY - 50_000)
 
 
-def test_paper_window_opens_at_cutoff_and_stops_at_the_recording_end() -> None:
+def test_paper_window_opens_at_cutoff_and_stops_at_the_window_end() -> None:
     """F6: pre-cutoff rows set the opening equity; rows at or past the end are excluded."""
     cutoff = _T0
-    recording_end = _T0 + 500.0
+    window_end = _T0 + 500.0
     rows = [
         _row(1, "OrderRejected", _rejected_payload(500), stamp=cutoff - 100.0),
         _row(
@@ -142,12 +151,12 @@ def test_paper_window_opens_at_cutoff_and_stops_at_the_recording_end() -> None:
             4,
             "FillRecorded",
             _fill_payload(_ULID_SELL, "sell", 150_000, 10, 150_000),
-            stamp=recording_end + 1.0,
+            stamp=window_end + 1.0,
         ),
     ]
 
     opening, window_rows = _paper_window(
-        rows, cutoff=cutoff, recording_end=recording_end, initial=_GENESIS_EQUITY
+        rows, cutoff=cutoff, window_end=window_end, initial=_GENESIS_EQUITY
     )
 
     assert opening.cash_lamports == _GENESIS_EQUITY - 500
@@ -292,3 +301,118 @@ def test_holdout_is_replayed_once_per_backtest(
     assert holdout_replays[0].name == "holdout.sqlite"
     # Three tuning folds plus the one holdout replay; the CLI adds no replay of its own.
     assert len(replays) == 4
+
+
+def _stored_row(kind: str, payload: dict[str, Any], ts_utc: str, key: str) -> dict[str, Any]:
+    """One row shaped for LedgerStore.append_batch."""
+    return {
+        "ts_utc": ts_utc,
+        "source": "replay",
+        "correlation_id": "round1-window",
+        "idempotency_key": key,
+        "type": kind,
+        "payload": payload,
+    }
+
+
+def _stored_fill(order_id: str, side: str, lamports: int, cash: int, ts_utc: str) -> dict[str, Any]:
+    """One FillRecorded row carrying the fill payload the replay writes."""
+    payload = {**_fill_payload(order_id, side, lamports, 10, cash), "source": "replay"}
+    return _stored_row("FillRecorded", payload, ts_utc, f"fill|{order_id}")
+
+
+def _printed_int(out: str, key: str) -> int:
+    """The integer printed on the `key: ` line of a rendered backtest report."""
+    (line,) = [line for line in out.splitlines() if line.startswith(f"{key}: ")]
+    return int(line.split(": ", 1)[1])
+
+
+def test_refused_attempt_fee_is_in_the_printed_fee_total_and_the_score(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F-R2-0: a paid refusal adds its fee once to the printed total and to the score."""
+    monkeypatch.chdir(tmp_path)
+    assert main(["backtest", "--fixture", "smoke"]) == 0
+    base_total = _printed_int(capsys.readouterr().out, "realized_fees_lamports_total")
+
+    real_run_search = cli_backtest.run_search
+    scores: list[int] = []
+
+    def run_with_refusal(*args: Any, **kwargs: Any) -> Any:
+        result = real_run_search(*args, **kwargs)
+        path = Path(kwargs["holdout_ledger_path"])
+        store = LedgerStore(str(path))
+        try:
+            last_ts = max(str(row["ts_utc"]) for row in store.read(limit=None))
+        finally:
+            store.close()
+        scores.append(_net_lamports(path))
+        payload = {
+            **_rejected_payload(300),
+            "source": "replay",
+            "detail": "confirm slippage breach",
+        }
+        store = LedgerStore(str(path))
+        try:
+            store.append_batch([_stored_row("OrderRejected", payload, last_ts, "reject|ROUND1")])
+        finally:
+            store.close()
+        scores.append(_net_lamports(path))
+        return result
+
+    monkeypatch.setattr(cli_backtest, "run_search", run_with_refusal)
+    assert main(["backtest", "--fixture", "smoke"]) == 0
+    out = capsys.readouterr().out
+
+    before, after = scores
+    assert after == before - 300
+    assert _printed_int(out, "realized_fees_lamports_total") == base_total + 300
+
+
+def test_late_settlement_fill_is_counted_alike_by_both_window_paths(tmp_path: Path) -> None:
+    """F-R2-1: a fill stamped after the last tick counts once per path, with the same result."""
+    dataset = load_dataset(_SMOKE)
+    stamps = tuple(event_epoch(event) for event in dataset.events)
+    split = holdout_split(stamps, "smoke")
+    cutoff = split.holdout_start_ts
+    first_tick_ts = format_ts_utc(min(stamp for stamp in stamps if stamp >= cutoff))
+    after_last_tick_ts = format_ts_utc(max(stamps) + 1.0)
+    path = tmp_path / "holdout.sqlite"
+    store = LedgerStore(str(path))
+    try:
+        store.append_batch(
+            [
+                _stored_fill(_ULID_BUY, "buy", 200_000, -200_000, first_tick_ts),
+                _stored_fill(_ULID_SELL, "sell", 150_000, 150_000, after_last_tick_ts),
+            ]
+        )
+    finally:
+        store.close()
+
+    outcome = _evaluate_holdout(
+        spec=_Dataset(name="smoke", ref="smoke", directory=_SMOKE),
+        dataset=dataset,
+        stamps=stamps,
+        split=split,
+        run_id=_ROUND1_RUN,
+        holdout_ledger=path,
+        initial_fallback=_GENESIS_EQUITY,
+    )
+    gate = _paper_gate(
+        paper_ledger=str(path),
+        dataset_name="smoke",
+        run_id=_ROUND1_RUN,
+        cutoff=cutoff,
+        window_end=outcome.window_end_ts,
+        elapsed_days=outcome.elapsed_days,
+        initial_fallback=_GENESIS_EQUITY,
+        backtest_result=outcome.backtest_result,
+        window_metrics=outcome.window_metrics,
+        eligible=True,
+    )
+
+    assert len(outcome.fills) == 2
+    assert outcome.window_metrics.trade_count == 2
+    assert gate.paper_metrics is not None
+    assert gate.paper_metrics.trade_count == outcome.window_metrics.trade_count
+    assert gate.paper_metrics.total_return == outcome.window_metrics.total_return

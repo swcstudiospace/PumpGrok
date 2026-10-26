@@ -261,15 +261,15 @@ def _paper_window(
     rows: Sequence[Mapping[str, Any]],
     *,
     cutoff: float,
-    recording_end: float,
+    window_end: float,
     initial: int,
 ) -> tuple[LedgerState, list[Mapping[str, Any]]]:
     """Fold paper rows before the window into its opening state; keep the window rows.
 
     Rows stamped before the cutoff set the opening equity, so the paper curve
     starts where the window starts rather than at genesis. Rows at or past the
-    recording end are left out, so a finished recording's report does not move
-    when the paper ledger keeps growing.
+    window end are left out, so the paper summary counts the same span the
+    holdout summary does, whatever the paper ledger holds after it.
     """
     opening = initial_state(source="backtest", initial_equity_lamports=initial, day_utc="")
     window_rows: list[Mapping[str, Any]] = []
@@ -277,18 +277,30 @@ def _paper_window(
         stamp = _row_stamp(row)
         if stamp < cutoff:
             opening = reduce(opening, row)
-        elif stamp < recording_end:
+        elif stamp < window_end:
             window_rows.append(row)
     return (opening, window_rows)
 
 
-def _recording_end(stamps: Sequence[float]) -> float:
-    """Half-open end of a recording: the first float past its last stamp.
+def _last_row_stamp(rows: Sequence[Mapping[str, Any]]) -> float:
+    """Latest stamp over every row of the holdout ledger, settling orders included.
 
-    Windows are half-open, so this keeps the final recorded stamp inside the
-    window the holdout replay covers.
+    Replay advances the clock while an order confirms, so a settlement row can
+    land past the last recorded tick. An empty ledger fails closed: replay
+    always writes its checkpoint verdict row, so an empty one means a broken run.
     """
-    return math.nextafter(max(stamps), math.inf)
+    if not rows:
+        raise ConfigError(["backtest holdout ledger holds no rows"])
+    return max(_row_stamp(row) for row in rows)
+
+
+def _window_end(last_stamp: float) -> float:
+    """Half-open window end: the first float past the latest holdout row.
+
+    The holdout summary and the paper comparison both take their end from
+    this one rule, so they count the same fills and marks.
+    """
+    return math.nextafter(last_stamp, math.inf)
 
 
 @contextmanager
@@ -324,6 +336,7 @@ class _HoldoutOutcome:
     data_end_utc: str
     window_start_utc: str
     window_end_utc: str
+    window_end_ts: float
     rejected_fees_lamports: int
 
 
@@ -344,7 +357,6 @@ def _evaluate_holdout(
     dataset: FixtureDataset,
     stamps: tuple[float, ...],
     split: HoldoutSplit,
-    recording_end: float,
     run_id: str,
     holdout_ledger: Path,
     initial_fallback: int,
@@ -356,8 +368,8 @@ def _evaluate_holdout(
     the split fails closed on drift. Fills rebuild from the recorded
     FillRecorded rows, the equity curve folds every window row from genesis,
     and the span between the first and last window event sets the elapsed
-    days. The shared result carries the same window bounds the paper
-    comparison enforces.
+    days. The window ends at the first float past the latest holdout row,
+    settling orders included; the shared result and the paper comparison use that end.
     """
     cutoff = split.holdout_start_ts
     windows = fold_windows(stamps, spec.name, 3)
@@ -365,6 +377,8 @@ def _evaluate_holdout(
     if holdout_window.window_id != split.holdout_id:
         raise ConfigError(["backtest holdout window identity drifted"])
     rows, meta = _read_window_ledger(holdout_ledger)
+    last_row_stamp = _last_row_stamp(rows)
+    window_end_ts = _window_end(last_row_stamp)
     fills, latencies = _fills_from_rows(rows)
     initial = int(meta) if meta is not None else initial_fallback
     genesis = initial_state(source="backtest", initial_equity_lamports=initial, day_utc="")
@@ -376,12 +390,10 @@ def _evaluate_holdout(
     ]
     if window_points:
         window_start_utc = window_points[0][1]
-        window_end_utc = window_points[-1][1]
         first_stamp = window_points[0][0]
         last_stamp = window_points[-1][0]
     else:
         window_start_utc = format_ts_utc(cutoff)
-        window_end_utc = format_ts_utc(cutoff)
         first_stamp = cutoff
         last_stamp = cutoff
     if last_stamp > first_stamp:
@@ -400,7 +412,7 @@ def _evaluate_holdout(
         run_id=run_id,
         dataset=spec.name,
         window_start_ts=cutoff,
-        window_end_ts=recording_end,
+        window_end_ts=window_end_ts,
         fills=fills,
         latencies=latencies,
     )
@@ -413,7 +425,8 @@ def _evaluate_holdout(
         data_start_utc=str(events[0]["ts_utc"]),
         data_end_utc=str(events[-1]["ts_utc"]),
         window_start_utc=window_start_utc,
-        window_end_utc=window_end_utc,
+        window_end_utc=format_ts_utc(last_row_stamp),
+        window_end_ts=window_end_ts,
         rejected_fees_lamports=_rejection_fees(rows),
     )
 
@@ -424,7 +437,7 @@ def _paper_gate(
     dataset_name: str,
     run_id: str,
     cutoff: float,
-    recording_end: float,
+    window_end: float,
     elapsed_days: Decimal,
     initial_fallback: int,
     backtest_result: SharedResult,
@@ -434,8 +447,8 @@ def _paper_gate(
     """Same-window paper comparison and the D7 promotion gate (PAP-02, G-08).
 
     Without a paper ledger path promotion stays ineligible with reason
-    divergence not compared. With one, the paper rows over the recording's
-    window (from the cutoff to the recording end) build the paper summary,
+    divergence not compared. With one, the paper rows over the holdout window
+    (from the cutoff to the window end) build the paper summary,
     opened at the equity the paper ledger held at the cutoff. SharedResult.compare
     enforces window equality before divergence.check, and a breach prints the
     DIVERGENCE BREACH line on stderr and exits 1 via enforce. Promotion is
@@ -449,7 +462,7 @@ def _paper_gate(
     paper_rows, paper_meta = _read_window_ledger(paper_file)
     paper_initial = int(paper_meta) if paper_meta is not None else initial_fallback
     opening, window_rows = _paper_window(
-        paper_rows, cutoff=cutoff, recording_end=recording_end, initial=paper_initial
+        paper_rows, cutoff=cutoff, window_end=window_end, initial=paper_initial
     )
     paper_fills, _ = _fills_from_rows(window_rows)
     paper_metrics = summarize(
@@ -464,7 +477,7 @@ def _paper_gate(
         run_id=run_id,
         dataset=dataset_name,
         window_start_ts=cutoff,
-        window_end_ts=recording_end,
+        window_end_ts=window_end,
         rows=paper_rows,
     )
     backtest_result.compare(paper_result)
@@ -536,7 +549,6 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     stamps = tuple(event_epoch(event) for event in events.events)
     split = holdout_split(stamps, dataset.name)
     cutoff = split.holdout_start_ts
-    recording_end = _recording_end(stamps)
     tuning_events = sum(1 for stamp in stamps if stamp < cutoff)
     holdout_events = len(stamps) - tuning_events
     run_dir = Path("var/backtest") / manifest.run_id
@@ -566,7 +578,6 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
             dataset=events,
             stamps=stamps,
             split=split,
-            recording_end=recording_end,
             run_id=manifest.run_id,
             holdout_ledger=holdout_ledger,
             initial_fallback=settings.risk.paper_equity_lamports,
@@ -583,7 +594,7 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
             dataset_name=dataset.name,
             run_id=manifest.run_id,
             cutoff=cutoff,
-            recording_end=recording_end,
+            window_end=outcome.window_end_ts,
             elapsed_days=outcome.elapsed_days,
             initial_fallback=settings.risk.paper_equity_lamports,
             backtest_result=outcome.backtest_result,
