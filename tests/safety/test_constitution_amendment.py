@@ -6,7 +6,8 @@ docs/RISK_POLICY.md row 8 and section 2.4, and .planning/PROJECT.md BLIND
 constraint against tests/safety/amendment_2026_10_25_frozen.txt, then proves
 every verbatim copy matches: clause 8 is identical in rules and RISK_POLICY,
 the clause 10 exception is present in every regenerated seat file, and only
-the RISK seat carries the amended clause 3.
+the RISK seat carries the amended clause 3. Clause 10 wording is authoritative in
+.planning/AMENDMENT-2026-10-25.md; the carriers and the frozen copy must match it.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ CORE = REPO_ROOT / "prompts" / "_shared" / "core-directives.xml"
 RISK_AGENT = REPO_ROOT / "agents" / "risk.md"
 RISK_POLICY = REPO_ROOT / "docs" / "RISK_POLICY.md"
 PROJECT = REPO_ROOT / ".planning" / "PROJECT.md"
+AMENDMENT = REPO_ROOT / ".planning" / "AMENDMENT-2026-10-25.md"
 SEATS = ("chief", "exit", "journal", "risk", "rug", "scout", "shill", "signal", "sniper", "whale")
 EXPECTED_SECTIONS = (
     "rules-line-8-roles",
@@ -91,6 +93,16 @@ def _rule_clause(prefix: str) -> str:
     raise AssertionError(f"rules file has no line starting with {prefix!r}")
 
 
+def _amendment_clause_10() -> str:
+    matches = [
+        line.removeprefix("    ")
+        for line in AMENDMENT.read_text(encoding="utf-8").splitlines()
+        if line.startswith("    10. If you cannot obtain live data")
+    ]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
 def test_frozen_oracle_covers_every_amended_clause() -> None:
     sections = _frozen()
     assert sections["clause-8-body"] in sections["rules-clause-8"]
@@ -132,7 +144,7 @@ def _core_section_text(section_id: str) -> str:
     raise AssertionError(f"core-directives.xml has no section {section_id!r}")
 
 
-def test_core_clause_10_matches_frozen() -> None:
+def test_core_clause_10_matches_amendment() -> None:
     sections = _frozen()
     for section_id in ("security-constitution", "security-constitution-risk"):
         matches = [
@@ -141,12 +153,14 @@ def test_core_clause_10_matches_frozen() -> None:
             if line.startswith("10. If you cannot obtain live data")
         ]
         assert len(matches) == 1, (section_id, matches)
-        assert matches[0] == sections["core-clause-10"], section_id
+        assert matches[0] == _amendment_clause_10(), section_id
+    assert sections["core-clause-10"] == _amendment_clause_10()
 
 
 def test_clause_10_exception_in_every_seat_file() -> None:
-    sections = _frozen()
-    exception = sections["core-clause-10-exception"]
+    clause = _amendment_clause_10()
+    start = clause.index("Exception while")
+    exception = clause[start:]
     for seat in SEATS:
         text = (REPO_ROOT / "agents" / f"{seat}.md").read_text(encoding="utf-8")
         assert exception in text, f"agents/{seat}.md lost the clause 10 exception"
@@ -156,7 +170,7 @@ def test_clause_10_exception_in_every_seat_file() -> None:
         if line.startswith("10. If you cannot obtain live data")
     ]
     assert len(risk_lines) == 1, risk_lines
-    assert risk_lines[0] == sections["core-clause-10"]
+    assert risk_lines[0] == clause
 
 
 def test_clause_8_identical_across_rules_and_risk_policy() -> None:
