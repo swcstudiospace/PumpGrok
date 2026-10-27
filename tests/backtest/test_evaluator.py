@@ -1,9 +1,9 @@
 """Window evaluator on the recorded fixtures (BT-03, BT-07).
 
-Desk-default overrides score the smoke full window as the ledger-derived
-net recorded cash change: the sum of FillRecorded cash_delta_lamports (every
-venue fee and network cost already inside it) minus the sum of OrderRejected
-fees_lamports, identical across runs, with no sign assumption.
+Desk-default overrides score the smoke full window as the eval ledger's closing
+equity less its opening equity: cash moves once per FillRecorded cash delta and
+once per OrderRejected fee, and open positions sit at their mark or cost basis,
+the valuation the report uses. Identical across runs, with no sign assumption.
 Every smoke-10m window scores an honest zero with no fills. Unknown keys
 and scoring-only knobs raise validation errors. Offline only, tmp ledgers
 under tmp_path, no network, no wall clock.
@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from pumpgrok.backtest.equity import equity_lamports
 from pumpgrok.backtest.evaluate import (
     CandidateParams,
     EvalWindow,
@@ -25,6 +26,7 @@ from pumpgrok.backtest.evaluate import (
     fold_windows,
 )
 from pumpgrok.config.settings import FilterSettings
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.supervisor.scheduler import run_once_replay
@@ -47,27 +49,36 @@ def _full_window(dataset_dir: Path, window_id: str) -> EvalWindow:
 
 
 def _ledger_math(ledger_path: Path) -> tuple[int, int]:
-    """Independent net lamports and fill count from one ledger's fills."""
+    """Closing less opening equity from one ledger's rows, and its fill count.
+
+    Cash must move once per fill cash delta and once per refusal fee; open
+    positions then add their mark or cost basis, the window valuation shared
+    with the report.
+    """
     store = LedgerStore(ledger_path)
     try:
-        fills = store.read(types=["FillRecorded"], limit=None)
-        rejections = store.read(types=["OrderRejected"], limit=None)
+        rows = store.read(limit=None)
+        meta = store.get_meta("initial_equity_lamports")
     finally:
         store.close()
+    assert meta is not None
+    opening = int(meta)
     cash_total = 0
-    for row in fills:
-        payload = row["payload"]
-        assert isinstance(payload, dict)
-        cash_total += int(payload["cash_delta_lamports"])
-    for row in rejections:
-        payload = row["payload"]
-        assert isinstance(payload, dict)
-        cash_total -= int(payload["fees_lamports"])
-    return cash_total, len(fills)
+    for row in rows:
+        if row["type"] == "FillRecorded":
+            cash_total += int(row["payload"]["cash_delta_lamports"])
+        elif row["type"] == "OrderRejected":
+            cash_total -= int(row["payload"]["fees_lamports"])
+    state = initial_state(source="replay", initial_equity_lamports=opening, day_utc="")
+    for row in rows:
+        state = reduce(state, row)
+    assert state.cash_lamports == opening + cash_total
+    fill_count = sum(1 for row in rows if row["type"] == "FillRecorded")
+    return equity_lamports(state) - opening, fill_count
 
 
 def test_desk_defaults_score_matches_ledger_math(tmp_path: Path) -> None:
-    """Smoke full-window score equals the ledger-derived net lamports."""
+    """Smoke full-window score equals the ledger's closing equity less opening equity."""
     window = _full_window(SMOKE, "smoke-full")
     score = evaluate_window(
         "smoke",

@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from pumpgrok.backtest.candidate import CandidateParams
 from pumpgrok.backtest.manifest import (
     RUN_ID_VERSION,
     RunManifest,
@@ -34,7 +35,7 @@ from pumpgrok.core.idempotency import canonical_json
 SMOKE10M = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke-10m"
 SEED = 20260101
 CODE_VERSION = "TESTCODEVERSION"
-PARAMS_RAW = json.dumps({"top_k": 10}, sort_keys=True).encode("utf-8")
+PARAMS_RAW = json.dumps({"filter": {"min_unique_buyers": 5}}, sort_keys=True).encode("utf-8")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 
 FILTER_HEX = "filter_settings_hash"
@@ -80,7 +81,7 @@ def test_manifest_holds_all_inputs(tmp_path: Path) -> None:
     assert manifest.dataset_digest == _expected_digest(root)
     assert manifest.seed == SEED
     assert manifest.filter_settings_hash == filter_settings_hash(FilterSettings())
-    assert manifest.param_set_hash == param_set_hash(PARAMS_RAW)
+    assert manifest.param_set_hash == CandidateParams(**json.loads(PARAMS_RAW)).content_hash
     assert manifest.code_version == CODE_VERSION
     assert manifest.run_id_version == RUN_ID_VERSION
     assert _DIGEST_RE.fullmatch(manifest.run_id)
@@ -160,3 +161,38 @@ def test_run_manifest_is_frozen(tmp_path: Path) -> None:
     manifest = _build(str(_copy_dataset(tmp_path / "work")))
     with pytest.raises(ValidationError):
         manifest.seed = SEED + 1  # type: ignore[misc]
+
+
+def test_param_set_hash_is_the_candidate_content_hash() -> None:
+    """Spelling does not change identity; the value is the CandidateParams content hash."""
+    mapping = {"filter": {"min_unique_buyers": 7, "require_metadata": False}}
+    compact = json.dumps(mapping, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    reordered = json.dumps(
+        {"filter": {"require_metadata": False, "min_unique_buyers": 7}}, indent=4
+    ).encode("utf-8")
+    assert compact != reordered
+    assert param_set_hash(compact) == param_set_hash(reordered)
+    assert param_set_hash(compact) == CandidateParams(**mapping).content_hash
+
+
+def test_param_set_hash_separates_different_sets() -> None:
+    """Two different parameter sets keep different identities."""
+    first = json.dumps({"filter": {"min_unique_buyers": 7}}).encode("utf-8")
+    second = json.dumps({"filter": {"min_unique_buyers": 8}}).encode("utf-8")
+    assert param_set_hash(first) != param_set_hash(second)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b"",
+        b"[1]",
+        b'{"top_k": 10}',
+        b'{"filter": {"min_total_score": 0.5}}',
+        b'{"filter": {"min_unique_buyers": 5.0}}',
+    ],
+)
+def test_param_set_hash_refuses_invalid_bytes(raw: bytes) -> None:
+    """Invalid parameter-set bytes raise ValueError, the error the CLI maps to a usage error."""
+    with pytest.raises(ValueError):
+        param_set_hash(raw)
