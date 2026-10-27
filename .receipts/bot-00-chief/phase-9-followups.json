@@ -4,13 +4,13 @@
   "branch": "bot-00-chief/phase-9-followups",
   "phase": "milestone-v3-followups",
   "plan": "Owner decisions after the merged-head Phase 8 and 9 re-verification: (1) Phase 9 claims corrected, upgrade paths library-only; (2) one canonical parameter-set identity (normalized CandidateParams content hash); (3) constitution clause-10 bytes aligned to the amendment; (4) selection valuation equal to the backtest report valuation.",
-  "purpose": "Receipt for the milestone v3 follow-up batch. Records the gates run on the final tree and the evidence for each owner decision. Not a merge approval.",
-  "status": "draft: gates green on the final tree (uncommitted at run time; the commit records the same tree). Awaiting owner review of the diff. G-1 path ownership unresolved for this branch.",
+  "purpose": "Receipt for the milestone v3 follow-up batch. Records the gates run on the committed tree and the evidence for each owner decision. Not a merge approval.",
+  "status": "draft. The first CI run on d43be62 failed on the tracked-receipt allowlist test; fixed in bb726cd (.gitignore allowlist line). Gates re-run green on the committed tree (commands 14 and 15). Awaiting owner review of the diff and G-1 routing. approved_by is intentionally absent.",
   "rollback_plan": "Close the draft pull request, or git revert the follow-up commits on bot-00-chief/phase-9-followups. No data migration is involved: smoke-10m events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d. Backtest run ids change for new runs only; existing var/backtest run directories are not rewritten.",
   "commands": [
     {"cmd": "make lint", "exit_code": 0, "output_tail": "798 files already formatted"},
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 206 source files"},
-    {"cmd": "make test", "exit_code": 0, "output_tail": "[100%] (no pytest summary line is printed by the Makefile target)"},
+    {"cmd": "make test (run before the receipt was tracked)", "exit_code": 0, "output_tail": "[100%] (no pytest summary line is printed by the Makefile target)"},
     {"cmd": "make audit", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
     {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "PumpGrok repository structure looks healthy."},
     {"cmd": "ASSEMBLE_UV=uv bash scripts/assemble-prompts.sh --check", "exit_code": 0, "output_tail": "assembled prompts clean: 10 prompts match prompts/"},
@@ -21,12 +21,14 @@
     {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Fix every unmet line or run in mode=paper. No transaction was attempted."},
     {"cmd": "uv run pumpgrok backtest --fixture smoke-10m (run 1, then run 2, then cmp)", "exit_code": 0, "output_tail": "cmp exit 0: reports byte-identical. param_set_hash d6c9cd2aa6bebb78a249d6fe42fc519d46ac85bcf4af10f96438b054a2990c93"},
     {"cmd": "grep -rn record_promotion|restore_active_set|escalate_candidate|record_active_set src/ (excluding defs, __all__, imports, pycache)", "exit_code": 0, "output_tail": "only docstrings and __all__ entries; no production caller"},
-    {"cmd": "uv run pytest tests/backtest tests/upgrade tests/safety/test_constitution_amendment.py -q -x", "exit_code": 0, "output_tail": "156 tests passed before the ruff __all__ fix; the final make test run covers the whole suite"}
+    {"cmd": "uv run pytest tests/backtest tests/upgrade tests/safety/test_constitution_amendment.py -q -x", "exit_code": 0, "output_tail": "156 tests passed before the ruff __all__ fix; the make test run covers the whole suite"},
+    {"cmd": "uv run pytest ci/tests/test_security_workflows.py::TestReceiptDirectories -q (committed tree, after the allowlist line)", "exit_code": 0, "output_tail": "... [100%]"},
+    {"cmd": "make test (full suite, committed tree after the allowlist line)", "exit_code": 0, "output_tail": "[100%] all tests pass; about 330 s"}
   ],
   "claims": [
     {"claim": "make lint passes on the final tree", "evidence_command_index": 0},
     {"claim": "make typecheck passes on the final tree", "evidence_command_index": 1},
-    {"claim": "make test passes on the final tree (whole suite, exit 0)", "evidence_command_index": 2},
+    {"claim": "make test passed on the tree before the receipt was tracked; the committed-tree run is command 15", "evidence_command_index": 2},
     {"claim": "make audit passes on the final tree", "evidence_command_index": 3},
     {"claim": "scripts/check.sh passes on the final tree", "evidence_command_index": 4},
     {"claim": "assemble-prompts --check is clean after regenerating prompts-assembled/** from the edited sources", "evidence_command_index": 5},
@@ -38,21 +40,25 @@
     {"claim": "Two backtest runs of smoke-10m produce byte-identical reports on this tree", "evidence_command_index": 11},
     {"claim": "No production code calls record_promotion, restore_active_set, escalate_candidate or record_active_set; the Phase 9 claims are corrected to library-only", "evidence_command_index": 12},
     {"claim": "Parameter-set identity is the CandidateParams content hash: whitespace and key order do not change it, and it equals content_hash (tests in tests/backtest)", "evidence_command_index": 13},
-    {"claim": "Selection net equals the report net for the same ledger, and a buy-and-hold candidate is not scored as a loss (tests in tests/backtest)", "evidence_command_index": 13}
+    {"claim": "Selection net equals the report net for the same ledger, and a buy-and-hold candidate is not scored as a loss (tests in tests/backtest)", "evidence_command_index": 13},
+    {"claim": "The tracked receipt passes the receipt-directory CI test because it is allowlisted in .gitignore", "evidence_command_index": 14},
+    {"claim": "make test passes on the committed tree after the allowlist line", "evidence_command_index": 15}
   ],
   "unverified": [
-    "G-1 path ownership on this branch: foreign-owned paths include CHANGELOG.md (bot-09-journal), docs/** and prompts/_shared/core-directives.xml and rules/** (bot-02-risk), skills/browser-ops/SKILL.md (bot-07-shill), src/pumpgrok/backtest/** (bot-02-risk). The PR 16 CI waiver is not extended to this branch. Owner routing or waiver is required before merge.",
+    "G-1 path ownership on this branch: foreign-owned paths include CHANGELOG.md (bot-09-journal), docs/RISK_POLICY.md, docs/ROSTER.md, prompts/_shared/core-directives.xml, src/pumpgrok/backtest/* and cli/backtest.py, tests/backtest/*, tests/safety/amendment and constitution test, tests/upgrade/test_active_set_ledger.py (bot-02-risk), .gitignore (bot-02-risk, added in bb726cd), and skills/browser-ops/SKILL.md (bot-07-shill). The PR 16 CI waiver is not extended to this branch. Owner routing or waiver is required before merge.",
+    "The first CI run on d43be62 failed in the check and gate-self-test jobs on ci/tests/test_security_workflows.py::TestReceiptDirectories (the receipt was tracked but not allowlisted). The local make test at command 2 ran before the receipt was tracked and did not catch it. Fixed in bb726cd; command 15 is the committed-tree evidence.",
     "approved_by is absent by design. The owner approved the four decisions, not this diff. The owner must review the diff and record approval before merge.",
-    "Greptile review and the PR's CI checks were not run; this is a draft pull request.",
+    "Greptile review was not run; this is a draft pull request. The CI gates job's G-2 step has not run in CI because G-1 stops that job first; G-2 fails locally on approved_by.",
     "The make test target prints no pytest summary line; the exit code 0 is the evidence, not a test count.",
     "The backtest report labels code_version as HEAD (1405e61...). The two identical runs were on the uncommitted tree that the follow-up commits record.",
     "Run ids changed for every backtest because the identity input changed. Existing var/backtest run directories and manifests will not match new runs. This is intended and is recorded in CHANGELOG."
   ],
   "carry_over": {
-    "G-1_ownership": "Open. Owner decision needed: route or waive the foreign-owned paths for this branch, as for PR 16. The PR 16 waiver in .github/workflows/gates.yml is not extended.",
+    "G-1_ownership": "Open. Owner decision needed: route or waive the foreign-owned paths for this branch, as for PR 16, including .gitignore. The PR 16 waiver in .github/workflows/gates.yml is not extended.",
     "equity_definitions": "Open. ledger/views.equity_lamports and reducer peak tracking still value positions at mark only; selection and the report use backtest/equity.py. Owner decision whether live drawdown converges on the shared rule.",
     "restore_hardening": "Open. ledger/active_set.py:93 skips rows whose by is not human: or gate:, so a restore with another by is recorded but never read back. Needs owner approval for a fix PR.",
-    "provider_mechanism": "Open. The paid-RPC provider is still read from env PUMPGROK_PAID_RPC_PROVIDER; the amendment names the STATE.md record. Follow-up code change.",
+    "provider_mechanism": "Open, owner decision not yet asked. The paid-RPC provider is still read from env PUMPGROK_PAID_RPC_PROVIDER; the amendment names the STATE.md record.",
+    "amendment_line_44": "Open. AMENDMENT-2026-10-25.md line 44 (a code span) uses the hyphen form; clause 10 at line 58 uses the en dash. skills/desk-operating-model/SKILL.md:31 matches line 44. Owner to say which form the desk carries.",
     "historical_note": "docs/SAFETY_INVARIANTS.md:332 is a historical contradictions record. It still quotes the hyphen form and says clause 10 exists only in agent files. Left unchanged as a record."
   }
 }
