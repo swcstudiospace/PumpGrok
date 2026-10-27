@@ -1,0 +1,58 @@
+{
+  "task_id": "phase-9-followups",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/phase-9-followups",
+  "phase": "milestone-v3-followups",
+  "plan": "Owner decisions after the merged-head Phase 8 and 9 re-verification: (1) Phase 9 claims corrected, upgrade paths library-only; (2) one canonical parameter-set identity (normalized CandidateParams content hash); (3) constitution clause-10 bytes aligned to the amendment; (4) selection valuation equal to the backtest report valuation.",
+  "purpose": "Receipt for the milestone v3 follow-up batch. Records the gates run on the final tree and the evidence for each owner decision. Not a merge approval.",
+  "status": "draft: gates green on the final tree (uncommitted at run time; the commit records the same tree). Awaiting owner review of the diff. G-1 path ownership unresolved for this branch.",
+  "rollback_plan": "Close the draft pull request, or git revert the follow-up commits on bot-00-chief/phase-9-followups. No data migration is involved: smoke-10m events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d. Backtest run ids change for new runs only; existing var/backtest run directories are not rewritten.",
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "798 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 206 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "[100%] (no pytest summary line is printed by the Makefile target)"},
+    {"cmd": "make audit", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "PumpGrok repository structure looks healthy."},
+    {"cmd": "ASSEMBLE_UV=uv bash scripts/assemble-prompts.sh --check", "exit_code": 0, "output_tail": "assembled prompts clean: 10 prompts match prompts/"},
+    {"cmd": "uv run python scripts/generate-templates.py --check", "exit_code": 0, "output_tail": "agents clean: 10 agent files match prompts/"},
+    {"cmd": "uv run python scripts/generate-event-schemas.py --check", "exit_code": 0, "output_tail": "event schemas clean: 18 schemas match ledger/events.py"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "exit_code": 0, "output_tail": "verify=CONSISTENT seq=2 events=41; events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "trades filled=2 not_filled=1"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Fix every unmet line or run in mode=paper. No transaction was attempted."},
+    {"cmd": "uv run pumpgrok backtest --fixture smoke-10m (run 1, then run 2, then cmp)", "exit_code": 0, "output_tail": "cmp exit 0: reports byte-identical. param_set_hash d6c9cd2aa6bebb78a249d6fe42fc519d46ac85bcf4af10f96438b054a2990c93"},
+    {"cmd": "grep -rn record_promotion|restore_active_set|escalate_candidate|record_active_set src/ (excluding defs, __all__, imports, pycache)", "exit_code": 0, "output_tail": "only docstrings and __all__ entries; no production caller"},
+    {"cmd": "uv run pytest tests/backtest tests/upgrade tests/safety/test_constitution_amendment.py -q -x", "exit_code": 0, "output_tail": "156 tests passed before the ruff __all__ fix; the final make test run covers the whole suite"}
+  ],
+  "claims": [
+    {"claim": "make lint passes on the final tree", "evidence_command_index": 0},
+    {"claim": "make typecheck passes on the final tree", "evidence_command_index": 1},
+    {"claim": "make test passes on the final tree (whole suite, exit 0)", "evidence_command_index": 2},
+    {"claim": "make audit passes on the final tree", "evidence_command_index": 3},
+    {"claim": "scripts/check.sh passes on the final tree", "evidence_command_index": 4},
+    {"claim": "assemble-prompts --check is clean after regenerating prompts-assembled/** from the edited sources", "evidence_command_index": 5},
+    {"claim": "generate-templates --check is clean after regenerating agents/** from the edited sources", "evidence_command_index": 6},
+    {"claim": "generate-event-schemas --check is clean", "evidence_command_index": 7},
+    {"claim": "Replay bytes are unchanged: smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "evidence_command_index": 8},
+    {"claim": "The paper smoke cycle completes on the fixture replay", "evidence_command_index": 9},
+    {"claim": "run --mode live --once refuses with exit 3 and no transaction", "evidence_command_index": 10, "expects_failure": true},
+    {"claim": "Two backtest runs of smoke-10m produce byte-identical reports on this tree", "evidence_command_index": 11},
+    {"claim": "No production code calls record_promotion, restore_active_set, escalate_candidate or record_active_set; the Phase 9 claims are corrected to library-only", "evidence_command_index": 12},
+    {"claim": "Parameter-set identity is the CandidateParams content hash: whitespace and key order do not change it, and it equals content_hash (tests in tests/backtest)", "evidence_command_index": 13},
+    {"claim": "Selection net equals the report net for the same ledger, and a buy-and-hold candidate is not scored as a loss (tests in tests/backtest)", "evidence_command_index": 13}
+  ],
+  "unverified": [
+    "G-1 path ownership on this branch: foreign-owned paths include CHANGELOG.md (bot-09-journal), docs/** and prompts/_shared/core-directives.xml and rules/** (bot-02-risk), skills/browser-ops/SKILL.md (bot-07-shill), src/pumpgrok/backtest/** (bot-02-risk). The PR 16 CI waiver is not extended to this branch. Owner routing or waiver is required before merge.",
+    "approved_by is absent by design. The owner approved the four decisions, not this diff. The owner must review the diff and record approval before merge.",
+    "Greptile review and the PR's CI checks were not run; this is a draft pull request.",
+    "The make test target prints no pytest summary line; the exit code 0 is the evidence, not a test count.",
+    "The backtest report labels code_version as HEAD (1405e61...). The two identical runs were on the uncommitted tree that the follow-up commits record.",
+    "Run ids changed for every backtest because the identity input changed. Existing var/backtest run directories and manifests will not match new runs. This is intended and is recorded in CHANGELOG."
+  ],
+  "carry_over": {
+    "G-1_ownership": "Open. Owner decision needed: route or waive the foreign-owned paths for this branch, as for PR 16. The PR 16 waiver in .github/workflows/gates.yml is not extended.",
+    "equity_definitions": "Open. ledger/views.equity_lamports and reducer peak tracking still value positions at mark only; selection and the report use backtest/equity.py. Owner decision whether live drawdown converges on the shared rule.",
+    "restore_hardening": "Open. ledger/active_set.py:93 skips rows whose by is not human: or gate:, so a restore with another by is recorded but never read back. Needs owner approval for a fix PR.",
+    "provider_mechanism": "Open. The paid-RPC provider is still read from env PUMPGROK_PAID_RPC_PROVIDER; the amendment names the STATE.md record. Follow-up code change.",
+    "historical_note": "docs/SAFETY_INVARIANTS.md:332 is a historical contradictions record. It still quotes the hyphen form and says clause 10 exists only in agent files. Left unchanged as a record."
+  }
+}
