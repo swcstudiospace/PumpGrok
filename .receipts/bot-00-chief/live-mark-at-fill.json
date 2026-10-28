@@ -5,7 +5,7 @@
   "phase": "milestone-v3-followups",
   "plan": "Owner decision 2026-10-28: fix now, mark at cost basis on fill. Implemented as one valuation rule, not a reducer state change: an open position is valued at its last mark when it has one, otherwise at its fill cost basis. Applied to ledger equity, peak tracking, unrealized PnL and the paper adapter's exec.positions equity. Pricing and close paths still read last_mtm_lamports directly, so no close is priced at cost.",
   "purpose": "Receipt for the valuation fix. Not a merge approval.",
-  "status": "draft. Gates green on this tree. approved_by is intentionally absent until the owner reviews the diff. G-1 path ownership fails for src/pumpgrok/ledger, src/pumpgrok/execution/paper_adapter and .gitignore (bot-02-risk and bot-04-sniper paths), pending the owner's waiver decision.",
+  "status": "draft. Gates green on this tree. G-1 waived for this PR only by owner decision 2026-10-28 (gates.yml, two G-1 steps). G-2 is enforced until approved_by is recorded, so the gates job stays red on G-2 by design. approved_by is intentionally absent until the owner reviews the diff.",
   "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/live-mark-at-fill. The change alters only derived valuations (equity, peak, unrealized PnL, exec.positions equity); no event is written differently. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
   "commands": [
     {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "environment synced"},
@@ -35,7 +35,7 @@
   "unverified": [
     "Known limit, not fixed here: a buy that adds to a position which already has a mark still reads its cost as a loss until the next mark (the add-on path in the buy fill). Fixing it touches the buy-fill path and the close pricing gate.",
     "The engine halt was not run end to end with three unmarked buys. The regression tests show the equity read is 2 percent low per unmarked default-size buy; that the engine halts on it was not executed.",
-    "G-1 path ownership: src/pumpgrok/ledger/views.py, reducer.py, src/pumpgrok/execution/paper_adapter/adapter.py (bot-02-risk, bot-04-sniper), and .gitignore. Owner waiver or routing needed before merge.",
+    "G-1 path ownership: src/pumpgrok/ledger/views.py, reducer.py, src/pumpgrok/execution/paper_adapter/adapter.py (bot-02-risk, bot-04-sniper), and .gitignore. Waived for this PR only by owner decision 2026-10-28. The foreign-owned paths still need routing or a permanent decision before the cleanup change.",
     "approved_by is absent by design. A human reviewer must review the diff and record approval before merge.",
     "Greptile review was not run on this branch before this receipt was written."
   ],
