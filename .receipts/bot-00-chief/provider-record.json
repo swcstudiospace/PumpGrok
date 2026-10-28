@@ -1,0 +1,55 @@
+{
+  "task_id": "provider-record",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/provider-record",
+  "phase": "milestone-v3-followups",
+  "plan": "Owner decision 2026-10-28: the paid-RPC provider is recorded in .planning/STATE.md, not in the environment, and a missing or unreadable record fails closed. Record format: exactly one line paid_rpc_provider: none means no provider recorded (SAFE-4 and SAFE-8 BLIND advisory, amendment 2026-10-25 section 2.4). Any other state is recorded (strict, BLIND stays KILL): file missing or unreadable, no key line, two or more key lines, empty value, any other value. The image carries .planning/STATE.md and nothing else from .planning.",
+  "purpose": "Receipt for the provider-record change. Not a merge approval.",
+  "status": "draft. Gates green on this tree; the image was built from this tree and checked in the container. approved_by is intentionally absent until the owner reviews the diff. G-1 path ownership fails for src/pumpgrok/tools/safety, src/pumpgrok/config, Dockerfile, .dockerignore, tests and .gitignore (bot-02-risk) and CHANGELOG.md (bot-09-journal), pending the owner's waiver decision.",
+  "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/provider-record. Rollback restores the environment-variable reader. Any operator who set PUMPGROK_PAID_RPC_PROVIDER after this change gets a startup refusal, so rollback is the only path back to the env var. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+  "commands": [
+    {"cmd": "uv run pytest tests/safety tests/tools/safety -q", "exit_code": 0, "output_tail": "targeted safety suites passed"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check and ruff format --check passed"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy --strict: no issues in 205 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite passed (no pytest summary line printed by the Makefile target)"},
+    {"cmd": "make audit", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "repository structure looks healthy"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "exit_code": 0, "output_tail": "verify=CONSISTENT; events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "paper smoke cycle completed"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "live refused; no transaction attempted"},
+    {"cmd": "docker build -t pumpgrok-provider-check .", "exit_code": 0, "output_tail": "image built"},
+    {"cmd": "docker run --rm --entrypoint sh pumpgrok-provider-check -c 'ls -la /app/.planning; id -un; grep paid_rpc_provider /app/.planning/STATE.md'", "exit_code": 0, "output_tail": "only STATE.md present, readable; user pumpgrok; line 19 paid_rpc_provider: none"},
+    {"cmd": "docker run --rm --entrypoint python pumpgrok-provider-check -c 'paid_rpc_provider_recorded()' (working directory /app)", "exit_code": 0, "output_tail": "recorded_from_app= False"},
+    {"cmd": "docker run --rm -w /tmp --entrypoint python pumpgrok-provider-check -c 'paid_rpc_provider_recorded()' (no record in the working directory)", "exit_code": 0, "output_tail": "recorded_from_tmp= True (fail closed)"},
+    {"cmd": "docker run --rm -e PUMPGROK_PAID_RPC_PROVIDER=test-provider --entrypoint python pumpgrok-provider-check -c 'load_settings()'", "exit_code": 1, "output_tail": "ConfigError: unknown setting: PUMPGROK_PAID_RPC_PROVIDER", "expects_failure": true}
+  ],
+  "claims": [
+    {"claim": "The targeted safety suites pass", "evidence_command_index": 0},
+    {"claim": "make lint passes on this tree", "evidence_command_index": 1},
+    {"claim": "make typecheck passes on this tree", "evidence_command_index": 2},
+    {"claim": "The full suite passes on this tree", "evidence_command_index": 3},
+    {"claim": "The dependency audit passes", "evidence_command_index": 4},
+    {"claim": "scripts/check.sh passes", "evidence_command_index": 5},
+    {"claim": "smoke-10m events.hash is unchanged by this change", "evidence_command_index": 6},
+    {"claim": "The paper smoke cycle completes", "evidence_command_index": 7},
+    {"claim": "run --mode live --once refuses with exit 3 and no transaction", "evidence_command_index": 8, "expects_failure": true},
+    {"claim": "The image builds from this tree with the new .dockerignore and the STATE.md copy", "evidence_command_index": 9},
+    {"claim": "The image holds only .planning/STATE.md, readable by the runtime user", "evidence_command_index": 10},
+    {"claim": "From the production working directory /app the record decides recorded=False", "evidence_command_index": 11},
+    {"claim": "Without a record in the working directory the decision is recorded=True (fail closed)", "evidence_command_index": 12},
+    {"claim": "An operator who sets PUMPGROK_PAID_RPC_PROVIDER gets a startup refusal", "evidence_command_index": 13, "expects_failure": true}
+  ],
+  "unverified": [
+    "G-1 path ownership: src/pumpgrok/tools/safety/provider.py and score_report.py, src/pumpgrok/config/settings.py, tests (bot-02-risk), Dockerfile and .dockerignore and .gitignore (bot-02-risk), CHANGELOG.md (bot-09-journal). .planning/STATE.md is bot-00-chief. Owner waiver or routing needed before merge.",
+    "approved_by is absent by design. A human reviewer must review the diff and record approval before merge.",
+    "Editing .planning/STATE.md outside a GSD workflow: the global agent rules say planning artifacts change only inside a GSD workflow. The owner decided the record lives there; the owner should confirm this edit is accepted.",
+    "GSD tooling may rewrite STATE.md. The record line sits after the frontmatter; a GSD rewrite that drops it would make the decision fail closed (recorded), not open.",
+    "Greptile review was not run on this branch before this receipt was written.",
+    "The docker build used the local Docker daemon and the base images it already had; the build was not run in CI."
+  ],
+  "carry_over": {
+    "fail_closed_direction": "A missing record now means recorded, so SAFE-4 and SAFE-8 BLIND become KILL in any environment where the record is not visible. The owner chose this direction. Deploys must ship STATE.md (the Dockerfile now does).",
+    "operator_env_var": "Any environment that sets PUMPGROK_PAID_RPC_PROVIDER now fails at startup. Check operator env files before rollout.",
+    "amendment_text": "The amendment and docs/RISK_POLICY.md already say the provider is recorded in .planning/STATE.md; no amendment text changed."
+  }
+}
