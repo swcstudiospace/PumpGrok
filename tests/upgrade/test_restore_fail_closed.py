@@ -9,6 +9,7 @@ set is applied and reads back. Offline only: temp ledger, no network.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ OPERATOR = "human:RESTORE-TEST"
 GATE = "gate:UPGRADE-GATE"
 CORRELATION = "restore-fail-closed-test"
 UNSTORED = hashlib.sha256(b"never recorded").hexdigest()
+CONTENT_PREFIX = "active_param_set_content:"
 
 
 def _record(store: LedgerStore, param_set: ParamSet, by: str, ts_utc: str) -> None:
@@ -78,6 +80,33 @@ def test_restore_to_unstored_hash_is_refused_and_writes_nothing(tmp_path: Path) 
             _restore(store, UNSTORED, OPERATOR, "2026-01-01T00:02:00Z")
         assert store.count() == before
         assert read_active_set(store) == SET_A.content_hash
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "{not json",
+        json.dumps({"filter": {"min_unique_buyers": "many"}}),
+        json.dumps(SET_B.model_dump(mode="json"), sort_keys=True, separators=(",", ":")),
+    ],
+    ids=["invalid_json", "fails_paramset_checks", "valid_content_wrong_hash"],
+)
+def test_restore_to_corrupt_stored_content_is_refused_and_writes_nothing(
+    tmp_path: Path, stored: str
+) -> None:
+    """Undecodable, ParamSet-invalid, or wrong-hash stored content is refused before any row."""
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        _record(store, SET_A, OPERATOR, "2026-01-01T00:01:00Z")
+        _record(store, SET_B, OPERATOR, "2026-01-01T00:02:00Z")
+        store.set_meta(f"{CONTENT_PREFIX}{SET_A.content_hash}", stored)
+        before = store.count()
+        with pytest.raises(ValueError):
+            _restore(store, SET_A.content_hash, OPERATOR, "2026-01-01T00:03:00Z")
+        assert store.count() == before
+        assert read_active_set(store) == SET_B.content_hash
     finally:
         store.close()
 
