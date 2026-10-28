@@ -83,12 +83,14 @@ jobs:
           echo "bot=$BOT" >> "$GITHUB_OUTPUT"
           echo "Acting bot: $BOT"
 
+      # PR 17 (draft follow-up batch): G-1 path ownership waived for this PR only, owner decision
+      # 2026-10-28. G-2 stays enforced until approved_by is recorded. Remove with the PR 16 waiver.
       - name: G-1 — Manifest self-check
-        if: github.event.pull_request.number != 16 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 16 && github.event.pull_request.number != 17 || github.event.pull_request.head.repo.full_name != github.repository
         run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
-        if: github.event.pull_request.number != 16 || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event.pull_request.number != 16 && github.event.pull_request.number != 17 || github.event.pull_request.head.repo.full_name != github.repository
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
