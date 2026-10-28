@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import json
 import logging
 import math
 import sys
@@ -17,7 +16,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from pumpgrok.backtest.candidate import param_set_mapping
 from pumpgrok.backtest.divergence import breach_line, check, enforce
+from pumpgrok.backtest.equity import equity_lamports
 from pumpgrok.backtest.evaluate import CandidateParams, evaluated_settings_hash, fold_windows
 from pumpgrok.backtest.harness import run_search
 from pumpgrok.backtest.manifest import build_manifest, param_set_hash
@@ -84,9 +85,9 @@ def _backtest_dataset(raw: str) -> _Dataset:
 def _backtest_params(raw: str | None) -> tuple[bytes, dict[str, Any]]:
     """Read parameter-set file bytes plus the mapping, or desk defaults.
 
-    Absent means the desk default empty mapping. The file bytes are the
-    hash input (CONTEXT G-03); the mapping must be JSON-stable, so float
-    leaves fail closed with a usage error instead of hashing ambiguously.
+    Absent means the desk default empty mapping. The file bytes feed the manifest
+    identity through param_set_hash, and the mapping comes from param_set_mapping,
+    so float leaves fail closed with a usage error instead of hashing ambiguously.
     """
     if raw is None:
         return (canonical_json({}).encode("utf-8"), {})
@@ -95,16 +96,11 @@ def _backtest_params(raw: str | None) -> tuple[bytes, dict[str, Any]]:
     except OSError as exc:
         raise ConfigError([f"unreadable --params file: {raw!r}"]) from exc
     try:
-        parsed: Any = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise UsageError(f"bad --params {raw!r}: want a JSON mapping file") from exc
-    if not isinstance(parsed, dict):
-        raise UsageError(f"bad --params {raw!r}: want a JSON mapping file")
-    try:
-        canonical_json(parsed)
-    except TypeError as exc:
+        parsed = param_set_mapping(data)
+    except ValueError as exc:
         raise UsageError(
-            f"bad --params {raw!r}: want JSON-stable ints, strings and bools; floats are refused"
+            f"bad --params {raw!r}: want a JSON mapping of ints, strings and bools; "
+            "floats are refused"
         ) from exc
     return (data, parsed)
 
@@ -218,22 +214,6 @@ def _row_stamp(row: Mapping[str, Any]) -> float:
         raise ConfigError(["paper ledger holds a row with an unusable timestamp"]) from exc
 
 
-def _equity_lamports(state: LedgerState) -> int:
-    """Cash plus open positions, each at its recorded mark or else at cost.
-
-    The reducer marks a position at last_mtm_lamports, which stays zero until
-    the first mark, so a fresh purchase would read as a loss of its whole
-    cost. A position with no recorded mark is held at its cost basis instead,
-    which keeps buy cash outflows out of trading PnL.
-    """
-    total = state.cash_lamports
-    for pos in state.positions.values():
-        if pos.token_units <= 0:
-            continue
-        total += pos.last_mtm_lamports if pos.last_mtm_ts_utc else pos.cost_basis_lamports
-    return total
-
-
 def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
     """Equity after each fill, folding every row of the window in ledger order.
 
@@ -249,11 +229,11 @@ def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tu
     for row in rows:
         if row.get("type") == "FillRecorded":
             if pending:
-                curve.append(_equity_lamports(state))
+                curve.append(equity_lamports(state))
             pending = True
         state = reduce(state, row)
     if pending:
-        curve.append(_equity_lamports(state))
+        curve.append(equity_lamports(state))
     return tuple(curve)
 
 
@@ -468,7 +448,7 @@ def _paper_gate(
     paper_metrics = summarize(
         paper_fills,
         MetricsContext(
-            initial_equity_lamports=_equity_lamports(opening),
+            initial_equity_lamports=equity_lamports(opening),
             equity_curve_lamports=_window_curve(opening, window_rows),
             elapsed_days=elapsed_days,
         ),

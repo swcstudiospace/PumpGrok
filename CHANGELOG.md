@@ -2,6 +2,14 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 follow-up: one identity, one valuation, constitution bytes
+
+### Changed
+
+- Parameter-set identity: `param_set_hash` is the normalized CandidateParams content hash, the value the search winner, promotion gate, evidence and active-set ledger carry. Whitespace and key order no longer change it. Every run id changes once, because the identity input changed. `--params` files with keys outside CandidateParams, or float leaves, are refused with a usage error.
+- Selection valuation: the search objective uses the report's rule (cash plus open positions at mark, else at cost basis) from `backtest/equity.py`, which the report also calls. A buy-and-hold candidate is no longer scored as a loss in selection, so search scores and winners can change.
+- Constitution wording: clause 10 quotes now match the amendment bytes (ASCII double quotes, en dash U+2013 kept) in the prompt core, the generated agent files, RISK_POLICY, ROSTER and the browser-ops skill. The frozen oracle test takes its clause 10 authority from `.planning/AMENDMENT-2026-10-25.md`.
+
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled
 
 ### Added
@@ -23,9 +31,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Added
 
 - UPG-01 adds content-hashed parameter sets within version-controlled bounds (src/pumpgrok/config/upgrade_bounds.toml). An out-of-bounds value fails with a typed error and is never clamped.
-- UPG-02 gates every promotion in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason.
-- UPG-03 records each active-set change as a ConfigChanged row with evidence under var/upgrade/promotions/, and restores the exact prior set in one operation.
-- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. It never writes an active-set row.
+- UPG-02 adds `evaluate_candidate`, a gate that checks in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason. `record_promotion` does not require `promotion_eligible` or check `blocks_promotion`, so gate enforcement is by convention.
+- UPG-03 adds `record_promotion`, which writes an evidence manifest under var/upgrade/promotions/ and refuses different evidence at the same hash without recording anything. `record_active_set` accepts any `by` value, needs no gate verdict and writes a ConfigChanged row with no evidence file. `restore_active_set` writes the prior hash back as a new ConfigChanged row; it does not check the caller and does not verify stored content for that hash.
+- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. `escalate_candidate` is a library function with tests; no production code calls it, so it runs only when a caller invokes it. It never writes an active-set row.
 - UPG-05 treats BLIND on SAFE-4 and SAFE-8 as advisory while no paid RPC provider is recorded (PUMPGROK_PAID_RPC_PROVIDER). Setting the provider restores the KILL contract.
 - UPG-06 applies the owner-approved constitution amendment of 2026-10-25 to the rules, the desk skill, the agent prompts and the risk policy, with a frozen oracle test. The risk seat alone carries the amended clause 3.
 
@@ -33,6 +41,7 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 - Phase 9: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Phase 9: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Correction after merge (2026-10-27): the UPG-02 and UPG-03 wording above implied operator-path gating, evidence for active-set changes and a verified restore; promotion, rollback, escalation and active-set record/restore are library-only in this milestone, with no production caller and no operator verb.
 
 ## [Unreleased] - v3 Phase 8: backtest and paper evaluation
 

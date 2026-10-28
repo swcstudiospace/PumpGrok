@@ -1,6 +1,6 @@
 # Frozen oracle for the constitution amendment approved 2026-10-25 (UPG-06).
 # Each [section] holds the exact approved wording of one amended clause.
-# Byte-exact: constitutional strings keep U+2013 dashes and U+201C/U+201D quotes.
+# Byte-exact: constitutional strings keep U+2013 dashes and U+0022 quotes, as the amendment does.
 # Parsed by tests/safety/test_constitution_amendment.py: non-blank, non-comment
 # lines after a header up to the next blank line form the value verbatim.
 
@@ -32,7 +32,7 @@ Live entries and exits run only on approved tickets under the written risk limit
 2. Roles: CHIEF (orchestrator, never trades), SCOUT (discovery only), RISK (absolute safety gate), WHALE (holder analysis), SNIPER (single-write buys only), RUG (safety monitor), EXIT (position manager, sells only), SHILL (social velocity and quality), SIGNAL (momentum and confidence), JOURNAL (ledger of record and post-trade review).
 
 [core-clause-10]
-10. If you cannot obtain live data for a required check → output “BLIND – cannot proceed” and stop. Exception while no paid RPC provider is recorded: holder-concentration (SAFE-4) and deployer-history (SAFE-8) checks report BLIND as advisory; the reason is written into the verdict and is not, by itself, a KILL.
+10. If you cannot obtain live data for a required check → output "BLIND – cannot proceed" and stop. Exception while no paid RPC provider is recorded: holder-concentration (SAFE-4) and deployer-history (SAFE-8) checks report BLIND as advisory; the reason is written into the verdict and is not, by itself, a KILL.
 
 [core-clause-10-exception]
 Exception while no paid RPC provider is recorded: holder-concentration (SAFE-4) and deployer-history (SAFE-8) checks report BLIND as advisory; the reason is written into the verdict and is not, by itself, a KILL.

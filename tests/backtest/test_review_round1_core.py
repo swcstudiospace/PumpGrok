@@ -2,19 +2,22 @@
 
 Covers one normalised candidate hash shared by run_search and ParamSet, so
 the promotion gate accepts a real search winner (finding 1); the window score
-equals the recorded cash change with every fee counted once (finding 3); and
-fold windows never come out empty on equal timestamps (finding 8). Offline
+equals the report's net, closing equity less opening, with every fee counted
+once (finding 3); and fold windows never come out empty on equal timestamps
+(finding 8). Offline
 only: tmp ledgers under tmp_path, bundled smoke fixture, no network, no wall
 clock.
 """
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from pumpgrok.backtest.equity import equity_lamports
 from pumpgrok.backtest.evaluate import (
     CandidateParams,
     EvalWindow,
@@ -24,7 +27,9 @@ from pumpgrok.backtest.evaluate import (
 )
 from pumpgrok.backtest.harness import run_search
 from pumpgrok.backtest.metrics import MetricsReport
+from pumpgrok.cli.backtest import _window_curve
 from pumpgrok.ledger.autonomy import autonomy_rows
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.upgrade.bounds import load_bounds
@@ -40,6 +45,7 @@ REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
 SEED = 20260101
 TS = "2026-01-01T00:00:00Z"
+OPENING = 1_000_000
 
 
 def _report() -> MetricsReport:
@@ -71,7 +77,9 @@ def _autonomous_store(path: Path) -> LedgerStore:
     return store
 
 
-def _fill_row(order_id: str, side: str, filled: int, fee: int, network: int, cash: int) -> dict:
+def _fill_row(
+    order_id: str, side: str, filled: int, fee: int, network: int, cash: int, units: int = 10
+) -> dict:
     """One FillRecorded row with explicit money fields."""
     return {
         "ts_utc": TS,
@@ -86,7 +94,7 @@ def _fill_row(order_id: str, side: str, filled: int, fee: int, network: int, cas
             "side": side,
             "mint": "MINT",
             "filled_lamports": filled,
-            "filled_units": 10,
+            "filled_units": units,
             "filled_fraction": "1",
             "price_avg": "100",
             "venue_fee_lamports": fee,
@@ -112,6 +120,44 @@ def _rejection_row(order_id: str, fees: int) -> dict:
             "detail": "confirm slippage breach",
             "stage": "CONFIRMING",
             "fees_lamports": fees,
+        },
+    }
+
+
+def _open_row(units: int, cost: int) -> dict:
+    """One PositionOpened row for the MINT position a buy fill opens."""
+    return {
+        "ts_utc": TS,
+        "source": "replay",
+        "correlation_id": "round1-fees",
+        "idempotency_key": "open|MINT",
+        "type": "PositionOpened",
+        "payload": {
+            "source": "replay",
+            "mint": "MINT",
+            "price_entry": "100",
+            "token_units": units,
+            "cost_basis_lamports": cost,
+            "opened_ts_utc": TS,
+        },
+    }
+
+
+def _mark_row(mtm: int) -> dict:
+    """One MarkToMarket row that marks the open MINT position at mtm lamports."""
+    return {
+        "ts_utc": TS,
+        "source": "replay",
+        "correlation_id": "round1-fees",
+        "idempotency_key": f"mtm|{mtm}",
+        "type": "MarkToMarket",
+        "payload": {
+            "source": "replay",
+            "ts_source": TS,
+            "cash_lamports": 0,
+            "equity_lamports": 0,
+            "unrealized_lamports": 0,
+            "prices_json": json.dumps({"MINT": {"mtm_lamports": mtm, "spot": "100"}}),
         },
     }
 
@@ -193,13 +239,14 @@ def test_net_lamports_counts_each_fee_once(tmp_path: Path) -> None:
                 _rejection_row("ORDER-REJ", fees=7),
             ]
         )
+        store.set_meta("initial_equity_lamports", "1000000")
     finally:
         store.close()
     assert _net_lamports(path) == 2000 - 1005 - 7
 
 
-def test_replay_score_equals_recorded_cash_change(tmp_path: Path) -> None:
-    """A real smoke replay scores exactly its recorded cash change, fees once."""
+def test_replay_score_counts_cash_and_fees_once(tmp_path: Path) -> None:
+    """A smoke replay: cash moves once per fill and refusal; the score is the equity change."""
     stamps = [event_epoch(event) for event in load_dataset(SMOKE).events]
     window = EvalWindow(window_id="smoke-full", start_ts=min(stamps), end_ts=float("inf"))
     path = tmp_path / "replay.sqlite"
@@ -212,14 +259,75 @@ def test_replay_score_equals_recorded_cash_change(tmp_path: Path) -> None:
     )
     store = LedgerStore(str(path))
     try:
-        fills = store.read(types=["FillRecorded"], limit=None)
-        rejections = store.read(types=["OrderRejected"], limit=None)
+        rows = store.read(limit=None)
+        meta = store.get_meta("initial_equity_lamports")
     finally:
         store.close()
+    assert meta is not None
+    initial = int(meta)
+    fills = [row for row in rows if row["type"] == "FillRecorded"]
+    rejections = [row for row in rows if row["type"] == "OrderRejected"]
     assert fills, "the smoke replay must place at least one order"
     cash = sum(int(row["payload"]["cash_delta_lamports"]) for row in fills)
     rejected = sum(int(row["payload"]["fees_lamports"]) for row in rejections)
-    assert score == cash - rejected
+    state = initial_state(source="replay", initial_equity_lamports=initial, day_utc="")
+    for row in rows:
+        state = reduce(state, row)
+    assert state.cash_lamports == initial + cash - rejected
+    assert score == equity_lamports(state) - initial
+
+
+def _ledger_nets(path: Path, opening: int) -> tuple[int, int]:
+    """Selection net of one ledger beside the report's net for the same rows."""
+    store = LedgerStore(str(path))
+    try:
+        rows = store.read(limit=None)
+    finally:
+        store.close()
+    genesis = initial_state(source="backtest", initial_equity_lamports=opening, day_utc="")
+    return (_net_lamports(path), _window_curve(genesis, rows)[-1] - opening)
+
+
+def test_buy_and_hold_is_not_a_loss_in_selection(tmp_path: Path) -> None:
+    """An open purchase with no sale or mark is held at cost: selection and report net 0."""
+    path = tmp_path / "hold.sqlite"
+    store = LedgerStore(str(path))
+    try:
+        store.set_meta("initial_equity_lamports", str(OPENING))
+        store.append_batch(
+            [
+                _fill_row("ORDER-BUY", "buy", filled=1000, fee=10, network=5, cash=-1005),
+                _open_row(units=10, cost=1005),
+            ]
+        )
+    finally:
+        store.close()
+    selection, report = _ledger_nets(path, OPENING)
+    assert selection == report == 0
+
+
+def test_open_position_selection_equals_report_net(tmp_path: Path) -> None:
+    """A partial sale leaves a marked position: selection nets exactly the report's net."""
+    path = tmp_path / "open.sqlite"
+    store = LedgerStore(str(path))
+    try:
+        store.set_meta("initial_equity_lamports", str(OPENING))
+        store.append_batch(
+            [
+                _fill_row("ORDER-BUY", "buy", filled=200_000, fee=0, network=0, cash=-200_000),
+                _open_row(units=10, cost=200_000),
+                _fill_row(
+                    "ORDER-SELL", "sell", filled=100_000, fee=0, network=0, cash=100_000, units=4
+                ),
+                _mark_row(150_000),
+            ]
+        )
+    finally:
+        store.close()
+    selection, report = _ledger_nets(path, OPENING)
+    assert selection == report
+    # 100_000 proceeds on 80_000 of sold cost, plus the 150_000 mark on 120_000 remaining cost.
+    assert selection == 50_000
 
 
 def test_equal_timestamps_never_make_an_empty_fold() -> None:

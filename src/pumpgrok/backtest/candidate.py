@@ -13,6 +13,7 @@ them reaches the evaluator, the scheduler, or the ledger active-set module.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
@@ -25,6 +26,7 @@ from pumpgrok.core.idempotency import canonical_json
 __all__ = [
     "CandidateParams",
     "ScoringKnobError",
+    "param_set_mapping",
 ]
 
 #: Tunable names the replay never consults, so accepting them would be a
@@ -147,3 +149,23 @@ class CandidateParams(BaseModel):
             "filter": _normalized_mapping(self.filter),
         }
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def param_set_mapping(data: bytes) -> dict[str, Any]:
+    """Parse parameter-set file bytes into the JSON mapping CandidateParams validates.
+
+    The bytes must hold one JSON object whose leaves are JSON-stable: ints,
+    strings, bools, lists and mappings, with float leaves refused. Any other
+    input raises ValueError, which the backtest CLI maps to a usage error.
+    """
+    try:
+        parsed: Any = json.loads(data.decode("utf-8"))
+    except ValueError as exc:
+        raise ValueError("parameter-set bytes must hold a JSON mapping") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("parameter-set bytes must hold a JSON mapping")
+    try:
+        canonical_json(parsed)
+    except TypeError as exc:
+        raise ValueError("parameter-set JSON must hold ints, strings and bools") from exc
+    return parsed
