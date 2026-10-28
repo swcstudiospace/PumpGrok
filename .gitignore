@@ -12,6 +12,7 @@ build/
 !.receipts/**/.gitkeep
 !.receipts/bot-00-chief/complete-phase-5.json
 !.receipts/bot-00-chief/phase-6.json
+!.receipts/bot-00-chief/provider-record.json
 var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp

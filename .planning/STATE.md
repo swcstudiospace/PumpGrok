@@ -16,6 +16,7 @@ progress:
   completed_plans: 25
   percent: 100
 ---
+paid_rpc_provider: none
 
 # Project State
 
