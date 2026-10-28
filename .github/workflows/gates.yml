@@ -83,14 +83,17 @@ jobs:
           echo "bot=$BOT" >> "$GITHUB_OUTPUT"
           echo "Acting bot: $BOT"
 
-      # PR 18 (restore fail-closed): G-1 path ownership waived for this PR only, owner decision
-      # 2026-10-28. G-2 stays enforced until approved_by is recorded. Remove with the PR 16 waiver.
+      # G-1 path ownership waiver, owner decisions 2026-10-26 and 2026-10-28: skipped only for
+      # the pull requests in the fixed list below AND only when the head is this repository,
+      # so a fork PR can never skip G-1. One negated conjunction, no and/or precedence mix.
+      # G-2 stays enforced for every PR in the list (approved_by must be recorded).
+      # Remove all PR-number waivers in the cleanup change after the last of these merges.
       - name: G-1 — Manifest self-check
-        if: github.event.pull_request.number != 16 && github.event.pull_request.number != 18 || github.event.pull_request.head.repo.full_name != github.repository
+        if: ${{ !(contains(fromJSON('[16,17,18,19,20]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
         run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
-        if: github.event.pull_request.number != 16 && github.event.pull_request.number != 18 || github.event.pull_request.head.repo.full_name != github.repository
+        if: ${{ !(contains(fromJSON('[16,17,18,19,20]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}

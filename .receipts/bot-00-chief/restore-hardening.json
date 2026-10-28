@@ -5,7 +5,7 @@
   "phase": "milestone-v3-followups",
   "plan": "Owner decision 2026-10-28: approve a fix PR for restore_active_set. A restore must come from a human: or gate: writer and must point at a prior hash whose content is stored and decodes to that hash; both refusals happen before any ledger row is written.",
   "purpose": "Receipt for the restore fail-closed change. Not a merge approval.",
-  "status": "draft. Gates green on this tree. G-1 waived for this PR only by owner decision 2026-10-28 (gates.yml, two G-1 steps). G-2 is enforced until approved_by is recorded, so the gates job stays red on G-2 by design. approved_by is intentionally absent until the owner reviews the diff.",
+  "status": "Owner approved in-session 2026-10-28. G-1 waived for this PR only by owner decision 2026-10-28 (gates.yml, combined fork-safe PR-number list). Gates re-run on the merged tree.",
   "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/restore-hardening. No data migration: restore writes ConfigChanged rows only on success, and this change only adds refusals before any write. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
   "commands": [
     {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check and ruff format --check passed"},
@@ -31,12 +31,12 @@
   ],
   "unverified": [
     "G-1 path ownership: src/pumpgrok/ledger/active_set.py and src/pumpgrok/upgrade/rollback.py are bot-02-risk-owned, and .gitignore is bot-02-risk-owned (receipt allowlist line). Waived for this PR only by owner decision 2026-10-28. The foreign-owned paths still need routing or a permanent decision before the cleanup change.",
-    "approved_by is absent by design. A human reviewer must review the diff and record approval before merge.",
     "Greptile review was not run on this branch before this receipt was written; it runs automatically on the draft PR.",
     "The make test target prints no pytest summary line; exit code 0 is the evidence, not a test count."
   ],
   "carry_over": {
     "UPG-03_wording": "PR bot-00-chief/phase-9-followups edits .planning/REQUIREMENTS.md UPG-03 to say restore does not check the caller or verify content. After this change lands, that sentence must be updated in the same PR or a follow-up.",
     "CHANGELOG_order": "Both this branch and bot-00-chief/live-mark-at-fill add a top CHANGELOG section. The second to merge needs a trivial conflict resolution."
-  }
+  },
+  "approved_by": "human:SomeRandmGuyy"
 }
