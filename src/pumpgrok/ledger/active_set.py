@@ -32,9 +32,11 @@ __all__ = [
     "ACTIVE_SET_KEY",
     "active_set_note_text",
     "active_set_rows",
+    "is_writer",
     "read_active_param_set",
     "read_active_set",
     "record_active_set",
+    "verify_stored_content",
 ]
 
 ACTIVE_SET_KEY = "active_param_set"
@@ -48,7 +50,7 @@ def active_set_note_text(new_hash: str, source: str) -> str:
     return f"active_param_set {new_hash} from {source}"
 
 
-def _is_writer(by: object) -> bool:
+def is_writer(by: object) -> bool:
     """Only human or gate-written rows count, mirroring the autonomy by rule."""
     return isinstance(by, str) and (by.startswith("human:") or by.startswith("gate:"))
 
@@ -90,7 +92,7 @@ def read_active_set(store: LedgerStore) -> str | None:
             continue
         if not isinstance(new_hash, str) or not _HASH_RE.fullmatch(new_hash):
             continue
-        if not _is_writer(by):
+        if not is_writer(by):
             continue
         active = new_hash
     return active
@@ -118,6 +120,23 @@ def read_active_param_set(store: LedgerStore) -> ParamSet | None:
     if not matches:
         raise CorruptState(f"active param set {active} content does not match its hash")
     return param_set
+
+
+def verify_stored_content(store: LedgerStore, content_hash: str) -> None:
+    """Refuse unless the canonical JSON stored under content_hash decodes to that hash.
+
+    Raises ValueError when nothing is stored, when the stored text does not
+    decode into a ParamSet, or when the decoded set hashes to something else.
+    """
+    raw = store.get_meta(_content_key(content_hash))
+    if raw is None:
+        raise ValueError(f"active param set {content_hash} has no stored content")
+    try:
+        matches = _decode_param_set(raw).content_hash == content_hash
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"active param set {content_hash} content is undecodable") from exc
+    if not matches:
+        raise ValueError(f"active param set {content_hash} content does not match its hash")
 
 
 def active_set_rows(

@@ -2,6 +2,18 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 follow-up: restore fails closed
+
+### Changed
+
+- `restore_active_set` refuses a caller that is not a `human:` or `gate:` writer.
+- `restore_active_set` refuses a prior hash with no valid stored content; both refusals happen before any ledger row is written.
+
+### Verified
+
+- v3 follow-up restore: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up restore: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled
 
 ### Added

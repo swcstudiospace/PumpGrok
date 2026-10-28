@@ -15,7 +15,12 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from pumpgrok.ledger.active_set import ACTIVE_SET_KEY, read_active_set
+from pumpgrok.ledger.active_set import (
+    ACTIVE_SET_KEY,
+    is_writer,
+    read_active_set,
+    verify_stored_content,
+)
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
@@ -47,10 +52,15 @@ def restore_active_set(
     Appends a ConfigChanged row (keys_changed holding active_param_set,
     old_hash the current live hash, new_hash the exact prior hash) plus a
     desk JournalNote, so the restore is itself ledger history. Fails closed
-    on a malformed prior hash and writes nothing in that case.
+    before any append, and writes nothing, on a malformed prior hash, on a
+    caller that is not a human: or gate: writer, and on a prior hash with no
+    valid stored content.
     """
     if not isinstance(prior_hash, str) or not _HASH_RE.fullmatch(prior_hash):
         raise ValueError("prior_hash must be a 64-hex content hash")
+    if not is_writer(by):
+        raise ValueError("restore needs a human: or gate: writer")
+    verify_stored_content(store, prior_hash)
     previous = read_active_set(store)
     rows: list[dict[str, Any]] = [
         {

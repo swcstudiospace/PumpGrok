@@ -1,0 +1,42 @@
+{
+  "task_id": "restore-hardening",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/restore-hardening",
+  "phase": "milestone-v3-followups",
+  "plan": "Owner decision 2026-10-28: approve a fix PR for restore_active_set. A restore must come from a human: or gate: writer and must point at a prior hash whose content is stored and decodes to that hash; both refusals happen before any ledger row is written.",
+  "purpose": "Receipt for the restore fail-closed change. Not a merge approval.",
+  "status": "draft. Gates green on this tree. approved_by is intentionally absent until the owner reviews the diff. G-1 path ownership fails for src/pumpgrok/ledger and src/pumpgrok/upgrade (bot-02-risk) and for .gitignore, pending the owner's waiver decision.",
+  "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/restore-hardening. No data migration: restore writes ConfigChanged rows only on success, and this change only adds refusals before any write. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check and ruff format --check passed"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy --strict: no issues"},
+    {"cmd": "uv run pytest tests/upgrade/test_restore_fail_closed.py tests/upgrade/test_rollback_exact.py tests/ledger/test_active_set_applied_at_startup.py -q", "exit_code": 0, "output_tail": "targeted tests passed"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite passed (no pytest summary line printed by the Makefile target)"},
+    {"cmd": "make audit", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "repository structure looks healthy"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "exit_code": 0, "output_tail": "verify=CONSISTENT; events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "paper smoke cycle completed"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "live refused; no transaction attempted"}
+  ],
+  "claims": [
+    {"claim": "make lint passes on this tree", "evidence_command_index": 0},
+    {"claim": "make typecheck passes on this tree", "evidence_command_index": 1},
+    {"claim": "The restore tests (refusals write nothing; a human restore is applied; the A, B, A order round-trips) and the existing rollback and startup tests pass", "evidence_command_index": 2},
+    {"claim": "The full suite passes on this tree", "evidence_command_index": 3},
+    {"claim": "The dependency audit passes", "evidence_command_index": 4},
+    {"claim": "scripts/check.sh passes", "evidence_command_index": 5},
+    {"claim": "smoke-10m events.hash is unchanged by this change", "evidence_command_index": 6},
+    {"claim": "The paper smoke cycle completes", "evidence_command_index": 7},
+    {"claim": "run --mode live --once refuses with exit 3 and no transaction", "evidence_command_index": 8, "expects_failure": true}
+  ],
+  "unverified": [
+    "G-1 path ownership: src/pumpgrok/ledger/active_set.py and src/pumpgrok/upgrade/rollback.py are bot-02-risk-owned, and .gitignore is bot-02-risk-owned (allowlist line for this receipt). Owner waiver or routing needed before merge.",
+    "approved_by is absent by design. A human reviewer must review the diff and record approval before merge.",
+    "Greptile review was not run on this branch before this receipt was written; it runs automatically on the draft PR.",
+    "The make test target prints no pytest summary line; exit code 0 is the evidence, not a test count."
+  ],
+  "carry_over": {
+    "UPG-03_wording": "PR bot-00-chief/phase-9-followups edits .planning/REQUIREMENTS.md UPG-03 to say restore does not check the caller or verify content. After this change lands, that sentence must be updated in the same PR or a follow-up.",
+    "CHANGELOG_order": "Both this branch and bot-00-chief/live-mark-at-fill add a top CHANGELOG section. The second to merge needs a trivial conflict resolution."
+  }
+}
