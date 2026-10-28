@@ -5,7 +5,7 @@
   "phase": "milestone-v3-followups",
   "plan": "Owner decisions after the merged-head Phase 8 and 9 re-verification: (1) Phase 9 claims corrected, upgrade paths library-only; (2) one canonical parameter-set identity (normalized CandidateParams content hash); (3) constitution clause-10 bytes aligned to the amendment; (4) selection valuation equal to the backtest report valuation.",
   "purpose": "Receipt for the milestone v3 follow-up batch. Records the gates run on the committed tree and the evidence for each owner decision. Not a merge approval.",
-  "status": "draft. The first CI run on d43be62 failed on the tracked-receipt allowlist test; fixed in bb726cd (.gitignore allowlist line). Gates re-run green on the committed tree (commands 14 and 15). Awaiting owner review of the diff and G-1 routing. approved_by is intentionally absent.",
+  "status": "draft. The first CI run on d43be62 failed on the tracked-receipt allowlist test; fixed in bb726cd (.gitignore allowlist line). Gates re-run green on the committed tree (commands 14 and 15). G-1 waived for this PR only by owner decision 2026-10-28 (commit cda2b25). G-2 is enforced until approved_by is recorded, so the gates job stays red on G-2 by design. Awaiting owner review of the diff. approved_by is intentionally absent.",
   "rollback_plan": "Close the draft pull request, or git revert the follow-up commits on bot-00-chief/phase-9-followups. No data migration is involved: smoke-10m events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d. Backtest run ids change for new runs only; existing var/backtest run directories are not rewritten.",
   "commands": [
     {"cmd": "make lint", "exit_code": 0, "output_tail": "798 files already formatted"},
@@ -54,9 +54,9 @@
     "Run ids changed for every backtest because the identity input changed. Existing var/backtest run directories and manifests will not match new runs. This is intended and is recorded in CHANGELOG."
   ],
   "carry_over": {
-    "G-1_ownership": "Open. Owner decision needed: route or waive the foreign-owned paths for this branch, as for PR 16, including .gitignore. The PR 16 waiver in .github/workflows/gates.yml is not extended.",
-    "equity_definitions": "Open. ledger/views.equity_lamports and reducer peak tracking still value positions at mark only; selection and the report use backtest/equity.py. Owner decision whether live drawdown converges on the shared rule.",
-    "restore_hardening": "Open. ledger/active_set.py:93 skips rows whose by is not human: or gate:, so a restore with another by is recorded but never read back. Needs owner approval for a fix PR.",
+    "G-1_ownership": "Waived for this PR only by owner decision 2026-10-28 (commit cda2b25: two G-1 steps skip for PR 17). The waiver is removed with the PR 16 waiver in the cleanup change. The foreign-owned paths (including .gitignore) still need routing or a permanent decision before the cleanup change.",
+    "equity_definitions": "Addressed in PR 19 (bot-00-chief/live-mark-at-fill, commit 378f53b): live equity, peak, unrealized PnL and exec.positions equity value an unmarked position at its cost basis, the same rule as selection. Known limit: an add-on buy to a marked position still reads its cost as a loss until the next mark.",
+    "restore_hardening": "Addressed in PR 18 (bot-00-chief/restore-hardening, commit 74e015d): restore refuses a non-writer caller and a prior hash without valid stored content, before any write. The UPG-03 sentence in .planning/REQUIREMENTS.md line 50 must be updated after PR 18 merges.",
     "provider_mechanism": "Open, owner decision not yet asked. The paid-RPC provider is still read from env PUMPGROK_PAID_RPC_PROVIDER; the amendment names the STATE.md record.",
     "amendment_line_44": "Open. AMENDMENT-2026-10-25.md line 44 (a code span) uses the hyphen form; clause 10 at line 58 uses the en dash. skills/desk-operating-model/SKILL.md:31 matches line 44. Owner to say which form the desk carries.",
     "historical_note": "docs/SAFETY_INVARIANTS.md:332 is a historical contradictions record. It still quotes the hyphen form and says clause 10 exists only in agent files. Left unchanged as a record."
