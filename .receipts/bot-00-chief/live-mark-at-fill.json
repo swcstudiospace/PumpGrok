@@ -1,0 +1,46 @@
+{
+  "task_id": "live-mark-at-fill",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/live-mark-at-fill",
+  "phase": "milestone-v3-followups",
+  "plan": "Owner decision 2026-10-28: fix now, mark at cost basis on fill. Implemented as one valuation rule, not a reducer state change: an open position is valued at its last mark when it has one, otherwise at its fill cost basis. Applied to ledger equity, peak tracking, unrealized PnL and the paper adapter's exec.positions equity. Pricing and close paths still read last_mtm_lamports directly, so no close is priced at cost.",
+  "purpose": "Receipt for the valuation fix. Not a merge approval.",
+  "status": "draft. Gates green on this tree. approved_by is intentionally absent until the owner reviews the diff. G-1 path ownership fails for src/pumpgrok/ledger, src/pumpgrok/execution/paper_adapter and .gitignore (bot-02-risk and bot-04-sniper paths), pending the owner's waiver decision.",
+  "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/live-mark-at-fill. The change alters only derived valuations (equity, peak, unrealized PnL, exec.positions equity); no event is written differently. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+  "commands": [
+    {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "environment synced"},
+    {"cmd": "uv run pytest tests/ledger/test_fill_valued_at_cost.py tests/execution tests/risk tests/integrity tests/ledger tests/test_tools_cli.py -q", "exit_code": 0, "output_tail": "targeted suites passed"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check and ruff format --check passed"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy --strict: no issues"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite passed (no pytest summary line printed by the Makefile target)"},
+    {"cmd": "make audit", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "repository structure looks healthy"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "exit_code": 0, "output_tail": "verify=CONSISTENT; events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "paper smoke cycle completed"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "live refused; no transaction attempted"},
+    {"cmd": "pre-fix proof: tests/ledger/test_fill_valued_at_cost.py run in a temporary worktree at origin/main", "exit_code": 1, "output_tail": "4 failed: equity 9800000000 vs 10000000000 per unmarked default-size buy; drawdown 0.02 vs 0"}
+  ],
+  "claims": [
+    {"claim": "make lint passes on this tree", "evidence_command_index": 2},
+    {"claim": "make typecheck passes on this tree", "evidence_command_index": 3},
+    {"claim": "The four regression tests and the ledger, execution, risk, integrity and tools suites pass on this tree", "evidence_command_index": 1},
+    {"claim": "The full suite passes on this tree", "evidence_command_index": 4},
+    {"claim": "The dependency audit passes", "evidence_command_index": 5},
+    {"claim": "scripts/check.sh passes", "evidence_command_index": 6},
+    {"claim": "smoke-10m events.hash is unchanged by this change", "evidence_command_index": 7},
+    {"claim": "The paper smoke cycle completes", "evidence_command_index": 8},
+    {"claim": "run --mode live --once refuses with exit 3 and no transaction", "evidence_command_index": 9, "expects_failure": true},
+    {"claim": "The four regression tests fail on origin/main before the fix, so they detect the phantom loss", "evidence_command_index": 10, "expects_failure": true}
+  ],
+  "unverified": [
+    "Known limit, not fixed here: a buy that adds to a position which already has a mark still reads its cost as a loss until the next mark (the add-on path in the buy fill). Fixing it touches the buy-fill path and the close pricing gate.",
+    "The engine halt was not run end to end with three unmarked buys. The regression tests show the equity read is 2 percent low per unmarked default-size buy; that the engine halts on it was not executed.",
+    "G-1 path ownership: src/pumpgrok/ledger/views.py, reducer.py, src/pumpgrok/execution/paper_adapter/adapter.py (bot-02-risk, bot-04-sniper), and .gitignore. Owner waiver or routing needed before merge.",
+    "approved_by is absent by design. A human reviewer must review the diff and record approval before merge.",
+    "Greptile review was not run on this branch before this receipt was written."
+  ],
+  "carry_over": {
+    "close_pricing": "Unchanged by design. marks.py _last_good_value still gates on last_mtm_lamports > 0, so an unpriced position still refuses to close (no_mark).",
+    "CHANGELOG_order": "bot-00-chief/phase-9-followups and bot-00-chief/restore-hardening also add top CHANGELOG sections. The second to merge resolves a trivial conflict."
+  }
+}
