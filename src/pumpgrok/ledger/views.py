@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any
 
-from pumpgrok.ledger.reducer import LedgerState, PositionView, reduce
+from pumpgrok.ledger.reducer import LedgerState, PositionView, position_value_lamports, reduce
 
 
 def cash_lamports(state: LedgerState) -> int:
@@ -24,14 +24,16 @@ def positions(state: LedgerState) -> dict[str, PositionView]:
 
 
 def unrealized_pnl_lamports(state: LedgerState) -> int:
-    """Sum of last-MTM minus cost basis over open positions."""
-    return sum(pos.last_mtm_lamports - pos.cost_basis_lamports for pos in positions(state).values())
+    """Sum of value minus cost basis over open positions; an unmarked position nets zero."""
+    return sum(
+        position_value_lamports(pos) - pos.cost_basis_lamports for pos in positions(state).values()
+    )
 
 
 def equity_lamports(state: LedgerState) -> int:
-    """Cash plus open-position marks."""
+    """Cash plus open positions, each at its mark or at cost basis until it has one."""
     return int(state.cash_lamports) + sum(
-        pos.last_mtm_lamports for pos in positions(state).values()
+        position_value_lamports(pos) for pos in positions(state).values()
     )
 
 

@@ -20,7 +20,7 @@ from pumpgrok.execution.paper_adapter.marks import _MarksMixin
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, PriceSource, _InflightOrders
 from pumpgrok.execution.paper_adapter.quote import _QuoteMixin
 from pumpgrok.execution.paper_adapter.sell import _SellMixin
-from pumpgrok.ledger.reducer import initial_state, reduce
+from pumpgrok.ledger.reducer import initial_state, position_value_lamports, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import RiskEngine
@@ -143,10 +143,10 @@ class PaperAdapter(
         return int(self._fold_state().cash_lamports)
 
     def equity_lamports(self) -> int:
-        """Cash plus open-position marks from the ledger fold (exec.positions)."""
+        """Cash plus open positions, each at its mark or at cost basis until it has one."""
         state = self._fold_state()
         return int(state.cash_lamports) + sum(
-            int(pos.last_mtm_lamports) for pos in state.positions.values() if pos.token_units > 0
+            position_value_lamports(pos) for pos in state.positions.values() if pos.token_units > 0
         )
 
     async def _read_curve(self, mint: str) -> CurveSnapshot | None:

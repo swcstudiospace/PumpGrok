@@ -2,6 +2,19 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 follow-up: live positions valued at cost until marked
+
+### Changed
+
+- An open position is valued at its fill cost until its first mark, so buys no longer read as a loss in the live equity, drawdown and daily-loss halt; the backtest and live ledger now use the same rule.
+- Known limit: a buy that adds to a position which already has a mark still reads its cost as a loss until the next mark. Fixing it changes the buy-fill path and the close pricing gate (`execution/paper_adapter/marks.py`), so it is not in this change.
+
+### Verified
+
+- v3 follow-up live: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up live: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- The four regression tests in tests/ledger/test_fill_valued_at_cost.py fail on origin/main (a phantom loss of 2 percent of equity per default-size unmarked buy) and pass with this change.
+
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled
 
 ### Added
