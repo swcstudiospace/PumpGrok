@@ -27,6 +27,7 @@ from pumpgrok.cli.errors import (
     _say,
     _tool_error,
 )
+from pumpgrok.cli.promotion import make_promotion_check
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
@@ -52,6 +53,7 @@ from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 from pumpgrok.upgrade.params import ParamSet
+from pumpgrok.upgrade.space import load_declared_space
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -78,6 +80,8 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         environ=os.environ,
         root=Path.cwd(),
         live_enabled=settings.live.enabled,
+        wallet_allowlist=settings.wallet.allowlist,
+        notional_cap_lamports=settings.live.notional_cap_lamports,
     )
     if settings.effective_mode == "live":
         preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
@@ -113,6 +117,12 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     host = settings.health.host
+    promotion = make_promotion_check(
+        source,
+        space=load_declared_space(),
+        seed=settings.replay.seed,
+        initial_equity_lamports=settings.risk.paper_equity_lamports,
+    )
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(
         serve_replay(
@@ -125,6 +135,7 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             budget=settings.risk,
             limits=settings.limits,
             active_set=operator_active_set(settings),
+            promotion_check=promotion,
         )
     )
 

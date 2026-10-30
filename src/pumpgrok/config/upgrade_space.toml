@@ -1,0 +1,11 @@
+# Declared promotion search space (UPG-05). Version-controlled.
+#
+# The scheduled promotion check searches exactly the candidates listed here, at most 20,
+# each inside the ranges of upgrade_bounds.toml. A value outside those ranges, an unknown
+# key, or a float knob fails the load. The owner lists candidates in this file; the code
+# invents no parameter values.
+#
+# Shape: one array-of-tables entry named candidate per candidate, each with an optional
+# filter table and an optional exits table of integer, boolean or string knobs.
+#
+# This file ships empty, so the promotion check is skipped until candidates are declared.

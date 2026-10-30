@@ -2,6 +2,32 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - Desk built-ins: platform, wallet allowlist, notional cap, scheduled promotion
+
+### Added
+
+- `[platform]` (`PlatformSettings`): chain solana, venue pumpfun-bonding-curve, execution paper, quote-only Jupiter Swap V2. It declares what the desk trades on. It selects no endpoint and changes no mode.
+- `[wallet] allowlist` (`WalletSettings`): public keys only. Each entry must be base58 and decode to exactly 32 bytes. It ships empty. A secret-key-length value is refused, and the value is never echoed.
+- `[live] notional_cap_lamports` (`LiveSettings`): integer lamports, default 1 SOL, valid in (0, 1 SOL]. Live gate rows 5 and 6 now read the allowlist and the cap. Row 5 stays unmet while the allowlist is empty, so live stays refused. The refusal header counts the unmet rows: 8 of 9 with the default cap.
+- Scheduled promotion (`upgrade/scheduled.py`, `cli/promotion.py`, `upgrade/space.py`): a bounded search over the space the owner declares in `src/pumpgrok/config/upgrade_space.toml` (at most 20 candidates, inside `upgrade_bounds.toml`). The winner goes through the existing promotion gate and is applied only at autonomous-paper. The declared space ships empty, so the check is skipped until the owner lists candidates. Checks run at most once per `PROMOTION_CHECK_INTERVAL_S` (3600 s) on the injected clock. The cadence is stored in ledger meta.
+
+### Changed
+
+- The refusal tests parse each line by regex and check the header count against the unmet rows, instead of pinning the old "9 of 9" header.
+- `docs/RISK_POLICY.md` and `docs/TOOL_CATALOG.md` name `live.notional_cap_lamports`. `docs/LIVE_READINESS.md` and `docs/runbooks/go_live.md` state the allowlist and cap reasons.
+
+### Known limitations
+
+- The serve tick runs a promotion search synchronously, so a long search holds the tick until it returns.
+- The cadence meta row is written after each interval even when the check is skipped.
+- The weekly report builds the live gate without settings, so it shows rows 5 and 6 unmet.
+
+### Verified
+
+- Phase built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- `make lint`, `make typecheck`, `make test`, `./scripts/check.sh`, both generator checks and the schema check exit 0. `run --mode live --once` exits 3.
+
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled
 
 ### Added

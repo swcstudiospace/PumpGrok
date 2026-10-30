@@ -134,7 +134,7 @@ Live is a config mode, not an engagement level (R16); when reached it would run 
 | 3 | `live.min_paper_days` (14) elapsed, measured only on `source=paper` ledger events | time and the paper run |
 | 4 | `closed_trades >= 50`, `profit_factor >= 1.2`, `max_drawdown <= risk.drawdown_halt_fraction`, same events | the paper run |
 | 5 | `live.wallet_allowlist` non-empty, public addresses only (no entry may match a G-3 secret shape) | operator |
-| 6 | `0 < live.notional_cap_sol <= 1.0` | operator |
+| 6 | `0 < live.notional_cap_lamports <= 1_000_000_000` (integer lamports; 1 SOL = 1_000_000_000 lamports) | operator |
 | 7 | `live.confirmation_record`: HMAC-signed human confirmation produced by `pumpgrok live confirm` with an operator secret that no seat or tool can read, bound to the config hash | human |
 | 8 | `live.adapter` explicitly named AND an implementation registered; none ships in this release, so this line is always unmet | a future, separately approved change (section 7) |
 | 9 | no active kill switch, halt or open breaker | the desk's current state |
