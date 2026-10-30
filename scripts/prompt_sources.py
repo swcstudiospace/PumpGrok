@@ -27,7 +27,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from xml.sax.saxutils import escape, quoteattr
 
 import yaml
 from defusedxml import ElementTree as ET
@@ -340,16 +339,27 @@ def load_desk_cycle(path: Path = DESK_CYCLE_PATH) -> Element:
     return root
 
 
+def _escape_text(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _escape_attr(value: str) -> str:
+    text = _escape_text(value)
+    if '"' in text and "'" not in text:
+        return f"'{text}'"
+    return '"' + text.replace('"', "&quot;") + '"'
+
+
 def _emit_cycle(el: Element, indent: str) -> list[str]:
-    attrs = "".join(f" {key}={quoteattr(value)}" for key, value in el.attrib.items())
+    attrs = "".join(f" {key}={_escape_attr(value)}" for key, value in el.attrib.items())
     children = list(el)
     text = (el.text or "").strip()
     if not children:
-        body = escape(text)
+        body = _escape_text(text)
         return [f"{indent}<{el.tag}{attrs}>{body}</{el.tag}>"]
     lines = [f"{indent}<{el.tag}{attrs}>"]
     if text:
-        lines.append(f"{indent}  {escape(text)}")
+        lines.append(f"{indent}  {_escape_text(text)}")
     for child in children:
         lines.extend(_emit_cycle(child, indent + "  "))
     lines.append(f"{indent}</{el.tag}>")
