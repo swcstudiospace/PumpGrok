@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -146,6 +146,8 @@ async def serve_fixture_timeline(
     pace_s: float = 0.0,
     hold: bool = False,
     heartbeats: bool = True,
+    store: LedgerStore | None = None,
+    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
 ) -> list[dict[str, str]]:
     """Advance the fixture clock along the recording and tick the supervisor at each tick.
 
@@ -156,17 +158,23 @@ async def serve_fixture_timeline(
     supervisor is stopped, so a serve stays up after its recording ends. ``pace_s`` real
     seconds separate steps (zero for a one-shot run), waited on the injected ``pace`` clock
     (a ``WallClock`` in serve, so production keeps real time; never ``asyncio.sleep``).
+    ``promotion_check``, when given with ``store``, runs once after each supervisor tick as
+    ``promotion_check(store, clock)``.
     Returns each recorded tick's outcomes.
     """
     clock = supervisor.clock
     if not isinstance(clock, FixtureClock):
         raise RuntimeError("a fixture timeline needs the fixture clock")
+    if promotion_check is not None and store is None:
+        raise ValueError("promotion_check needs the store it checks")
     ticks: list[dict[str, str]] = []
     for at in stamps:
         if at < clock.now():
             continue
         clock.advance_to(at)
         ticks.append(await supervisor.tick_once(heartbeats=heartbeats))
+        if promotion_check is not None and store is not None:
+            promotion_check(store, clock)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
         if supervisor.stopped:
@@ -176,6 +184,8 @@ async def serve_fixture_timeline(
     while not supervisor.stopped:
         clock.advance_to(clock.now() + TICK_S)
         await supervisor.tick_once(heartbeats=heartbeats)
+        if promotion_check is not None and store is not None:
+            promotion_check(store, clock)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
     return ticks
@@ -196,12 +206,20 @@ def build_serve_replay(
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
-    Runs ``run_replay`` once to rebuild the ledger, then wires the ten
-    offline seat cycles from ``_replay_cycles`` with ``source="replay"`` so
-    the health body carries ``ledger_source=replay`` (never live data). The
-    returned store stays open; the caller closes it after the serve loop.
+    Runs ``run_replay`` once, resuming the ledger a previous start wrote so the
+    persisted trailing-stop peaks survive a restart (a missing ledger is built fresh).
+    It then wires the ten offline seat cycles from ``_replay_cycles`` with
+    ``source="replay"`` so the health body carries ``ledger_source=replay`` (never
+    live data). The returned store stays open; the caller closes it after the serve loop.
     """
-    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, active_set=active_set)
+    run_replay(
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        ledger_path=ledger_path,
+        active_set=active_set,
+        resume_existing=True,
+    )
     runtime = open_replay_runtime(
         dataset_dir,
         filter_cfg,
@@ -309,6 +327,7 @@ async def serve_replay(
     limits: EngineLimits | None = None,
     pace_s: float = SERVE_PACE_S,
     active_set: ParamSet | None = None,
+    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
@@ -321,7 +340,9 @@ async def serve_replay(
     SIGINT/SIGTERM stop the loop and the server closes before the store does.
     Fixture time follows the recording (see :func:`serve_fixture_timeline`), paced
     ``pace_s`` real seconds per step; after the last recorded tick the clock keeps
-    moving at the tick cadence until stop. Returns 0.
+    moving at the tick cadence until stop. ``promotion_check`` runs once per tick, with the
+    serve's own store and clock.
+    Returns 0.
     """
     supervisor, metrics, store = build_serve_replay(
         dataset_dir,
@@ -350,6 +371,8 @@ async def serve_replay(
             pace=WallClock(),
             pace_s=pace_s,
             hold=True,
+            store=store,
+            promotion_check=promotion_check,
         )
         return 0
     finally:

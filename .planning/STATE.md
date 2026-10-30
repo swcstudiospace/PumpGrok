@@ -12,8 +12,8 @@ progress:
   total_phases: 5
   completed_phases: 5
   blocked_phases: 0
-  total_plans: 25
-  completed_plans: 25
+  total_plans: 35
+  completed_plans: 35
   percent: 100
 ---
 

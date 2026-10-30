@@ -62,7 +62,7 @@ Cursor / Claude Code / Grok Build load `skills/`, `agents/`, and `rules/` from t
 | `rules/` | Always-applied desk constitution (`pumpgrok-team.mdc`) |
 | `src/pumpgrok/` | Operator CLI and tool registry (JSON on stdout; never sign or send) |
 | `scripts/` | `check.sh` repository linter |
-| `vendor/grokbot-pumpfun/` | In-tree vendored screening pipeline (regular files, not a git submodule or gitlink; pin `409e74c905faa0e9de42e918efe2c604f206856e`, provenance in `docs/VENDOR_PIN.md`); notes in `vendor/grokbot-pumpfun/PUMPGROK.md`; desk-facing procedure in `skills/grokbot-pipeline` |
+| `src/pumpgrok/engine/` | Screening engine. Formerly the vendored `vendor/grokbot-pumpfun/` tree, retired in Phase 4; pin `409e74c905faa0e9de42e918efe2c604f206856e` kept as history in `docs/VENDOR_PIN.md`; desk-facing procedure in `skills/grokbot-pipeline` |
 | `plugin.json` | Root agent-plugins manifest |
 | `.claude-plugin/`, `.cursor-plugin/`, `.grok-plugin/` | Host-specific plugin metadata |
 | `SETUP.md` | Step-by-step Grok Bot desk bootstrap |

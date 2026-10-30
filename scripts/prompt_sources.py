@@ -27,6 +27,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape, quoteattr
 
 import yaml
 from defusedxml import ElementTree as ET
@@ -281,3 +282,116 @@ def check_skills(seat: SeatSource) -> list[str]:
     if not SKILLS_DIR.is_dir():
         return []
     return [s for s in seat.skills if not (SKILLS_DIR / s / "SKILL.md").exists()]
+
+
+DESK_CYCLE_PATH = REPO_ROOT / "scripts" / "desk_cycle.xml"
+CYCLE_TAGS = (
+    "strategy_details",
+    "backtesting_params",
+    "paper_testing_config",
+    "autonomous_execution_steps",
+    "rpc_calls",
+    "optimization_instructions",
+    "grok_bot_integration",
+)
+CYCLE_STATES = (
+    "DISCOVERY",
+    "ANALYSIS",
+    "STRATEGY_DEVELOPMENT",
+    "BACKTESTING",
+    "PAPER_TESTING",
+    "OPTIMIZATION",
+    "FAILURE_RECOVERY",
+    "LIVE_TRADING",
+)
+_CYCLE_FORBIDDEN = re.compile(
+    r"https?://|sendTransaction|send_transaction|signTransaction|sign_transaction|\{\{"
+)
+
+
+def load_desk_cycle(path: Path = DESK_CYCLE_PATH) -> Element:
+    """The shared paper-cycle contract. Raises PromptError when it would enable a send."""
+    if not path.exists():
+        raise PromptError(f"{path}: desk cycle not found")
+    raw = path.read_text(encoding="utf-8")
+    forbidden = _CYCLE_FORBIDDEN.search(raw)
+    if forbidden:
+        raise PromptError(f"{path.name}: forbidden token {forbidden.group(0)!r}")
+    root = ET.parse(path).getroot()
+    if root.tag != "desk-cycle":
+        raise PromptError(f"{path.name}: root must be <desk-cycle>")
+    seen = [child.tag for child in root]
+    if seen != list(CYCLE_TAGS):
+        raise PromptError(f"{path.name}: children must be {CYCLE_TAGS} in order, got {seen}")
+    steps = root.find("autonomous_execution_steps")
+    state_ids = [el.get("id") for el in steps.findall("state")]
+    if state_ids != list(CYCLE_STATES):
+        raise PromptError(f"{path.name}: state ids must be {CYCLE_STATES}, got {state_ids}")
+    live = steps.find("state[@id='LIVE_TRADING']")
+    live_text = "".join(live.itertext())
+    if "gate_denied" not in live_text or "No signer" not in live_text:
+        raise PromptError(f"{path.name}: LIVE_TRADING must stay gate_denied with no signer")
+    paper = "".join(root.find("paper_testing_config").itertext())
+    if "PaperAdapter" not in paper:
+        raise PromptError(f"{path.name}: paper_testing_config must name PaperAdapter")
+    grok = "".join(root.find("grok_bot_integration").itertext())
+    if "must not be called" not in grok:
+        raise PromptError(f"{path.name}: grok_bot_integration must refuse unregistered modules")
+    return root
+
+
+def _emit_cycle(el: Element, indent: str) -> list[str]:
+    attrs = "".join(f" {key}={quoteattr(value)}" for key, value in el.attrib.items())
+    children = list(el)
+    text = (el.text or "").strip()
+    if not children:
+        body = escape(text)
+        return [f"{indent}<{el.tag}{attrs}>{body}</{el.tag}>"]
+    lines = [f"{indent}<{el.tag}{attrs}>"]
+    if text:
+        lines.append(f"{indent}  {escape(text)}")
+    for child in children:
+        lines.extend(_emit_cycle(child, indent + "  "))
+    lines.append(f"{indent}</{el.tag}>")
+    return lines
+
+
+def desk_cycle_xml(path: Path = DESK_CYCLE_PATH) -> str:
+    """Indented desk-cycle element for an assembled prompt. No CDATA."""
+    text = "\n".join(_emit_cycle(load_desk_cycle(path), "  "))
+    if "]]>" in text:
+        raise PromptError(f"{path.name}: cycle contains ']]>'")
+    return text
+
+
+def desk_cycle_markdown(path: Path = DESK_CYCLE_PATH) -> str:
+    """Readable copy of the cycle, appended after the seat body. Does not replace it."""
+    root = load_desk_cycle(path)
+    lines = [
+        "",
+        "## Desk cycle",
+        "",
+        "Shared paper-cycle contract. Live send is refused. No seat may sign or broadcast.",
+        "",
+    ]
+    for child in root:
+        lines.append(f"### {child.tag}")
+        lines.append("")
+        text = (child.text or "").strip()
+        if text:
+            lines.append(text)
+            lines.append("")
+        for sub in child:
+            label = sub.get("id") or sub.tag
+            lines.append(f"#### {label}")
+            lines.append("")
+            sub_text = (sub.text or "").strip()
+            if sub_text:
+                lines.append(sub_text)
+                lines.append("")
+    rendered = "\n".join(lines)
+    if not rendered.endswith("\n"):
+        rendered += "\n"
+    if "]]>" in rendered:
+        raise PromptError(f"{path.name}: cycle markdown contains ']]>'")
+    return rendered

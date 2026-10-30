@@ -19,13 +19,13 @@ The gate evaluates `PRECONDITION_IDS` from `src/pumpgrok/execution/live/live_gat
 2. `live_enable_env` -- `PUMPGROK_LIVE_ENABLE` is set to 1.
 3. `min_paper_days` -- at least 14 elapsed UTC days of source=paper ledger events.
 4. `performance_thresholds` -- closed count, profit factor, and drawdown on paper rows within limits.
-5. `wallet_allowlist` -- live wallet allowlist configured (not a setting in this release).
-6. `notional_cap` -- live notional cap configured (not a setting in this release).
+5. `wallet_allowlist` -- `live.wallet_allowlist` must hold at least one public key (base58, 32 bytes); it is empty by default.
+6. `notional_cap` -- `live.notional_cap_lamports` must be set with 0 < cap <= 1 SOL.
 7. `confirmation_record` -- a fresh `var/live_confirmation.json` verifies against the config hash.
 8. `adapter_registered` -- a registered live adapter exists (no live adapter ships in this release).
 9. `no_active_stop` -- halt, kill switch, and breaker state all readable and clear (not readable in this release).
 
-Preconditions 5, 6, 8, and 9 can never hold in this release, so the gate stays closed. Preconditions 1 and 2 keep the posture explicit: every overlay ships `[live] enabled = false`, and the environment flag defaults off.
+Preconditions 8 and 9 can never hold in this release, so the gate stays closed. Preconditions 1 and 2 keep the posture explicit: every overlay ships `[live] enabled = false`, and the environment flag defaults off.
 
 ## Rules that apply to go-live
 
