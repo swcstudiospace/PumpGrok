@@ -6,7 +6,7 @@
   "approved_by": "human:SomeRandmGuyy",
   "purpose": "Declare the paper platform, add an empty wallet public-key allowlist, bind the live notional cap to 1 SOL, and add an owner-declared scheduled promotion check. Also address the Greptile round on PR 22.",
   "plan": "Rebase the new work onto origin/main; keep main's fail-closed restore; wire settings into live gate rows 5 and 6; add the scheduled promotion check reading the operator ledger; fix each open Greptile thread.",
-  "rollback_plan": "Revert the single commit on bot-00-chief/desk-built-ins. Live stays refused by exit 3 on either tree. The declared space ships empty, so no promotion can run until an owner lists candidates.",
+  "rollback_plan": "Revert the commits on bot-00-chief/desk-built-ins. Live stays refused by exit 3 on either tree. The declared space ships empty, so no promotion can run until an owner lists candidates.",
   "commands": [
     {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed!"},
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 208 source files"},
@@ -23,7 +23,7 @@
   "claims": [
     {"claim": "The platform is declared in config as solana, pumpfun-bonding-curve, paper, quote-only Jupiter Swap V2. It selects no endpoint.", "evidence_command_index": 2},
     {"claim": "The wallet allowlist holds public keys only and ships empty. Secret-key-length values are refused and not echoed.", "evidence_command_index": 2},
-    {"claim": "Live gate row 5 stays unmet while the allowlist is empty, and row 6 is met at the 1 SOL ceiling. Live still exits 3.", "evidence_command_index": 10},
+    {"claim": "Live gate row 5 stays unmet while the allowlist is empty, and row 6 is met at the 1 SOL ceiling. Live still exits 3.", "evidence_command_index": 10, "expects_failure": true},
     {"claim": "The scheduled promotion check searches only an owner-declared space, reads autonomy from the operator ledger, and promotes only at autonomous-paper. The shipped space is empty, so it is skipped.", "evidence_command_index": 2},
     {"claim": "Replay output is unchanged: smoke-10m events.hash b69c2959...b32d before and after.", "evidence_command_index": 9},
     {"claim": "Greptile threads on PR 22 are addressed in code: autonomy source, uncaught declaration errors, incomplete paper window, risk settings, manifest save, settlement-internal equity, genesis refusal, probe path credentials, runbook key names, serve resume, promotion reload, and exit reload.", "evidence_command_index": 3}
