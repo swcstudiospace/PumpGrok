@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.engine.pipeline import evaluate_candidates
+from pumpgrok.engine.pipeline import BUY, evaluate_candidates
 from pumpgrok.ledger.active_set import load_verified_param_set, read_active_set
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.replay.clock import FixtureClock, WallClock, parse_ts_utc
@@ -312,6 +312,14 @@ def _build_serve(
         ):
             runtime.clock.advance_to(resumed_at)
         trading = _replay_trading(runtime)
+        if resumed_at is not None:
+            # A resumed ledger already holds every BUY attempt up to its boundary, so those
+            # candidates count as attempted and the next tick never re-buys them.
+            trading.attempted.update(
+                i
+                for i, candidate in enumerate(trading.candidates)
+                if candidate.verdict.decision == BUY and candidate.ts <= resumed_at
+            )
         degraded = DegradedState()
         seat_filter = filter_cfg
         if active_set is not None:

@@ -6,7 +6,7 @@
   "approved_by": "human:SomeRandmGuyy",
   "purpose": "Declare the paper platform, add an empty wallet public-key allowlist, bind the live notional cap to 1 SOL, and add an owner-declared scheduled promotion check. Also address the Greptile round on PR 22.",
   "plan": "Rebase the new work onto origin/main; keep main's fail-closed restore; wire settings into live gate rows 5 and 6; add the scheduled promotion check reading the operator ledger; fix each open Greptile thread.",
-  "rollback_plan": "Revert the commits on bot-00-chief/desk-built-ins. Live stays refused by exit 3 on either tree. The declared space ships empty, so no promotion can run until an owner lists candidates.",
+  "rollback_plan": "Revert the commits on bot-00-chief/desk-built-ins and redeploy the prior tree. Expected recovery time: about 10 minutes (estimate, not measured): revert, rebuild and restart. Data implications: no schema change and no data migration. Ledger rows already appended are append-only events and stay valid after a revert. Live stays refused by exit 3 on either tree. The declared space ships empty, so no promotion can run until an owner lists candidates.",
   "commands": [
     {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed!"},
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 208 source files"},
@@ -38,7 +38,9 @@
     "docs/LIVE_READINESS.md and the refusal reason strings in live_gate.py still name live.wallet_allowlist. The setting is [wallet] allowlist. The reason text was not changed.",
     "Ledgers written by the previous build hold genesis content for the empty ParamSet. A restore to that hash still succeeds there. This needs an owner decision.",
     "The weekly report builds the live gate without settings, so it shows rows 5 and 6 unmet.",
-    "Live trading is refused. Nothing here exercises a live adapter, and none exists."
+    "Live trading is refused. Nothing here exercises a live adapter, and none exists.",
+    "The resume double-buy guard in serve.py has no regression test: a restart over a recorded fixture should show no new BUY order for a candidate at or before the saved boundary.",
+    "The candidates.json written beside trials.jsonl and the paper-source promotion rows have no test that reads them back."
   ],
   "carry_over": [
     "Decide whether ledgers written by the previous build keep genesis restore.",

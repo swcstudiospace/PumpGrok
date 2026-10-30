@@ -63,7 +63,8 @@ log = logging.getLogger("pumpgrok.cli")
 
 #: Provenance written on every scheduled promotion row (human rows keep their own prefix).
 CHECK_BY = "gate:promotion-check"
-CHECK_SOURCE = "replay"
+# Operator-ledger source, the one state autonomy writes; a replay row fails the live gate.
+CHECK_SOURCE = "paper"
 CHECK_CORRELATION_ID = "upgrade-promotion-check"
 
 _MAX_DETAIL_CHARS = 200
@@ -146,6 +147,7 @@ def _check_and_apply(
         manifest_path.write_text(
             canonical_json(manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
         )
+        (run_dir / "candidates.json").write_bytes(space_bytes)
         if read_active_set(operator) == winner.content_hash:
             return "skipped"
         outcome = _evaluate_holdout(
