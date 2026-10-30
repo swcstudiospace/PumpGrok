@@ -312,14 +312,18 @@ def _build_serve(
         ):
             runtime.clock.advance_to(resumed_at)
         trading = _replay_trading(runtime)
-        if resumed_at is not None:
-            # A resumed ledger already holds every BUY attempt up to its boundary, so those
-            # candidates count as attempted and the next tick never re-buys them.
-            trading.attempted.update(
-                i
-                for i, candidate in enumerate(trading.candidates)
-                if candidate.verdict.decision == BUY and candidate.ts <= resumed_at
-            )
+        # A BUY is attempted only when the resumed ledger already holds its OrderPlaced row:
+        # same side and mint, and the same ts_utc as the candidate stamp. Others stay eligible.
+        placed: set[tuple[str, float]] = set()
+        for row in store.read(types=["OrderPlaced"], limit=None):
+            payload = row.get("payload") or {}
+            if payload.get("side") == "buy":
+                placed.add((str(payload.get("mint", "")), parse_ts_utc(str(row["ts_utc"]))))
+        trading.attempted.update(
+            i
+            for i, candidate in enumerate(trading.candidates)
+            if candidate.verdict.decision == BUY and (candidate.token.mint, candidate.ts) in placed
+        )
         degraded = DegradedState()
         seat_filter = filter_cfg
         if active_set is not None:

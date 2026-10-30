@@ -40,7 +40,9 @@
     "The weekly report builds the live gate without settings, so it shows rows 5 and 6 unmet.",
     "Live trading is refused. Nothing here exercises a live adapter, and none exists.",
     "The resume double-buy guard in serve.py has no regression test: a restart over a recorded fixture should show no new BUY order for a candidate at or before the saved boundary.",
-    "The candidates.json written beside trials.jsonl and the paper-source promotion rows have no test that reads them back."
+    "The candidates.json written beside trials.jsonl and the paper-source promotion rows have no test that reads them back.",
+    "Restart re-attempt: a BUY rejected before the restart writes OrderRejected, which has no side or mint field, so it cannot be matched to its candidate. On resume it becomes eligible again. It relies on the risk engine re-vetoing it deterministically from the replayed state. That is not proven.",
+    "The resume match assumes the OrderPlaced ts_utc equals the candidate stamp, because the adapter clock reads the tick at batch write. That is not verified against the latency and mark-refresh path."
   ],
   "carry_over": [
     "Decide whether ledgers written by the previous build keep genesis restore.",
