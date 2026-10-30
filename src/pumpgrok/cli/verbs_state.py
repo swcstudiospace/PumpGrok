@@ -11,6 +11,7 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pumpgrok.cli.codes import (
     _TRADE_UNAVAILABLE,
@@ -37,6 +38,7 @@ from pumpgrok.cli.wiring import (
 )
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.tool import Tool
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
@@ -72,6 +74,14 @@ def operator_active_set(settings: Settings) -> ParamSet | None:
         return read_active_param_set(store)
     finally:
         store.close()
+
+
+def _declared_space() -> tuple[dict[str, Any], ...]:
+    """The declared search space; a load defect is the CLI's typed configuration error."""
+    try:
+        return load_declared_space()
+    except PumpgrokError as exc:
+        raise ConfigError([exc.message]) from exc
 
 
 def _run(args: argparse.Namespace, settings: Settings) -> int:
@@ -117,11 +127,14 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     host = settings.health.host
+    space = _declared_space()
     promotion = make_promotion_check(
         source,
-        space=load_declared_space(),
+        space=space,
         seed=settings.replay.seed,
         initial_equity_lamports=settings.risk.paper_equity_lamports,
+        budget=settings.risk,
+        limits=settings.limits,
     )
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(

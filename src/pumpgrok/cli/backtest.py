@@ -263,16 +263,33 @@ def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tu
     return tuple(curve)
 
 
-def _equity_path(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
-    """Equity before the first window row, then after each row, in ledger order.
+_SETTLEMENT_ROWS = frozenset({"PositionOpened", "PositionClosed"})
 
-    Every row can move equity, including a mark on a position open at the
-    window boundary that never produces a fill, so the path records every move.
+
+def _equity_path(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
+    """Equity before the first window row, then at each settled point, in ledger order.
+
+    A settlement is a FillRecorded row and the PositionOpened or PositionClosed row
+    appended with it. The fill debits or credits cash before its position row lands,
+    so the state between the two is not a settled point and is never recorded.
+    Every other row can move equity, including a mark on a position open at the
+    window boundary that never produces a fill, so each of those rows is recorded.
     """
     state = genesis
     path = [_equity_lamports(state)]
+    unsettled = False
     for row in rows:
+        kind = row.get("type")
+        if unsettled and kind not in _SETTLEMENT_ROWS:
+            # A fill that no position row followed is settled as it stands.
+            path.append(_equity_lamports(state))
         state = reduce(state, row)
+        if kind == "FillRecorded":
+            unsettled = True
+            continue
+        unsettled = False
+        path.append(_equity_lamports(state))
+    if unsettled:
         path.append(_equity_lamports(state))
     return tuple(path)
 

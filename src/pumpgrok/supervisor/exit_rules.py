@@ -161,6 +161,10 @@ class ExitRules:
         self._sold: list[RuleSell] = []
         self._watcher = PositionWatcher(self._book, self._price, self._sell, clock)
 
+    def reload_exits(self, exits: ExitsSettings) -> None:
+        """Replace the exit thresholds; peaks, held-out sells and open positions carry over."""
+        self._book.exits = exits
+
     async def _price(self, mint: str) -> int:
         snapshot = await self._curves.curve(mint)
         if snapshot is None or snapshot.t_units <= 0:

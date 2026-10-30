@@ -16,9 +16,9 @@ keeps ``LAYOUT_STATUS`` ASSUMED, writes ``probe.json`` carrying the probe error
 with credentials redacted, and writes the doc with ``Status: ASSUMED`` plus an
 ``Error: <redacted probe error>`` line. While ASSUMED, RPC-derived prices stay
 fail-closed (``data_unavailable``) per the existing rule in ``curve_layout``.
-An endpoint carrying credentials (userinfo or a credential-named query
-parameter) is refused with exit 2 before any RPC call or write; only its
-scheme, host and path are ever written.
+An endpoint carrying credentials (userinfo, a credential-named query parameter or
+an opaque path segment such as a provider key) is refused with exit 2 before any
+RPC call or write; only its scheme, host and path are ever written.
 
 Usage:
     uv run python scripts/probe_curve_layout.py
@@ -61,10 +61,17 @@ _CREDENTIAL_ASSIGNMENT = re.compile(
     r"([\w.-]*(?:api[-_]?key|token|secret|password|key)[\w.-]*=)[^\s&#'\"]*", re.IGNORECASE
 )
 _USERINFO_IN_TEXT = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#]*@")
+# A long opaque path segment is a provider key in the URL path, e.g. /v2/<key>.
+_OPAQUE_PATH_SEGMENT = re.compile(r"[A-Za-z0-9_-]{20,}")
+
+
+def _path_has_credential(path: str) -> bool:
+    """True when a URL path holds an opaque segment, the shape of a provider key in the path."""
+    return any(_OPAQUE_PATH_SEGMENT.fullmatch(segment) for segment in path.split("/"))
 
 
 def _require_credential_free(endpoint: str) -> None:
-    """Raise unless the endpoint has no userinfo and no credential-named query parameter."""
+    """Raise unless the endpoint has no userinfo, credential-named query parameter or path key."""
     try:
         parts = urlsplit(endpoint)
     except ValueError:
@@ -80,10 +87,18 @@ def _require_credential_free(endpoint: str) -> None:
                 "RPC endpoint carries a credential-named query parameter; URL not echoed; "
                 "remove it from --endpoint or RPC_ENDPOINT"
             )
+    if _path_has_credential(parts.path):
+        raise ValueError(
+            "RPC endpoint carries a credential in its URL path; URL not echoed; "
+            "remove it from --endpoint or RPC_ENDPOINT"
+        )
 
 
 def _redact_endpoint(endpoint: str) -> str:
-    """Keep only scheme, host (with port) and path; drop userinfo, query and fragment."""
+    """Keep only scheme, host (with port) and path; drop userinfo, query and fragment.
+
+    A path holding a credential is replaced by a placeholder, never written.
+    """
     try:
         parts = urlsplit(endpoint)
         port = parts.port
@@ -94,7 +109,8 @@ def _redact_endpoint(endpoint: str) -> str:
     host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
     if port is not None:
         host = f"{host}:{port}"
-    return urlunsplit((parts.scheme, host, parts.path, "", ""))
+    path = "/<redacted>" if _path_has_credential(parts.path) else parts.path
+    return urlunsplit((parts.scheme, host, path, "", ""))
 
 
 def _redact_text(text: str, endpoint: str = "") -> str:
