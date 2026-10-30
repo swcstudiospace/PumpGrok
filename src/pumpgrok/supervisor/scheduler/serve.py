@@ -196,12 +196,20 @@ def build_serve_replay(
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
-    Runs ``run_replay`` once to rebuild the ledger, then wires the ten
-    offline seat cycles from ``_replay_cycles`` with ``source="replay"`` so
-    the health body carries ``ledger_source=replay`` (never live data). The
-    returned store stays open; the caller closes it after the serve loop.
+    Runs ``run_replay`` once, resuming the ledger a previous start wrote so the
+    persisted trailing-stop peaks survive a restart (a missing ledger is built fresh).
+    It then wires the ten offline seat cycles from ``_replay_cycles`` with
+    ``source="replay"`` so the health body carries ``ledger_source=replay`` (never
+    live data). The returned store stays open; the caller closes it after the serve loop.
     """
-    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, active_set=active_set)
+    run_replay(
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        ledger_path=ledger_path,
+        active_set=active_set,
+        resume_existing=True,
+    )
     runtime = open_replay_runtime(
         dataset_dir,
         filter_cfg,

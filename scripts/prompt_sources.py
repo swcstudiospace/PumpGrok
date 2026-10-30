@@ -300,9 +300,9 @@ CYCLE_STATES = (
     "STRATEGY_DEVELOPMENT",
     "BACKTESTING",
     "PAPER_TESTING",
-    "LIVE_TRADING",
     "OPTIMIZATION",
     "FAILURE_RECOVERY",
+    "LIVE_TRADING",
 )
 _CYCLE_FORBIDDEN = re.compile(
     r"https?://|sendTransaction|send_transaction|signTransaction|sign_transaction|\{\{"

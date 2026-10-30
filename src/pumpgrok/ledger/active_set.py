@@ -14,6 +14,9 @@ Each recorded set's canonical JSON is stored in the ledger meta table under
 row. ``read_active_param_set`` loads and verifies that content, so a restored
 hash runs the exact overrides it names. Missing, undecodable, or mismatched
 content raises CorruptState instead of falling back to the desk defaults.
+The first promotion also stores ``GENESIS_PARAM_SET`` (the desk defaults, no
+overrides) under its own hash, so the genesis set stays restorable; a ledger
+without that content refuses a rollback to it.
 """
 
 from __future__ import annotations
@@ -30,8 +33,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ACTIVE_SET_KEY",
+    "GENESIS_PARAM_SET",
     "active_set_note_text",
     "active_set_rows",
+    "load_verified_param_set",
     "read_active_param_set",
     "read_active_set",
     "record_active_set",
@@ -39,6 +44,9 @@ __all__ = [
 
 ACTIVE_SET_KEY = "active_param_set"
 _CONTENT_KEY_PREFIX = "active_param_set_content:"
+
+# Desk defaults: the set the desk runs before any promotion (no overrides).
+GENESIS_PARAM_SET = ParamSet()
 
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
 
@@ -99,24 +107,32 @@ def read_active_set(store: LedgerStore) -> str | None:
 def read_active_param_set(store: LedgerStore) -> ParamSet | None:
     """Content of the latest recorded active set, or ``None`` when never set.
 
-    Loads the canonical JSON stored under the active hash and requires it to
-    decode to a ParamSet whose content_hash is that hash. A recorded set whose
-    content is missing, undecodable, or different from its hash raises
-    CorruptState, so the desk never runs overrides it cannot verify.
+    Verifies the recorded content through ``load_verified_param_set``. A
+    recorded set whose content is missing, undecodable, or different from its
+    hash raises CorruptState, so the desk never runs overrides it cannot verify.
     """
     active = read_active_set(store)
     if active is None:
         return None
-    raw = store.get_meta(_content_key(active))
+    return load_verified_param_set(store, active)
+
+
+def load_verified_param_set(store: LedgerStore, content_hash: str) -> ParamSet:
+    """Load one recorded set; its content must decode to exactly that hash.
+
+    Missing, undecodable, or mismatched content raises CorruptState. Shared by
+    the startup reader and rollback, so both refuse the same bad content.
+    """
+    raw = store.get_meta(_content_key(content_hash))
     if raw is None:
-        raise CorruptState(f"active param set {active} is recorded without its content")
+        raise CorruptState(f"param set {content_hash} is recorded without its content")
     try:
         param_set = _decode_param_set(raw)
-        matches = param_set.content_hash == active
+        matches = param_set.content_hash == content_hash
     except (TypeError, ValueError) as exc:
-        raise CorruptState(f"active param set {active} content is undecodable: {exc}") from exc
+        raise CorruptState(f"param set {content_hash} content is undecodable: {exc}") from exc
     if not matches:
-        raise CorruptState(f"active param set {active} content does not match its hash")
+        raise CorruptState(f"param set {content_hash} content does not match its hash")
     return param_set
 
 
@@ -175,11 +191,19 @@ def record_active_set(
     """Store the content under its hash, then append the activation pair.
 
     The canonical JSON is written before the ConfigChanged row, so every
-    recorded activation has its content on file. Return the content hash.
+    recorded activation has its content on file; the first promotion also stores the
+    genesis content it can roll back to. Return the content hash.
     """
     new_hash = param_set.content_hash
     store.set_meta(_content_key(new_hash), _canonical_param_set(param_set))
     previous = read_active_set(store)
+    if previous is None:
+        # The desk runs GENESIS_PARAM_SET before any promotion: store its content
+        # so the first promotion can be rolled back to it. old_hash stays "" here.
+        store.set_meta(
+            _content_key(GENESIS_PARAM_SET.content_hash),
+            _canonical_param_set(GENESIS_PARAM_SET),
+        )
     store.append_batch(
         active_set_rows(
             param_set,
