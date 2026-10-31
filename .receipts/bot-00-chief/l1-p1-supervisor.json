@@ -1,0 +1,29 @@
+{
+  "task_id": "l1-p1-supervisor",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/l1-p1-supervisor",
+  "phase": "L1 audit P1 #2 relay cursor and sibling autonomy read (from origin/main 1cfd86a)",
+  "approved_by": "human:SomeRandmGuyy",
+  "purpose": "Fix L1 audit P1 #2: relay_tail advanced the cursor past a failed critical alert, so it was never retried. Also point /healthz autonomy_level at the operator ledger; it read the replay store.",
+  "plan": "Stop the relay pass at the first failed send and return the cursor before that row. Read autonomy from the operator ledger at PAPER_LEDGER_PATH, read-only and never created; a missing ledger reads manual-ticket.",
+  "rollback_plan": "Revert the commit on bot-00-chief/l1-p1-supervisor. Expected recovery time: about 10 minutes (estimate, not measured). No schema or data migration. Relay retries stop; cursor semantics return to the prior behavior.",
+  "commands": [
+    {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "dependencies in sync"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "808 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 208 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite, [100%], no failures"},
+    {"cmd": "uv run pytest -q tests/desk/test_relay_tail_retry.py tests/desk/test_healthz_autonomy_operator_ledger.py -p no:cacheprovider", "exit_code": 0, "output_tail": "5 tests, all passed"}
+  ],
+  "claims": [
+    {"claim": "A failed critical relay send stops the pass. The returned cursor sits before the failed row, so the next pass retries it.", "evidence_command_index": 4},
+    {"claim": "Successful sends advance the cursor exactly as before.", "evidence_command_index": 4},
+    {"claim": "/healthz autonomy_level reads the operator ledger at PAPER_LEDGER_PATH. A missing ledger reads manual-ticket and is not created.", "evidence_command_index": 4}
+  ],
+  "unverified": [
+    "Seat-cycle autonomy (SeatContext.autonomy_level) now also reads the operator level. This is intended but wider than the /healthz symptom. No existing test covers the seat-side change.",
+    "A permanently failing critical alert blocks every later relay row (head-of-line), and it is retried each tick. This is the fail-closed design; the operator must know it.",
+    "autonomy_level opens the operator database on each call. The cost is not measured.",
+    "Not yet run on CI or Greptile. Draft PR, not merged."
+  ],
+  "status": "draft PR. Not merged. Owner review required."
+}
