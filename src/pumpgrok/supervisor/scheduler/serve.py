@@ -15,6 +15,7 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.engine.pipeline import BUY, evaluate_candidates
 from pumpgrok.ledger.active_set import load_verified_param_set, read_active_set
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.replay.clock import FixtureClock, WallClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
@@ -240,26 +241,34 @@ def _resume_stamp(store: LedgerStore) -> float | None:
 
 @dataclass
 class _ServeRules:
-    """Sniper candidates, reloaded from the ledger's active set at tick boundaries.
+    """Sniper candidates, reloaded from the operator ledger's active set at tick boundaries.
 
-    ``loaded`` is the active-set hash the running candidates were built from. ``reload``
-    changes nothing until the ledger names another set. It then judges the recording again
-    under that set's filter. Candidate indices follow the recording, so the placed marks stay
-    valid. Every candidate at or before the current tick is marked placed: a reload never buys
-    a past tick, and a later tick is judged under the new filter.
+    ``loaded`` is the active-set hash the running candidates were built from. ``reload`` reads
+    the operator ledger, the one ``apply_candidate`` records promotions to and startup reads
+    with ``operator_active_set``. The replay ledger never holds the active set, so reading it
+    would miss every promotion. ``reload`` changes nothing until the operator ledger names
+    another set, and it never creates that ledger. It then judges the recording again under
+    that set's filter. Candidate indices follow the recording, so the placed marks stay valid.
+    Every candidate at or before the current tick is marked placed: a reload never buys a past
+    tick, and a later tick is judged under the new filter.
     """
 
-    store: LedgerStore
     events: Sequence[Mapping[str, Any]]
     trading: _ReplayTrading
     clock: Clock
     loaded: str | None
 
     def reload(self) -> None:
-        active = read_active_set(self.store)
-        if active is None or active == self.loaded:
+        if not PAPER_LEDGER_PATH.exists():
             return
-        param_set = load_verified_param_set(self.store, active)
+        operator = LedgerStore(str(PAPER_LEDGER_PATH))
+        try:
+            active = read_active_set(operator)
+            if active is None or active == self.loaded:
+                return
+            param_set = load_verified_param_set(operator, active)
+        finally:
+            operator.close()
         candidates = evaluate_candidates(self.events, param_set.candidate().filter_settings())
         now = self.clock.now()
         self.trading.candidates = candidates
@@ -367,7 +376,6 @@ def _build_serve(
             seat_cadences=FIXTURE_SEAT_CADENCES,
         )
         rules = _ServeRules(
-            store=store,
             events=runtime.dataset.events,
             trading=trading,
             clock=runtime.clock,
