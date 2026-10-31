@@ -577,7 +577,8 @@ async def relay_tail(
     """Relay new Escalation/HaltSet/KillSwitchSet/BreakerTripped rows.
 
     Returns the new high-water seq. A None notifier only advances the
-    cursor; relay failures never raise.
+    cursor. A failed send stops the pass: the returned cursor sits before the
+    failed row, so the next pass retries it. Relay failures never raise.
     """
     try:
         events = store.read(since_seq=cursor_seq + 1, limit=None)
@@ -586,9 +587,10 @@ async def relay_tail(
         return cursor_seq
     high = cursor_seq
     for event in events:
-        high = max(high, int(event.get("seq", high)))
+        seq = int(event.get("seq", high))
         event_type = str(event.get("type", ""))
         if event_type not in RELAY_TYPES or notifier is None:
+            high = max(high, seq)
             continue
         payload = event.get("payload")
         detail = payload.get("detail", "") if isinstance(payload, dict) else ""
@@ -604,5 +606,8 @@ async def relay_tail(
                 idempotency_key=f"relay|{event_type}|{event.get('seq')}",
             )
         except Exception as exc:
-            log.warning("tail relay failed at seq %s: %s", event.get("seq"), exc)
+            # Stop at the failed row: the cursor stays before it, so the next pass retries it.
+            log.warning("tail relay failed at seq %s; retrying next pass: %s", seq, exc)
+            return high
+        high = max(high, seq)
     return high

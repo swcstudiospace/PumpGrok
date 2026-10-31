@@ -15,6 +15,7 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.views import equity_lamports
@@ -168,11 +169,21 @@ class Supervisor:
         return self._stop.is_set()
 
     def autonomy_level(self) -> str:
-        """Ledger-recorded level; live mode always forces manual-ticket."""
+        """Operator-ledger level at PAPER_LEDGER_PATH; live mode always forces manual-ticket.
+
+        Read-only and never created: a missing operator ledger reads as manual-ticket, the same
+        rule the promotion path applies. The replay store never carries the human level.
+        """
         if self._mode == "live":
             return "manual-ticket"
         try:
-            return read_autonomy(self._store)
+            if not PAPER_LEDGER_PATH.exists():
+                return "manual-ticket"
+            operator = LedgerStore(str(PAPER_LEDGER_PATH))
+            try:
+                return read_autonomy(operator)
+            finally:
+                operator.close()
         except Exception:
             return "manual-ticket"
 
