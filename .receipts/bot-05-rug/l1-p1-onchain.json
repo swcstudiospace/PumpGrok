@@ -1,0 +1,30 @@
+{
+  "task_id": "l1-p1-onchain",
+  "bot": "bot-05-rug",
+  "branch": "bot-05-rug/l1-p1-onchain",
+  "phase": "L1 audit P1 #4 large-transfer scan fail-open (from origin/main 1cfd86a)",
+  "approved_by": "human:SomeRandmGuyy",
+  "purpose": "Fix L1 audit P1 #4: the large-transfer scan swallowed RpcError per lookup, so a total RPC failure returned an empty list that read as no large transfers.",
+  "plan": "Count failed lookups. When lookups failed and no transaction was read, raise DataStale. When only some failed, return coverage=partial. Otherwise coverage=complete. A successful scan returns its transfers unchanged.",
+  "rollback_plan": "Revert the commit on bot-05-rug/l1-p1-onchain. Expected recovery time: about 10 minutes (estimate, not measured). The output gains one coverage field; consumers that ignore unknown keys are unaffected.",
+  "commands": [
+    {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "dependencies in sync"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "807 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 208 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite, [100%], no failures"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_large_transfers_coverage.py -p no:cacheprovider", "exit_code": 0, "output_tail": "6 passed"}
+  ],
+  "claims": [
+    {"claim": "A total signature-lookup failure raises DataStale. It never returns an empty list.", "evidence_command_index": 4},
+    {"claim": "When every transaction read fails after signatures succeed, DataStale is raised instead of an empty partial.", "evidence_command_index": 4},
+    {"claim": "A partial wallet or transaction failure with readable transfers returns coverage=partial.", "evidence_command_index": 4},
+    {"claim": "A fully successful scan returns its transfers unchanged, with coverage=complete. An empty successful scan is complete, not stale.", "evidence_command_index": 4}
+  ],
+  "unverified": [
+    "docs/TOOL_CATALOG.md does not yet describe the coverage field. It belongs to the operator docs item and is not in this branch.",
+    "Non-list signature responses and null getTransaction results are still skipped silently. They are not RpcError and are out of scope.",
+    "The existing tests/tools/onchain/test_onchain_reads.py exercises this function. It passes in the full make test run (exit 0).",
+    "Not yet run on CI or Greptile. Draft PR, not merged."
+  ],
+  "status": "draft PR. Not merged. Owner review required."
+}
