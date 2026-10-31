@@ -53,9 +53,14 @@ class LargeTransfersIn(ToolInput):
 
 
 class LargeTransfersOut(ToolOutput):
-    """Qualifying movements oldest-first."""
+    """Qualifying movements oldest-first.
+
+    ``coverage`` is ``partial`` when some RPC lookups failed: an empty or short
+    ``transfers`` list then does not prove that no qualifying movement happened.
+    """
 
     transfers: list[Transfer]
+    coverage: Literal["complete", "partial"]
 
 
 LARGE_TRANSFERS_SPEC = ToolSpec(
@@ -183,6 +188,12 @@ def parse_transfer_tx(
     )
 
 
+def _require_coverage(mint: str, failed: int, tx_ok: int) -> None:
+    """Fail closed: lookups failed and not one transaction was read, so nothing was covered."""
+    if failed and not tx_ok:
+        raise DataStale(f"onchain.large_transfers scan failed mint={mint} failed_lookups={failed}")
+
+
 async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str, Any]:
     """Scan watched wallets and return a validated typed payload."""
     supply = await _supply_units(inp.mint, rpc)
@@ -197,10 +208,13 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
         except (KeyError, TypeError) as exc:
             raise DataStale(f"onchain.large_transfers holders malformed mint={inp.mint}") from exc
     found: list[Transfer] = []
+    failed = 0
+    tx_ok = 0
     for wallet in wallets[: inp.limit]:
         try:
             sigs = await rpc.call("getSignaturesForAddress", [wallet, {"limit": _SIGS_PER_WALLET}])
         except RpcError:
+            failed += 1
             continue
         if not isinstance(sigs, list):
             continue
@@ -220,7 +234,9 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
                     ],
                 )
             except RpcError:
+                failed += 1
                 continue
+            tx_ok += 1
             transfer = parse_transfer_tx(
                 inp.mint,
                 entry["signature"],
@@ -231,9 +247,11 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
             )
             if transfer is not None:
                 found.append(transfer)
+    _require_coverage(inp.mint, failed, tx_ok)
     found.sort(key=lambda t: t.ts)
     out = {
         "transfers": [t.model_dump(by_alias=True) for t in found],
+        "coverage": "partial" if failed else "complete",
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
             inp.correlation_id or (str(a) if (a := ambient_correlation()) else None),
