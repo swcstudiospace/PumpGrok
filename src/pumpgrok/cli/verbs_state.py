@@ -11,6 +11,7 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pumpgrok.cli.codes import (
     _TRADE_UNAVAILABLE,
@@ -27,6 +28,7 @@ from pumpgrok.cli.errors import (
     _say,
     _tool_error,
 )
+from pumpgrok.cli.promotion import make_promotion_check
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
@@ -36,6 +38,7 @@ from pumpgrok.cli.wiring import (
 )
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.tool import Tool
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
@@ -52,6 +55,7 @@ from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 from pumpgrok.upgrade.params import ParamSet
+from pumpgrok.upgrade.space import load_declared_space
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -72,12 +76,22 @@ def operator_active_set(settings: Settings) -> ParamSet | None:
         store.close()
 
 
+def _declared_space() -> tuple[dict[str, Any], ...]:
+    """The declared search space; a load defect is the CLI's typed configuration error."""
+    try:
+        return load_declared_space()
+    except PumpgrokError as exc:
+        raise ConfigError([exc.message]) from exc
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
     gate = LiveGate(
         mode=settings.effective_mode,
         environ=os.environ,
         root=Path.cwd(),
         live_enabled=settings.live.enabled,
+        wallet_allowlist=settings.wallet.allowlist,
+        notional_cap_lamports=settings.live.notional_cap_lamports,
     )
     if settings.effective_mode == "live":
         preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
@@ -113,6 +127,15 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     host = settings.health.host
+    space = _declared_space()
+    promotion = make_promotion_check(
+        source,
+        space=space,
+        seed=settings.replay.seed,
+        initial_equity_lamports=settings.risk.paper_equity_lamports,
+        budget=settings.risk,
+        limits=settings.limits,
+    )
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(
         serve_replay(
@@ -125,6 +148,7 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             budget=settings.risk,
             limits=settings.limits,
             active_set=operator_active_set(settings),
+            promotion_check=promotion,
         )
     )
 

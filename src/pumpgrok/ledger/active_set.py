@@ -14,6 +14,9 @@ Each recorded set's canonical JSON is stored in the ledger meta table under
 row. ``read_active_param_set`` loads and verifies that content, so a restored
 hash runs the exact overrides it names. Missing, undecodable, or mismatched
 content raises CorruptState instead of falling back to the desk defaults.
+The first promotion stores no genesis content: the desk runs the config's filter and
+exits before it, the ledger never records those, so ``NO_OVERRIDE_HASH`` has no stored
+content and a rollback to it raises ``GenesisNotRecorded``.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
-from pumpgrok.core.errors import CorruptState
+from pumpgrok.core.errors import CorruptState, PumpgrokError
 from pumpgrok.upgrade.params import ParamSet
 
 if TYPE_CHECKING:
@@ -30,9 +33,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ACTIVE_SET_KEY",
+    "NO_OVERRIDE_HASH",
+    "GenesisNotRecorded",
     "active_set_note_text",
     "active_set_rows",
     "is_writer",
+    "load_verified_param_set",
     "read_active_param_set",
     "read_active_set",
     "record_active_set",
@@ -42,7 +48,22 @@ __all__ = [
 ACTIVE_SET_KEY = "active_param_set"
 _CONTENT_KEY_PREFIX = "active_param_set_content:"
 
+# Content hash of the no-override set. Before any promotion the desk runs the config's
+# filter and exits, which the ledger never records, so no genesis content is stored.
+NO_OVERRIDE_HASH = ParamSet().content_hash
+
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
+
+
+class GenesisNotRecorded(PumpgrokError, ValueError):
+    """A rollback named the no-override set but no content was ever recorded for it.
+
+    Before the first promotion the desk runs the config's filter and exits, which the
+    ledger does not record, so the first promotion stores no genesis. Subclassing
+    ValueError keeps callers that fail closed on a bad prior hash refusing it.
+    """
+
+    code = "genesis_not_recorded"
 
 
 def active_set_note_text(new_hash: str, source: str) -> str:
@@ -101,35 +122,49 @@ def read_active_set(store: LedgerStore) -> str | None:
 def read_active_param_set(store: LedgerStore) -> ParamSet | None:
     """Content of the latest recorded active set, or ``None`` when never set.
 
-    Loads the canonical JSON stored under the active hash and requires it to
-    decode to a ParamSet whose content_hash is that hash. A recorded set whose
-    content is missing, undecodable, or different from its hash raises
-    CorruptState, so the desk never runs overrides it cannot verify.
+    Verifies the recorded content through ``load_verified_param_set``. A
+    recorded set whose content is missing, undecodable, or different from its
+    hash raises CorruptState, so the desk never runs overrides it cannot verify.
     """
     active = read_active_set(store)
     if active is None:
         return None
-    raw = store.get_meta(_content_key(active))
+    return load_verified_param_set(store, active)
+
+
+def load_verified_param_set(store: LedgerStore, content_hash: str) -> ParamSet:
+    """Load one recorded set; its content must decode to exactly that hash.
+
+    Missing, undecodable, or mismatched content raises CorruptState. Shared by
+    the startup reader and rollback, so both refuse the same bad content.
+    """
+    raw = store.get_meta(_content_key(content_hash))
     if raw is None:
-        raise CorruptState(f"active param set {active} is recorded without its content")
+        raise CorruptState(f"param set {content_hash} is recorded without its content")
     try:
         param_set = _decode_param_set(raw)
-        matches = param_set.content_hash == active
+        matches = param_set.content_hash == content_hash
     except (TypeError, ValueError) as exc:
-        raise CorruptState(f"active param set {active} content is undecodable: {exc}") from exc
+        raise CorruptState(f"param set {content_hash} content is undecodable: {exc}") from exc
     if not matches:
-        raise CorruptState(f"active param set {active} content does not match its hash")
+        raise CorruptState(f"param set {content_hash} content does not match its hash")
     return param_set
 
 
 def verify_stored_content(store: LedgerStore, content_hash: str) -> None:
     """Refuse unless the canonical JSON stored under content_hash decodes to that hash.
 
-    Raises ValueError when nothing is stored, when the stored text does not
-    decode into a ParamSet, or when the decoded set hashes to something else.
+    Raises GenesisNotRecorded when the no-override hash has nothing stored, and
+    ValueError when other content is missing, does not decode into a ParamSet, or
+    hashes to something else.
     """
     raw = store.get_meta(_content_key(content_hash))
     if raw is None:
+        if content_hash == NO_OVERRIDE_HASH:
+            raise GenesisNotRecorded(
+                f"rollback to the pre-promotion desk settings refused: {content_hash} "
+                "has no recorded content; the ledger never records the config they run"
+            )
         raise ValueError(f"active param set {content_hash} has no stored content")
     try:
         matches = _decode_param_set(raw).content_hash == content_hash
@@ -193,8 +228,9 @@ def record_active_set(
 ) -> str:
     """Store the content under its hash, then append the activation pair.
 
-    The canonical JSON is written before the ConfigChanged row, so every
-    recorded activation has its content on file. Return the content hash.
+    The canonical JSON is written before the ConfigChanged row, so every recorded
+    activation has its content on file. Nothing is stored for the pre-promotion
+    settings: they come from config, not from this set. Return the content hash.
     """
     new_hash = param_set.content_hash
     store.set_meta(_content_key(new_hash), _canonical_param_set(param_set))

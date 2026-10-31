@@ -5,16 +5,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Sequence
-from dataclasses import replace
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.engine.pipeline import BUY, evaluate_candidates
+from pumpgrok.ledger.active_set import load_verified_param_set, read_active_set
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
-from pumpgrok.replay.clock import FixtureClock, WallClock
+from pumpgrok.replay.clock import FixtureClock, WallClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
 from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
@@ -35,6 +38,7 @@ from pumpgrok.supervisor.scheduler.replay_runtime import (
 from pumpgrok.supervisor.scheduler.supervisor import ROSTER, TICK_S, Supervisor
 
 if TYPE_CHECKING:
+    from pumpgrok.supervisor.scheduler.replay_runtime import _ReplayTrading
     from pumpgrok.upgrade.params import ParamSet
 
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
@@ -146,27 +150,38 @@ async def serve_fixture_timeline(
     pace_s: float = 0.0,
     hold: bool = False,
     heartbeats: bool = True,
+    store: LedgerStore | None = None,
+    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
+    resume_after: float | None = None,
+    rules_reload: Callable[[], None] | None = None,
 ) -> list[dict[str, str]]:
     """Advance the fixture clock along the recording and tick the supervisor at each tick.
 
     Each recorded tick is one supervisor tick at its own time, so a BUY is judged and
     priced at its own tick and an exit rule sees every later tick in order. A tick the
     clock has already passed (an order's latency moved it on) is skipped, never replayed
-    backwards. With ``hold`` the clock then keeps stepping at the tick cadence until the
+    backwards. ``resume_after``, when given, is the last stamp a resumed ledger already
+    holds: a tick at or before it is skipped, so a restart does not run completed ticks.
+    With ``hold`` the clock then keeps stepping at the tick cadence until the
     supervisor is stopped, so a serve stays up after its recording ends. ``pace_s`` real
     seconds separate steps (zero for a one-shot run), waited on the injected ``pace`` clock
     (a ``WallClock`` in serve, so production keeps real time; never ``asyncio.sleep``).
-    Returns each recorded tick's outcomes.
+    ``promotion_check``, when given with ``store``, runs once after each supervisor tick as
+    ``promotion_check(store, clock)``. ``rules_reload`` runs right after it, at the same
+    tick boundary. Returns each recorded tick's outcomes.
     """
     clock = supervisor.clock
     if not isinstance(clock, FixtureClock):
         raise RuntimeError("a fixture timeline needs the fixture clock")
+    if promotion_check is not None and store is None:
+        raise ValueError("promotion_check needs the store it checks")
     ticks: list[dict[str, str]] = []
     for at in stamps:
-        if at < clock.now():
+        if at < clock.now() or (resume_after is not None and at <= resume_after):
             continue
         clock.advance_to(at)
         ticks.append(await supervisor.tick_once(heartbeats=heartbeats))
+        _tick_boundary(clock, store, promotion_check, rules_reload)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
         if supervisor.stopped:
@@ -176,12 +191,94 @@ async def serve_fixture_timeline(
     while not supervisor.stopped:
         clock.advance_to(clock.now() + TICK_S)
         await supervisor.tick_once(heartbeats=heartbeats)
+        _tick_boundary(clock, store, promotion_check, rules_reload)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
     return ticks
 
 
-def build_serve_replay(
+def _tick_boundary(
+    clock: FixtureClock,
+    store: LedgerStore | None,
+    promotion_check: Callable[[LedgerStore, Clock], None] | None,
+    rules_reload: Callable[[], None] | None,
+) -> None:
+    """Between two ticks: run the promotion check, then the rule reload it may need.
+
+    The reload follows the check, so a promotion applied at this boundary is in force from
+    the next tick. Neither runs inside a tick.
+    """
+    if promotion_check is not None and store is not None:
+        promotion_check(store, clock)
+    if rules_reload is not None:
+        rules_reload()
+
+
+@dataclass(frozen=True)
+class _ServeParts:
+    """One serve build: the supervisor, its metrics and store, and the rule reload."""
+
+    supervisor: Supervisor
+    metrics: Metrics
+    store: LedgerStore
+    rules: _ServeRules
+    resumed_at: float | None
+
+
+def _resume_stamp(store: LedgerStore) -> float | None:
+    """Epoch of the last timeline row in the ledger, or None when it holds none.
+
+    Row 1 is the checkpoint verdict ``run_replay`` appends. It is stamped at the recording's
+    last stamp, so it is not a timeline row. Sequence numbers run 1..count with no gaps, so
+    the last timeline row is the one at ``seq == count``.
+    """
+    count = store.count()
+    if count < 2:
+        return None
+    tail = store.read(since_seq=count, limit=None)
+    return parse_ts_utc(str(tail[-1]["ts_utc"]))
+
+
+@dataclass
+class _ServeRules:
+    """Sniper candidates, reloaded from the operator ledger's active set at tick boundaries.
+
+    ``loaded`` is the active-set hash the running candidates were built from. ``reload`` reads
+    the operator ledger, the one ``apply_candidate`` records promotions to and startup reads
+    with ``operator_active_set``. The replay ledger never holds the active set, so reading it
+    would miss every promotion. ``reload`` changes nothing until the operator ledger names
+    another set, and it never creates that ledger. It then judges the recording again under
+    that set's filter. Candidate indices follow the recording, so the placed marks stay valid.
+    Every candidate at or before the current tick is marked placed: a reload never buys a past
+    tick, and a later tick is judged under the new filter.
+    """
+
+    events: Sequence[Mapping[str, Any]]
+    trading: _ReplayTrading
+    clock: Clock
+    loaded: str | None
+
+    def reload(self) -> None:
+        if not PAPER_LEDGER_PATH.exists():
+            return
+        operator = LedgerStore(str(PAPER_LEDGER_PATH))
+        try:
+            active = read_active_set(operator)
+            if active is None or active == self.loaded:
+                return
+            param_set = load_verified_param_set(operator, active)
+        finally:
+            operator.close()
+        candidates = evaluate_candidates(self.events, param_set.candidate().filter_settings())
+        now = self.clock.now()
+        self.trading.candidates = candidates
+        self.trading.attempted.update(i for i, c in enumerate(candidates) if c.ts <= now)
+        if self.trading.exits is not None:
+            self.trading.exits.reload_exits(param_set.candidate().exits_settings())
+        self.loaded = active
+
+
+def _build_serve(
     dataset_dir: str | Path,
     filter_cfg: Any,
     *,
@@ -193,15 +290,16 @@ def build_serve_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
-) -> tuple[Supervisor, Metrics, LedgerStore]:
-    """Construct the D1 serve supervisor over a replayed ledger.
-
-    Runs ``run_replay`` once to rebuild the ledger, then wires the ten
-    offline seat cycles from ``_replay_cycles`` with ``source="replay"`` so
-    the health body carries ``ledger_source=replay`` (never live data). The
-    returned store stays open; the caller closes it after the serve loop.
-    """
-    run_replay(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path, active_set=active_set)
+) -> _ServeParts:
+    """Build the serve parts over a replayed ledger; see :func:`build_serve_replay`."""
+    run_replay(
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        ledger_path=ledger_path,
+        active_set=active_set,
+        resume_existing=True,
+    )
     runtime = open_replay_runtime(
         dataset_dir,
         filter_cfg,
@@ -215,7 +313,26 @@ def build_serve_replay(
     )
     store = runtime.store
     try:
+        resumed_at = _resume_stamp(store)
+        if (
+            resumed_at is not None
+            and isinstance(runtime.clock, FixtureClock)
+            and resumed_at > runtime.clock.now()
+        ):
+            runtime.clock.advance_to(resumed_at)
         trading = _replay_trading(runtime)
+        # A BUY is attempted only when the resumed ledger already holds its OrderPlaced row:
+        # same side and mint, and the same ts_utc as the candidate stamp. Others stay eligible.
+        placed: set[tuple[str, float]] = set()
+        for row in store.read(types=["OrderPlaced"], limit=None):
+            payload = row.get("payload") or {}
+            if payload.get("side") == "buy":
+                placed.add((str(payload.get("mint", "")), parse_ts_utc(str(row["ts_utc"]))))
+        trading.attempted.update(
+            i
+            for i, candidate in enumerate(trading.candidates)
+            if candidate.verdict.decision == BUY and (candidate.token.mint, candidate.ts) in placed
+        )
         degraded = DegradedState()
         seat_filter = filter_cfg
         if active_set is not None:
@@ -258,10 +375,60 @@ def build_serve_replay(
             cycle_observer=metrics.observe,
             seat_cadences=FIXTURE_SEAT_CADENCES,
         )
+        rules = _ServeRules(
+            events=runtime.dataset.events,
+            trading=trading,
+            clock=runtime.clock,
+            loaded=active_set.content_hash if active_set is not None else None,
+        )
     except Exception:
         store.close()
         raise
-    return supervisor, metrics, store
+    return _ServeParts(
+        supervisor=supervisor,
+        metrics=metrics,
+        store=store,
+        rules=rules,
+        resumed_at=resumed_at,
+    )
+
+
+def build_serve_replay(
+    dataset_dir: str | Path,
+    filter_cfg: Any,
+    *,
+    seed: int,
+    clock: Clock | None = None,
+    ledger_path: str | Path | None = None,
+    health_path: str | Path | None = None,
+    exits: ExitsSettings | None = None,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
+    active_set: ParamSet | None = None,
+) -> tuple[Supervisor, Metrics, LedgerStore]:
+    """Construct the D1 serve supervisor over a replayed ledger.
+
+    Runs ``run_replay`` once, resuming the ledger a previous start wrote so the
+    persisted trailing-stop peaks survive a restart (a missing ledger is built fresh).
+    It then wires the ten offline seat cycles from ``_replay_cycles`` with
+    ``source="replay"`` so the health body carries ``ledger_source=replay`` (never
+    live data). A resumed ledger that already holds timeline rows starts the clock at the
+    last of them, so the serve continues its timeline. The returned store stays open; the
+    caller closes it after the serve loop.
+    """
+    parts = _build_serve(
+        dataset_dir,
+        filter_cfg,
+        seed=seed,
+        clock=clock,
+        ledger_path=ledger_path,
+        health_path=health_path,
+        exits=exits,
+        budget=budget,
+        limits=limits,
+        active_set=active_set,
+    )
+    return parts.supervisor, parts.metrics, parts.store
 
 
 async def _finish_serve(
@@ -309,6 +476,7 @@ async def serve_replay(
     limits: EngineLimits | None = None,
     pace_s: float = SERVE_PACE_S,
     active_set: ParamSet | None = None,
+    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
@@ -321,9 +489,13 @@ async def serve_replay(
     SIGINT/SIGTERM stop the loop and the server closes before the store does.
     Fixture time follows the recording (see :func:`serve_fixture_timeline`), paced
     ``pace_s`` real seconds per step; after the last recorded tick the clock keeps
-    moving at the tick cadence until stop. Returns 0.
+    moving at the tick cadence until stop. ``promotion_check`` runs once per tick, with the
+    serve's own store and clock. A resumed ledger continues its timeline from its last
+    recorded stamp, and a promotion applied in the loop reloads the candidates at the next
+    tick boundary.
+    Returns 0.
     """
-    supervisor, metrics, store = build_serve_replay(
+    parts = _build_serve(
         dataset_dir,
         filter_cfg,
         seed=seed,
@@ -334,6 +506,7 @@ async def serve_replay(
         limits=limits,
         active_set=active_set,
     )
+    supervisor, metrics, store = parts.supervisor, parts.metrics, parts.store
     server = HealthServer(
         supervisor.clock,
         supervisor.health_status,
@@ -350,6 +523,10 @@ async def serve_replay(
             pace=WallClock(),
             pace_s=pace_s,
             hold=True,
+            store=store,
+            promotion_check=promotion_check,
+            resume_after=parts.resumed_at,
+            rules_reload=parts.rules.reload,
         )
         return 0
     finally:
