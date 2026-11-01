@@ -30,7 +30,7 @@ import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, get_args
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import (
@@ -45,10 +45,15 @@ from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.risk.limits import EngineLimits
 
 
-def _require_scheme(url: str, schemes: tuple[str, ...]) -> str:
-    """Refuse a URL whose scheme is not one of ``schemes`` (TLS only; value never echoed)."""
+def _require_scheme(url: str, schemes: tuple[str, ...], setting: str) -> str:
+    """Refuse a URL off the TLS schemes or carrying a credential (value never echoed).
+
+    A bad scheme raises ValueError, which pydantic reports by location and type only. A
+    credential raises ConfigError naming ``setting``.
+    """
     if urlsplit(url).scheme.lower() not in schemes:
         raise ValueError(f"URL must use {' or '.join(s + '://' for s in schemes)}")
+    _refuse_credential_url(url, setting)
     return url
 
 
@@ -65,12 +70,12 @@ class DataSettings(BaseModel):
     @field_validator("rest_url")
     @classmethod
     def _tls_rest_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https",))
+        return _require_scheme(v, ("https",), "data.rest_url")
 
     @field_validator("ws_url")
     @classmethod
     def _tls_ws_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https", "wss"))
+        return _require_scheme(v, ("https", "wss"), "data.ws_url")
 
 
 class RpcSettings(BaseModel):
@@ -89,7 +94,7 @@ class RpcSettings(BaseModel):
     @classmethod
     def _tls_endpoints(cls, v: list[str]) -> list[str]:
         for endpoint in v:
-            _require_scheme(endpoint, ("https", "wss"))
+            _require_scheme(endpoint, ("https", "wss"), "rpc.endpoints")
         return v
 
 
@@ -107,7 +112,7 @@ class GrokSettings(BaseModel):
     @field_validator("base_url")
     @classmethod
     def _tls_base_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https",))
+        return _require_scheme(v, ("https",), "grok.base_url")
 
 
 class JupiterSettings(BaseModel):
@@ -120,7 +125,7 @@ class JupiterSettings(BaseModel):
     @field_validator("quote_url")
     @classmethod
     def _tls_quote_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https", "wss"))
+        return _require_scheme(v, ("https", "wss"), "jupiter.quote_url")
 
 
 class FilterSettings(BaseModel):
@@ -331,6 +336,37 @@ class ConfigError(RuntimeError):
             "settings are not fit to start:\n"
             + "\n".join(f"- {problem}" for problem in self.problems)
         )
+
+
+# Query parameter or path-style names that carry a credential: api-key, apikey, token, secret,
+# key, password and suffixed forms (x-api-key, access_token, client_secret). A separator must
+# precede the name, so innocent words such as monkey or tokenizer do not match.
+_CREDENTIAL_PARAM_RE = re.compile(
+    r"(?i)(?:^|[-_])(?:api[-_]?key|apikey|token|secret|key|password|passwd|pwd|auth)$"
+)
+# A long opaque token: 24+ URL-safe characters holding both a letter and a digit. Provider keys
+# ride in path segments or parameter values; plain words and short version segments do not match.
+_OPAQUE_TOKEN_RE = re.compile(r"(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}")
+
+
+def _refuse_credential_url(url: str, setting: str) -> None:
+    """Refuse a URL that carries a credential: userinfo, a key parameter or an opaque token.
+
+    Raises ConfigError naming ``setting`` only. It is a ConfigError rather than ValueError so
+    pydantic does not copy the rejected URL into its ValidationError text.
+    """
+    parts = urlsplit(url)
+    params = parse_qsl(parts.query, keep_blank_values=True)
+    tokens = [unquote(segment) for segment in parts.path.split("/")]
+    tokens.extend(value for _, value in params)
+    credential = (
+        "@" in parts.netloc
+        or KEY_BEARING_VALUE_RE.search(url) is not None
+        or any(_CREDENTIAL_PARAM_RE.search(name) for name, _ in params)
+        or any(_OPAQUE_TOKEN_RE.fullmatch(token) for token in tokens)
+    )
+    if credential:
+        raise ConfigError([f"{setting}: URL carries a credential (userinfo, key or opaque token)"])
 
 
 def mask(secret: str) -> str:

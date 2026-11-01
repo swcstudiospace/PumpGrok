@@ -104,7 +104,11 @@ class _EngineSteps:
 
     def _equity_for_halts(self, state: LedgerState) -> int:
         if self._limits.daily_loss_basis == "realized":
-            return int(state.cash_lamports) + int(state.counters.realized_today_lamports)
+            # Realized basis: day-start total equity moves only by PnL booked today. The
+            # baseline (day_start_equity_lamports) is on this same basis: no PnL is realized
+            # before the rollover that records it, so the two compare like with like.
+            realized_equity = int(state.day_start_equity_lamports)
+            return realized_equity + int(state.counters.realized_today_lamports)
         return int(equity_lamports(state))
 
     def _cleared_today(self, today: str) -> bool:

@@ -1,4 +1,4 @@
-# CI: the canonical commands from the Makefile (lint, typecheck, test, audit).
+# CI: the canonical commands from the Makefile (make check: lint, typecheck, test, audit, drift).
 #
 # uv is installed through pip at the version that wrote uv.lock (0.13.4), so the lockfile is
 # honoured exactly. Every job runs on the Omega CI runner pool
@@ -41,8 +41,20 @@ jobs:
       - name: Install uv (pinned to the version that wrote uv.lock)
         run: python -m pip install "uv==0.13.4"
 
-      - name: Lint, typecheck, test and audit
-        run: make lint typecheck test audit
+      # Lint and tool settings live in pyproject.toml and the Makefile, which a pull request can
+      # edit. On a pull request this job first overlays the base copies of both, so a PR cannot
+      # weaken lint, typing or pytest settings and still pass; its own edits apply once merged.
+      # Same trust model as the ci/gates overlay in gates.yml.
+      - name: Use trusted lint and type config from base ref
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git checkout "origin/$BASE_REF" -- pyproject.toml Makefile
+          echo "Trusted pyproject.toml and Makefile overlay from origin/$BASE_REF"
+
+      - name: Lint, typecheck, test, audit and drift checks
+        run: make check
 
   soak:
     name: Nightly slow soak

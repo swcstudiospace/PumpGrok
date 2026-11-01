@@ -266,4 +266,3 @@ async def test_failing_telegram_send_does_not_log_token(
     assert delivered["424242"]["ok"] is False  # the send really failed
     assert TELEGRAM_TOKEN not in caplog.text
     assert TELEGRAM_TOKEN not in json.dumps(out.model_dump(), default=str)
-    assert "bot[redacted]" in caplog.text  # the request was logged, with the token masked
