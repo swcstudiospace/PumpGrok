@@ -221,3 +221,81 @@ Full `make test` and the full suite were NOT run (assignment instruction; orches
 - The `make test` suite and the full pytest run were not run, per the assignment.
 - Hermes scripts and the cron/isolation checks were not executed.
 - docs/VENDOR_PIN.md was not edited (verify only); its pin and retirement wording pass the test, and the residual lines are listed in deviation 7.
+
+## Round 2
+
+Scope: the four items in the round 2 assignment, closing the gaps in 21-VERIFICATION.md (gaps_found) and the DOC-01 and DOC-03 notes in 07-VERIFICATION.md. Document commit: fd8a707 (README.md, ARCHITECTURE.md, SETUP.md, CLAUDE.md, CHANGELOG.md; explicit paths). Branch bot-00-chief/v3-closeout. No product code, no test changes, no push, no merge.
+
+### Item 1: read-only wording
+
+Each claim was checked against the code before the edit.
+
+| Location | Before | After | Evidence |
+|----------|--------|-------|----------|
+| README.md:5 | "read-only Python helpers" | "Python helpers that never sign or send. The helpers write only local files, mainly under `var/`" | `src/pumpgrok/ledger/paths.py:20,23` (`var/ledger.sqlite`, `var/desk`); `src/pumpgrok/replay/runner.py:54` (`var/replay`); `src/pumpgrok/cli/backtest.py:615` (`var/backtest`) |
+| README.md:14 | "Read-only operator CLI" | "Operator CLI ... that never signs or sends"; `ticket next` and `create` append a row to `var/ledger.sqlite`; paper-trade commands refuse without writing | `src/pumpgrok/cli/verbs_state.py:383-384` (`allocate_ticket`); `src/pumpgrok/ledger/tickets.py` (`store.append_batch([row])`); `src/pumpgrok/ledger/store.py:139-140` (mkdir and sqlite connect); `verbs_state.py:177-195` (`_paper`: "nothing is written") |
+| README.md:30 | "That flow is read-only" | "That flow writes only local folders and files, with no keys and no real trades" | `SETUP.md:15-16` (mkdir and clone), `:50`, `:55-56`, `:168`, `:184` |
+| ARCHITECTURE.md:3 | "small read-only CLIs" | "small CLIs that never sign or send; they write only local files, mainly under `var/`" | Same as README.md:5 and :14 |
+| SETUP.md:6 | "Setup is **read-only**" | "Setup writes only local folders and files on the desk computer (for example the clone in section 1 and `~/trading-desk` in sections 3 and 10)" | `SETUP.md:15-16`, `:50`, `:55-56`, `:168`, `:184` |
+
+The replay write was checked at `src/pumpgrok/supervisor/scheduler/replay_runtime.py:210` (`REPLAY_ROOT / dataset / "ledger.sqlite"`). The kill latch write at `verbs_state.py:324` goes to `var/desk`. Ticket and replay commands were not executed, because `ticket next` appends a real row to the worktree ledger; the check was done by reading the code.
+
+Left unchanged, not in the item 1 list:
+
+- ARCHITECTURE.md:18, :61, :223 "read-only `/healthz` and `/metrics`": describes served endpoints, not the CLI.
+- ARCHITECTURE.md:84 "scripts/check.sh (read-only validation)": `scripts/check.sh` has no write operation (the rg for redirects, mkdir, touch, rm, mv and cp matched only numeric comparisons).
+
+### Item 2: ARCHITECTURE.md diagram
+
+The mermaid block (one fence opened at line 35 and closed at line 51) lost these nodes: `Vendor[Vendor engine dry-run]`, `Jsonl[JSONL trades.jsonl]`, `Bridge[scout pipeline]`. It lost these edges: `Vendor --> Jsonl`, `Jsonl --> Bridge`, `Bridge --> Desk`. Kept nodes: Human, Host, Pack, Desk, Jup, Rpc, Web. Kept edges: Human to Host, Host to Pack, Host to Desk, Host to Web, Pack to Jup, Pack to Rpc. A grep of the block for vendor, jsonl, bridge and scout returns nothing. The diagram was not rendered in a renderer; the check was textual.
+
+### Item 3: CLAUDE.md line anchors
+
+Anchors were found with `rg -n 'lines? [0-9]'` and `rg -n ':[0-9]+'`.
+
+| Line | Anchor as written | Code | Verdict | Action |
+|------|-------------------|------|---------|--------|
+| 63 | `supervisor.py:36-37`, `TICK_S = 1.0` | line 36 is the comment, line 37 is `TICK_S = 1.0` | Correct | Left |
+| 64 | `replay_runtime.py:222` (`PaperAdapter`) | `PaperAdapter(` is at line 233; line 222 is the `RiskEngine(` setup. `open_replay_runtime` is defined at line 176 | Wrong | Replaced with "inside `open_replay_runtime`" |
+| 96 | `_run`, lines 68-83 | `def _run` is at `verbs_state.py:87`; the record and duration refusal is at 101-102; other combinations return at 107-116. Lines 68-83 hold no `_run` code. `_not_implemented` returns exit 5, equal to `EXIT_NOT_IMPLEMENTED` (`codes.py:19`) | Wrong range | Replaced with `_run` |
+| 97 | `_run`, lines 57-67 | `gate = LiveGate(` is at line 88; `return EXIT_LIVE` at line 100; `EXIT_LIVE = 3` at `codes.py:13` | Wrong range | Replaced with `_run` |
+| 93-94 (file citation, not a numeric anchor) | Preconditions "in `src/pumpgrok/cli/verbs_state.py`" | `PRECONDITION_IDS` is at `live_gate.py:38`; `refusal_lines` at `live_gate.py:244`. `verbs_state.py:44` imports `LiveGate, refusal_lines` and `_run` enforces them at lines 88-100 | Wrong file | Repointed to `src/pumpgrok/execution/live/live_gate.py`, with `_run` as the enforcer |
+
+Lines 93-94 were not a numeric anchor. They are included because 07-VERIFICATION.md names them as a DOC-01 blocker.
+
+### Item 4: residual scan after the edits
+
+Pattern set (21-VERIFICATION check 4), run with `rg -n` over README.md, ARCHITECTURE.md, SETUP.md, skills/replay-and-backtest/SKILL.md and docs/VENDOR_PIN.md. Zero hits for `eight`, `Eight`, `ticket_helper`, `paper_sim`, `/workspace/trading-desk`, `--rpc`.
+
+| Hit | Verdict |
+|-----|---------|
+| `ticket next`: README.md:14 (new text), :46, :52; SETUP.md:136, :203; ARCHITECTURE.md:144, :168, :180, :192 | Correct. README:46, SETUP:136 and SETUP:203 are help forms only. The others describe allocation, which the code does |
+| `vendor/grokbot-pumpfun/`: README.md:65; ARCHITECTURE.md:15, :81; SETUP.md:147 | Correct. Each says absent or formerly vendored |
+| `vendor/grokbot-pumpfun/`: docs/VENDOR_PIN.md:3, :10 | Correct as historical record (header lines 3-5) |
+| `vendor/grokbot-pumpfun/`: docs/VENDOR_PIN.md:9 (`License: MIT (vendor/grokbot-pumpfun/LICENSE)`) | Path is absent. The MIT text is retained at `src/pumpgrok/engine/LICENSE-grokbot-pumpfun`. Left as provenance because VENDOR_PIN.md is verify-only in this round (see deviation 3) |
+| `config.example.yaml`: docs/VENDOR_PIN.md:25 | Correct. Says the file is not in this checkout |
+| Wider set, `market.price`: README.md:43 (help); ARCHITECTURE.md:27, :118 | Correct. RPC `getAccountInfo` on the curve account, ASSUMED layout, matching `tools/market/price.py` |
+| Wider set, `trading-desk`: ARCHITECTURE.md:40, :179, :201, :203, :204; SETUP.md:6, :47, :50, :55-56, :168, :184 | Correct. Operator host folder `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh:8` |
+
+### Gates
+
+| Gate | Command | Exit | Result |
+|------|---------|------|--------|
+| G1 | `uv run python -m pytest tests/docs -q --junitxml=/tmp/r2-docs.xml` | 0 | junit tests=44 failures=0 errors=0 skipped=0 |
+| G2 | `./scripts/verify_doc_commands.sh` | 0 | `pass=2 skip=9 fail=0` |
+| G3 | `./scripts/check.sh` | 0 | `ok: 35 skills, 10 agents, 321 markdown files checked`; structure healthy. 21-VERIFICATION recorded 320 at 9cb6e66; this round created no files, so the drift predates these edits |
+| G4 | `make lint` | 0 | ruff check passed; ruff format 819 files already formatted |
+| G5 | `uv run pumpgrok verify --fixture smoke-10m` | 0 | `events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d`; `verify=CONSISTENT seq=2 events=41`; matches the required hash |
+
+### Deviations
+
+1. Edit path. Three edit calls used relative headers (`README.md#...`). The edit tool resolved them against the session cwd, `/root/src/repos/pumpgrok`, and the calls were rejected on hash mismatch before any write. The main repo's README.md still reads "paper fills, ... pipeline JSONL evidence" at line 14, so it was not changed. Every later edit used the absolute worktree path. This is the same mis-target as round 1 deviation 1.
+2. CLAUDE.md lines 93-94 were repointed although they are a file citation, not a numeric anchor. Both 07-VERIFICATION and 21-VERIFICATION name them as DOC-01 blockers.
+3. docs/VENDOR_PIN.md was not edited, as the round 2 scope requires. Its line 9 license pointer to the absent `vendor/grokbot-pumpfun/LICENSE` remains. The retained copy is `src/pumpgrok/engine/LICENSE-grokbot-pumpfun`. A follow-up can point the line at that copy.
+4. Round 2 CHANGELOG bullets were added under the phase 21 entry, one per changed document: README.md, ARCHITECTURE.md, SETUP.md, and CLAUDE.md (DOC-01). The replay hash line is in the phase 20 entry and was not touched.
+
+### Not verified in round 2
+
+- `make test` and the full suite were not run, per the assignment. The orchestrator's run on 9cb6e66 is the reference.
+- No setup command was executed (clone, `uv sync`, mkdir and touch to `$HOME`).
+- The mermaid diagram was not rendered.
