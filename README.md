@@ -43,7 +43,7 @@ Optional reads (schemas print without keys or spends):
 uv run pumpgrok tools market.price --help
 uv run pumpgrok tools onchain.authorities --help
 uv run pumpgrok tools onchain.priority_fee --help
-uv run pumpgrok ticket next
+uv run pumpgrok ticket next --help
 uv run pumpgrok tools market.holders_snapshot --help
 uv run pumpgrok paper buy --help
 uv run pumpgrok scout pipeline --candidates --help

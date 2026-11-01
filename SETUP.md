@@ -200,7 +200,7 @@ In the Trading Floor run:
 
 Optional tool checks:
 ```bash
-pumpgrok ticket next
+pumpgrok ticket next --help
 pumpgrok tools onchain.priority_fee --help
 ```
 

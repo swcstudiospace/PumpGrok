@@ -10,6 +10,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - DOC-03 (phase 21): `ARCHITECTURE.md` no longer names the absent `ticket_helper.py` and `paper_sim.py`; ticket IDs come from `pumpgrok ticket next` and paper fills from `pumpgrok run --mode paper`. `vendor/grokbot-pumpfun/` is described as absent from this checkout and formerly vendored (see `docs/VENDOR_PIN.md`). "eight persistent Bots" becomes "ten seats". The seat table lists SIGNAL and JOURNAL. `scout pipeline --candidates` is recorded as not implemented (exit 5). The `/workspace/trading-desk` path becomes `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh`.
 - DOC-03 (phase 21): `SETUP.md` counts 10 role files, lists all ten Bots in the desk record and receipt, checks `src/pumpgrok/tools` (the root `tools/` path it listed does not exist), and uses `~/trading-desk` in place of `/workspace/trading-desk`.
 - DOC-03 (phase 21): `README.md` no longer describes the vendored engine as present, and no longer says `pumpgrok paper` logs fills; `pumpgrok run --mode paper` drives the paper adapter and `pumpgrok paper buy|sell` refuse until the curve reader is verified.
+- DOC-03 (phase 21): `SETUP.md` and `README.md` list `pumpgrok ticket next --help` in their tool checks. The bare `pumpgrok ticket next` allocates a ticket id and writes a row to the paper ledger, so it is not a read-only check and is no longer listed as one.
+- DOC-03 (phase 21): `docs/VENDOR_PIN.md` no longer tells the reader to copy `config.example.yaml`. That file belonged to the vendored tree and is absent from this checkout.
 
 ## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
 
