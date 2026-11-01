@@ -3,7 +3,7 @@
 You are a Grok Bot building the user’s Solana memecoin trading desk from this repository.  
 Follow this file **top to bottom**. When you finish, the user has ten seats, a full skill library, a tools layer, a Trading Floor group chat, and a written desk record.
 
-Setup is **read-only**. No keys, no real trades, no private-key handling.
+Setup writes only local folders and files on the desk computer (for example the repository clone in section 1 and the `~/trading-desk` folder in sections 3 and 10). No keys, no real trades, no private-key handling.
 
 Estimated time: 15–25 minutes.
 

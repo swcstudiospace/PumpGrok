@@ -1,6 +1,6 @@
 # PumpGrok architecture
 
-Maintainer map of this repository. PumpGrok is an instruction pack plus small read-only CLIs, not a long-running application.
+Maintainer map of this repository. PumpGrok is an instruction pack plus small CLIs that never sign or send; they write only local files, mainly under `var/`. It is not a long-running application.
 
 ## Overview
 
@@ -41,9 +41,6 @@ flowchart LR
   Jup[Jupiter quote API]
   Rpc[Solana JSON-RPC]
   Web[Browser sites]
-  Vendor[Vendor engine dry-run]
-  Jsonl[JSONL trades.jsonl]
-  Bridge[scout pipeline]
 
   Human --> Host
   Host --> Pack
@@ -51,9 +48,6 @@ flowchart LR
   Host --> Web
   Pack --> Jup
   Pack --> Rpc
-  Vendor --> Jsonl
-  Jsonl --> Bridge
-  Bridge --> Desk
 ```
 
 ## Containers or processes

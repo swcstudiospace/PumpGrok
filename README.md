@@ -2,7 +2,7 @@
 
 ![PumpGrok banner](banner.jpg)
 
-PumpGrok is a ten-seat Solana memecoin trading desk packaged as agent instructions, 35 skills, a hard security constitution, and read-only Python helpers. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
+PumpGrok is a ten-seat Solana memecoin trading desk packaged as agent instructions, 35 skills, a hard security constitution, and Python helpers that never sign or send. The helpers write only local files, mainly under `var/`. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
 
 Version 0.1.0, the package version (see `pyproject.toml`).
 
@@ -11,7 +11,7 @@ Version 0.1.0, the package version (see `pyproject.toml`).
 - Ten specialist seats: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL (`agents/`)
 - 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and the screening-engine procedure (`skills/grokbot-pipeline`; the vendored tree is retired, see `docs/VENDOR_PIN.md`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
-- Read-only operator CLI (`pumpgrok`) for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, holder concentration, and paper-trade commands (which refuse until the curve reader is verified); `scout pipeline` is registered but not implemented
+- Operator CLI (`pumpgrok`) that never signs or sends. It reads Jupiter quotes, mint/freeze authority, priority fees, and holder concentration; `ticket next` and `create` append a row to the paper ledger `var/ledger.sqlite`; paper-trade commands refuse without writing until the curve reader is verified. `scout pipeline` is registered but not implemented
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
@@ -27,7 +27,7 @@ A committed `uv.lock` pins every dependency. No API keys are required for the pu
 
 ## Setup and usage
 
-Full Grok Bot bootstrap (clone, folders, skills, ten seats, Trading Floor, desk record) is in [SETUP.md](SETUP.md). That flow is read-only: no keys, no real trades.
+Full Grok Bot bootstrap (clone, folders, skills, ten seats, Trading Floor, desk record) is in [SETUP.md](SETUP.md). That flow writes only local folders and files, with no keys and no real trades.
 
 From this repository:
 

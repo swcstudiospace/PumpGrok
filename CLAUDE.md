@@ -61,7 +61,7 @@ One supervisor tick drives ten seats in roster order; risk approves every order
 and paper fills settle against the curve account.
 
 - Ten-seat tick loop lives in `src/pumpgrok/supervisor/scheduler/supervisor.py`; due seats start in roster order each tick (`TICK_S = 1.0`, `src/pumpgrok/supervisor/scheduler/supervisor.py:36-37`).
-- One-shot replay: `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py` calls `open_replay_runtime` in `src/pumpgrok/supervisor/scheduler/replay_runtime.py`, which builds a `PaperAdapter` (`replay_runtime.py:222`).
+- One-shot replay: `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py` calls `open_replay_runtime` in `src/pumpgrok/supervisor/scheduler/replay_runtime.py`, which builds a `PaperAdapter` (inside `open_replay_runtime`).
 - Pre-graduation fills come from bonding-curve reserves via `src/pumpgrok/execution/paper_adapter/adapter.py`, never from a quote.
 - `src/pumpgrok/tools/market/price.py` reads the curve account with `getAccountInfo` and decodes it with `src/pumpgrok/tools/onchain/curve_layout.py`; it has no Jupiter path.
 - `src/pumpgrok/tools/exec/quote.py` routes through the `ExecutionAdapter` from `src/pumpgrok/core/adapter.py` and is informational only, never the fill price.
@@ -90,11 +90,11 @@ Planning state and per-task evidence live outside the product tree.
 
 ## Safety
 
-Paper-only by default; live mode refuses to start unless every precondition in
-`src/pumpgrok/cli/verbs_state.py` is met.
+Paper-only by default; live mode refuses to start unless every precondition defined in
+`src/pumpgrok/execution/live/live_gate.py` is met (`_run` in `src/pumpgrok/cli/verbs_state.py` enforces it).
 
-- `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run`, lines 68-83).
-- `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli/verbs_state.py` (`_run`, lines 57-67) and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli/codes.py`) when any precondition is unmet.
+- `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run`).
+- `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli/verbs_state.py` (`_run`) and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli/codes.py`) when any precondition is unmet.
 - Secrets arrive only as `PUMPGROK_*` env vars per `src/pumpgrok/config/settings.py`; key-bearing endpoint values are refused at startup (see `RpcSettings` in `src/pumpgrok/config/settings.py`).
 - Paid-provider keys travel in `api_key` and are sent as a header, never embedded in endpoint URLs (see `src/pumpgrok/config/settings.py`).
 
