@@ -1,30 +1,15 @@
 ---
 milestone: 3
-audited: 2026-11-01T06:10:01Z
-status: gaps_found
+audited: 2026-11-01T08:43:58Z
+status: tech_debt
 scores:
-  requirements: 32/34 substantively verified (2 unsatisfied); 10 traceability-orphaned (see below)
-  phases: 5/5 verification status passed
-  integration: 1 critical, 1 gap, 3 warnings
-  flows: NOT_CHECKED (no end-to-end flow run)
+  requirements: 34/34 verified by a passing phase verification (0 unsatisfied, 0 orphaned; 3 satisfied in all three sources, 31 partial on SUMMARY metadata)
+  phases: 7/7 verification status passed (6, 7, 8, 9, 10, 20, 21)
+  integration: 0 blocking; 2 closed in this run (LIV-01 by phase 20, DOC-03 by phase 21); 1 accepted by owner (UPG-03 operator command)
+  flows: 1 checked (replay smoke and verify CONSISTENT); no separate end-to-end flow audit
 gaps:
-  requirements:
-    - id: LIV-01
-      status: unsatisfied
-      phase: 10
-      verification_status: passed (criteria) but import claim fails at runtime
-      evidence: "cli/backtest.py and cli/promotion.py load execution/live/__init__.py through cli/__init__.py -> dispatch -> verbs_state.py:44 (imports execution.live.live_gate). execution/live/__init__.py:3 imports LiveAdapterStub. The AST guard tests/safety/test_import_graph_no_live.py does not model the parent-package edge (test lines 251-253). No live write path exists because the stub is unregistered."
-    - id: UPG-03
-      status: unsatisfied (operator path)
-      phase: 9
-      verification_status: passed (criteria)
-      evidence: "upgrade/rollback.py:41 restore_active_set has no CLI or operator entry point. Its callers are tests only: tests/upgrade/test_restore_fail_closed.py, tests/upgrade/test_rollback_exact.py, tests/ledger/test_active_set_applied_at_startup.py."
-    - ids: [BT-01, BT-02, BT-03, BT-04, BT-05, BT-07, DOC-02, PAP-01, PAP-02, PAP-03]
-      status: orphaned (traceability only)
-      verification_status: not cited in any VERIFICATION.md text; integration check PASS at symbol level, PAP-02 WARNING
-  integration:
-    - LIV-01 import path to a live adapter (critical)
-    - UPG-03 no operator rollback entry (gap)
+  requirements: []
+  integration: []
   flows: []
 tech_debt:
   - phase: 06
@@ -33,67 +18,127 @@ tech_debt:
       - "Phase 6 evidence paths cite /root/src/repos/pumpgrok, a different checkout"
   - phase: 07
     items:
-      - "Deviations OVERRIDE-A to OVERRIDE-D recorded and justified in 07-VERIFICATION.md"
-      - "CHANGELOG lacks the before-hash line (integration warning F4)"
+      - "OVERRIDE-A to OVERRIDE-D deviation judgements recorded in 07-VERIFICATION.md (re-checked: still valid)"
+      - "docs/ROSTER.md and docs/FOUNDATION_STACK.md: design documents outside the DOC-04 fixed set (scope decision for the owner)"
+      - "Criterion 4 re-baselined from origin/main to f3887bb (phase start point), dated note in ROADMAP"
   - phase: 08
     items:
-      - "PAP-02 alert channel unverified (integration warning F2)"
-      - "BT-06 path drift in SUMMARY references (F3)"
+      - "Criteria 3, 4, 5, 9 evidenced by a targeted run rather than a standalone command (verifier note)"
+      - "Path drift in SUMMARY references (BT-06 path drift)"
   - phase: 09
     items:
-      - "docs/RISK_POLICY.md line 25 still paraphrases clause 10 (recorded as non-FAIL in 09-VERIFICATION.md)"
+      - "docs/RISK_POLICY.md line 25 still paraphrases clause 10 (recorded as non-FAIL in 09-VERIFICATION.md; not re-verified)"
+  - phase: 10
+    items:
+      - "Earlier PASS on the import-graph claim was wrong; corrected by phase 20 (correction note in 10-VERIFICATION.md)"
+  - phase: 20
+    items:
+      - "AST guard does not see dynamic imports (pkgutil, importlib); reviewer F-01 minor, no present false negative"
+  - phase: 21
+    items:
+      - "Out-of-scope docs still say eight roles or name absent helpers: agents/README.md, skills/desk-operating-model/SKILL.md, skills/pumpgrok-setup/SKILL.md, scripts/hermes-bootstrap.sh, scripts/README.md, skills/holder-and-flow-analysis/SKILL.md"
+      - "Design and history docs keep trading-desk, paper_sim, ticket_helper and eight wording (D-10): docs/ROSTER.md, docs/upgrade-plan-desk-v2.md, docs/FOUNDATION_STACK.md, docs/DISCOVERY.md, docs/MIGRATION_MAP.md, docs/design/*"
+      - "docs/VENDOR_PIN.md:9 names the absent vendored license path (historical provenance; retained copy in src/pumpgrok/engine)"
+      - "Plugin manifest description parenthetical lists eight names (.claude-plugin/plugin.json:3)"
+      - "Literal reading of DOC-03 each change appears in CHANGELOG: entries are per document, row-level list in 21-01-SUMMARY (owner to confirm the interpretation)"
+      - "tests/docs does not cover the ARCHITECTURE diagram or read-only wording; no recurrence guard"
+      - "Placeholder org name your-org in SETUP.md and marketplace manifests (allowlisted in scripts/check.sh)"
   - phase: all
     items:
-      - "requirements-completed frontmatter present only in 06-05 (INT-08); 35 of 36 plan SUMMARY files omit it"
-      - "Path drift in SUMMARY references: execution/paper_adapter, supervisor/scheduler, risk/engine now packages (F3)"
-      - "Operator readiness visibility deferred by owner decision (PARKED)"
+      - "requirements-completed frontmatter present only in 06-05 (INT-08), 20-01 (LIV-01) and 21-01 (DOC-03); 31 requirements are partial on this metadata alone"
+      - "Operator rollback command absent: restore_active_set has tests only; UPG-03 is met by its own definition and Phase 9 criterion 5, accepted by the owner"
+      - "Nyquist VALIDATION.md missing for every v3 phase (validate-phase hook active; discovery only, a coverage item, not a blocker)"
+      - "Phase verification evidence written in a checkout other than the worktree in the first run (corrected by re-verification at the worktree)"
       - "28 historical marker lines, all PARKED, in .planning/BACKLOG-INVENTORY.md"
+      - "Operator readiness visibility deferred by owner decision (PARKED)"
+nyquist:
+  compliant_phases: []
+  partial_phases: []
+  not_validated_phases: []
+  missing_phases: ["06", "07", "08", "09", "10", "20", "21"]
+  overall: missing (discovery only)
 ---
 
 # Milestone v3 audit: PumpGrok Desk v3
 
-Result: **gaps_found**. The milestone cannot be archived as passed. Audited 2026-11-01T06:10:01Z on branch bot-00-chief/v3-closeout from origin/main 1cfd86a.
+Result: **tech_debt**. No requirement is unsatisfied and no integration gap remains open. The audit records accumulated debt that needs the owner's decision before archive. Audited 2026-11-01T08:43:58Z on branch bot-00-chief/v3-closeout.
+
+## What changed since the first audit (gaps_found, commit 9bfb0f6)
+
+- LIV-01 (phase 10 claim false at runtime): closed by phase 20 (commits 148dbfa, 02f5997, 21e99dd, c3898ec, e58920b). Runtime probe: live_adapter absent, live_gate present. Guard now models parent-package edges.
+- UPG-03: the integration check read the requirement as needing an operator command. The requirement says one operation rolls back to the exact prior version, verified by a test, and Phase 9 criterion 5 is that test (9 of 9 pass). The owner accepted UPG-03 as met; the operator command is tech debt.
+- Orphaned requirements (11 IDs absent from every VERIFICATION file): resolved by re-verifying phases 7, 8 and 10 with explicit IDs, and by phase 20 for LIV-01.
+- DOC-03 (re-verification found it unmet): closed by phase 21 (red-first manifest test, manifest versions, ARCHITECTURE diagram, read-only wording, ticket next and VENDOR_PIN corrections, CLAUDE.md anchors). Phase 21 verification passed at HEAD da51664.
+- PAP-02 integration warning (alert channel unverified): the requirement names no delivery channel; the breach raises an alert, blocks promotion, and the divergence test passes. Met.
+- Phase 7 criterion 4: the literal comparison against origin/main could not pass after the merge. Re-baselined to f3887bb (423 lines, phase start point; HEAD 133 lines).
 
 ## Sources
 
-- Phase VERIFICATION.md: all five report status passed (06, 07, 08, 09, 10).
-- REQUIREMENTS.md: 34 v3 requirement IDs, all Complete with checkboxes checked.
-- Phase SUMMARY frontmatter: requirements-completed present for one plan only (06-05, INT-08).
-- Integration checker (read-only, phases 06 to 10): verdict integration gaps. Gates skipped by design; runtime claims NOT_CHECKED or reasoned from source.
-- Orchestrator verification of the two failing claims against source: confirmed (see gaps).
+- Phase VERIFICATION.md at HEAD: phases 6 and 9 (earlier, not stale); 7 (da51664), 8 and 10 (e58920b, product code unchanged since), 20 (c3898ec), 21 (da51664).
+- REQUIREMENTS.md: 34 v3 IDs, all checked and traced.
+- SUMMARY frontmatter requirements-completed: present for 06-05 (INT-08), 20-01 (LIV-01), 21-01 (DOC-03).
+- Matrix script (read-only, /tmp/audit_matrix.py) on the committed tree.
+- Canonical test target: make test exit 0 at 9cb6e66 (2404 tests in the phase 20 run; full run at 9cb6e66 reached 100 percent).
 
 ## Requirements
 
-| Status | IDs | Basis |
-|---|---|---|
-| unsatisfied | LIV-01 | import path from CLI modules to the live adapter stub; AST guard blind spot |
-| unsatisfied | UPG-03 | rollback function has no operator entry; tests only |
-| orphaned (traceability) | BT-01 to BT-05, BT-07, DOC-02, PAP-01 to PAP-03 | not cited in any VERIFICATION.md; integration check PASS at symbol level; PAP-02 warning |
-| satisfied | remaining 22 | VERIFICATION criteria passed; REQUIREMENTS checked; integration PASS |
+| Requirement | Class | Verification phases | SUMMARY phases |
+|---|---|---|---|
+| BT-01 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-02 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-03 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-04 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-05 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-06 | partial | 08-backtest-and-paper-evaluation | - |
+| BT-07 | partial | 08-backtest-and-paper-evaluation | - |
+| DOC-01 | partial | 07-documentation-upgrade | - |
+| DOC-02 | partial | 07-documentation-upgrade | - |
+| DOC-03 | satisfied | 07-documentation-upgrade, 21-close-gap-doc-03-documentation-accuracy | 21-close-gap-doc-03-documentation-accuracy |
+| DOC-04 | partial | 07-documentation-upgrade | - |
+| INT-01 | partial | 06-integrity-closure | - |
+| INT-02 | partial | 06-integrity-closure | - |
+| INT-03 | partial | 06-integrity-closure | - |
+| INT-04 | partial | 06-integrity-closure | - |
+| INT-05 | partial | 06-integrity-closure | - |
+| INT-06 | partial | 06-integrity-closure | - |
+| INT-07 | partial | 06-integrity-closure | - |
+| INT-08 | satisfied | 06-integrity-closure | 06-integrity-closure |
+| INT-09 | partial | 06-integrity-closure | - |
+| INT-10 | partial | 06-integrity-closure | - |
+| LIV-01 | satisfied | 10-live-readiness-kept-disabled, 20-close-gap-liv-01-live-adapter-import-path | 20-close-gap-liv-01-live-adapter-import-path |
+| LIV-02 | partial | 10-live-readiness-kept-disabled | - |
+| PAP-01 | partial | 08-backtest-and-paper-evaluation | - |
+| PAP-02 | partial | 08-backtest-and-paper-evaluation | - |
+| PAP-03 | partial | 08-backtest-and-paper-evaluation | - |
+| PRC-01 | partial | 06-integrity-closure, 07-documentation-upgrade | - |
+| PRC-02 | partial | 06-integrity-closure | - |
+| UPG-01 | partial | 09-bounded-paper-self-upgrade | - |
+| UPG-02 | partial | 09-bounded-paper-self-upgrade | - |
+| UPG-03 | partial | 09-bounded-paper-self-upgrade | - |
+| UPG-04 | partial | 09-bounded-paper-self-upgrade | - |
+| UPG-05 | partial | 09-bounded-paper-self-upgrade | - |
+| UPG-06 | partial | 09-bounded-paper-self-upgrade | - |
 
-Orphan rule applied as written: requirements absent from every VERIFICATION.md are unsatisfied, so the audit cannot pass by rule. The orchestrator did not annotate historical verification files to clear the flag.
-
-## Integration
-
-- LIV-01 (critical): Phase 10 claims no import path from backtest, paper, or upgrade modules to a live adapter. Runtime import of pumpgrok.cli.backtest and pumpgrok.cli.promotion loads execution/live/__init__.py, which imports LiveAdapterStub. The AST guard does not model implicit parent-package imports, so it passes.
-- UPG-03 (gap): restore_active_set is defined at upgrade/rollback.py:41 and has no CLI or operator entry point. The requirement says one operation rolls back to the exact prior version, so the operator path is part of the requirement.
-- Warnings: PAP-02 alert channel unverified (F2); SUMMARY path drift (F3); Phase 7 CHANGELOG lacks a before-hash line (F4).
+Classes: satisfied = passed verification and listed in SUMMARY frontmatter. partial = passed verification, SUMMARY frontmatter omits the ID (metadata debt, verified manually against the passing verification). No row is unsatisfied or orphaned.
 
 ## Phases
 
-| Phase | VERIFICATION status | Notes |
+| Phase | Verification | Notes |
 |---|---|---|
-| 06 integrity closure | passed | criterion 17 owner-waived; later correction and supersession notes |
-| 07 documentation upgrade | passed | OVERRIDE-A to D recorded |
-| 08 backtest and paper evaluation | passed | PAP-02 alert channel unverified |
-| 09 bounded paper self-upgrade | passed | stale RISK_POLICY paraphrase, non-FAIL |
-| 10 live readiness, kept disabled | passed | import-path claim does not hold at runtime (LIV-01) |
+| 06 integrity closure | passed | criterion 17 owner-waived |
+| 07 documentation upgrade | passed (da51664) | DOC-01 to DOC-04 satisfied after phase 21; criterion 4 re-baselined |
+| 08 backtest and paper evaluation | passed (e58920b) | PAP-02 met by its requirement text |
+| 09 bounded paper self-upgrade | passed | not re-verified; no covered file changed |
+| 10 live readiness, kept disabled | passed (e58920b) | corrected by phase 20 |
+| 20 close gap LIV-01 | passed (c3898ec) | import path closed; reviewer minor F-01 |
+| 21 close gap DOC-03 | passed (da51664) | red-first test; two closure rounds |
 
-## Tech debt and deferred items
+## Tech debt
 
-- Listed in the YAML above. Deferred by owner decision: operator readiness visibility (PARKED). Historical markers: 28 lines, all PARKED.
+Listed in the YAML above. Decision for the owner: accept this debt and archive (complete milestone), or plan a cleanup phase first (see routing).
 
 ## Routing
 
-- gaps_found blocks completion. Per the run contract, closing gaps requires a decision: new closure phases are outside ROADMAP and therefore out of scope without approval, and recording the gaps as accepted is an owner override.
-- No archive, no tag, no ship has run. Branch bot-00-chief/v3-closeout holds the SETUP correction and the planning record, unpushed.
+- Status tech_debt: archive requires the owner's explicit decision. The archive is irreversible; the tag lands on the bot branch HEAD until merge.
+- Verification counts used here are from the phase records and the orchestrator runs; no full re-run of phase 9 was made.
+
