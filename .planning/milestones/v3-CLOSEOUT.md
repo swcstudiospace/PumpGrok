@@ -36,7 +36,7 @@ v3: annotated tag on the final closeout commit. Local only; not pushed.
 
 ## Tracking
 
-The Notion Task row (Graph ID ut-8a40d0d875-bac7f745) records PR 27, branch bot-00-chief/v3-closeout, PR State Draft. Linear was never created for this graph (free issue limit), so no Linear state exists.
+The Notion Task row (Graph ID ut-8a40d0d875-bac7f745) records PR 27, branch bot-00-chief/v3-closeout, PR State Merged. Linear was never created for this graph (free issue limit), so no Linear state exists.
 
 ## Debt carried forward (not blocking the archive)
 
@@ -49,6 +49,8 @@ The Notion Task row (Graph ID ut-8a40d0d875-bac7f745) records PR 27, branch bot-
 - Reviewer finding F-01 (minor): the import guard reads AST imports only, so dynamic imports (pkgutil, importlib) are not modelled. No present path is missed.
 - The phase 6 owner waiver of criterion 17 stands (see the phase 6 verification).
 - PR-number waivers in gates.yml (16, 17, 18, 19, 20, 22 and 27) are removed in the cleanup change after the last of these merges, as the workflow's own comment requires.
+- Ten files merged to main as part of PR 27 under the PR 28 owner waiver, without owner review: bot-02-risk (8), bot-04-sniper (1) and bot-09-journal (1). Owner review or the re-home follow-up in the Ship path is still open, as with PR 22.
+- Traceability is mention-based: the scores count requirement IDs in VERIFICATION prose. The workflow's table rule was not applied; the owner accepted this on 2026-11-01 (see the Method note in .planning/milestones/v3-MILESTONE-AUDIT.md).
 
 ## Not part of v3
 
