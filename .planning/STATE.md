@@ -143,3 +143,20 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 - Last update: 2026-10-26, after the Phase 6 closure records (receipt, verification, PROJECT V3-5, requirements, roadmap, CHANGELOG).
 - Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (passed, owner closure). The ship PR is the only remaining step.
 - Next: ultrathink-ship. Open the ready PR into main, add the PR-number waiver to .github/workflows/gates.yml, run the Greptile loop capped at three fix cycles, then merge only through ultrathink-ship. Then verify main and record with ultrathink-sync.
+
+
+## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
+
+- Run start: 2026-11-01T05:49:18Z. Session 01a18b55-88d2-77ca-ade2-cca68b9e2d06. Graph ut-8a40d0d875-bac7f745.
+- Branch: bot-00-chief/v3-closeout, cut from origin/main 1cfd86a in worktree /root/src/repos/pumpgrok-wt/v3-closeout. The phase-6 checkout is superseded and was not used.
+- Pre-run snapshot: .planning/pre-run-snapshot/ (ROADMAP.md and STATE.md copies verified by cmp, planning file list, git status, hashes). Scratch: removed in cleanup, never committed.
+- Start state: worktree clean. No STATE entry records another active run. The substrate lists another omp graph (ut-8dd6e76c49-d129de1d) as Implementing; it is not recorded here, so it is noted and not treated as an active run in this file.
+- Tracking: Notion Task set to Implementing. Linear NOT_RUN: the free issue limit is reached (user chose Notion only).
+- User decisions (source user): proceed alongside the claude-code handoff, which this run supersedes; fresh bot branch from origin/main; archive after a passing audit; auto-merge at 5/5 through ultrathink-ship; readiness visibility deferred to a follow-up (PARKED).
+- Repository decision (source repository): milestone scope is v3 only. ROADMAP.md lists no next milestone.
+- Frozen phase list: none remaining. Phases 6-10 are Complete with CONTEXT, PLAN, SUMMARY and VERIFICATION present. Phase count 0; the per-phase wave is skipped and recorded here.
+- Baseline (make check on 1cfd86a): PASS. Lint 806 files formatted; typecheck 208 source files clean; test suite passed; pip-audit no known vulnerabilities; prompt, template and event-schema checks clean; check.sh healthy. Pre-existing failures: none.
+- Suppression and skip counts (baseline): noqa 33; type: ignore 107; pytest.mark.skip 5; pragma: no cover 10; pragma: allowlist 92; empty except-pass blocks 6.
+- Backlog inventory: .planning/BACKLOG-INVENTORY.md. 28 marker lines, all historical text in docs and planning records; none in source, tests, ci or scripts. Categories: IN_PHASE 0, ACTIONABLE 0, DECISION_NEEDED 0, PARKED 28, STALE 0.
+- Tracker items for this branch: SETUP.md section 8 is verified false (vendor/ absent; scout pipeline not implemented, exit 5). Classified ACTIONABLE and corrected in this run. Readiness visibility: PARKED. Other tracker items belong to other branches or repositories and stay PARKED with their owner decisions listed.
+- Next: correct SETUP.md section 8, run the canonical checks on the final tree, run the milestone audit, complete v3 after a passing audit, clean up run-created scratch, then ultrathink-ship (pr, review, merge at 5/5).
