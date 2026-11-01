@@ -19,3 +19,5 @@ var/
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
 !.receipts/bot-02-risk/00057-omega-ci-runners.json
+!.receipts/bot-00-chief/v3-closeout.json
+!.receipts/bot-02-risk/pr-27-gate-waiver.json

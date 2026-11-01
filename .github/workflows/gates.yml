@@ -90,11 +90,11 @@ jobs:
       # PR 22 (desk built-ins) is waived PR-scoped only; re-homing its paths is the follow-up change.
       # Remove all PR-number waivers in the cleanup change after the last of these merges.
       - name: G-1 — Manifest self-check
-        if: ${{ !(contains(fromJSON('[16,17,18,19,20,22]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !(contains(fromJSON('[16,17,18,19,20,22,27]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
         run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
-        if: ${{ !(contains(fromJSON('[16,17,18,19,20,22]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !(contains(fromJSON('[16,17,18,19,20,22,27]'), github.event.pull_request.number) && github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
