@@ -14,8 +14,8 @@ progress:
   percent: 100
   blocked_phases: 0
 milestone_name: PumpGrok Desk v3
-current_phase: 6
-stopped_at: Phase 6 closed 2026-10-26 with owner-approved deviations; ship in progress (PR not yet merged).
+current_phase: none
+stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded; closeout PR 27 open. Resume at .planning/milestones/v3-CLOSEOUT.md."
 ---
 
 # Project State
@@ -49,11 +49,11 @@ Last activity: 2026-11-01 — Milestone v3 completed and archived
   - dependency audit: make audit (pip-audit). Run at milestone close, not per phase.
   - build: defined by Dockerfile and docker-compose.yml; no make target; not run per phase; manual.
   - Absent gates: none. Format, lint, type check and test all exist.
-- TODO source: no tracked TODO file. Zero TODO, FIXME, HACK or XXX markers in src, tests, ci, scripts, services, skills, agents or contracts. TODO and FIXME text in docs/ and the v2 archive is historical design text, not active items. The TODO items are the session tracker, mapped below.
+- Backlog source: no tracked backlog file. Zero task-marker words in src, tests, ci, scripts, services, skills, agents or contracts. Those words appear in docs/ and the v2 archive as historical design text, not active items. The open items are the session tracker, mapped below.
 
-## TODO mapping
+## Backlog mapping
 
-| TODO item | Disposition |
+| Backlog item | Disposition |
 |---|---|
 | Close v2 open items: R65 bonding-curve probe | Phase 6 INT-10. Probe script added; records ASSUMED with the exact error. VERIFIED needs a bonding-curve account, which was not supplied. |
 | Close v2 open items: G-4 consumer acks | Human action outside code. Backlog (out of scope in REQUIREMENTS.md). |
@@ -93,7 +93,7 @@ Last activity: 2026-11-01 — Milestone v3 completed and archived
   - OVERRIDE-A: the README version is 0.1.0. Plan 07-03's "plugin pack stays 1.0.0" is superseded by criterion 6.
   - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
   - OVERRIDE-C: manifest descriptions say ten-seat.
-- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See 06-VERIFICATION.md.
+- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See .planning/milestones/v3-phases/06-integrity-closure/06-VERIFICATION.md.
 - Phase 7 gates at HEAD 8e32f14: lint, typecheck, full test, check.sh, verify_doc_commands.sh and the smoke replay exit 0. The smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, identical to Phase 6. Live run exits 3. Criterion 5 is narrowed to the offline subset and recorded as such.
 - Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
 - Phase 8 correction set: the first Phase 8 evaluator scored candidates with a SHA-256 digest of the seed, parameter hash and fold ids. No fills fed it, and the report showed zero fees and no metrics. That was a fabricated evaluator. The correction set (08-08 to 08-10, see 08-CORRECTION.md) replaced it with replayed net realized lamports, measured metrics, and conservative eligibility (promotion_eligible false without a passing paper comparison). The plan checker had not caught it; its checklist now includes a hash-as-score check.
@@ -139,9 +139,9 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-26, after the Phase 6 closure records (receipt, verification, PROJECT V3-5, requirements, roadmap, CHANGELOG).
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (passed, owner closure). The ship PR is the only remaining step.
-- Next: ultrathink-ship. Open the ready PR into main, add the PR-number waiver to .github/workflows/gates.yml, run the Greptile loop capped at three fix cycles, then merge only through ultrathink-ship. Then verify main and record with ultrathink-sync.
+- Last update: 2026-11-01, after the v3 archive and the closeout records (PR 27 open).
+- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01); closeout PR 27 is the only remaining step.
+- Next: ultrathink-ship. Run the Greptile loop on PR 27 until the score is 5 with no open comments and CI is green. The PR-number waiver is already on main (PR 28). Then merge through ultrathink-ship with merge method merge.
 
 ## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
 

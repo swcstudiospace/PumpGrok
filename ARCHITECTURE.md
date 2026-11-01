@@ -28,7 +28,7 @@ External systems named in skills or tools:
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
 | `PUMPGROK_RPC__ENDPOINTS` | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
-| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py`. The in-tree REST analyzer (`src/pumpgrok/engine/analyzer.py`) and the pump.fun read client (`src/pumpgrok/tools/social/client.py`) call pump.fun REST; the read client is not registered as a tool. No WS client and no x.ai client exist in this tree. The retired vendor engine made these calls (see `docs/VENDOR_PIN.md`) |
+| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py` (`ws_url`, x.ai `base_url`). Clients that remain in the package: the PumpPortal websocket consumer `LaunchMonitor.stream` (`src/pumpgrok/engine/monitor.py`) and the x.ai client `GrokAgent._call` (`src/pumpgrok/engine/agents/base.py`, used by the auditor, timing, narrative and checker agents). The replay CLI path calls neither; it imports only pure helpers from `engine/monitor.py`. The in-tree REST analyzer (`src/pumpgrok/engine/analyzer.py`) and the pump.fun read client (`src/pumpgrok/tools/social/client.py`) call pump.fun REST; the read client is not registered as a tool. The retired vendor engine made these calls (see `docs/VENDOR_PIN.md`) |
 
 No server database, message bus, or secrets manager is referenced. Tools take no API keys. The paper ledger is one SQLite file, `var/ledger.sqlite`. There are no `os.environ` / `.env` readers in the instruction pack's own files; the retired vendor engine (absent from this checkout; see `docs/VENDOR_PIN.md`) kept its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
 
@@ -167,11 +167,11 @@ Retry behavior that **is** implemented as policy (instructions, not code): on un
 
 Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON and the process exits 1. Ticket IDs are allocated by `pumpgrok ticket next` (`src/pumpgrok/ledger/tickets.py`), with a bounded retry on UNIQUE collisions (`MAX_ATTEMPTS`).
 
-Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`pumpgrok run --mode paper`; the canonical ledger is `var/ledger.sqlite`; `pumpgrok paper buy|sell` refuses with code `unavailable` until the Phase 4 curve reader is verified, see `src/pumpgrok/cli/codes.py`). There is no higher level on this desk. Daily loss >= 5% of wallet equity -> CHIEF posts `FLOOR HALTED - DAILY LOSS LIMIT` and refuses new entries until the human resets.
+Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`pumpgrok run --mode paper --once --replay <dir>` writes its ledger to `var/replay/<dataset>/ledger.sqlite`; the operator paper ledger is `var/ledger.sqlite`; `pumpgrok paper buy|sell` refuses with code `unavailable` until the Phase 4 curve reader is verified, see `src/pumpgrok/cli/codes.py`). There is no higher level on this desk. Daily loss >= 5% of wallet equity -> CHIEF posts `FLOOR HALTED - DAILY LOSS LIMIT` and refuses new entries until the human resets.
 
 ## Persistence
 
-No server database, migrations, or cache layer. The paper ledger is one SQLite file (`var/ledger.sqlite`, `src/pumpgrok/ledger/store.py`); desk operational files live under `var/desk/` (`src/pumpgrok/ledger/paths.py`).
+No server database, migrations, or cache layer. The operator paper ledger is one SQLite file (`var/ledger.sqlite`, `src/pumpgrok/ledger/store.py`); each recorded-data replay run keeps its own ledger at `var/replay/<dataset>/ledger.sqlite` (`src/pumpgrok/supervisor/scheduler/replay_runtime.py`). Desk operational files live under `var/desk/` (`src/pumpgrok/ledger/paths.py`).
 
 Desk files live **outside** the git tree, conventionally:
 
