@@ -12,7 +12,7 @@ PumpGrok turns a host agent runtime into a ten-seat Solana memecoin trading desk
 | `skills/*/SKILL.md` | Named procedures the host loads by frontmatter `name` | A framework or SDK |
 | `rules/pumpgrok-team.mdc` | Always-applied constitution (`alwaysApply: true`) | Runtime enforcement code |
 | `src/pumpgrok/tools/*` | Fail-closed tool registry (JSON via guarded `pumpgrok` verbs) | Signers, senders, or wallets |
-| `vendor/grokbot-pumpfun/` | Vendored third-party screening engine (dry-run default; pinned upstream commit) | Part of the instruction pack; it never signs or sends |
+| Screening engine (`src/pumpgrok/engine/`) | Replay-only port of the vendored grokbot-pumpfun engine. `vendor/grokbot-pumpfun/` is absent from this checkout; formerly vendored (see `docs/VENDOR_PIN.md`) | Signers, senders, or wallets; no trade subscription |
 | Plugin manifests | How Cursor / Claude Code / Grok Build / Grok Bot discover the pack | A deployable service |
 
 This tree runs no always-on services behind the desk. The process that “runs” the desk is the host (Grok Bot, Cursor, Claude Code, or Grok Build). The one long-running form is `pumpgrok run --mode paper --serve --replay <dataset>`: it replays a recorded dataset in a loop while serving read-only `/healthz` and `/metrics` (paper-only; the compose `pumpgrok` service runs this form). Humans approve every spend by exact ticket ID. Only SNIPER may send buys; only EXIT may send sells.
@@ -24,20 +24,20 @@ External systems named in skills or tools:
 | System | How PumpGrok uses it |
 |--------|----------------------|
 | Jupiter Swap API `https://api.jup.ag/swap/v2/order` (`QUOTE_URL`; never `/execute`) | Informational exec-side quote only; never swap/send |
-| Solana bonding curve (on-chain reserves) | `market.price` spot read via `getAccountInfo` on the curve account (ASSUMED layout); the only price the fill model uses |
+| Solana bonding curve (on-chain reserves) | `market.price` spot read via `getAccountInfo` on the curve account (ASSUMED layout). Paper fills and marks read the curve through the paper adapter's `_read_curve` port and price with `execution/curve_math.py` |
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
 | `PUMPGROK_RPC__ENDPOINTS` | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
-| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Called only by operator-run processes of the vendored `vendor/grokbot-pumpfun` engine (see `skills/grokbot-pipeline`); never by the read-only tool registry |
+| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py`. The in-tree REST analyzer (`src/pumpgrok/engine/analyzer.py`) and the pump.fun read client (`src/pumpgrok/tools/social/client.py`) call pump.fun REST; the read client is not registered as a tool. No WS client and no x.ai client exist in this tree. The retired vendor engine made these calls (see `docs/VENDOR_PIN.md`) |
 
-No database, message bus, or secrets manager is referenced. Tools take no API keys. There are no `os.environ` / `.env` readers in the instruction pack's own files; the vendored `vendor/grokbot-pumpfun` component keeps its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
+No server database, message bus, or secrets manager is referenced. Tools take no API keys. The paper ledger is one SQLite file, `var/ledger.sqlite`. There are no `os.environ` / `.env` readers in the instruction pack's own files; the retired vendor engine (absent from this checkout; see `docs/VENDOR_PIN.md`) kept its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
 
 ```mermaid
 flowchart LR
   Human[Human operator]
   Host[Host agent runtime]
   Pack[PumpGrok pack]
-  Desk["/workspace/trading-desk files"]
+  Desk["$HOME/trading-desk files (operator host folder)"]
   Jup[Jupiter quote API]
   Rpc[Solana JSON-RPC]
   Web[Browser sites]
@@ -65,7 +65,7 @@ Only one repo process ever runs as a service, and only on request: `pumpgrok run
 | Host agent | Operator opens the repo / installs the plugin | Loads agents, skills, and rules; talks on the Trading Floor; may invoke tools |
 | `pumpgrok <verb>` | One-shot CLI from the repo root (`uv run pumpgrok ...`) | Structured reads / paper journal appends |
 | `./scripts/check.sh` | One-shot from the repo root | Offline lint of instruction files |
-| Vendor engine dry-run screen | Operator-run process from `vendor/grokbot-pumpfun`, procedure in `skills/grokbot-pipeline` | Appends screening-evidence JSONL only; signs nothing, sends nothing (`mode: live` is an upstream stub) |
+| Screening engine dry-run (retired vendor process) | `skills/grokbot-pipeline` describes the procedure; the vendor process is absent from this checkout (see `docs/VENDOR_PIN.md`) | Screening evidence only; signs nothing, sends nothing |
 | Human wallet (throwaway, outside this repo) | Screen hand-off only (`tool-connections`) | Actual signing; never handled by PumpGrok files |
 
 `rules/pumpgrok-team.mdc`: if the host has no persistent Bots or group chats, use subagents or role-labelled passes and state which fallback is active. Do not invent a Bot-creation API.
@@ -80,11 +80,11 @@ rules/pumpgrok-team.mdc  -->  agents/*  (roles + hard constraints)
 agents/*.md  -->  skills/*  (frontmatter skills: lists)
 skills/*  -->  `pumpgrok` verbs  (documented CLI, not Python imports)
 tool registry  -->  Jupiter / Solana RPC / ledger files
-`pumpgrok scout pipeline`  -->  vendor JSONL via the export cursor (read only; no Python import of vendor)
+`pumpgrok scout pipeline`  -->  not implemented (exit 5); no vendor import
 scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 ```
 
-**Vendored components.** `vendor/grokbot-pumpfun/` sits outside these layers on purpose: no agent, skill, rule, or tool imports it as Python code. The files are vendored in-tree (regular files, not a git submodule or gitlink) and pinned to commit `409e74c905faa0e9de42e918efe2c604f206856e`; see `vendor/grokbot-pumpfun/PUMPGROK.md`. The desk reaches the engine through operator-run dry-run processes (procedure in `skills/grokbot-pipeline`) and the JSON evidence bridge `pumpgrok scout pipeline --candidates`, which reads the exported `trades.jsonl` and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. `scripts/check.sh` excludes `vendor/` markdown from its emoji sweep. Upstream live execution is an unimplemented stub, so the desk cannot be driven around its ticket-approval boundaries by this component. Pipeline verdicts are never RISK clearance or human approval. SNIPER and EXIT remain the only exchange writers.
+**Retired vendor components.** The grokbot-pumpfun engine was vendored under `vendor/grokbot-pumpfun/`. That directory is absent from this checkout; formerly vendored (see `docs/VENDOR_PIN.md`, pin `409e74c905faa0e9de42e918efe2c604f206856e`). Its screening logic is ported in-tree as the `src/pumpgrok/engine/` package, a port of the retired oracle. The `pumpgrok scout pipeline --candidates` verb is registered but not implemented: it exits 5 with `status: not-yet-implemented`. Pipeline verdicts are never RISK clearance or human approval. SNIPER and EXIT remain the only exchange writers.
 
 ### Agents (`agents/`)
 
@@ -98,8 +98,10 @@ scripts/check.sh  -->  agents/, skills/, rules/  (read-only validation)
 | `rug.md` | Post-fill red-flag monitor; never closes | false | position-monitoring, desk-monitoring, solana-market-data, grokbot-pipeline |
 | `exit.md` | Only sell sender | true | position-monitoring, desk-execution-protocol, desk-post-trade-review, jupiter-routing, grokbot-pipeline |
 | `shill.md` | Social velocity / quality | false | social-sentiment, discovery-tools, grokbot-pipeline |
+| `signal.md` | Momentum scorer; its score is evidence, never clearance | false | grokbot-pipeline, solana-market-data, momentum-signals, replay-and-backtest, verification-receipts, desk-doctor |
+| `journal.md` | Post-trade ledger; reports and reviews, never trades | false | desk-post-trade-review, desk-folders-and-journal, hermes-cron-desk, portfolio-ledger, daily-report, verification-receipts |
 
-SETUP.md Trading Floor group: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG. EXIT and SHILL may be DMs if the host caps group size at six.
+SETUP.md Trading Floor group: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG. EXIT, SHILL, SIGNAL and JOURNAL are DM seats (`seat: DM` in their frontmatter).
 
 ### Skills (`skills/`)
 
@@ -125,7 +127,7 @@ All tools: registry-resolved, JSON on stdout, fail closed (`ok: false` + error),
 | `onchain.top_holders` | RPC `getTokenLargestAccounts` | `tools/onchain/top_holders.py` |
 | `journal.append` | Append ledger rows | `tools/journal/append.py` |
 | `exec.simulate` / `exec.place` | Paper fills only | `tools/exec/simulate.py`, `tools/exec/place.py` |
-| `pumpgrok scout pipeline --candidates` | Read exported `trades.jsonl`; no Python import of vendor | `ledger/export.py` cursor |
+| `pumpgrok scout pipeline --candidates` | Not implemented: exits 5 with `status: not-yet-implemented` | None |
 
 ### Plugin manifests
 
@@ -169,23 +171,23 @@ flowchart TD
 
 Retry behavior that **is** implemented as policy (instructions, not code): on unknown, timeout, or failed send, SNIPER/EXIT must not auto-retry; they report `UNKNOWN RESULT – reconcile by signature` and wait for a fresh human approval.
 
-Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON and the process exits 1. `ticket_helper.py` also exits 1 on invalid ids, duplicate proposals, and unknown commands.
+Tool-level errors: HTTP/RPC exceptions become `{"ok": false, "error": ...}` JSON and the process exits 1. Ticket IDs are allocated by `pumpgrok ticket next` (`src/pumpgrok/ledger/tickets.py`), with a bounded retry on UNIQUE collisions (`MAX_ATTEMPTS`).
 
-Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`paper_sim.py`). There is no higher level on this desk. Daily loss ≥ 5% of wallet equity → CHIEF posts `FLOOR HALTED – DAILY LOSS LIMIT` and refuses new entries until the human resets.
+Engagement levels (`desk-operating-model`): **research** (no money), **paper** (`pumpgrok run --mode paper`; the canonical ledger is `var/ledger.sqlite`; `pumpgrok paper buy|sell` refuses with code `unavailable` until the Phase 4 curve reader is verified, see `src/pumpgrok/cli/codes.py`). There is no higher level on this desk. Daily loss >= 5% of wallet equity -> CHIEF posts `FLOOR HALTED - DAILY LOSS LIMIT` and refuses new entries until the human resets.
 
 ## Persistence
 
-No database, migrations, or cache layer.
+No server database, migrations, or cache layer. The paper ledger is one SQLite file (`var/ledger.sqlite`, `src/pumpgrok/ledger/store.py`); desk operational files live under `var/desk/` (`src/pumpgrok/ledger/paths.py`).
 
 Desk files live **outside** the git tree, conventionally:
 
 ```
-/workspace/trading-desk/
-  proposals/     ticket_helper.py create
+$HOME/trading-desk/
+  proposals/     operator folder; ticket IDs come from `pumpgrok ticket next`
   briefs/
   leads/
   research/
-  journal/       paper_sim.py appends paper-YYYY-MM-DD.md
+  journal/       operator folder; the ledger of record is var/ledger.sqlite
   incidents/
   positions/
   watch/
@@ -193,20 +195,20 @@ Desk files live **outside** the git tree, conventionally:
   desk.md        engagement, public wallet address, daily loss limit
 ```
 
-Journal rules (`desk-folders-and-journal`): append-only; every entry needs ticket ID and UTC. `ticket_helper.py` uses `/workspace/trading-desk/proposals` when `/workspace` exists, else `./trading-desk/proposals`. `paper_sim.py` defaults `--desk /workspace/trading-desk`.
+Journal rules (`desk-folders-and-journal`): append-only; every entry needs ticket ID and UTC. Ticket IDs come from `pumpgrok ticket next|create|list` (`src/pumpgrok/ledger/tickets.py`). `scripts/hermes-bootstrap.sh` defaults the desk folder to `${HOME}/trading-desk` (`PUMPGROK_DESK` overrides it) and creates the folders listed above.
 
-This repository itself stores instruction files, plugin JSON, Python helpers, the in-tree `vendor/grokbot-pumpfun/` engine, `SETUP.md`, and `banner.jpg`.
+This repository itself stores instruction files, plugin JSON, Python helpers, the in-tree screening engine `src/pumpgrok/engine/` (ported from the retired vendor tree, see `docs/VENDOR_PIN.md`), `SETUP.md`, and `banner.jpg`.
 
 ## Configuration and secrets
 
 | Mechanism | Where |
 |-----------|--------|
-| `PUMPGROK_RPC__ENDPOINTS` | `authority_check.py`, `priority_fee.py`, `holder_check.py` |
-| `--desk` | `paper_sim.py` (default `/workspace/trading-desk`) |
-| Quote params | `jupiter_quote.py` flags |
-| Desk record | `/workspace/trading-desk/desk.md` (engagement, public address, RPC note) |
-| Risk numbers | `/workspace/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
-| `GROKBOT_*` environment variables | Vendored engine only (`vendor/grokbot-pumpfun`, e.g. `GROKBOT_GROK_API_KEY`); never stored in PumpGrok or trading-desk files |
+| `PUMPGROK_RPC__ENDPOINTS` | `tools/onchain/authorities.py`, `tools/onchain/priority_fee.py`, `tools/onchain/top_holders.py` (`RpcSettings` in `config/settings.py`) |
+| `PUMPGROK_DESK` | `scripts/hermes-bootstrap.sh`, `scripts/hermes-install-cron.sh`, `scripts/hermes-verify-isolation.sh` (default `${HOME}/trading-desk`; their `--desk` flag overrides it) |
+| Quote params | `src/pumpgrok/tools/market/jupiter.py` (`QUOTE_URL`) |
+| Desk record | `$HOME/trading-desk/desk.md` (engagement, public address, RPC note) |
+| Risk numbers | `$HOME/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
+| `GROKBOT_*` environment variables | None read by this tree; the retired vendor engine used them (see `docs/VENDOR_PIN.md`); never stored in PumpGrok or desk files |
 
 Do not put seed phrases, private keys, or live RPC credentials in git. Connection is screen hand-off; only the public address is recorded. Tools do not read environment variables.
 
@@ -218,11 +220,11 @@ Do not put seed phrases, private keys, or live RPC credentials in git. Connectio
 
 **Write boundary.** `scripts/check.sh` expects only `sniper` and `exit` to set `writes_to_exchange: true` (soft check).
 
-**Observability.** Instruction-level: UTC-timestamped sourced evidence, ticket IDs in the journal, CHIEF desk status. No metrics/tracing code.
+**Observability.** Instruction-level: UTC-timestamped sourced evidence, ticket IDs in the journal, CHIEF desk status. `run --serve` serves read-only `/healthz` and `/metrics` on 127.0.0.1 (`src/pumpgrok/doctor.py`, `src/pumpgrok/cli/verbs_state.py`). No tracing code.
 
 **Feature flags.** None. Engagement level in `desk.md` is the mode switch.
 
-**Validation.** `scripts/check.sh`: YAML frontmatter on agents and skills, skill `name` matches directory, constitution phrase spot-check, `rules/pumpgrok-team.mdc` exists, Hermes helper scripts executable, no emoji in markdown / `.mdc`. Stdlib Python only; no network. `python3 -m unittest tests.test_tools_cli` covers tool CLI contracts.
+**Validation.** `scripts/check.sh`: YAML frontmatter on agents and skills, skill `name` matches directory, constitution phrase spot-check, `rules/pumpgrok-team.mdc` exists, Hermes helper scripts executable, no emoji in markdown / `.mdc`. Stdlib Python only; no network. `uv run pytest tests/test_tools_cli.py` covers tool CLI contracts.
 
 ## Change guidance
 
@@ -239,6 +241,6 @@ Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep S
 
 ## Unknowns
 
-- Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
+- Plugin manifests `plugin.json` and `pyproject.toml` carry `"license": "AGPL-3.0"` (plugin.json) and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace). The two marketplace manifests and `SETUP.md` still carry a placeholder organisation name, which `scripts/check.sh` allowlists until the real organisation is supplied.
 - `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
-- Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
+- Whether a given host actually creates ten seats and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.

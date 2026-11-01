@@ -15,14 +15,14 @@ Estimated time: 15–25 minutes.
 mkdir -p /workspace && cd /workspace
 git clone --depth 1 https://github.com/your-org/pumpgrok.git pumpgrok \
   || (curl -L https://github.com/your-org/pumpgrok/archive/refs/heads/main.tar.gz | tar xz && mv pumpgrok-main pumpgrok)
-ls /workspace/pumpgrok/agents /workspace/pumpgrok/skills /workspace/pumpgrok/tools /workspace/pumpgrok/rules
+ls /workspace/pumpgrok/agents /workspace/pumpgrok/skills /workspace/pumpgrok/src/pumpgrok/tools /workspace/pumpgrok/rules
 ```
 
 If GitHub is unavailable, ask the user to upload the archive and unpack it into `/workspace/pumpgrok`.
 
 Confirm the following exist:
 - `SETUP.md` (this file)
-- `agents/` (8 role files + README)
+- `agents/` (10 role files + README)
 - `skills/` (skill library)
 - `src/pumpgrok/` (operator CLI and tool registry)
 - `rules/pumpgrok-team.mdc`
@@ -44,14 +44,16 @@ These override any conflicting instructions.
 
 ## 3. Prepare the working directories
 
+The desk folder is the operator's host folder, outside the repository. `scripts/hermes-bootstrap.sh` uses the same default (`$HOME/trading-desk`; `PUMPGROK_DESK` overrides it).
+
 ```bash
-mkdir -p /workspace/trading-desk/{proposals,briefs,leads,research,journal,incidents,positions,watch}
+mkdir -p ~/trading-desk/{proposals,briefs,leads,research,journal,incidents,positions,watch}
 ```
 
 Optional but recommended:
 ```bash
-touch /workspace/trading-desk/desk.md
-touch /workspace/trading-desk/risk-limits.md
+touch ~/trading-desk/desk.md
+touch ~/trading-desk/risk-limits.md
 ```
 
 ---
@@ -142,7 +144,7 @@ A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability
 
 ## 8. Optional: vendor dry-run pipeline (not available)
 
-This step does not apply to this tree. The screening engine is not vendored here: `vendor/` is absent, so there is no `vendor/grokbot-pumpfun/` to read, install, or configure. `pumpgrok scout pipeline --candidates` is registered but not implemented; it exits 5 and prints a not-yet-implemented status. Skip this section.
+This step does not apply to this tree. The screening engine is not vendored here: `vendor/grokbot-pumpfun/` is absent from this checkout (formerly vendored, see `docs/VENDOR_PIN.md`), so there is nothing to read, install, or configure there. `pumpgrok scout pipeline --candidates` is registered but not implemented; it exits 5 and prints a not-yet-implemented status. Skip this section.
 
 Engagement stays **research**. No keys. When a pipeline exists, its verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
 
@@ -163,7 +165,7 @@ Remind the user of the Global Security Constitution:
 
 ## 10. Write the desk record
 
-Create or update `/workspace/trading-desk/desk.md` with:
+Create or update `~/trading-desk/desk.md` with:
 
 ```markdown
 # PumpGrok Desk Record
@@ -171,7 +173,7 @@ Date: <UTC>
 Engagement: research          # research | paper
 Throwaway wallet: not yet connected
 Daily loss limit: 5 %
-Bots created: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL
+Bots created: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL
 Trading Floor: created
 Skills installed: <list or “core set”>
 Tools available: yes
@@ -179,7 +181,7 @@ RPC: public (or private URL if provided)
 Notes: Setup complete. No live trading until risk-limits interview and explicit user confirmation.
 ```
 
-Also create a starter `/workspace/trading-desk/risk-limits.md` that the RISK Bot will fill during the interview.
+Also create a starter `~/trading-desk/risk-limits.md` that the RISK Bot will fill during the interview.
 
 ---
 
@@ -209,7 +211,7 @@ When everything above is complete, reply to the user with this exact structure:
 
 ```
 PUMPGROK SETUP COMPLETE
-Bots: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL
+Bots: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL
 Trading Floor: created
 Skills: core set installed
 Tools: available

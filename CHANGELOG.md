@@ -2,6 +2,15 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 21: DOC-03 documentation accuracy
+
+### Fixed
+
+- DOC-03 (phase 21): both marketplace manifests (`.claude-plugin/marketplace.json`, `.grok-plugin/marketplace.json`) carry version `0.1.0` (was `1.0.0`) and describe a "Ten-seat" desk (was "Eight-role"). `tests/docs/test_doc_consistency.py` checks all six plugin manifests against the package version and rejects "Eight-role" in any plugin description.
+- DOC-03 (phase 21): `ARCHITECTURE.md` no longer names the absent `ticket_helper.py` and `paper_sim.py`; ticket IDs come from `pumpgrok ticket next` and paper fills from `pumpgrok run --mode paper`. `vendor/grokbot-pumpfun/` is described as absent from this checkout and formerly vendored (see `docs/VENDOR_PIN.md`). "eight persistent Bots" becomes "ten seats". The seat table lists SIGNAL and JOURNAL. `scout pipeline --candidates` is recorded as not implemented (exit 5). The `/workspace/trading-desk` path becomes `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh`.
+- DOC-03 (phase 21): `SETUP.md` counts 10 role files, lists all ten Bots in the desk record and receipt, checks `src/pumpgrok/tools` (the root `tools/` path it listed does not exist), and uses `~/trading-desk` in place of `/workspace/trading-desk`.
+- DOC-03 (phase 21): `README.md` no longer describes the vendored engine as present, and no longer says `pumpgrok paper` logs fills; `pumpgrok run --mode paper` drives the paper adapter and `pumpgrok paper buy|sell` refuse until the curve reader is verified.
+
 ## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
 
 ### Fixed

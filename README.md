@@ -9,13 +9,13 @@ Version 0.1.0, the package version (see `pyproject.toml`).
 ## Capabilities
 
 - Ten specialist seats: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL (`agents/`)
-- 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
+- 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and the screening-engine procedure (`skills/grokbot-pipeline`; the vendored tree is retired, see `docs/VENDOR_PIN.md`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
-- Read-only operator CLI (`pumpgrok`) for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence
+- Read-only operator CLI (`pumpgrok`) for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, holder concentration, and paper-trade commands (which refuse until the curve reader is verified); `scout pipeline` is registered but not implemented
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
-The desk starts in **research** mode. **paper** logs simulated fills via `pumpgrok paper`. The CLI refuses `pumpgrok paper buy|sell` with code `unavailable` until the curve reader is verified (Phase 4), so no paper fill runs from the CLI. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
+The desk starts in **research** mode. **paper** is the simulated-fill level: `pumpgrok run --mode paper` drives the paper adapter on recorded data. The `pumpgrok paper buy|sell` commands refuse with code `unavailable` until the curve reader is verified (Phase 4), so no paper fill runs from those commands. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
 
 ## Requirements
 
