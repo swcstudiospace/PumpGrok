@@ -1,0 +1,72 @@
+{
+  "task_id": "l1-p1-risk",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/l1-p1-risk",
+  "phase": "L1 audit P1 #5, #6, #7, #8, #9 (from origin/main 1cfd86a)",
+  "approved_by": "human:SomeRandmGuyy",
+  "purpose": "Fix L1 audit P1 #5 (RPC endpoint credentials and httpx URL logging), #6 (G-7 passes when prompt directories are missing), #7 (CI does not run the drift checks), #8 (CI trusts PR-controlled lint and type config), and #9 (realized-basis daily-loss halt mixes bases).",
+  "plan": "Refuse URLs with userinfo, key-named parameters, or opaque path tokens at config load; quiet httpx and httpcore logs to WARNING. G-7 fails closed on a missing prompt or template directory. CI runs make check and overlays the base pyproject.toml and Makefile. Realized-basis halt compares day-start plus realized against the same basis.",
+  "rollback_plan": "Revert the commit on bot-02-risk/l1-p1-risk. Expected recovery time: about 10 minutes (estimate, not measured). No schema or data migration. Endpoint guard returns to scheme-only validation; CI returns to the prior step list.",
+  "commands": [
+    {
+      "cmd": "uv sync --frozen --group dev",
+      "exit_code": 0,
+      "output_tail": "dependencies in sync"
+    },
+    {
+      "cmd": "uv run pytest -q tests/safety/test_rpc_endpoint_guard.py tests/safety/test_daily_loss_realized_basis.py tests/safety/test_httpx_log_quiet.py (before fix: failed; after fix: 34 passed)",
+      "exit_code": 0,
+      "output_tail": "34 tests pass after the fix"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "810 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 208 source files"
+    },
+    {
+      "cmd": "make test (after removing the incidental httpx log-line pin)",
+      "exit_code": 0,
+      "output_tail": "full suite, [100%], no failures"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_gates.py ci/tests/test_security_workflows.py ci/tests/test_ci_workflow.py -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "212 passed (pre-fix run recorded in the seat report)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "An RPC endpoint URL with userinfo, a key-named parameter, or an opaque path token is refused at config load. The error names the setting only and never echoes the value.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "httpx and httpcore log lines are kept at WARNING, so request URLs with path or query credentials are not logged at INFO.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Under the realized basis the daily-loss halt compares day-start plus realized against the day-start baseline. An unrealized swing alone does not halt. The total basis is unchanged.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-7 reports a problem when a prompt, prompt-assembled or agents directory is missing, instead of printing a note.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "CI runs make check, which includes the drift commands and scripts/check.sh, after overlaying the base pyproject.toml and Makefile.",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "The CI overlay has been tested locally against a depth-1 clone, not on GitHub. The real ci.yml run is unverified.",
+    "uv.lock, scripts/*.py, scripts/check.sh and assemble-prompts.sh are still PR-controlled and not overlaid. Outside the named targets.",
+    "Realized basis also feeds breakers, sizing caps and drawdown. Drawdown still compares against the total-basis peak. Not changed.",
+    "The G-7 template directory was repointed from grokbot/templates to agents, because grokbot/templates is stale and fail-closed would break G-7 on main. This is a judgment call for the owner.",
+    "Not yet run on CI or Greptile. Draft PR, not merged."
+  ],
+  "status": "draft PR. Not merged. Owner review required."
+}

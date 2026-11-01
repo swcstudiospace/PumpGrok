@@ -26,11 +26,11 @@ constitution clause 1 and RISK_POLICY section 6:
 - The human connects the wallet by screen hand-off only. The desk never
   requests, accepts, stores, prints, or reasons about seed phrases,
   private keys, or recovery phrases.
-- The desk sees only the public address in live.wallet_allowlist. No key
+- The desk sees only the public address in wallet.allowlist. No key
   material enters settings, environment files, logs, receipts, or ledger
   payloads.
 
-Current state: the setting live.wallet_allowlist exists in this release
+Current state: the setting wallet.allowlist exists in this release
 (WalletSettings.allowlist), is empty by default, and no public key is allowlisted.
 There is nothing to custody in paper mode.
 The custody group is deferred to a human decision with its own change
@@ -97,8 +97,8 @@ the gate are:
 | 2 | live_enable_env | PUMPGROK_LIVE_ENABLE is not 1 |
 | 3 | min_paper_days | no source=paper ledger at var/ledger.sqlite |
 | 4 | performance_thresholds | no source=paper ledger at var/ledger.sqlite |
-| 5 | wallet_allowlist | live.wallet_allowlist is empty; no public key is allowlisted |
-| 6 | notional_cap | live.notional_cap_lamports is not set |
+| 5 | wallet_allowlist | wallet.allowlist is empty; no public key is allowlisted |
+| 6 | notional_cap | live.notional_cap_lamports defaults to 1 SOL (1000000000 lamports); the 1 SOL ceiling is met |
 | 7 | confirmation_record | var/live_confirmation.json missing |
 | 8 | adapter_registered | no live adapter implementation ships in this release |
 | 9 | no_active_stop | halt, kill switch and breaker state are not readable in this release |
