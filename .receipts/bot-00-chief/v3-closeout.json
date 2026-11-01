@@ -8,7 +8,7 @@
     {
       "cmd": "make check",
       "exit_code": 0,
-      "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked; PumpGrok repository structure looks healthy. (run before the documentation corrections)"
+      "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked; PumpGrok repository structure looks healthy. (run before the first documentation corrections)"
     },
     {
       "cmd": "uv run pumpgrok verify --fixture smoke-10m",
@@ -39,11 +39,16 @@
       "cmd": "./scripts/check.sh",
       "exit_code": 0,
       "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked; PumpGrok repository structure looks healthy."
+    },
+    {
+      "cmd": "uv run python -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v3-closeout.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS \u2014 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"
     }
   ],
   "claims": [
     {
-      "claim": "make check passed on the closeout tree before the documentation corrections: lint, typecheck, tests, audit, generator checks and check.sh.",
+      "claim": "make check passed on the closeout tree before the first documentation corrections: lint, typecheck, tests, audit, generator checks and check.sh.",
       "evidence_command_index": 0
     },
     {
@@ -61,7 +66,7 @@
       "expects_failure": true
     },
     {
-      "claim": "The corrected MILESTONES, CLAUDE.md and closeout records pass tests/docs (44 tests, no failures).",
+      "claim": "The corrected MILESTONES, CLAUDE.md, ARCHITECTURE, README, STATE and closeout records pass tests/docs (44 tests, no failures).",
       "evidence_command_index": 4
     },
     {
@@ -71,11 +76,15 @@
     {
       "claim": "The corrected documents pass check.sh: ASCII, placeholder, and structure checks over 322 markdown files.",
       "evidence_command_index": 6
+    },
+    {
+      "claim": "The rollback plan passes the G-5 rule: it names the command, the expected recovery time and the data implications.",
+      "evidence_command_index": 7
     }
   ],
   "unverified": [
-    "The PR 27 CI run after PR 28 is on main has not been observed yet; the G-1 skip and the G-2 result depend on that run.",
-    "Greptile review of PR 27 and the 5/5 merge gate are not complete when this receipt is written.",
+    "The PR 27 CI run on the fix commit has not been observed yet; the G-2 result and the Greptile score depend on it.",
+    "Greptile re-review of the fix commit (the six review comments are addressed in the fix commit) is not complete when this receipt is written.",
     "The tag v3 is local and not pushed.",
     "Live venue behaviour is not exercised; the live path stays refused.",
     "INT-10 live-mainnet probe not run; recorded as debt in the closeout record and the audit correction.",
@@ -92,8 +101,10 @@
     ".planning/milestones/v3-phases/ (phase directories 06 to 10, 20 and 21 moved here)",
     ".planning/milestones/v3-CLOSEOUT.md",
     ".planning/milestones/v3-CLEANUP-REPORT.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "ARCHITECTURE.md",
+    "README.md"
   ],
   "contract_changes": [],
-  "rollback_plan": "Revert the closeout merge commit on main. That restores .planning to the pre-archive state; the archive is recoverable from git history. The local tag v3 can be deleted without effect on main. PR 28 is a separate change and is reverted by its own merge commit."
+  "rollback_plan": "Rollback: revert the closeout merge commit on main with git revert. The recorded command pumpgrok run --mode live --once exits 3 and changes nothing, so no deployment happens. Expected recovery time: about 10 minutes (one git revert and one CI run). Data implications: none to the paper ledger or live state; the .planning archive comes back from git history."
 }
