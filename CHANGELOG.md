@@ -2,6 +2,27 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 21: DOC-03 documentation accuracy
+
+### Fixed
+
+- DOC-03 (phase 21): both marketplace manifests (`.claude-plugin/marketplace.json`, `.grok-plugin/marketplace.json`) carry version `0.1.0` (was `1.0.0`) and describe a "Ten-seat" desk (was "Eight-role"). `tests/docs/test_doc_consistency.py` checks all six plugin manifests against the package version and rejects "Eight-role" in any plugin description.
+- DOC-03 (phase 21): `ARCHITECTURE.md` no longer names the absent `ticket_helper.py` and `paper_sim.py`; ticket IDs come from `pumpgrok ticket next` and paper fills from `pumpgrok run --mode paper`. `vendor/grokbot-pumpfun/` is described as absent from this checkout and formerly vendored (see `docs/VENDOR_PIN.md`). "eight persistent Bots" becomes "ten seats". The seat table lists SIGNAL and JOURNAL. `scout pipeline --candidates` is recorded as not implemented (exit 5). The `/workspace/trading-desk` path becomes `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh`.
+- DOC-03 (phase 21): `SETUP.md` counts 10 role files, lists all ten Bots in the desk record and receipt, checks `src/pumpgrok/tools` (the root `tools/` path it listed does not exist), and uses `~/trading-desk` in place of `/workspace/trading-desk`.
+- DOC-03 (phase 21): `README.md` no longer describes the vendored engine as present, and no longer says `pumpgrok paper` logs fills; `pumpgrok run --mode paper` drives the paper adapter and `pumpgrok paper buy|sell` refuse until the curve reader is verified.
+- DOC-03 (phase 21): `SETUP.md` and `README.md` list `pumpgrok ticket next --help` in their tool checks. The bare `pumpgrok ticket next` allocates a ticket id and writes a row to the paper ledger, so it is not a read-only check and is no longer listed as one.
+- DOC-03 (phase 21): `docs/VENDOR_PIN.md` no longer tells the reader to copy `config.example.yaml`. That file belonged to the vendored tree and is absent from this checkout.
+- DOC-03 (phase 21, round 2): `README.md` no longer calls the CLI or setup "read-only". It states what is written: `ticket next` and `create` append a row to the paper ledger `var/ledger.sqlite`, and setup writes local folders and files. "No keys, no real trades" is kept.
+- DOC-03 (phase 21, round 2): `ARCHITECTURE.md` no longer calls the CLIs "read-only" and names the local files they write under `var/`. The data-flow diagram drops the retired vendor engine, the `trades.jsonl` node and the unimplemented scout pipeline node, with their edges, because the vendor tree is absent and `pumpgrok scout pipeline` exits 5.
+- DOC-03 (phase 21, round 2): `SETUP.md` replaces "Setup is read-only" with the local folders and files setup writes (the repository clone in section 1 and `~/trading-desk` in sections 3 and 10).
+- DOC-01 (phase 21, round 2): `CLAUDE.md` replaces stale line ranges (`_run` at lines 57-67 and 68-83, and `replay_runtime.py:222`) with symbol names verified in the code, and cites the live-mode preconditions in `src/pumpgrok/execution/live/live_gate.py`.
+
+## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
+
+### Fixed
+
+- LIV-01 (phase 20): `pumpgrok.execution.live` no longer re-exports `LiveAdapterStub`, so importing the CLI, backtest or promotion modules no longer loads `pumpgrok.execution.live.live_adapter`. The import-graph guard follows parent package `__init__` edges, and a fresh-interpreter test proves the path is closed (tests/safety/test_cli_import_no_live_adapter.py). The replay hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is unchanged.
+
 ## [Unreleased] - Desk built-ins: platform, wallet allowlist, notional cap, scheduled promotion
 
 ### Added

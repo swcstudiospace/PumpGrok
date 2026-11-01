@@ -2,20 +2,20 @@
 
 ![PumpGrok banner](banner.jpg)
 
-PumpGrok is a ten-seat Solana memecoin trading desk packaged as agent instructions, 35 skills, a hard security constitution, and read-only Python helpers. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
+PumpGrok is a ten-seat Solana memecoin trading desk packaged as agent instructions, 35 skills, a hard security constitution, and Python helpers that never sign or send. The helpers write only local files, mainly under `var/`. It is loaded into a host agent runtime (Grok Bot, Cursor, Claude Code, or Grok Build). It is not a trading bot, exchange client, or signer: private keys never enter the system, and only a human-approved ticket may be sent.
 
 Version 0.1.0, the package version (see `pyproject.toml`).
 
 ## Capabilities
 
 - Ten specialist seats: CHIEF, SCOUT, RISK, WHALE, SNIPER, RUG, EXIT, SHILL, SIGNAL, JOURNAL (`agents/`)
-- 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and a vendored dry-run screening engine (`skills/grokbot-pipeline`)
+- 35 skills covering desk constitution, ticket lifecycle, risk audit, Jupiter routing, discovery, journal conventions, paper-trading discipline, safety scoring, and the screening-engine procedure (`skills/grokbot-pipeline`; the vendored tree is retired, see `docs/VENDOR_PIN.md`)
 - Always-on desk rule `rules/pumpgrok-team.mdc` (RISK veto, human approval by ticket ID, single-send, no private keys)
-- Read-only operator CLI (`pumpgrok`) for Jupiter quotes, mint/freeze authority, priority fees, ticket IDs, paper fills, holder concentration, and pipeline JSONL evidence
+- Operator CLI (`pumpgrok`) that never signs or sends. It reads Jupiter quotes, mint/freeze authority, priority fees, and holder concentration; `ticket next` and `create` append a row to the paper ledger `var/ledger.sqlite`. Paper-trade commands place no trades and refuse with code `unavailable` until the curve reader is verified, but first they create the local folders, load or create the binding key, open the ledger and seed its starting equity. `scout pipeline` is registered but not implemented
 - Repo linter `scripts/check.sh` (frontmatter, constitution phrases, one-writer convention; no network)
 - Plugin manifests for Grok Bot (`plugin.json`), Claude Code (`.claude-plugin/`), Cursor (`.cursor-plugin/`), and Grok Build (`.grok-plugin/`)
 
-The desk starts in **research** mode. **paper** logs simulated fills via `pumpgrok paper`. The CLI refuses `pumpgrok paper buy|sell` with code `unavailable` until the curve reader is verified (Phase 4), so no paper fill runs from the CLI. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
+The desk starts in **research** mode. **paper** is the simulated-fill level: `pumpgrok run --mode paper --once --replay <dir>` drives the paper adapter on a recorded dataset. The `pumpgrok paper buy|sell` commands refuse with code `unavailable` until the curve reader is verified (Phase 4), so no paper fill runs from those commands. There is no live-capital level on this desk: entries beyond paper require an explicit user decision outside these instructions. The desk ships no strategies and makes no return claims.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ A committed `uv.lock` pins every dependency. No API keys are required for the pu
 
 ## Setup and usage
 
-Full Grok Bot bootstrap (clone, folders, skills, ten seats, Trading Floor, desk record) is in [SETUP.md](SETUP.md). That flow is read-only: no keys, no real trades.
+Full Grok Bot bootstrap (clone, folders, skills, ten seats, Trading Floor, desk record) is in [SETUP.md](SETUP.md). That flow writes only local folders and files, with no keys and no real trades.
 
 From this repository:
 
@@ -43,7 +43,7 @@ Optional reads (schemas print without keys or spends):
 uv run pumpgrok tools market.price --help
 uv run pumpgrok tools onchain.authorities --help
 uv run pumpgrok tools onchain.priority_fee --help
-uv run pumpgrok ticket next
+uv run pumpgrok ticket next --help
 uv run pumpgrok tools market.holders_snapshot --help
 uv run pumpgrok paper buy --help
 uv run pumpgrok scout pipeline --candidates --help

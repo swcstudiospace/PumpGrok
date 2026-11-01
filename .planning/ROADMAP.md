@@ -1,5 +1,7 @@
 # Roadmap: PumpGrok Desk v3
 
+> v3 is archived (2026-11-01, tech_debt recorded). Phase details and evidence live in `.planning/milestones/v3-ROADMAP.md` and `.planning/milestones/v3-phases/`; the links below point there.
+
 ## Overview
 
 PumpGrok Desk v3 makes the paper desk autonomous and evaluable, closes the integrity gaps the v2 audits found, and documents the codebase for agents. Live trading stays disabled throughout. Five phases follow the owner's sequence. Phase 6 closes the audited invariant violations and the feature-lineage gaps first, so every later phase builds on integer money and fail-closed state. Phase 7 rewrites the docs against that fixed code. Phase 8 adds the holdout-aware backtest, the shared result schema and the paper divergence check. Phase 9 adds bounded, reversible paper parameter promotion and applies the approved constitution amendment together with the code it describes. Phase 10 records live readiness and keeps live refused.
@@ -62,7 +64,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] `CHANGELOG.md` entries: the Phase 6 before and after replay hash lines, and the review of Omega CI runner migration commits 5b5d6a1 and 9772655 (PRC-01)
 - [x] Phase branch and draft PR per AGENTS.md; no merge to main (PRC-02)
 
-**Plans**: 9 planned (06-01 to 06-09) plus fix-up 06-01b; all have SUMMARY files. Phase closed 2026-10-26 with owner-approved deviations (see .planning/phases/06-integrity-closure/06-VERIFICATION.md, Owner closure).
+**Plans**: 9 planned (06-01 to 06-09) plus fix-up 06-01b; all have SUMMARY files. Phase closed 2026-10-26 with owner-approved deviations (see .planning/milestones/v3-phases/06-integrity-closure/06-VERIFICATION.md, Owner closure).
 
 ### Phase 7: Documentation upgrade
 
@@ -74,7 +76,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0 and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0 (PRC-01)
   2. `test "$(grep -cE '^## (Purpose|Stack|Layout|Commands|Architecture|Conventions|GSD artifact|Safety|Known gaps)' CLAUDE.md)" -ge 9` exits 0 (DOC-01)
   3. `! grep -nE '^\s*[-*] ' CLAUDE.md | grep -v '`'` exits 0; every bullet in CLAUDE.md cites a backticked repository path (a grep proxy for "every statement cites a file"; the phase review checks prose statements) (DOC-01)
-  4. `test "$(wc -l < AGENTS.md)" -lt "$(git show origin/main:AGENTS.md | wc -l)"` exits 0, `grep -q "CLAUDE.md" AGENTS.md` exits 0, and `! grep -niE "placeholder" AGENTS.md` exits 0 (DOC-02)
+  4. `test "$(wc -l < AGENTS.md)" -lt "$(git show f3887bb:AGENTS.md | wc -l)"` exits 0, `grep -q "CLAUDE.md" AGENTS.md` exits 0, and `! grep -niE "placeholder" AGENTS.md` exits 0 (DOC-02). Re-baselined 2026-11-01 from `origin/main`: once phase 7 merged, `origin/main` holds the trimmed file (133 lines), so the literal comparison can never pass again. `f3887bb` is the phase start point (423 lines).
   5. `./scripts/verify_doc_commands.sh` exits 0; it runs each command in the Commands sections of AGENTS.md and CLAUDE.md and checks its documented exit code (DOC-02)
   6. `uv run pytest -q tests/docs/` exits 0; it asserts that plugin version statements match `pyproject.toml`, that `docs/VENDOR_PIN.md` matches the vendored snapshot, that every command named in README, ARCHITECTURE, SETUP and `skills/replay-and-backtest/SKILL.md` exists in the CLI help, and that no contradiction from the 2026-10-25 docs audit remains (DOC-03)
   7. `uv run pytest -q tests/docs/test_historical_banners.py` exits 0; every historical design record it lists begins with the banner "Historical design record" (DOC-04)
@@ -93,7 +95,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] Banner "Historical design record" on the design records under `docs/` (`docs/design/`, `docs/DISCOVERY.md`, `docs/MIGRATION_MAP.md`, `docs/upgrade-plan-desk-v2.md`); the set is fixed in `tests/docs/test_historical_banners.py` (DOC-04)
 - [x] `CHANGELOG.md` entry for each documentation change, tagged with its DOC id, and the Phase 7 replay hash line (DOC-03)
 
-**Plans**: 6 complete (07-01 to 07-06). Verification: `.planning/phases/07-documentation-upgrade/07-VERIFICATION.md` (passed, 9 of 9 criteria). Criterion 6 checks the vendor pin and a retirement statement, not a snapshot (OVERRIDE-D; the snapshot was deleted in Phase 4). Criterion 5 runs the offline subset; make targets, `run --serve` and `check.sh` are name-checked, not executed. Overrides A to D are recorded in the plan SUMMARY files.
+**Plans**: 6 complete (07-01 to 07-06). Verification: `.planning/milestones/v3-phases/07-documentation-upgrade/07-VERIFICATION.md` (passed, 9 of 9 criteria). Criterion 6 checks the vendor pin and a retirement statement, not a snapshot (OVERRIDE-D; the snapshot was deleted in Phase 4). Criterion 5 runs the offline subset; make targets, `run --serve` and `check.sh` are name-checked, not executed. Overrides A to D are recorded in the plan SUMMARY files.
 
 ### Phase 8: Backtest and paper evaluation
 
@@ -130,7 +132,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] `tests/backtest/`, `tests/e2e/test_autonomous_paper_recorded.py` and the autonomous-paper verification on recorded datasets (PAP-03)
 - [x] `CHANGELOG.md` before and after replay hash lines for Phase 8
 
-**Plans**: 10 complete. 08-01 to 08-07 delivered the phase; 08-08 to 08-10 are a correction set that replaced the digest-scored evaluator (see 08-CORRECTION.md). Verification: `.planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md` (passed, 13 of 13 criteria).
+**Plans**: 10 complete. 08-01 to 08-07 delivered the phase; 08-08 to 08-10 are a correction set that replaced the digest-scored evaluator (see 08-CORRECTION.md). Verification: `.planning/milestones/v3-phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md` (passed, 13 of 13 criteria).
 
 ### Phase 9: Bounded paper self-upgrade
 
@@ -163,7 +165,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] `tests/upgrade/` and `tests/safety/test_blind_advisory.py`
 - [x] `CHANGELOG.md` before and after replay hash lines for Phase 9
 
-**Plans**: 7 complete (09-01 to 09-07; 09-06 carries the risk-only clause 3 override and the content-based locators). Verification: `.planning/phases/09-bounded-paper-self-upgrade/09-VERIFICATION.md` (passed, 10 of 10 criteria).
+**Plans**: 7 complete (09-01 to 09-07; 09-06 carries the risk-only clause 3 override and the content-based locators). Verification: `.planning/milestones/v3-phases/09-bounded-paper-self-upgrade/09-VERIFICATION.md` (passed, 10 of 10 criteria).
 
 ### Phase 10: Live readiness, kept disabled
 
@@ -190,12 +192,12 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] `docs/LIVE_READINESS.md`: deferred record of custody model, venue, legal review and nine-precondition evidence (LIV-02)
 - [x] `CHANGELOG.md` v3 closeout entry and the Phase 10 replay hash line
 
-**Plans**: 3 complete (10-01 to 10-03). Verification: `.planning/phases/10-live-readiness-kept-disabled/10-VERIFICATION.md` (passed, 8 of 8 criteria). Live stays refused: exit 3, no live adapter registered, no live import reachable from the guarded roots.
+**Plans**: 3 complete (10-01 to 10-03). Verification: `.planning/milestones/v3-phases/10-live-readiness-kept-disabled/10-VERIFICATION.md` (passed, 8 of 8 criteria). Live stays refused: exit 3, no live adapter registered, no live import reachable from the guarded roots.
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
+Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20 -> 21
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -204,3 +206,25 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | 8. Backtest and paper evaluation | 10/10 | Complete | 2026-10-25 |
 | 9. Bounded paper self-upgrade | 7/7 | Complete | 2026-10-25 |
 | 10. Live readiness, kept disabled | 3/3 | Complete | 2026-10-25 |
+| 20. Close gap: LIV-01 live adapter import path | 1/1 | Complete | 2026-11-01 |
+| 21. Close gap: DOC-03 documentation accuracy | 1/1 | Complete | 2026-11-01 |
+
+### Phase 20: Close gap: LIV-01 live adapter import path
+
+**Goal:** The import graph has no path from the CLI, backtest, paper, or upgrade modules to the live adapter, proven at runtime and by the guard (audit gap LIV-01).
+**Requirements**: LIV-01
+**Depends on:** Phase 10
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 20-01-PLAN.md - red regression tests, package re-export removed, guard parent-package edges, CHANGELOG entry
+
+### Phase 21: Close gap: DOC-03 documentation accuracy
+
+**Goal:** The documents named by DOC-03 match the code: no retired vendor or unimplemented scout flow presented as live, no absent helper scripts, no read-only claims contradicted by ledger or setup writes, plugin manifests at the package version, and CLAUDE.md line anchors that resolve (audit gap DOC-03, plus DOC-01 anchors found during re-verification).
+**Requirements**: DOC-03
+**Depends on:** Phase 20
+**Plans:** 1/1 plans complete (two documented closure rounds)
+
+Plans:
+- [x] 21-01-SUMMARY.md - red-first manifest test, manifest and wording corrections, ARCHITECTURE diagram, CLAUDE.md anchors, follow-up and round 2 fixes

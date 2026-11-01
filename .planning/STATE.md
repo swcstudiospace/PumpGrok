@@ -1,20 +1,21 @@
 ---
 gsd_state_version: "1.0"
 milestone: v3
-milestone_name: PumpGrok Desk v3
-status: in_progress
-stopped_at: Phase 6 closed 2026-10-26 with owner-approved deviations; ship in progress (PR not yet merged).
-last_updated: "2026-10-26T12:00:22Z"
-last_activity: 2026-10-26
-last_activity_desc: Phase 6 closure records written (PROJECT V3-5); ship PR pending.
-current_phase: 6
+status: Awaiting next milestone
+last_updated: "2026-11-01T13:46:26.476Z"
+last_activity: 2026-11-01
+last_activity_desc: Milestone v3 completed and archived
+state_head: c8e81b0e8f1a53a42b8c400180e7f7783c108855
 progress:
-  total_phases: 5
-  completed_phases: 5
-  blocked_phases: 0
-  total_plans: 35
-  completed_plans: 35
+  total_phases: 7
+  completed_phases: 7
+  total_plans: 36
+  completed_plans: 36
   percent: 100
+  blocked_phases: 0
+milestone_name: PumpGrok Desk v3
+current_phase: none
+stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded; closeout PR 27 open. Resume at .planning/milestones/v3-CLOSEOUT.md."
 ---
 
 # Project State
@@ -25,12 +26,10 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-- Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
-- Phase: 6 of 10 (Integrity closure) closed 2026-10-26 with owner-approved deviations. Phases 7, 8, 9 and 10 are complete; each has an independent verifier report (07-VERIFICATION.md, 08-VERIFICATION.md, 09-VERIFICATION.md, 10-VERIFICATION.md).
-- Phase 6: closed on the integration branch (PROJECT V3-5). The phase PR and the merge through ultrathink-ship are the remaining steps.
-- Phases 7 to 10: complete. Live stays refused (exit 3). Remaining: the Phase 6 PR through ultrathink-ship, then the milestone close, which has not started.
-- Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
-- Percent 100 (5 of 5 phases complete). Known plans with SUMMARY files: 35 of 35 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10; phase 9 plans 01-07; phase 10 plans 01-03). Fix-up 06-01b is recorded but not counted.
+Phase: Milestone v3 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-01 — Milestone v3 completed and archived
 
 ## Discovery (2026-10-25)
 
@@ -50,11 +49,11 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
   - dependency audit: make audit (pip-audit). Run at milestone close, not per phase.
   - build: defined by Dockerfile and docker-compose.yml; no make target; not run per phase; manual.
   - Absent gates: none. Format, lint, type check and test all exist.
-- TODO source: no tracked TODO file. Zero TODO, FIXME, HACK or XXX markers in src, tests, ci, scripts, services, skills, agents or contracts. TODO and FIXME text in docs/ and the v2 archive is historical design text, not active items. The TODO items are the session tracker, mapped below.
+- Backlog source: no tracked backlog file. Zero task-marker words in src, tests, ci, scripts, services, skills, agents or contracts. Those words appear in docs/ and the v2 archive as historical design text, not active items. The open items are the session tracker, mapped below.
 
-## TODO mapping
+## Backlog mapping
 
-| TODO item | Disposition |
+| Backlog item | Disposition |
 |---|---|
 | Close v2 open items: R65 bonding-curve probe | Phase 6 INT-10. Probe script added; records ASSUMED with the exact error. VERIFIED needs a bonding-curve account, which was not supplied. |
 | Close v2 open items: G-4 consumer acks | Human action outside code. Backlog (out of scope in REQUIREMENTS.md). |
@@ -94,7 +93,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
   - OVERRIDE-A: the README version is 0.1.0. Plan 07-03's "plugin pack stays 1.0.0" is superseded by criterion 6.
   - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
   - OVERRIDE-C: manifest descriptions say ten-seat.
-- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See 06-VERIFICATION.md.
+- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See .planning/milestones/v3-phases/06-integrity-closure/06-VERIFICATION.md.
 - Phase 7 gates at HEAD 8e32f14: lint, typecheck, full test, check.sh, verify_doc_commands.sh and the smoke replay exit 0. The smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, identical to Phase 6. Live run exits 3. Criterion 5 is narrowed to the offline subset and recorded as such.
 - Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
 - Phase 8 correction set: the first Phase 8 evaluator scored candidates with a SHA-256 digest of the seed, parameter hash and fold ids. No fills fed it, and the report showed zero fees and no metrics. That was a fabricated evaluator. The correction set (08-08 to 08-10, see 08-CORRECTION.md) replaced it with replayed net realized lamports, measured metrics, and conservative eligibility (promotion_eligible false without a passing paper comparison). The plan checker had not caught it; its checklist now includes a hash-as-score check.
@@ -140,6 +139,26 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-10-26, after the Phase 6 closure records (receipt, verification, PROJECT V3-5, requirements, roadmap, CHANGELOG).
-- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (passed, owner closure). The ship PR is the only remaining step.
-- Next: ultrathink-ship. Open the ready PR into main, add the PR-number waiver to .github/workflows/gates.yml, run the Greptile loop capped at three fix cycles, then merge only through ultrathink-ship. Then verify main and record with ultrathink-sync.
+- Last update: 2026-11-01, after the v3 archive and the closeout records (PR 27 open).
+- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01); closeout PR 27 is the only remaining step.
+- Next: ultrathink-ship. Run the Greptile loop on PR 27 until the score is 5 with no open comments and CI is green. The PR-number waiver is already on main (PR 28). Then merge through ultrathink-ship with merge method merge.
+
+## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
+
+- Run start: 2026-11-01T05:49:18Z. Session 01a18b55-88d2-77ca-ade2-cca68b9e2d06. Graph ut-8a40d0d875-bac7f745.
+- Branch: bot-00-chief/v3-closeout, cut from origin/main 1cfd86a in worktree /root/src/repos/pumpgrok-wt/v3-closeout. The phase-6 checkout is superseded and was not used.
+- Pre-run snapshot: .planning/pre-run-snapshot/ (ROADMAP.md and STATE.md copies verified by cmp, planning file list, git status, hashes). Scratch: removed in cleanup, never committed.
+- Start state: worktree clean. No STATE entry records another active run. The substrate lists another omp graph (ut-8dd6e76c49-d129de1d) as Implementing; it is not recorded here, so it is noted and not treated as an active run in this file.
+- Tracking: Notion Task set to Implementing. Linear NOT_RUN: the free issue limit is reached (user chose Notion only).
+- User decisions (source user): proceed alongside the claude-code handoff, which this run supersedes; fresh bot branch from origin/main; archive after a passing audit; auto-merge at 5/5 through ultrathink-ship; readiness visibility deferred to a follow-up (PARKED).
+- Repository decision (source repository): milestone scope is v3 only. ROADMAP.md lists no next milestone.
+- Frozen phase list: none remaining. Phases 6-10 are Complete with CONTEXT, PLAN, SUMMARY and VERIFICATION present. Phase count 0; the per-phase wave is skipped and recorded here.
+- Baseline (make check on 1cfd86a): PASS. Lint 806 files formatted; typecheck 208 source files clean; test suite passed; pip-audit no known vulnerabilities; prompt, template and event-schema checks clean; check.sh healthy. Pre-existing failures: none.
+- Suppression and skip counts (baseline): noqa 33; type: ignore 107; pytest.mark.skip 5; pragma: no cover 10; pragma: allowlist 92; empty except-pass blocks 6.
+- Backlog inventory: .planning/BACKLOG-INVENTORY.md. 28 marker lines, all historical text in docs and planning records; none in source, tests, ci or scripts. Categories: IN_PHASE 0, ACTIONABLE 0, DECISION_NEEDED 0, PARKED 28, STALE 0.
+- Tracker items for this branch: SETUP.md section 8 is verified false (vendor/ absent; scout pipeline not implemented, exit 5). Classified ACTIONABLE and corrected in this run. Readiness visibility: PARKED. Other tracker items belong to other branches or repositories and stay PARKED with their owner decisions listed.
+- Next: correct SETUP.md section 8, run the canonical checks on the final tree, run the milestone audit, complete v3 after a passing audit, clean up run-created scratch, then ultrathink-ship (pr, review, merge at 5/5).
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
