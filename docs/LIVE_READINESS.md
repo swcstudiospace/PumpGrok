@@ -88,20 +88,22 @@ Owner: human
 Status: deferred
 
 The live gate in src/pumpgrok/execution/live/live_gate.py evaluates the
-nine preconditions in R21 order. The current unmet reasons quoted from
-the gate are:
+nine preconditions in R21 order. The gate text printed in a fresh checkout by
+`uv run pumpgrok run --mode live --once --replay tests/fixtures/replay/smoke` is:
 
-| # | Precondition id | Current unmet reason from the gate |
-|---|-----------------|------------------------------------|
-| 1 | mode_live | effective mode is paper |
-| 2 | live_enable_env | PUMPGROK_LIVE_ENABLE is not 1 |
-| 3 | min_paper_days | no source=paper ledger at var/ledger.sqlite |
-| 4 | performance_thresholds | no source=paper ledger at var/ledger.sqlite |
-| 5 | wallet_allowlist | wallet.allowlist is empty; no public key is allowlisted |
-| 6 | notional_cap | live.notional_cap_lamports defaults to 1 SOL (1000000000 lamports); the 1 SOL ceiling is met |
-| 7 | confirmation_record | var/live_confirmation.json missing |
-| 8 | adapter_registered | no live adapter implementation ships in this release |
-| 9 | no_active_stop | halt, kill switch and breaker state are not readable in this release |
+| # | Precondition id | State | Gate text |
+|---|-----------------|-------|-----------|
+| 1 | mode_live | unmet | effective mode is live but [live] enabled is not true |
+| 2 | live_enable_env | unmet | PUMPGROK_LIVE_ENABLE is not 1 |
+| 3 | min_paper_days | unmet | no source=paper events in var/ledger.sqlite |
+| 4 | performance_thresholds | unmet | no source=paper events in var/ledger.sqlite |
+| 5 | wallet_allowlist | unmet | wallet.allowlist is empty; no public key is allowlisted |
+| 6 | notional_cap | met | live.notional_cap_lamports is 1000000000 (ceiling 1 SOL) |
+| 7 | confirmation_record | unmet | var/live_confirmation.json missing |
+| 8 | adapter_registered | unmet | no live adapter implementation ships in this release |
+| 9 | no_active_stop | unmet | halt, kill switch and breaker state are not readable in this release |
+
+Rows 3 and 4 read var/ledger.sqlite and row 7 reads var/live_confirmation.json, so their text changes once those files exist.
 
 Notes on the evidence above:
 

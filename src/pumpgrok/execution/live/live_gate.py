@@ -130,8 +130,8 @@ def _allowlist_row(allowlist: tuple[str, ...]) -> tuple[bool, str]:
     """Precondition 5: at least one allowlisted public key."""
     count = len(allowlist)
     if count:
-        return (True, f"live.wallet_allowlist lists {count} public key(s)")
-    return (False, "live.wallet_allowlist is empty; no public key is allowlisted")
+        return (True, f"wallet.allowlist lists {count} public key(s)")
+    return (False, "wallet.allowlist is empty; no public key is allowlisted")
 
 
 def _cap_row(cap: int | None) -> tuple[bool, str]:

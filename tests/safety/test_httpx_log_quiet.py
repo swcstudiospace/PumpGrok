@@ -14,7 +14,7 @@ import pytest
 
 from pumpgrok.logging import setup_logging
 
-SECRET = "synthetic-key-7f3a9c2e1b8d"  # pragma: allowlist secret: synthetic test value
+SECRET = "synthetic-key-7f3a9c2e1b8d"  # pragma: allowlist secret: synthetic  # gitleaks:allow
 REQUEST_URL = f"https://rpc.example.org/?token={SECRET}"
 THIRD_PARTY_LOGGERS = ("httpx", "httpcore")
 
