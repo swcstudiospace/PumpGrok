@@ -25,6 +25,8 @@ LIVE_DIR = SRC / "execution" / "live"
 QUARANTINE_MODULE = "pumpgrok.execution.live.live_adapter"
 QUARANTINE_SYMBOL = "LiveAdapterStub"
 GATE_MODULE = "pumpgrok.execution.live.live_gate"
+GATE_PACKAGE = "pumpgrok.execution.live"
+CLI_ROOT = "pumpgrok.cli"
 
 GUARDED_PREFIXES = (
     "pumpgrok.backtest",
@@ -313,3 +315,14 @@ def test_network_probe_is_classified(tmp_path: Path, source: str, flagged: bool)
     package = tmp_path / "live_probe.py"
     package.write_text(source, encoding="utf-8")
     assert bool(_network_references(package)) is flagged
+
+
+def test_guard_follows_parent_package_init() -> None:
+    """LIV-01 fidelity: importing a.b.c executes a/__init__.py and a/b/__init__.py."""
+    modules = _module_map()
+    graph = _edges(modules)
+    assert GATE_PACKAGE in graph[GATE_MODULE], (
+        "live_gate has no edge to its parent package execution/live/__init__.py"
+    )
+    seen = _closure({CLI_ROOT}, graph)
+    assert GATE_PACKAGE in seen, "pumpgrok.cli closure omits the parent package __init__"
