@@ -15,7 +15,7 @@ progress:
   blocked_phases: 0
 milestone_name: PumpGrok Desk v3
 current_phase: none
-stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded; closeout PR 27 open. Resume at .planning/milestones/v3-CLOSEOUT.md."
+stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded. PR 27 merged as 0ca794d; waiver PR 28 merged as 9588bc0. Record corrections: PR 29 (bot-02, ARCHITECTURE wording and allowlist) and the bot-00 follow-up. Resume at .planning/milestones/v3-CLOSEOUT.md."
 ---
 
 # Project State
@@ -139,9 +139,9 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-11-01, after the v3 archive and the closeout records (PR 27 open).
-- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01); closeout PR 27 is the only remaining step.
-- Next: ultrathink-ship. Run the Greptile loop on PR 27 until the score is 5 with no open comments and CI is green. The PR-number waiver is already on main (PR 28). Then merge through ultrathink-ship with merge method merge.
+- Last update: 2026-11-01, after PR 27 merged (0ca794d) and the record follow-ups.
+- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01). No v3 step remains open.
+- Next: none for v3. Owner decisions outstanding: push the local tag v3 (on 85e3e0d) and approve any re-home follow-up for the ten waived files.
 
 ## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
 

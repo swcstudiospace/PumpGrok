@@ -12,29 +12,29 @@ gaps:
   integration: []
   flows: []
 tech_debt:
-  - phase: 06
+  - phase: "06"
     items:
       - "Criterion 17 owner-waived for the phase PR (PROJECT V3-5); later correction and supersession notes in 06-VERIFICATION.md"
       - "Phase 6 evidence paths cite /root/src/repos/pumpgrok, a different checkout"
-  - phase: 07
+  - phase: "07"
     items:
       - "OVERRIDE-A to OVERRIDE-D deviation judgements recorded in 07-VERIFICATION.md (re-checked: still valid)"
       - "docs/ROSTER.md and docs/FOUNDATION_STACK.md: design documents outside the DOC-04 fixed set (scope decision for the owner)"
       - "Criterion 4 re-baselined from origin/main to f3887bb (phase start point), dated note in ROADMAP"
-  - phase: 08
+  - phase: "08"
     items:
       - "Criteria 3, 4, 5, 9 evidenced by a targeted run rather than a standalone command (verifier note)"
       - "Path drift in SUMMARY references (BT-06 path drift)"
-  - phase: 09
+  - phase: "09"
     items:
       - "docs/RISK_POLICY.md line 25 still paraphrases clause 10 (recorded as non-FAIL in 09-VERIFICATION.md; not re-verified)"
-  - phase: 10
+  - phase: "10"
     items:
       - "Earlier PASS on the import-graph claim was wrong; corrected by phase 20 (correction note in 10-VERIFICATION.md)"
-  - phase: 20
+  - phase: "20"
     items:
       - "AST guard does not see dynamic imports (pkgutil, importlib); reviewer F-01 minor, no present false negative"
-  - phase: 21
+  - phase: "21"
     items:
       - "Out-of-scope docs still say eight roles or name absent helpers: agents/README.md, skills/desk-operating-model/SKILL.md, skills/pumpgrok-setup/SKILL.md, scripts/hermes-bootstrap.sh, scripts/README.md, skills/holder-and-flow-analysis/SKILL.md"
       - "Design and history docs keep trading-desk, paper_sim, ticket_helper and eight wording (D-10): docs/ROSTER.md, docs/upgrade-plan-desk-v2.md, docs/FOUNDATION_STACK.md, docs/DISCOVERY.md, docs/MIGRATION_MAP.md, docs/design/*"
@@ -43,7 +43,7 @@ tech_debt:
       - "Literal reading of DOC-03 each change appears in CHANGELOG: entries are per document, row-level list in 21-01-SUMMARY (owner to confirm the interpretation)"
       - "tests/docs does not cover the ARCHITECTURE diagram or read-only wording; no recurrence guard"
       - "Placeholder org name your-org in SETUP.md and marketplace manifests (allowlisted in scripts/check.sh)"
-  - phase: all
+  - phase: "all"
     items:
       - "requirements-completed frontmatter present only in 06-05 (INT-08), 20-01 (LIV-01) and 21-01 (DOC-03); 31 requirements are partial on this metadata alone"
       - "Operator rollback command absent: restore_active_set has tests only; UPG-03 is met by its own definition and Phase 9 criterion 5, accepted by the owner"
@@ -146,3 +146,7 @@ Listed in the YAML above. Decision for the owner: accept this debt and archive (
 
 INT-10 is partially met, not satisfied. The requirement says the bonding-curve layout is probed read-only against live mainnet accounts. The probe script exists (scripts/probe_curve_layout.py). No bonding-curve account is configured in this checkout, so the probe makes no RPC call and records Status ASSUMED (docs/CURVE_LAYOUT_PROBE.md). The layout stays ASSUMED (src/pumpgrok/tools/onchain/curve_layout.py:33), and RPC-derived curve entries fail closed with data_unavailable. Phase 6 verification row 11a passed on that recorded ASSUMED result, so the requirement count above overstates INT-10. This item was not on the debt list the owner reviewed. The status stays tech_debt, because the fail-closed behaviour is verified and the live probe is recorded as debt.
 
+
+## Method note (2026-11-01)
+
+The traceability scores above count requirement IDs that appear in each phase's VERIFICATION prose. The workflow's table-based rule (requirement rows in each VERIFICATION file) was not applied. Under that rule, phases 06, 09 and 20 have no requirement rows, and phases 07, 08, 10 and 21 have 4, 10, 2 and 1 rows. The owner accepted the mention-based result as documented on 2026-11-01; the archived status stays tech_debt.
