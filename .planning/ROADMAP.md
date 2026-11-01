@@ -195,7 +195,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
+Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -204,3 +204,14 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10
 | 8. Backtest and paper evaluation | 10/10 | Complete | 2026-10-25 |
 | 9. Bounded paper self-upgrade | 7/7 | Complete | 2026-10-25 |
 | 10. Live readiness, kept disabled | 3/3 | Complete | 2026-10-25 |
+| 20. Close gap: LIV-01 live adapter import path | 1/1 | Complete | 2026-11-01 |
+
+### Phase 20: Close gap: LIV-01 live adapter import path
+
+**Goal:** The import graph has no path from the CLI, backtest, paper, or upgrade modules to the live adapter, proven at runtime and by the guard (audit gap LIV-01).
+**Requirements**: LIV-01
+**Depends on:** Phase 10
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 20-01-PLAN.md - red regression tests, package re-export removed, guard parent-package edges, CHANGELOG entry

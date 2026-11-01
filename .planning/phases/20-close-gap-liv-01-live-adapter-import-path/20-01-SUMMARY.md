@@ -22,8 +22,9 @@ stays loaded. The import-graph guard now follows parent package `__init__` edges
 and reports the CLI path that it previously missed. The guard assertions were
 not weakened.
 
-Requirement LIV-01 is closed in code and tests. The repository `make lint` gate
-still exits 2 for a reason outside this plan (see Deviations, item 3).
+Requirement LIV-01 is closed in code and tests. `make lint` exited 2 at execution time
+because of the planning document (Deviations, item 3). After the formatting fix recorded
+there, `make lint` exits 0; see 20-VERIFICATION.md.
 
 ## Commits
 
@@ -67,18 +68,18 @@ pre-existing and outside this change.
 
 | Gate | After Task 5 | After Task 6 |
 |---|---|---|
-| make lint | 2 | 2 |
+| make lint | 2 | 2 at execution; 0 after the planning-doc format fix |
 | make typecheck | 0 | 0 |
 | make test | 0 | 0 |
 | make audit | 0 | 0 |
 | ./scripts/check.sh | 0 | 0 |
 
-`make lint` exit 2 is caused only by `ruff format --check .` on the untracked file
-`.planning/phases/20-close-gap-liv-01-live-adapter-import-path/20-01-PLAN.md:160`
-(a Python code block line over 100 columns). Every touched Python file passes
-`ruff check` and `ruff format --check`. The tree with `.planning` excluded passes
-`ruff format --check` (589 files) and `ruff check` (no issues). `make typecheck`
-reports `Success: no issues found in 208 source files`. `make audit` reports
+`make lint` exit 2 at execution came only from `ruff format --check .` on the untracked
+planning document `.planning/phases/20-close-gap-liv-01-live-adapter-import-path/20-01-PLAN.md`,
+line 160 (a Python code block line over 100 columns). The orchestrator then ran `ruff format`
+on that document only. `ruff format --check .` now reports 814 files formatted and
+`ruff check .` reports no issues. Every touched Python file passed both checks before.
+`make typecheck` reports `Success: no issues found in 208 source files`. `make audit` reports
 `No known vulnerabilities found`.
 
 ## Smoke and replay (exact lines)
@@ -129,12 +130,11 @@ sys.modules probe, fresh interpreter (cwd /tmp, PYTHONPATH pointing at the workt
    default 1 SOL cap (`live.notional_cap_lamports` is 1000000000). This matches the existing
    CHANGELOG entry ("8 of 9 with default cap"). I reconciled the reported wording to the observed
    output and changed no code.
-3. Lint gate exit 2, not resolved. The untracked planning document
-   `.planning/phases/20-close-gap-liv-01-live-adapter-import-path/20-01-PLAN.md`, line 160, is a
-   Python code block with a line over 100 columns, so `ruff format --check .` fails. The
-   plan document is outside this plan's file list and I did not edit it. Resolving it needs
-   a decision from the owner: wrap that code line in the planning document, or exclude
-   `.planning` from ruff. `make lint` therefore does not exit 0.
+3. Lint gate exit 2 at execution, resolved by the orchestrator. The untracked planning
+   document `.planning/phases/20-close-gap-liv-01-live-adapter-import-path/20-01-PLAN.md`,
+   line 160, was a Python code block with a line over 100 columns. Running `ruff format`
+   on that one document fixed it. `make lint` exits 0 after the fix (814 files formatted,
+   `ruff check` clean). No lint exclusion was added.
 4. Commit structure. The plan's Task 5 specifies one commit covering five paths. The orchestrator
    asked for one commit per task. I used three commits: the red tests (148dbfa), the fix
    covering Tasks 2 to 4 (02f5997, four paths, because Tasks 2 and 4 edit the same init file and
@@ -163,7 +163,8 @@ sys.modules probe, fresh interpreter (cwd /tmp, PYTHONPATH pointing at the workt
 
 ## Not verified
 
-- `make lint` exit 0. Blocked by deviation 3.
+- `make lint` exit 0 after the planning-document format fix: verified by the orchestrator
+  and in 20-VERIFICATION.md, not by the executor.
 - A fresh full-suite junit run on the final tree after the CHANGELOG commit. The final `make test`
   exit 0 is recorded; the counts are from the earlier tree. The CHANGELOG change cannot affect pytest.
 - The live smoke with a real venue or network: not applicable, and the live path stays refused.
