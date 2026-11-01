@@ -140,19 +140,11 @@ A private Solana RPC (Helius, QuickNode, etc.) dramatically improves reliability
 
 ---
 
-## 8. Optional: vendor dry-run pipeline (research only)
+## 8. Optional: vendor dry-run pipeline (not available)
 
-The screening engine is vendored as in-tree files at `vendor/grokbot-pumpfun/` (not a git submodule or gitlink), pinned to `409e74c905faa0e9de42e918efe2c604f206856e`. Read `vendor/grokbot-pumpfun/PUMPGROK.md` before running anything.
+This step does not apply to this tree. The screening engine is not vendored here: `vendor/` is absent, so there is no `vendor/grokbot-pumpfun/` to read, install, or configure. `pumpgrok scout pipeline --candidates` is registered but not implemented; it exits 5 and prints a not-yet-implemented status. Skip this section.
 
-```bash
-cd /workspace/pumpgrok/vendor/grokbot-pumpfun
-make install                  # creates .venv and installs requirements
-cp config.example.yaml config.yaml
-# Keep mode: dry-run. Do not set mode: live. Do not add wallet keys.
-uv run --project /workspace/pumpgrok pumpgrok scout pipeline --candidates --help
-```
-
-This step is optional. Engagement stays **research**. No keys. `pumpgrok scout pipeline --candidates` is the desk bridge: it reads vendor JSONL and prints fail-closed JSON plus a PIPELINE-EVIDENCE block. Pipeline verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
+Engagement stays **research**. No keys. When a pipeline exists, its verdicts are evidence only; they are not RISK clearance and not human approval. SNIPER and EXIT remain the only senders after exact human approval.
 
 
 ## 9. Approvals & security
