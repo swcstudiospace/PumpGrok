@@ -22,7 +22,8 @@
     {"cmd": "python3 ci/gates/check_secrets.py --files tests/safety/test_httpx_log_quiet.py tests/safety/test_rpc_endpoint_guard.py .env.example docs/LIVE_READINESS.md docs/TOOL_CATALOG.md src/pumpgrok/execution/live/live_gate.py", "exit_code": 0, "output_tail": "G-3 PASS - 6 file(s) scanned, no secrets detected"},
     {"cmd": "uv run pumpgrok run --mode live --once --replay tests/fixtures/replay/smoke (final tree)", "exit_code": 3, "output_tail": "Fix every unmet line or run in mode=paper. No transaction was attempted."},
     {"cmd": "make lint with the 109-column SECRET lines (historical, before the E501 fix)", "exit_code": 2, "output_tail": "Found 2 errors. / make: *** [Makefile:15: lint] Error 1"},
-    {"cmd": "uv run python ci/gates/run_all.py --bot bot-02-risk --base origin/main --receipt .receipts/bot-02-risk/l1-p1-risk.json (first gate run, on c322815, before the receipt and secret-marker fixes)", "exit_code": 1, "output_tail": "2 gate(s) failed. Fix the cause - never bypass a gate (PD-3)."}
+    {"cmd": "uv run python ci/gates/run_all.py --bot bot-02-risk --base origin/main --receipt .receipts/bot-02-risk/l1-p1-risk.json (first gate run, on c322815, before the receipt and secret-marker fixes)", "exit_code": 1, "output_tail": "2 gate(s) failed. Fix the cause - never bypass a gate (PD-3)."},
+    {"cmd": "uv run python /tmp/compare_live_table.py (run in this worktree: runs pumpgrok run --mode live --once --replay tests/fixtures/replay/smoke, then compares its nine gate lines with the rows of docs/LIVE_READINESS.md)", "exit_code": 0, "output_tail": "gate rows 9 exit 3 missing from LIVE_READINESS.md 0"}
   ],
   "claims": [
     {"claim": "The RPC endpoint guard refuses an endpoint with userinfo, a key-named query parameter or an opaque key-shaped path segment at config load. The ConfigError names the setting and never echoes the secret.", "evidence_command_index": 2},
@@ -31,7 +32,8 @@
     {"claim": "On the realized basis the daily-loss halt uses day-start equity plus realized P&L: cash deployed into a position and an unrealized swing alone do not halt, and a realized loss at the floor does.", "evidence_command_index": 2},
     {"claim": "The defects reproduce before the fix: on origin/main code, 21 of the 34 tests fail (userinfo and key-parameter refusals, httpx and httpcore INFO logging, realized-basis halt). The 13 that pass there are non-regression cases.", "evidence_command_index": 1, "expects_failure": true},
     {"claim": "The live gate prints the wallet allowlist as wallet.allowlist, the real setting key. The gate text and its two pins are renamed, and the live-gate tests pass.", "evidence_command_index": 4},
-    {"claim": "The LIVE_READINESS table prints the gate's own text for all nine rows, from the live refusal output: row 6 is met (live.notional_cap_lamports is 1000000000), the other eight are unmet.", "evidence_command_index": 12},
+    {"claim": "Each of the nine gate lines printed by the live refusal appears in docs/LIVE_READINESS.md with the same precondition id, state (met for [x], unmet for [ ]) and text, for all nine rows.", "evidence_command_index": 15},
+    {"claim": "The live refusal exits 3 by design, with eight preconditions unmet and row 6 met.", "evidence_command_index": 12, "expects_failure": true},
     {"claim": "PUMPGROK_RPC__API_KEY is documented in .env.example as an empty placeholder, and the placeholder and docs tests pass.", "evidence_command_index": 3},
     {"claim": "Locally, G-7 reports a problem for a missing prompts, prompts-assembled or agents directory, and the ci tests pass. In CI, the gate-self-test job replaces ci/gates with the base copy before running tests, so these four tests fail there (see unverified).", "evidence_command_index": 5},
     {"claim": "ci/tests/test_ci_workflow.py asserts that the check job runs make check after the base pyproject.toml and Makefile overlay.", "evidence_command_index": 5},
