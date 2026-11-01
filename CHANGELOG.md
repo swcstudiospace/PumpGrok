@@ -2,6 +2,12 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
+
+### Fixed
+
+- LIV-01 (phase 20): `pumpgrok.execution.live` no longer re-exports `LiveAdapterStub`, so importing the CLI, backtest or promotion modules no longer loads `pumpgrok.execution.live.live_adapter`. The import-graph guard follows parent package `__init__` edges, and a fresh-interpreter test proves the path is closed (tests/safety/test_cli_import_no_live_adapter.py). The replay hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is unchanged.
+
 ## [Unreleased] - Desk built-ins: platform, wallet allowlist, notional cap, scheduled promotion
 
 ### Added
