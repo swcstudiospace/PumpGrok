@@ -95,15 +95,15 @@ nine preconditions in R21 order. The gate text printed in a fresh checkout by
 |---|-----------------|-------|-----------|
 | 1 | mode_live | unmet | effective mode is live but [live] enabled is not true |
 | 2 | live_enable_env | unmet | PUMPGROK_LIVE_ENABLE is not 1 |
-| 3 | min_paper_days | unmet | no source=paper events in var/ledger.sqlite |
-| 4 | performance_thresholds | unmet | no source=paper events in var/ledger.sqlite |
+| 3 | min_paper_days | unmet | no source=paper ledger at var/ledger.sqlite |
+| 4 | performance_thresholds | unmet | no source=paper ledger at var/ledger.sqlite |
 | 5 | wallet_allowlist | unmet | wallet.allowlist is empty; no public key is allowlisted |
 | 6 | notional_cap | met | live.notional_cap_lamports is 1000000000 (ceiling 1 SOL) |
 | 7 | confirmation_record | unmet | var/live_confirmation.json missing |
 | 8 | adapter_registered | unmet | no live adapter implementation ships in this release |
 | 9 | no_active_stop | unmet | halt, kill switch and breaker state are not readable in this release |
 
-Rows 3 and 4 read var/ledger.sqlite and row 7 reads var/live_confirmation.json, so their text changes once those files exist.
+Rows 3 and 4 read var/ledger.sqlite and row 7 reads var/live_confirmation.json, so their text depends on the checkout's var/ state. The table is the fresh-checkout output: with no var/ledger.sqlite, rows 3 and 4 read "no source=paper ledger at var/ledger.sqlite". With an existing ledger that holds no source=paper events, they read "no source=paper events in var/ledger.sqlite" instead.
 
 Notes on the evidence above:
 
