@@ -84,7 +84,7 @@ before inventing a second convention.
 
 Planning state and per-task evidence live outside the product tree.
 
-- Phase plans, context, and summaries live in `.planning/phases/07-documentation-upgrade/` (e.g. `.planning/phases/07-documentation-upgrade/07-CONTEXT.md`).
+- Phase plans, context, and summaries for v3 live in `.planning/milestones/v3-phases/` (e.g. `.planning/milestones/v3-phases/07-documentation-upgrade/07-CONTEXT.md`); active phases go in `.planning/phases/`.
 - Per-task machine receipts live in `.receipts/<bot>/<task>.json` (see the `gates` target in `Makefile`).
 - Prompt sources and generated agent templates are checked by `scripts/assemble-prompts.sh` and `scripts/generate-templates.py`.
 

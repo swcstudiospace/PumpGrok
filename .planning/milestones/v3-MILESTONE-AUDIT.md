@@ -1,5 +1,5 @@
 ---
-milestone: 3
+milestone: v3
 audited: 2026-11-01T08:43:58Z
 status: tech_debt
 scores:
@@ -141,4 +141,8 @@ Listed in the YAML above. Decision for the owner: accept this debt and archive (
 
 - Status tech_debt: archive requires the owner's explicit decision. The archive is irreversible; the tag lands on the bot branch HEAD until merge.
 - Verification counts used here are from the phase records and the orchestrator runs; no full re-run of phase 9 was made.
+
+## Correction (2026-11-01)
+
+INT-10 is partially met, not satisfied. The requirement says the bonding-curve layout is probed read-only against live mainnet accounts. The probe script exists (scripts/probe_curve_layout.py). No bonding-curve account is configured in this checkout, so the probe makes no RPC call and records Status ASSUMED (docs/CURVE_LAYOUT_PROBE.md). The layout stays ASSUMED (src/pumpgrok/tools/onchain/curve_layout.py:33), and RPC-derived curve entries fail closed with data_unavailable. Phase 6 verification row 11a passed on that recorded ASSUMED result, so the requirement count above overstates INT-10. This item was not on the debt list the owner reviewed. The status stays tech_debt, because the fail-closed behaviour is verified and the live probe is recorded as debt.
 
