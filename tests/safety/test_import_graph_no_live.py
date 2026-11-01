@@ -9,6 +9,7 @@ symbol. Imports of the gate module live_gate stay allowed because the
 CLI refusal and the weekly report read the gate without reaching an
 adapter. Modules under src/pumpgrok/execution/live/ additionally import
 no network client and open no socket. Offline only, ASCII only.
+Each module also depends on every parent package __init__, because importing a child executes it.
 """
 
 from __future__ import annotations
@@ -77,6 +78,8 @@ def _module_name(path: Path) -> str:
     parts = list(rel.parts)
     if parts[-1] == "__init__":
         parts = parts[:-1]
+    if not parts:
+        return "pumpgrok"
     return "pumpgrok." + ".".join(parts)
 
 
@@ -141,6 +144,12 @@ def _resolve(dep: str, modules: dict[str, Path]) -> str | None:
     return None
 
 
+def _ancestors(module: str) -> list[str]:
+    """Parent packages, outermost first; importing a module executes each of them."""
+    parts = module.split(".")
+    return [".".join(parts[:size]) for size in range(1, len(parts))]
+
+
 def _edges(modules: dict[str, Path]) -> dict[str, set[str]]:
     """Internal import edges between known modules."""
     graph: dict[str, set[str]] = {}
@@ -150,6 +159,9 @@ def _edges(modules: dict[str, Path]) -> dict[str, set[str]]:
             resolved = _resolve(dep, modules)
             if resolved is not None and resolved != module:
                 targets.add(resolved)
+        for ancestor in _ancestors(module):
+            if ancestor in modules and ancestor != module:
+                targets.add(ancestor)
         graph[module] = targets
     return graph
 

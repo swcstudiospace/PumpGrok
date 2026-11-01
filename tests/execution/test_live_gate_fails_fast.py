@@ -27,7 +27,8 @@ from pumpgrok.config.settings import load_settings
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
-from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate, Precondition
+from pumpgrok.execution.live import PRECONDITION_IDS, LiveGate, Precondition
+from pumpgrok.execution.live.live_adapter import LiveAdapterStub
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
