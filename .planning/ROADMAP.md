@@ -74,7 +74,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0 and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0 (PRC-01)
   2. `test "$(grep -cE '^## (Purpose|Stack|Layout|Commands|Architecture|Conventions|GSD artifact|Safety|Known gaps)' CLAUDE.md)" -ge 9` exits 0 (DOC-01)
   3. `! grep -nE '^\s*[-*] ' CLAUDE.md | grep -v '`'` exits 0; every bullet in CLAUDE.md cites a backticked repository path (a grep proxy for "every statement cites a file"; the phase review checks prose statements) (DOC-01)
-  4. `test "$(wc -l < AGENTS.md)" -lt "$(git show origin/main:AGENTS.md | wc -l)"` exits 0, `grep -q "CLAUDE.md" AGENTS.md` exits 0, and `! grep -niE "placeholder" AGENTS.md` exits 0 (DOC-02)
+  4. `test "$(wc -l < AGENTS.md)" -lt "$(git show f3887bb:AGENTS.md | wc -l)"` exits 0, `grep -q "CLAUDE.md" AGENTS.md` exits 0, and `! grep -niE "placeholder" AGENTS.md` exits 0 (DOC-02). Re-baselined 2026-11-01 from `origin/main`: once phase 7 merged, `origin/main` holds the trimmed file (133 lines), so the literal comparison can never pass again. `f3887bb` is the phase start point (423 lines).
   5. `./scripts/verify_doc_commands.sh` exits 0; it runs each command in the Commands sections of AGENTS.md and CLAUDE.md and checks its documented exit code (DOC-02)
   6. `uv run pytest -q tests/docs/` exits 0; it asserts that plugin version statements match `pyproject.toml`, that `docs/VENDOR_PIN.md` matches the vendored snapshot, that every command named in README, ARCHITECTURE, SETUP and `skills/replay-and-backtest/SKILL.md` exists in the CLI help, and that no contradiction from the 2026-10-25 docs audit remains (DOC-03)
   7. `uv run pytest -q tests/docs/test_historical_banners.py` exits 0; every historical design record it lists begins with the banner "Historical design record" (DOC-04)
@@ -195,7 +195,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20
+Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20 -> 21
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -205,6 +205,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20
 | 9. Bounded paper self-upgrade | 7/7 | Complete | 2026-10-25 |
 | 10. Live readiness, kept disabled | 3/3 | Complete | 2026-10-25 |
 | 20. Close gap: LIV-01 live adapter import path | 1/1 | Complete | 2026-11-01 |
+| 21. Close gap: DOC-03 documentation accuracy | 1/1 | Complete | 2026-11-01 |
 
 ### Phase 20: Close gap: LIV-01 live adapter import path
 
@@ -215,3 +216,13 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 20
 
 Plans:
 - [x] 20-01-PLAN.md - red regression tests, package re-export removed, guard parent-package edges, CHANGELOG entry
+
+### Phase 21: Close gap: DOC-03 documentation accuracy
+
+**Goal:** The documents named by DOC-03 match the code: no retired vendor or unimplemented scout flow presented as live, no absent helper scripts, no read-only claims contradicted by ledger or setup writes, plugin manifests at the package version, and CLAUDE.md line anchors that resolve (audit gap DOC-03, plus DOC-01 anchors found during re-verification).
+**Requirements**: DOC-03
+**Depends on:** Phase 20
+**Plans:** 1/1 plans complete (two documented closure rounds)
+
+Plans:
+- [x] 21-01-SUMMARY.md - red-first manifest test, manifest and wording corrections, ARCHITECTURE diagram, CLAUDE.md anchors, follow-up and round 2 fixes
