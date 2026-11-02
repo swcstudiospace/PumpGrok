@@ -360,3 +360,33 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
+
+  sbom:
+    name: CycloneDX SBOM
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, omega-ci]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate CycloneDX SBOM from the uv.lock export
+        # The SBOM describes the set pip-audit scans: the locked runtime export, no dev group.
+        # cyclonedx-bom runs through uvx at a pinned version, so the generator stays out of uv.lock.
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.13.4"
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o req.txt
+          uvx --from cyclonedx-bom==7.6.0 cyclonedx-py requirements req.txt --of JSON --output-reproducible -o sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyclonedx-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
