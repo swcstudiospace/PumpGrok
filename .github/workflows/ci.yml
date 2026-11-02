@@ -41,8 +41,8 @@ jobs:
       - name: Install uv (pinned to the version that wrote uv.lock)
         run: python -m pip install "uv==0.13.4"
 
-      - name: Lint, typecheck, coverage floor and audit
-        run: make lint typecheck cov audit
+      - name: Lint, typecheck, test and audit
+        run: make lint typecheck test audit
 
   soak:
     name: Nightly slow soak

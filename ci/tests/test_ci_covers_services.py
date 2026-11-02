@@ -1,6 +1,6 @@
 """CI lint, typecheck and audit cover services/ once a service lands (D-13).
 
-The check job in ci.yml runs `make lint typecheck cov audit`. The Makefile makes the service
+The check job in ci.yml runs `make lint typecheck test audit`. The Makefile makes the service
 steps of lint, typecheck and audit path-conditional on a service source tree. These tests pin the
 gating behaviour, not whether the tree exists: they override SERVICE_SRC on the make command line
 to exercise both branches, and they check that the default recipe follows the directory's real
@@ -39,7 +39,7 @@ def _check_job_runs() -> str:
 
 
 def test_ci_check_job_runs_the_service_aware_make_targets():
-    assert "make lint typecheck cov audit" in _check_job_runs()
+    assert "make lint typecheck test audit" in _check_job_runs()
 
 
 def test_makefile_service_wildcard_is_path_conditional_on_desk_signer():

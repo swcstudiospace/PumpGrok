@@ -29,8 +29,8 @@ typecheck: sync  ## mypy --strict on src/
 	$(UV) run mypy src/
 	$(if $(SERVICE_SRC),$(UV) run mypy $(SERVICE_SRC),echo "services: services/desk-signer/src absent; service typecheck skipped")
 
-test: sync       ## fast suite: default path, soak excluded (-m 'not slow')
-	$(UV) run pytest -q -m 'not slow'
+test: sync       ## fast suite with branch coverage; the floor is pyproject fail_under (soak excluded)
+	$(UV) run pytest -q -m 'not slow' --cov=pumpgrok
 
 test-soak: sync  ## slow multi-day soak replay only (-m slow)
 	$(UV) run pytest -q -m slow
@@ -68,7 +68,7 @@ prompts:         ## assemble prompts and regenerate agent templates
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh
 	$(UV) run python scripts/generate-templates.py
 
-check: lint typecheck cov audit  ## everything ci.yml runs (cov is the fast suite with the floor)
+check: lint typecheck test audit  ## everything ci.yml runs
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh --check
 	$(UV) run python scripts/generate-templates.py --check
 	$(UV) run python scripts/generate-event-schemas.py --check
