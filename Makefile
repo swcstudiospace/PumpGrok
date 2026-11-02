@@ -1,4 +1,4 @@
-.PHONY: help sync lint fmt typecheck test audit run-paper gateway replay report gates prompts check doctor clean
+.PHONY: help sync lint fmt typecheck test test-soak test-all cov audit run-paper gateway replay report gates prompts check doctor clean
 
 UV ?= uv
 BOT ?= bot-00-chief
@@ -22,8 +22,17 @@ fmt: sync        ## ruff format (writes files; never run by a hook)
 typecheck: sync  ## mypy --strict on src/
 	$(UV) run mypy src/
 
-test: sync       ## pytest (product + gate self-tests)
-	$(UV) run pytest -q
+test: sync       ## fast suite: default path, soak excluded (-m 'not slow')
+	$(UV) run pytest -q -m 'not slow'
+
+test-soak: sync  ## slow multi-day soak replay only (-m slow)
+	$(UV) run pytest -q -m slow
+
+test-all: sync   ## every test, soak included
+	$(UV) run pytest -q -m 'slow or not slow'
+
+cov: sync        ## fast suite with branch coverage; writes coverage.xml; floor in pyproject
+	$(UV) run pytest -q -m 'not slow' --cov=pumpgrok --cov-report=term-missing --cov-report=xml:coverage.xml
 
 audit: sync      ## pip-audit against the lockfile
 	$(UV) export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o /tmp/pumpgrok-req.txt
