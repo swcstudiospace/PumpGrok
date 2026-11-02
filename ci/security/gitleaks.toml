@@ -71,8 +71,8 @@ regexes = [
   # Telegram-shaped placeholder the redaction tests build in tests/risk/test_alert_channel.py.
   '''123456789:PLACEHOLDER_NOT_A_REAL_TOKEN_0000AB''',  # pragma: allowlist secret: synthetic test value
   # Deterministic idempotency keys of the trading smoke replay pin (plan 11-01): hex digests the replay derives from its fixture, not credentials. Each is a full literal, so any other value still fails the scan.
-  '''ab51bbdc86dc16bebe9a072ea0701301''',
-  '''6c0fdfec1710eb2320480c72c7df30bb''',
-  '''aea68c17eeaeb0972d242754d9ced5de''',
-  '''005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725''',
+  '''^ab51bbdc86dc16bebe9a072ea0701301$''',
+  '''^6c0fdfec1710eb2320480c72c7df30bb$''',
+  '''^aea68c17eeaeb0972d242754d9ced5de$''',
+  '''^005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725$''',
 ]
