@@ -1,3 +1,12 @@
+# Requirements Archive: v3 v3
+
+**Archived:** 2026-11-01
+**Status:** SHIPPED
+
+For current requirements, see `.planning/REQUIREMENTS.md`.
+
+---
+
 # Requirements: PumpGrok Desk v3
 
 **Defined:** 2026-10-25

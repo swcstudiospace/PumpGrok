@@ -12,9 +12,15 @@ build/
 !.receipts/**/.gitkeep
 !.receipts/bot-00-chief/complete-phase-5.json
 !.receipts/bot-00-chief/phase-6.json
+!.receipts/bot-00-chief/restore-hardening.json
+!.receipts/bot-00-chief/desk-built-ins.json
 !.receipts/bot-00-chief/phase-9-followups.json
 var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
 !.receipts/bot-02-risk/00057-omega-ci-runners.json
+!.receipts/bot-00-chief/v3-closeout.json
+!.receipts/bot-02-risk/pr-27-gate-waiver.json
+!.receipts/bot-00-chief/v3-closeout-followup.json
+!.receipts/bot-02-risk/pr-27-followup.json

@@ -12,10 +12,13 @@ layout is written to ``tests/fixtures/rpc/bonding_curve/probe.json`` and
 ``docs/CURVE_LAYOUT_PROBE.md`` records ``Status: VERIFIED`` only when the account is owned by the
 expected program and carries the expected discriminator. On any failure
 (unreachable network, unknown account, undecodable bytes) the script exits 0,
-keeps ``LAYOUT_STATUS`` ASSUMED, writes ``probe.json`` carrying the exact
-error text verbatim, and writes the doc with ``Status: ASSUMED`` plus an
-``Error: <exact probe error>`` line. While ASSUMED, RPC-derived prices stay
+keeps ``LAYOUT_STATUS`` ASSUMED, writes ``probe.json`` carrying the probe error
+with credentials redacted, and writes the doc with ``Status: ASSUMED`` plus an
+``Error: <redacted probe error>`` line. While ASSUMED, RPC-derived prices stay
 fail-closed (``data_unavailable``) per the existing rule in ``curve_layout``.
+An endpoint carrying credentials (userinfo, a credential-named query parameter or
+an opaque path segment such as a provider key) is refused with exit 2 before any
+RPC call or write; only its scheme, host and path are ever written.
 
 Usage:
     uv run python scripts/probe_curve_layout.py
@@ -30,11 +33,13 @@ import base64
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENDPOINT = "https://api.mainnet-beta.solana.com"
@@ -48,6 +53,73 @@ _EXPECTED_SIZE = _CURVE_STRUCT.size
 # are trusted. Both match tests/fixtures/rpc/bonding_curve/layout.json.
 EXPECTED_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
+
+# Query-parameter names that carry credentials, matched case-insensitively.
+_CREDENTIAL_NAME = re.compile(r"api[-_]?key|token|secret|password|key", re.IGNORECASE)
+# The same names as they appear inside free text, e.g. "...?api_key=VALUE".
+_CREDENTIAL_ASSIGNMENT = re.compile(
+    r"([\w.-]*(?:api[-_]?key|token|secret|password|key)[\w.-]*=)[^\s&#'\"]*", re.IGNORECASE
+)
+_USERINFO_IN_TEXT = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#]*@")
+# A long opaque path segment is a provider key in the URL path, e.g. /v2/<key>.
+_OPAQUE_PATH_SEGMENT = re.compile(r"[A-Za-z0-9_-]{20,}")
+
+
+def _path_has_credential(path: str) -> bool:
+    """True when a URL path holds an opaque segment, the shape of a provider key in the path."""
+    return any(_OPAQUE_PATH_SEGMENT.fullmatch(segment) for segment in path.split("/"))
+
+
+def _require_credential_free(endpoint: str) -> None:
+    """Raise unless the endpoint has no userinfo, credential-named query parameter or path key."""
+    try:
+        parts = urlsplit(endpoint)
+    except ValueError:
+        raise ValueError("RPC endpoint is not a parseable URL; URL not echoed") from None
+    if "@" in parts.netloc:
+        raise ValueError(
+            "RPC endpoint carries credentials in its userinfo; URL not echoed; "
+            "remove them from --endpoint or RPC_ENDPOINT"
+        )
+    for name, _ in parse_qsl(parts.query, keep_blank_values=True):
+        if _CREDENTIAL_NAME.search(name):
+            raise ValueError(
+                "RPC endpoint carries a credential-named query parameter; URL not echoed; "
+                "remove it from --endpoint or RPC_ENDPOINT"
+            )
+    if _path_has_credential(parts.path):
+        raise ValueError(
+            "RPC endpoint carries a credential in its URL path; URL not echoed; "
+            "remove it from --endpoint or RPC_ENDPOINT"
+        )
+
+
+def _redact_endpoint(endpoint: str) -> str:
+    """Keep only scheme, host (with port) and path; drop userinfo, query and fragment.
+
+    A path holding a credential is replaced by a placeholder, never written.
+    """
+    try:
+        parts = urlsplit(endpoint)
+        port = parts.port
+    except ValueError:
+        return "<unparseable endpoint>"
+    if not parts.scheme or not parts.hostname:
+        return "<unparseable endpoint>"
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    if port is not None:
+        host = f"{host}:{port}"
+    path = "/<redacted>" if _path_has_credential(parts.path) else parts.path
+    return urlunsplit((parts.scheme, host, path, "", ""))
+
+
+def _redact_text(text: str, endpoint: str = "") -> str:
+    """Scrub error text: no raw endpoint, no userinfo, no credential-named values."""
+    if endpoint:
+        text = text.replace(endpoint, _redact_endpoint(endpoint))
+    text = _USERINFO_IN_TEXT.sub(r"\1REDACTED@", text)
+    text = _CREDENTIAL_ASSIGNMENT.sub(r"\1REDACTED", text)
+    return " ".join(text.splitlines())
 
 
 def _now_utc() -> str:
@@ -117,15 +189,17 @@ def _check_identity(value: dict, raw: bytes) -> None:
 def _write_assumed(
     out: Path, doc: Path, *, endpoint: str, account: str | None, commitment: str, error: str
 ) -> None:
+    safe_endpoint = _redact_endpoint(endpoint)
+    safe_error = _redact_text(error, endpoint)
     record = {
         "fixture": "bonding_curve_probe",
         "layout_status": "ASSUMED",
-        "endpoint": endpoint,
+        "endpoint": safe_endpoint,
         "account": account,
         "commitment": commitment,
         "probed_at": _now_utc(),
         "decoded": None,
-        "probe_error": error,
+        "probe_error": safe_error,
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
@@ -134,9 +208,9 @@ def _write_assumed(
         "# Bonding-curve layout probe (INT-10, R65)\n"
         "\n"
         "Status: ASSUMED\n"
-        f"Error: {error}\n"
+        f"Error: {safe_error}\n"
         "\n"
-        f"Endpoint: {endpoint}\n"
+        f"Endpoint: {safe_endpoint}\n"
         f"Method: getAccountInfo (read-only, no keys)\n"
         "Layout: ASSUMED until a live probe decodes under it; "
         "RPC-derived entries fail closed with data_unavailable.\n",
@@ -153,6 +227,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--doc", default=str(DEFAULT_DOC))
     args = parser.parse_args(argv)
+
+    try:
+        _require_credential_free(args.endpoint)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     out = Path(args.out)
     doc = Path(args.doc)
@@ -181,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         raw = base64.b64decode(data[0], validate=True)
         _check_identity(value, raw)
         decoded = _decode_account(raw)
-    except Exception as exc:  # the exact text is the recorded artifact
+    except Exception as exc:  # the redacted text is the recorded artifact
         _write_assumed(
             out,
             doc,
@@ -192,10 +272,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    safe_endpoint = _redact_endpoint(args.endpoint)
     record = {
         "fixture": "bonding_curve_probe",
         "layout_status": "VERIFIED",
-        "endpoint": args.endpoint,
+        "endpoint": safe_endpoint,
         "account": account,
         "commitment": args.commitment,
         "probed_at": _now_utc(),
@@ -213,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         "\n"
         "Status: VERIFIED\n"
         "\n"
-        f"Endpoint: {args.endpoint}\n"
+        f"Endpoint: {safe_endpoint}\n"
         f"Account: {account}\n"
         "Method: getAccountInfo (read-only, no keys)\n",
         encoding="utf-8",
