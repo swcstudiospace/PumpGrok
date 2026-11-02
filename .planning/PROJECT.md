@@ -12,13 +12,13 @@ The desk reacts to events instead of polling, runs several bounded strategies in
 
 v2 shipped 2026-10-23 (paper-only desk, ten seats, risk engine, paper adapter on the bonding-curve model, deterministic replay, supervised serve loop, desk gateway, Telegram kill channel; 71 requirements). v3 shipped (closed 2026-10-26): integer money and fail-closed state, `CLAUDE.md` and a trimmed `AGENTS.md`, the holdout-aware `pumpgrok backtest` verb and divergence check, bounded and reversible paper parameter promotion with the constitution amendment of 2026-10-25, and live kept refused (34 requirements, 35 plans). Archived under `.planning/milestones/`: `v2-ROADMAP.md`, `v2-REQUIREMENTS.md`, `v2-MILESTONE-AUDIT.md`, `v3-ROADMAP.md`, `v3-REQUIREMENTS.md`.
 
-v4 is in progress. The roadmap (Phases 11 to 19), requirements (111) and plans (74, in 45 pull requests) were written on 2026-10-28 and none has started. The product line is main at the commit tagged `v4-base`, taken after the owner-approved merge of draft PRs 16 to 20 (order 18, 19, 20, 17 for 17 to 20). Live is still refused (exit 3).
+v4 is in progress. The roadmap (Phases 11 to 19), requirements (157) and plans (74, in 45 pull requests) were written on 2026-10-28 and none has started. The product line is main at the commit tagged `v4-base`, taken after the owner-approved merge of draft PRs 16 to 20 (order 18, 19, 20, 17 for 17 to 20). Live is still refused (exit 3).
 
 ## Current Milestone: v4 Event-Driven Multi-Strategy Desk with a Dormant Live Path
 
 **Goal:** make the desk event-driven (typed event bus, one Grok gateway, event-mode supervisor wake, idle desk silent), run four bounded strategies in paper on live-recorded data with per-strategy slices, backtest v2 and an evidence-based promotion lifecycle, and build the live path fully but dormant (segregated signer, arm record, instruction-level policy, shadow mode, human-approved constitution amendment). Live trading is never enabled by v4.
 
-**Status:** planned 2026-10-28 in `.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md` (111 requirements, 14 families, 9 phases, 74 plans); ready to plan Phase 11 (`.planning/STATE.md`). Phase 11 plan 11-09 installs these planning files in the repository.
+**Status:** planned 2026-10-28 in `.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md` (157 requirements, 17 families, 9 phases, 74 plans); ready to plan Phase 11 (`.planning/STATE.md`). Phase 11 plan 11-09 installs these planning files in the repository.
 
 **Deferred beyond v4** (see `.planning/STATE.md` Deferred Items and Out of Scope):
 - Manual-ticket exit approvals: a standing human `exit_rule` approval that the exit seat consults before a rule sell (PAPER-007 narrowed; see Out of Scope).
@@ -84,6 +84,9 @@ Full v3 record: `.planning/milestones/v3-REQUIREMENTS.md` (34 of 34 complete) an
 - [ ] OBS (7 requirements, OBS-01..07): doctor v4, health and metric sections, alert rules, docs, nightly event soak, milestone audit, per-strategy report section
 - [ ] FEE (1 requirements, FEE-01): paper fee model v2 selectable, default flip with a recorded before and after pair
 - [ ] RT (4 requirements, RT-01..04): event-mode seat cycle bodies, Intent to exec.place router, event desk composition root, restart recovery
+- [ ] ONB (10 requirements, ONB-01..10): operator onboarding inventory of every input, doctor readiness per mode, paper start refused with the missing inputs named, seat tool-access approvals, no secret value echoed or stored, wallet and RPC endpoint recorded by host only, x.ai key rules, HMAC confirmation key forbidden in live
+- [ ] HARD (20 requirements, HARD-01..12, HARD-19, HARD-24..26, HARD-30..33; HARD-04 owner confirmation pending): settings refusals, narrowed supervisor excepts, import-linter layering, dead-module guard, function-size guard, resume safety, hash-chained opening rows, fail-closed ledger reads, integer and Decimal gate math, G-3 path allowlist, upgrade rollback verb
+- [ ] HOST (16 requirements, HOST-01..16; HOST-03 owner design choice pending): hosted runtime with the state directory on one named volume, /livez, /readyz and /metrics only, shutdown failure exit, ledger backup and restore, log level and JSON logs, gateway bind and token rules, Docker secrets and digest-pinned images, replay-demo labels, live-data paper root in compose
 
 ### Out of Scope
 
