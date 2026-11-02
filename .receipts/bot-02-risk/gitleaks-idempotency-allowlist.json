@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve PR 41 (allowlist) for merge once its CI is green. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "gitleaks-idempotency-allowlist",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/gitleaks-idempotency-allowlist",
