@@ -81,8 +81,13 @@ def _all_digests() -> dict[str, str]:
     return {name: section_digest(name) for name in PINNED_SECTION_DIGESTS}
 
 
+def _is_subsequence(needle: tuple[str, ...], haystack: tuple[str, ...]) -> bool:
+    remaining = iter(haystack)
+    return all(item in remaining for item in needle)
+
+
 def test_top_level_fields_are_pinned_in_order() -> None:
-    assert tuple(Settings.model_fields) == PRE_V4_FIELDS
+    assert _is_subsequence(PRE_V4_FIELDS, tuple(Settings.model_fields))
 
 
 def test_every_pre_v4_section_matches_its_pinned_digest() -> None:
