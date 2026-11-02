@@ -30,11 +30,11 @@ The canonical suite, which CI also runs, is:
 
 ```bash
 uv sync --frozen --group dev
-make lint typecheck cov audit          # ruff, mypy --strict, pytest with branch coverage floor, pip-audit
+make lint typecheck test audit          # ruff, mypy --strict, pytest, pip-audit
 ./scripts/check.sh                      # instruction-file lint, no network
 ```
 
-`make check` runs the same lint, typecheck, cov and audit targets (`cov` is the fast suite and enforces the coverage floor set in `pyproject.toml`), then the prompt-assembly and
+`make check` runs the same lint, typecheck, test and audit targets, then the prompt-assembly and
 template drift checks, the event-schema drift check, and `./scripts/check.sh`.
 
 ## Receipts (G-2)
