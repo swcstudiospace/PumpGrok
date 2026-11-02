@@ -95,6 +95,7 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 - Parameter-set identity: `param_set_hash` is the normalized CandidateParams content hash, the value the search winner, promotion gate, evidence and active-set ledger carry. Whitespace and key order no longer change it. Every run id changes once, because the identity input changed. `--params` files with keys outside CandidateParams, or float leaves, are refused with a usage error.
 - Selection valuation: the search objective uses the report's rule (cash plus open positions at mark, else at cost basis) from `backtest/equity.py`, which the report also calls. A buy-and-hold candidate is no longer scored as a loss in selection, so search scores and winners can change.
+- Search input: the promotion search runs over `promotion.canonical_space`, one entry per content hash in hash order. A repeated declaration counts as one trial, and a score tie goes to the lowest content hash instead of the earlier declared entry. The declared-space identity value is unchanged; run ids change only where a tie now picks a different winner, and candidates.json bytes change for declarations not already in hash order.
 - Constitution wording: clause 10 quotes now match the amendment bytes (ASCII double quotes, en dash U+2013 kept) in the prompt core, the generated agent files, RISK_POLICY, ROSTER and the browser-ops skill. The frozen oracle test takes its clause 10 authority from `.planning/AMENDMENT-2026-10-25.md`.
 
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled

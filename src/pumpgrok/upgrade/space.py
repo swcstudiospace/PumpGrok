@@ -6,7 +6,8 @@ values. The file ships empty, so the check is skipped until candidates are decla
 
 Shape: one array-of-tables entry named candidate per candidate, each with an optional filter
 table and an optional exits table of integer, boolean or string knobs. The array keeps
-declaration order, which decides ties in the search (the first best candidate wins).
+declaration order. The search does not use that order: promotion.canonical_space sorts the
+entries by content hash and keeps one per hash, so a tie goes to the lowest content hash.
 
 load_declared_space parses the file and fails closed. It raises DeclaredSpaceError for a
 malformed file, more than MAX_DECLARED_CANDIDATES candidates (never truncated), an unknown
