@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: re-approve PR 36 as amended (overflow fix a523273 adds ArithmeticError to _MALFORMED; receipt schema commit 1b510f1); merge after PR 35. Review points accepted: the behaviour change in authority and holder checks, and the unverified decoder field layouts (MKT-03 owns the on-chain check). Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p11-rug-excepts-event-decoder",
   "bot": "bot-05-rug",
   "branch": "bot-05-rug/v4-p11-rug-excepts-event-decoder",
