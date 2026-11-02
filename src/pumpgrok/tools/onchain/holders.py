@@ -13,7 +13,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 # Payload shapes the holder parser cannot walk; each becomes a failed check.
-_MALFORMED = (AttributeError, KeyError, TypeError, ValueError)
+_MALFORMED = (ArithmeticError, AttributeError, KeyError, TypeError, ValueError)
 
 
 async def holder_snapshot(mint: str, rpc: RpcClient, limit: int = 20) -> dict[str, Any]:

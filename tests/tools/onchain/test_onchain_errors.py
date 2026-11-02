@@ -109,6 +109,12 @@ async def test_holder_malformed_item_is_typed_false() -> None:
     assert result == {"ok": False, "error": "holder check failed", "mint": MINT}
 
 
+async def test_holder_huge_integer_amount_is_typed_false() -> None:
+    """float() on a 400-digit integer raises OverflowError; it must fail typed, not escape."""
+    result = await holder_snapshot(MINT, _result([{"address": "Holder", "uiAmount": 10**400}]))
+    assert result == {"ok": False, "error": "holder check failed", "mint": MINT}
+
+
 async def test_holder_unexpected_error_propagates() -> None:
     with pytest.raises(RuntimeError, match="unexpected"):
         await holder_snapshot(MINT, _raising(_http_status(200)))

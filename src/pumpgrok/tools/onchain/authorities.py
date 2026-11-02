@@ -13,7 +13,7 @@ from pumpgrok.core.errors import DataStale
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 # Payload shapes the mint parser cannot walk; each becomes a failed check.
-_MALFORMED = (AttributeError, KeyError, TypeError, ValueError)
+_MALFORMED = (ArithmeticError, AttributeError, KeyError, TypeError, ValueError)
 
 
 async def check_mint(mint: str, rpc: RpcClient) -> dict[str, Any]:
