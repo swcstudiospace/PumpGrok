@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve all Phase 11 PRs in order (41, 34, then 35 to 39) once each CI is green, with the review points accepted as written. PR 37 review point: the jupiter narrowing (an unexpected exception now propagates). Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p11-jupiter-excepts",
   "bot": "bot-01-scout",
   "branch": "bot-01-scout/v4-p11-jupiter-excepts",
@@ -95,7 +97,8 @@
     },
     {
       "claim": "The new error test was red before the src change (2 failing) and is green after (8 pass).",
-      "evidence_command_index": 1
+      "evidence_command_index": 1,
+      "expects_failure": true
     },
     {
       "claim": "tests/tools/market and tests/characterization/test_jupiter_quote.py pass: 25 tests, 0 failures, 0 errors.",
@@ -107,7 +110,8 @@
     },
     {
       "claim": "Touched files contain only ASCII and no TODO text.",
-      "evidence_command_index": 6
+      "evidence_command_index": 6,
+      "expects_failure": true
     },
     {
       "claim": "Trading smoke pin passes: 4 tests, 0 failures.",
