@@ -81,6 +81,17 @@ def _declared_params(space: Sequence[Mapping[str, Any]]) -> dict[str, ParamSet]:
     return {params.content_hash: params for params in (ParamSet(**dict(entry)) for entry in space)}
 
 
+def declared_space_identity(space: Sequence[Mapping[str, Any]]) -> str:
+    """Identity of a declared space: sha256 over its sorted, distinct per-entry content hashes.
+
+    Entries are keyed by content hash (see _declared_params), so a repeated entry and the order
+    of the entries leave the identity unchanged, while a different entry changes it.
+    """
+    entry_hashes = {param_set_hash(canonical_json(dict(entry)).encode("utf-8")) for entry in space}
+    payload = canonical_json({"entry_hashes": sorted(entry_hashes)})
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float) -> bool:
     """True when the paper ledger reached window_end and holds a row inside the window.
 
@@ -116,10 +127,7 @@ def _check_and_apply(
     spec = _backtest_dataset(str(dataset_dir))
     declared = _declared_params(space)
     space_bytes = canonical_json({"candidates": [dict(entry) for entry in space]}).encode("utf-8")
-    entry_hashes = [param_set_hash(canonical_json(dict(entry)).encode("utf-8")) for entry in space]
-    space_hash = hashlib.sha256(
-        canonical_json({"entry_hashes": sorted(entry_hashes)}).encode("utf-8")
-    ).hexdigest()
+    space_hash = declared_space_identity(space)
     manifest = build_manifest(
         spec.ref,
         seed,
