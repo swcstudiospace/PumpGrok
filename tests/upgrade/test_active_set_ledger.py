@@ -17,7 +17,7 @@ from pumpgrok.upgrade.params import ParamSet
 
 
 def _set_bytes(param_set: ParamSet) -> bytes:
-    """The exact bytes the identity hash covers (int leaves need no mapping)."""
+    """Canonical bytes of one set; param_set_hash parses them back to its content hash."""
     payload = {
         "exits": dict(param_set.exits or {}),
         "filter": dict(param_set.filter or {}),

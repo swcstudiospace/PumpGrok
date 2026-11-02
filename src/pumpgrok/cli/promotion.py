@@ -14,6 +14,7 @@ check at most once per PROMOTION_CHECK_INTERVAL_S on the injected clock.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -80,6 +81,29 @@ def _declared_params(space: Sequence[Mapping[str, Any]]) -> dict[str, ParamSet]:
     return {params.content_hash: params for params in (ParamSet(**dict(entry)) for entry in space)}
 
 
+def canonical_space(space: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Declaration order and repeats do not change the search input, so one identity names one
+    search."""
+    by_hash = {
+        param_set_hash(canonical_json(dict(entry)).encode("utf-8")): dict(entry) for entry in space
+    }
+    return [by_hash[content_hash] for content_hash in sorted(by_hash)]
+
+
+def declared_space_identity(space: Sequence[Mapping[str, Any]]) -> str:
+    """Identity of a declared space: sha256 over the content hashes of its canonical entries.
+
+    The canonical entries are the distinct ones, in content-hash order (see canonical_space), so
+    a repeated entry and the order of the entries leave the identity unchanged, while a different
+    entry changes it.
+    """
+    entry_hashes = [
+        param_set_hash(canonical_json(entry).encode("utf-8")) for entry in canonical_space(space)
+    ]
+    payload = canonical_json({"entry_hashes": entry_hashes})
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float) -> bool:
     """True when the paper ledger reached window_end and holds a row inside the window.
 
@@ -114,12 +138,14 @@ def _check_and_apply(
     """
     spec = _backtest_dataset(str(dataset_dir))
     declared = _declared_params(space)
-    space_bytes = canonical_json({"candidates": [dict(entry) for entry in space]}).encode("utf-8")
+    ordered = canonical_space(space)
+    space_bytes = canonical_json({"candidates": ordered}).encode("utf-8")
+    space_hash = declared_space_identity(space)
     manifest = build_manifest(
         spec.ref,
         seed,
         evaluated_settings_hash(ParamSet().candidate(), risk_budget=risk_budget, limits=limits),
-        param_set_hash(space_bytes),
+        space_hash,
     )
     events = load_dataset(spec.directory)
     stamps = tuple(event_epoch(event) for event in events.events)
@@ -132,8 +158,8 @@ def _check_and_apply(
             trials_path.unlink()
         search = run_search(
             spec.ref,
-            space,
-            len(space),
+            ordered,
+            len(ordered),
             seed,
             run_id=manifest.run_id,
             risk_budget=risk_budget,

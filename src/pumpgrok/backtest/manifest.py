@@ -24,6 +24,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pumpgrok.backtest.candidate import CandidateParams, param_set_mapping
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.idempotency import canonical_json
 
@@ -75,6 +76,11 @@ class RunManifest(BaseModel):
         return value
 
 
+def file_digest(data: bytes) -> str:
+    """sha256 hex of one file's bytes: the per-file digest dataset_digest folds."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def dataset_digest(dataset_dir: Path | str) -> str:
     """sha256 over every file in a dataset directory.
 
@@ -87,7 +93,7 @@ def dataset_digest(dataset_dir: Path | str) -> str:
     names = sorted(entry.name for entry in root.iterdir() if entry.is_file())
     if not names:
         raise ValueError(f"dataset directory holds no files: {root}")
-    per_file = [hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names]
+    per_file = [file_digest((root / name).read_bytes()) for name in names]
     return hashlib.sha256("".join(per_file).encode("utf-8")).hexdigest()
 
 
@@ -166,10 +172,14 @@ def filter_settings_hash(settings: FilterSettings) -> str:
 
 
 def param_set_hash(data: bytes) -> str:
-    """sha256 over parameter-set file bytes (the file bytes are the hash input)."""
-    if not data:
-        raise ValueError("parameter-set bytes must not be empty")
-    return hashlib.sha256(data).hexdigest()
+    """Canonical identity of one parameter-set file: the CandidateParams content hash.
+
+    The bytes parse into the same CandidateParams model the backtest CLI validates,
+    so whitespace and key order never change the identity. The value is the hash the
+    search winner, the promotion gate, the evidence and the active-set ledger carry.
+    Invalid bytes raise ValueError.
+    """
+    return CandidateParams(**param_set_mapping(data)).content_hash
 
 
 def run_id(manifest: RunManifest) -> str:

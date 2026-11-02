@@ -1,13 +1,13 @@
 {
   "approved_by": "human:SomeRandmGuyy",
-  "approval_note": "Owner approval for merge, 2026-11-01. Owner answer: approve both once hosted checks are green. Recorded for G-2 only; the bot did not approve this work.",
+  "approval_note": "Owner approval for merge, 2026-11-02 (the owner answered after the 2026-11-02T07:20Z gate run). Owner answer: approve both once hosted checks are green. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "live-mark-at-fill",
   "bot": "bot-00-chief",
   "branch": "bot-00-chief/live-mark-at-fill",
   "phase": "milestone-v3-followups",
   "plan": "Owner decision 2026-10-28: fix now, mark at cost basis on fill. Implemented as one valuation rule, not a reducer state change: an open position is valued at its last mark when it has one, otherwise at its fill cost basis. Applied to ledger equity, peak tracking, unrealized PnL and the paper adapter's exec.positions equity. Pricing and close paths still read last_mtm_lamports directly, so no close is priced at cost.",
   "purpose": "Receipt for the valuation fix. Not a merge approval.",
-  "status": "approved for merge by the owner 2026-11-01 (approved_by recorded). Gates green on this tree after the G-5 data-implications fix. G-1 waived for this PR by owner decision 2026-10-28 (gates.yml).",
+  "status": "approved for merge by the owner 2026-11-02 (approved_by recorded). Gates green on this tree after the G-5 data-implications fix. G-1 waived for this PR by owner decision 2026-10-28 (gates.yml).",
   "rollback_plan": "Close the draft pull request, or git revert the commit on bot-00-chief/live-mark-at-fill. The change alters only derived valuations (equity, peak, unrealized PnL, exec.positions equity); no event is written differently. smoke-10m events.hash is unchanged: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d. Data implications: none stored; no ledger row is rewritten, and the derived equity and PnL views for open positions return to their prior values on rollback. Expected recovery time: about 5 minutes (one git revert and one CI run).",
   "commands": [
     {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "environment synced"},

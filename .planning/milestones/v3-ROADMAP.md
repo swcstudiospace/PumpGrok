@@ -15,7 +15,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] **Phase 6: Integrity closure** - Audited invariant violations closed or proven present, feature-lineage fixes re-applied, replay hash before and after recorded (12 requirements)
 - [x] **Phase 7: Documentation upgrade** - CLAUDE.md codebase map, trimmed AGENTS.md, contradictions corrected, historical design banners (4 requirements)
 - [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
-- [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
+- [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion and exact rollback as library functions only (no operator verb), BLIND advisory rule and the approved constitution amendment (6 requirements)
 - [x] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
 
 ## Phase Details
@@ -134,23 +134,23 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 
 ### Phase 9: Bounded paper self-upgrade
 
-**Goal**: Paper parameter sets are content-hashed and held within version-controlled bounds; a candidate is promoted only through the gate; every promotion records its evidence and one operation rolls back to the exact prior version; SAFE-4 and SAFE-8 BLIND results are advisory while no paid RPC provider is recorded; the approved constitution amendment lands with the code it describes.
+**Goal**: Paper parameter sets are content-hashed and held within version-controlled bounds; the gate judges each candidate, and promotion evidence and one-call rollback exist as library functions with no operator verb; SAFE-4 and SAFE-8 BLIND results are advisory while no paid RPC provider is recorded; the approved constitution amendment lands with the code it describes.
 **Depends on**: Phase 8
 **Requirements**: UPG-01, UPG-02, UPG-03, UPG-04, UPG-05, UPG-06
 **Success Criteria** (what must be TRUE):
 
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0 and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0 (PRC-01)
   2. `uv run pytest -q tests/upgrade/test_param_set_hash.py tests/upgrade/test_active_set_ledger.py` exits 0 (parameter sets are content-hashed; the active set is written to the ledger) and `uv run python -c "import tomllib; tomllib.load(open('src/pumpgrok/config/upgrade_bounds.toml','rb'))"` exits 0 (UPG-01)
-  3. `uv run pytest -q tests/upgrade/test_promotion_gate.py` exits 0; an out-of-bounds candidate, a failed holdout, a divergence breach, a search above 20 trials, and a run below the autonomous-paper level each block promotion (UPG-02)
-  4. `uv run pytest -q tests/upgrade/test_promotion_evidence.py` exits 0; each promotion records the candidate hash, backtest run id, holdout id, divergence result, trial count and bounds (UPG-03)
-  5. `uv run pytest -q tests/upgrade/test_rollback_exact.py` exits 0; promote then roll back restores the exact prior version, verified by content hash and by the active-set ledger record (UPG-03)
-  6. `uv run pytest -q tests/upgrade/test_escalation.py` exits 0; an out-of-bounds or ineligible candidate is not promoted and produces a decision request and a journal note (UPG-04)
+  3. `uv run pytest -q tests/upgrade/test_promotion_gate.py` exits 0; an out-of-bounds candidate, a failed holdout, a divergence breach, a search above 20 trials, and a run below the autonomous-paper level each give the gate verdict promotion_eligible false (UPG-02; record_promotion does not enforce the verdict)
+  4. `uv run pytest -q tests/upgrade/test_promotion_evidence.py` exits 0; record_promotion writes the candidate hash, backtest run id, holdout id, divergence result, trial count and bounds (UPG-03)
+  5. `uv run pytest -q tests/upgrade/test_rollback_exact.py` exits 0; promote then roll back with restore_active_set reads back the prior hash from the active-set ledger record (UPG-03; restore does not verify stored content)
+  6. `uv run pytest -q tests/upgrade/test_escalation.py` exits 0; escalate_candidate on a blocked verdict writes an Escalation and a journal note and no active-set row, and refuses an eligible verdict (UPG-04)
   7. `uv run pytest -q tests/safety/test_blind_advisory.py` exits 0; SAFE-4 and SAFE-8 report BLIND as advisory with the blind reason written into the verdict while no paid RPC provider is recorded, every other BLIND result stays KILL, and the rule reverts to required when a provider is recorded (UPG-05)
   8. `python3 scripts/generate-templates.py --check` exits 0 and `uv run pytest -q tests/safety/test_constitution_amendment.py` exits 0; the test compares the amended text of `rules/pumpgrok-team.mdc` (clauses 2 and 8, ten-role correction), `agents/risk.md` clause 10, `docs/RISK_POLICY.md` (row 8 and section 2.4) and `.planning/PROJECT.md` (BLIND constraint) with the frozen approved text (UPG-06)
   9. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b" && grep -qE "Phase 9: smoke-10m events.hash before: [0-9a-f]{64}" CHANGELOG.md && grep -qF "Phase 9: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0; the active-set record may change replay output, so both values are recorded (equal if unchanged)
   10. `uv run pumpgrok run --mode live --once; test $? -eq 3` exits 0 with the upgrade modules present
 
-**Checkpoint**: a candidate is promoted and rolled back exactly under test, ineligible candidates escalate, the amendment text passes `generate-templates --check`, and live stays refused.
+**Checkpoint**: a candidate is promoted and rolled back exactly under test (library functions only), escalate_candidate handles blocked verdicts when a caller invokes it, the amendment text passes `generate-templates --check`, and live stays refused.
 
 **Deliverables**:
 

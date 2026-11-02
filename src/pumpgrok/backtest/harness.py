@@ -20,12 +20,12 @@ Protocol (CONTEXT D-05, D-06, D-10 and G-05):
 Scoring is real replay (correction D-C3, D-C4): each candidate mapping is
 validated by CandidateParams against the real FilterSettings and
 ExitsSettings models, replayed through the real engine and PaperAdapter over
-each pre-holdout fold window, and scored as the mean net realized lamports
-over the folds (net recorded cash change: the sum of FillRecorded
-cash_delta_lamports, which already carries every venue fee and network cost,
-minus OrderRejected fees_lamports; partial fills count at their recorded
-filled amount; zero trades score 0). Candidates are taken in
-space order with no shuffle and the best is tracked with strict
+each pre-holdout fold window, and scored as the mean over the folds of each eval
+ledger's net realized lamports: closing equity less opening equity, with open
+positions at mark or else cost basis, the rule in equity.py. Every venue fee and
+network cost sits in its cash movement and each refusal fee counts once; partial
+fills count at their recorded filled amount; zero trades score 0. Candidates are
+taken in space order with no shuffle and the best is tracked with strict
 greater-than, so ties keep the earlier candidate. Scores are measured
 returns over the replayed windows, never forecasts.
 """

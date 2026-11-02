@@ -330,14 +330,31 @@ def test_autonomous_search_gates_only_the_winner(ledger, tmp_path, monkeypatch) 
     assert len(calls) == 1
     assert calls[0]["n_trials"] == 2
     assert calls[0]["seed"] == 7
-    assert calls[0]["space"] == [
-        {"filter": {"min_unique_buyers": 5}},
-        {"filter": {"min_unique_buyers": 7}},
-    ]
+    assert calls[0]["space"] == promotion.canonical_space(_declared(tmp_path))
     assert read_active_set(ledger) == SECOND.content_hash
     promotions = tmp_path / "var" / "upgrade" / "promotions"
     assert (promotions / f"{SECOND.content_hash}.json").is_file()
     assert not (promotions / f"{IN_BOUNDS.content_hash}.json").exists()
+
+
+def test_repeated_declaration_counts_once(ledger, tmp_path, monkeypatch) -> None:
+    """A repeated declaration is one trial, and the search receives the canonical space."""
+    _grant_autonomy(ledger)
+    _paper_window_rows(ledger)
+    calls: list[dict] = []
+    _fake_harness(monkeypatch, SECOND, calls)
+    declared = _declared(tmp_path)
+    outcome = promotion.run_promotion_check(
+        ledger,
+        DATASET,
+        clock=FixtureClock(T0),
+        space=[*declared, declared[0]],
+        seed=7,
+        initial_equity_lamports=0,
+    )
+    assert outcome == "promoted"
+    assert calls[0]["n_trials"] == 2
+    assert calls[0]["space"] == promotion.canonical_space(declared)
 
 
 def test_winner_already_active_is_skipped(ledger, tmp_path, monkeypatch) -> None:
