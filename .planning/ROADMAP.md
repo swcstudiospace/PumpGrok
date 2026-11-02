@@ -66,7 +66,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `CHANGELOG.md` Phase 11 entry with the smoke-10m and trading-smoke before and after pairs (PRC-03)
 - [ ] Hardening family: `tests/hardening/` and `ci/tests/` checks and the code fixes they name in `src/pumpgrok/`, `ci/gates/`, `.github/workflows/gates.yml` and `tools/desk/receipt_check.py` (HARD-01 to HARD-12, HARD-19, HARD-24 to HARD-26, HARD-30 to HARD-33)
 
-**Plans**: 11 planned (11-01 to 11-11) in 6 waves. Plan ids: 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/11-*/` by the GSD workflow. The plan decomposition for the new HARD requirements is produced by gsd-plan-phase when Phase 11 is planned.
+**Plans**: 11 planned (11-01 to 11-11) in 6 waves. Plan ids: 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/11-*/` by the GSD workflow. The plan decomposition for the new HARD requirements is produced by gsd-plan-phase when Phase 11 is planned.
 
 ### Phase 12: Event runtime core
 
@@ -98,7 +98,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `pumpgrok events dlq list|replay|purge` verb in `src/pumpgrok/cli/events.py` and `docs/design/events-grok.md` (EVT-05)
 - [ ] `CHANGELOG.md` Phase 12 entry with both hash pairs (PRC-03)
 
-**Plans**: 5 planned (12-01 to 12-05) in 5 waves. Plan ids: 12-01, 12-02, 12-03, 12-04, 12-05. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/12-*/` by the GSD workflow.
+**Plans**: 5 planned (12-01 to 12-05) in 5 waves. Plan ids: 12-01, 12-02, 12-03, 12-04, 12-05. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/12-*/` by the GSD workflow.
 
 ### Phase 13: Curve truth, live market data and recorder
 
@@ -135,7 +135,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `execution/fees.py` fee model v2 (selectable, v1 default), `execution/paper_factory.py` and `execution/entry_hook.py` (FEE-01)
 - [ ] `CHANGELOG.md` Phase 13 entry with both hash pairs (PRC-03)
 
-**Plans**: 7 planned (13-01 to 13-07) in 6 waves. Plan ids: 13-01, 13-02, 13-03, 13-04, 13-05, 13-06, 13-07. Human-gated: 13-05. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/13-*/` by the GSD workflow.
+**Plans**: 7 planned (13-01 to 13-07) in 6 waves. Plan ids: 13-01, 13-02, 13-03, 13-04, 13-05, 13-06, 13-07. Human-gated: 13-05. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/13-*/` by the GSD workflow.
 
 ### Phase 14: Event-driven desk and Grok gateway
 
@@ -176,7 +176,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `CHANGELOG.md` Phase 14 entry with both hash pairs and the `events-smoke-10m` and `events-soak-3d` golden hashes (PRC-03)
 - [ ] Grok operator onboarding family (ONB-01 to ONB-10): `tests/onboarding/` checks, the input inventory, the `doctor --json` missing-input report, the paper start gate, seat access approval, and the wallet and RPC choice record
 
-**Plans**: 9 planned (14-01 to 14-09) in 7 waves. Plan ids: 14-01, 14-02, 14-03, 14-04, 14-05, 14-06, 14-07, 14-08, 14-09. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/14-*/` by the GSD workflow. The plan decomposition for the new ONB requirements is produced by gsd-plan-phase when Phase 14 is planned.
+**Plans**: 9 planned (14-01 to 14-09) in 7 waves. Plan ids: 14-01, 14-02, 14-03, 14-04, 14-05, 14-06, 14-07, 14-08, 14-09. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/14-*/` by the GSD workflow. The plan decomposition for the new ONB requirements is produced by gsd-plan-phase when Phase 14 is planned.
 
 ### Phase 15: Strategy framework and multi-strategy paper
 
@@ -213,7 +213,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `supervisor/live_paper.py`, `supervisor/exit_rules.py` ticket filter and `supervisor/intent_router.py` (MKT-09, RT-02)
 - [ ] `CHANGELOG.md` Phase 15 entry: equal smoke-10m pair, moved trading-smoke pair (PRC-03)
 
-**Plans**: 8 planned (15-01 to 15-08) in 7 waves. Plan ids: 15-01, 15-02, 15-03, 15-04, 15-05, 15-06, 15-07, 15-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/15-*/` by the GSD workflow.
+**Plans**: 8 planned (15-01 to 15-08) in 7 waves. Plan ids: 15-01, 15-02, 15-03, 15-04, 15-05, 15-06, 15-07, 15-08. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/15-*/` by the GSD workflow.
 
 ### Phase 16: Backtest v2 and autonomous evaluation
 
@@ -246,7 +246,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `reporting/strategy_section.py` per-strategy report section (OBS-07)
 - [ ] `CHANGELOG.md` Phase 16 entry with both hash pairs (PRC-03)
 
-**Plans**: 7 planned (16-01 to 16-07) in 6 waves. Plan ids: 16-01, 16-02, 16-03, 16-04, 16-05, 16-06, 16-07. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/16-*/` by the GSD workflow.
+**Plans**: 7 planned (16-01 to 16-07) in 6 waves. Plan ids: 16-01, 16-02, 16-03, 16-04, 16-05, 16-06, 16-07. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/16-*/` by the GSD workflow.
 
 ### Phase 17: Risk hardening and promotion lifecycle
 
@@ -280,7 +280,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `supervisor/recovery.py` restart recovery wiring with crash tests (RT-04)
 - [ ] `CHANGELOG.md` Phase 17 entry with both hash pairs (PRC-03)
 
-**Plans**: 7 planned (17-01 to 17-07) in 6 waves. Plan ids: 17-01, 17-02, 17-03, 17-04, 17-05, 17-06, 17-07. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/17-*/` by the GSD workflow.
+**Plans**: 7 planned (17-01 to 17-07) in 6 waves. Plan ids: 17-01, 17-02, 17-03, 17-04, 17-05, 17-06, 17-07. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/17-*/` by the GSD workflow.
 
 ### Phase 18: Dormant live path, amendment-gated
 
@@ -322,7 +322,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `docs/runbooks/go_live.md`, `signer.md`, `live_rollback.md` and the dormant live wiring in `supervisor/live_paper.py` (LIV-07, LIV-10)
 - [ ] `CHANGELOG.md` Phase 18 entry with both hash pairs (PRC-03)
 
-**Plans**: 11 planned (18-01 to 18-11) in 7 waves. Plan ids: 18-01, 18-02, 18-03, 18-04, 18-05, 18-06, 18-07, 18-08, 18-09, 18-10, 18-11. Human-gated: 18-07. Amendment-wait (merge only after the approved amendment lands): 18-03, 18-04, 18-05, 18-06, 18-08, 18-09. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/18-*/` by the GSD workflow.
+**Plans**: 11 planned (18-01 to 18-11) in 7 waves. Plan ids: 18-01, 18-02, 18-03, 18-04, 18-05, 18-06, 18-07, 18-08, 18-09, 18-10, 18-11. Human-gated: 18-07. Amendment-wait (merge only after the approved amendment lands): 18-03, 18-04, 18-05, 18-06, 18-08, 18-09. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/18-*/` by the GSD workflow.
 
 ### Phase 19: Observability, docs, hardening and milestone audit
 
@@ -359,7 +359,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `.planning/milestones/v4-MILESTONE-AUDIT.md`, v4 archive and the final `CHANGELOG.md` closeout (OBS-05, PRC-06)
 - [ ] Hosted runtime family (HOST-01 to HOST-16): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, Docker secrets and digest pins, the replay-demo label (HOST-15), and the compose live-data root (HOST-16); no hosted run starts, with or without the named volume (HOST-02), until HARD-07 passes
 
-**Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow. The plan decomposition for the new HOST requirements is produced by gsd-plan-phase when Phase 19 is planned.
+**Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow. The plan decomposition for the new HOST requirements is produced by gsd-plan-phase when Phase 19 is planned.
 
 ## Progress
 

@@ -3,7 +3,7 @@
 **Defined:** 2026-10-28
 **Core Value:** The desk reacts to events instead of polling, runs several bounded strategies in paper against live-recorded data, promotes and demotes them on recorded evidence, and carries a fully built but DORMANT live path that only a human can arm; no agent and no desk process can move real funds.
 
-Source: owner decisions of 2026-10-28 (live is armed once by a human and then autonomous inside caps; live limits stay inside the current rules, notional cap at most 1.0 SOL and the D6 fractions; custody is a segregated signer process; constitution amendments are drafted for the owner and applied only by a human-approved pull request; draft PRs 17 to 20 merge first, in the order 18, 19, 20, 17; receipts are approved as human:SomeRandmGuyy in batches at the ship checkpoints after phases 12, 14, 17 and 19), the three v4 designs (A events and Grok gateway, B strategies backtest and data, C risk promotion and live), the N6 critique as applied in `changes-applied.md`, and `plans.json` (74 plans, nine phases). Requirement ids continue the v3 numbering where a family already exists (BT-08 onward, LIV-03 onward, PRC-03 onward). Command forms use `uv run` and exit 0 unless stated.
+Source: owner decisions of 2026-10-28 (live is armed once by a human and then autonomous inside caps; live limits stay inside the current rules, notional cap at most 1.0 SOL and the D6 fractions; custody is a segregated signer process; constitution amendments are drafted for the owner and applied only by a human-approved pull request; draft PRs 17 to 20 merge first, in the order 18, 19, 20, 17; receipts are approved as human:SomeRandmGuyy in batches at the ship checkpoints after phases 12, 14, 17 and 19), the three v4 designs (A events and Grok gateway, B strategies backtest and data, C risk promotion and live), the N6 critique as applied in `changes-applied.md`, and the v4 plan index, which is not in this repository (74 plans, nine phases). Requirement ids continue the v3 numbering where a family already exists (BT-08 onward, LIV-03 onward, PRC-03 onward). Command forms use `uv run` and exit 0 unless stated.
 
 ## v4 Requirements
 
@@ -272,7 +272,7 @@ Design A (EVT-11), design B (STR-02) and design C (RSK-07) each stated the same 
 
 ## Traceability
 
-Which phases cover which requirements. Populated from `plans.json`; each requirement maps to exactly one phase, the phase that proves it, although a plan of an earlier phase may land part of it (for example the RSK-08 pin lands in Phase 11 and is re-run in Phase 17).
+Which phases cover which requirements. Populated from the v4 plan index, which is not in this repository; the traceability table below is the record. Each requirement maps to exactly one phase, the phase that proves it, although a plan of an earlier phase may land part of it (for example the RSK-08 pin lands in Phase 11 and is re-run in Phase 17).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
