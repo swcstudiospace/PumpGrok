@@ -16,12 +16,10 @@ from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.alert_channel import AlertChannel
-from pumpgrok.risk.breakers import BREAKER_NAMES, BreakerSet
+from pumpgrok.risk.breakers import BreakerSet
 from pumpgrok.risk.engine.constants import (
     _DECISION_CACHE_MAX,
-    _RECHECK_STEPS,
     EXIT_SELL_REASONS,
-    EXIT_SKIP_STEPS,
     KILL_VERDICT_RE,
     RULE_EXIT_REASONS,
     STEP_IDS,
@@ -32,6 +30,13 @@ from pumpgrok.risk.engine.model import (
     _StepCtx,
     order_hash_for,
     utc_day,
+)
+from pumpgrok.risk.engine.rules import (
+    ProbeView,
+    claim_probe,
+    confirm_holding,
+    snapshot_probes,
+    walk_steps,
 )
 from pumpgrok.risk.engine.steps import _EngineSteps
 from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
@@ -320,38 +325,21 @@ class RiskEngine(_EngineSteps):
             f"|{','.join(sorted(self._breakers.half_open_breakers()))}"
         )
 
-    def _skip(self, step: str, ctx: _StepCtx) -> bool:
-        if ctx.stage == "CONFIRMING" and step not in _RECHECK_STEPS:
-            return True
-        return ctx.is_exit_sell and step in EXIT_SKIP_STEPS
-
-    def _evaluate(
+    def _new_ctx(
         self,
         order: OrderRequest,
         *,
-        order_hash: str,
         seat: str | None,
         exit_reason: str | None,
         creator: str | None,
         source: str,
         correlation_id: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
-    ) -> RiskDecision:
+        state: LedgerState,
+        equity: int,
+        probes: ProbeView,
+    ) -> _StepCtx:
         is_buy = order.side.value == "buy"
-        state = self._fold()
-        self._breakers.sync_from_ledger()
-        ts_utc = self._now_ts()
-        equity = self._equity_for_halts(state)
-        self._breakers.refresh(
-            ts_utc=ts_utc, source=source, correlation_id=correlation_id, equity_now=equity
-        )
-        for name in list(self._probe_owners):
-            if not self._breakers.by_name(name).probe_inflight:
-                del self._probe_owners[name]
-        half_all = [name for name in BREAKER_NAMES if self._breakers.by_name(name).half_open]
-        # Probes this order already holds are its own: its repeat checks reuse them.
-        owned = [name for name in half_all if self._probe_owners.get(name) == order_hash]
-        half_avail = self._breakers.half_open_breakers()
         ctx = _StepCtx(
             order=order,
             seat=seat,
@@ -368,32 +356,53 @@ class RiskEngine(_EngineSteps):
             state=state,
             kill=self._poll_kill(source, correlation_id),
             open_breakers=set(self._breakers.open_breakers()),
-            half_blocked=is_buy and bool(half_all) and not half_avail and not owned,
+            half_blocked=(
+                is_buy and bool(probes.half_all) and not probes.half_avail and not probes.owned
+            ),
             killed=self._killed_mints() if is_buy else set(),
             equity=equity,
             approvals=self._approvals(),
             final_size=order.size_lamports if is_buy else None,
         )
         ctx.approval_id = order.approval_id or None
+        return ctx
+
+    def _evaluate(
+        self,
+        order: OrderRequest,
+        *,
+        order_hash: str,
+        seat: str | None,
+        exit_reason: str | None,
+        creator: str | None,
+        source: str,
+        correlation_id: str,
+        stage: Literal["ACCEPTED", "CONFIRMING"],
+    ) -> RiskDecision:
+        state = self._fold()
+        self._breakers.sync_from_ledger()
+        ts_utc = self._now_ts()
+        equity = self._equity_for_halts(state)
+        self._breakers.refresh(
+            ts_utc=ts_utc, source=source, correlation_id=correlation_id, equity_now=equity
+        )
+        probes = snapshot_probes(self._breakers, self._probe_owners, order_hash)
+        ctx = self._new_ctx(
+            order,
+            seat=seat,
+            exit_reason=exit_reason,
+            creator=creator,
+            source=source,
+            correlation_id=correlation_id,
+            stage=stage,
+            state=state,
+            equity=equity,
+            probes=probes,
+        )
         try:
-            for step in STEP_IDS:
-                if self._skip(step, ctx):
-                    continue
-                getattr(self, f"_step_{step}")(ctx)
-            if stage == "CONFIRMING" and not is_buy:
-                # A sell sized at ACCEPTED must still find its holding at the fill: a
-                # flatten or another exit may have closed it while this order slept.
-                held = state.positions.get(order.mint)
-                if held is None or held.token_units <= 0:
-                    raise _Fail("no_position", f"mint={order.mint} holding closed before fill")
-            if ctx.is_buy and not ctx.is_exit_sell and half_all:
-                if owned:
-                    ctx.probe = True
-                elif half_avail and self._breakers.admit_probe(half_avail[0]):
-                    self._probe_owners[half_avail[0]] = order_hash
-                    ctx.probe = True
-                else:
-                    raise _Fail("breaker_open", "probe inflight")
+            walk_steps(self, ctx)
+            confirm_holding(ctx)
+            claim_probe(self._breakers, self._probe_owners, ctx, order_hash, probes)
         except _Fail as fail:
             return self._reject(order_hash, ctx, fail.reason)
         return self._accept(order_hash, ctx)
@@ -519,45 +528,65 @@ class RiskEngine(_EngineSteps):
             raise ValueError(f"halt_clear approval {approval.id} is already consumed")
         ts_utc = self._now_ts()
         self._store.append_batch(
-            [
-                {
-                    "ts_utc": ts_utc,
-                    "source": source,
-                    "correlation_id": correlation_id,
-                    "idempotency_key": f"halt-clear|{approval.id}",
-                    "type": "HaltCleared",
-                    "payload": {
-                        "source": source,
-                        "reason": reason,
-                        "cleared_by": by,
-                        "approval_id": approval.id,
-                        "note": reason,
-                    },
-                },
-                {
-                    "ts_utc": ts_utc,
-                    "source": source,
-                    "correlation_id": correlation_id,
-                    "idempotency_key": f"consumed|{approval.id}",
-                    "type": "ApprovalRecorded",
-                    "payload": {
-                        "source": source,
-                        "id": approval.id,
-                        "kind": approval.kind,
-                        "approved_by": by,
-                        "at": approval.at.isoformat(),
-                        "ticket_id": approval.ticket_id or "",
-                        "mint": approval.mint or "",
-                        "size_lamports": approval.size_lamports or 0,
-                        "token_units": approval.token_units or 0,
-                        "max_slippage_bps": approval.max_slippage_bps or 0,
-                        "exit_rule_id": approval.exit_rule_id or "",
-                        "raw_message": reason,
-                        "consumed": True,
-                    },
-                },
-            ]
+            self._halt_clear_rows(
+                approval,
+                reason=reason,
+                by=by,
+                source=source,
+                correlation_id=correlation_id,
+                ts_utc=ts_utc,
+            )
         )
+
+    @staticmethod
+    def _halt_clear_rows(
+        approval: ApprovalRecord,
+        *,
+        reason: str,
+        by: str,
+        source: str,
+        correlation_id: str,
+        ts_utc: str,
+    ) -> list[dict[str, Any]]:
+        """The ``HaltCleared`` row, then the consumed ``halt_clear`` approval row."""
+        return [
+            {
+                "ts_utc": ts_utc,
+                "source": source,
+                "correlation_id": correlation_id,
+                "idempotency_key": f"halt-clear|{approval.id}",
+                "type": "HaltCleared",
+                "payload": {
+                    "source": source,
+                    "reason": reason,
+                    "cleared_by": by,
+                    "approval_id": approval.id,
+                    "note": reason,
+                },
+            },
+            {
+                "ts_utc": ts_utc,
+                "source": source,
+                "correlation_id": correlation_id,
+                "idempotency_key": f"consumed|{approval.id}",
+                "type": "ApprovalRecorded",
+                "payload": {
+                    "source": source,
+                    "id": approval.id,
+                    "kind": approval.kind,
+                    "approved_by": by,
+                    "at": approval.at.isoformat(),
+                    "ticket_id": approval.ticket_id or "",
+                    "mint": approval.mint or "",
+                    "size_lamports": approval.size_lamports or 0,
+                    "token_units": approval.token_units or 0,
+                    "max_slippage_bps": approval.max_slippage_bps or 0,
+                    "exit_rule_id": approval.exit_rule_id or "",
+                    "raw_message": reason,
+                    "consumed": True,
+                },
+            },
+        ]
 
     def plan_flatten(self, *, correlation_id: str = "desk") -> list[FlattenOrder]:
         """Build one ``kill_flatten`` sell per open position with a minted approval.
