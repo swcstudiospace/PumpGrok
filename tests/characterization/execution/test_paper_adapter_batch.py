@@ -195,6 +195,29 @@ async def scn_sell_wrong_seat_refused_then_replayed(root: Path) -> dict[str, Any
     return {"first": outcome(first[0]), "second": outcome(second[0]), "rows": h.ledger()}
 
 
+async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
+    """A batch write for a sell from the wrong seat is refused by the ACCEPTED re-check."""
+    h = Harness(root, [snap(S0, T0)])
+    buy = await h.open_position()
+    request = h.sell_request(units=buy.filled_units)
+    written = await h.drive(
+        h.adapter._append_order_batch(
+            request,
+            order_id=h.ids.ulid(),
+            quote_id=h.ids.ulid(),
+            out0=1_000_000,
+            threshold=990_000,
+            impact=Decimal("0.0125"),
+            ledger_source="paper",
+            correlation_id="test",
+            seat="bot-04-sniper",
+            exit_reason=None,
+            creator=None,
+        )
+    )
+    return {"outcome": outcome(written[0]), "rows": h.ledger()}
+
+
 async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
     h = Harness(root, [snap(S0, T0)])
     buy = await h.open_position()
@@ -273,6 +296,7 @@ SCENARIOS: dict[str, Callable[[Path], Awaitable[dict[str, Any]]]] = {
     "buy_order_placed": scn_buy_order_placed,
     "sell_rule_exit_consumes": scn_sell_rule_exit_consumes_approval,
     "sell_wrong_seat_replayed": scn_sell_wrong_seat_refused_then_replayed,
+    "direct_batch_refused_at_accepted": scn_direct_batch_refused_at_accepted,
     "consumed_approval_collision": scn_consumed_approval_collision,
     "direct_append_order_batch": scn_direct_append_order_batch,
     "direct_batch_duplicate": scn_direct_append_order_batch_duplicate,
@@ -285,6 +309,7 @@ sell_wrong_seat_replayed 3500e284433e50b6d01098b05389a1d4dd25b671a82307f75c0ec32
 consumed_approval_collision 35830f04d4344a52a1802a9369df433350f6919a7572e203783aca7934546df6
 direct_append_order_batch 3c81b0c6d469504494e929ab506067a68a444ffbd73cb27a036e5a5d267082d2
 direct_batch_duplicate 7b7e7581c42857ff15857e6d95a3c3edcbb9fbe622c1bf6fd077d15bc7d49e47
+direct_batch_refused_at_accepted c623616980d023388071556df21896060528624e6b324505ffe3fbecbd60d3d1
 """
 PINS: dict[str, str] = dict(line.split() for line in _PIN_TABLE.strip().splitlines())
 
@@ -317,3 +342,12 @@ async def test_consumed_approval_refuses_the_whole_batch(tmp_path: Path) -> None
     assert trace["outcome"]["stage"] == "ACCEPTED"
     kinds = [row["type"] for row in trace["rows"]]
     assert kinds.count("OrderPlaced") == 1
+
+
+async def test_batch_refuses_at_accepted_recheck_and_writes_no_order(tmp_path: Path) -> None:
+    trace = await scn_direct_batch_refused_at_accepted(tmp_path)
+    assert trace["outcome"]["reason"] == "seat_may_trade"
+    assert trace["outcome"]["stage"] == "ACCEPTED"
+    kinds = [row["type"] for row in trace["rows"]]
+    assert kinds.count("OrderPlaced") == 1
+    assert kinds.count("OrderRejected") == 1
