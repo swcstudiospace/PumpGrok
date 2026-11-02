@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve all Phase 11 PRs in order (41, 34, then 35 to 39) once each CI is green, with the review points accepted as written. PR 39 review points: adopts the v4 planning files; the INT-10 conflict in scripts/probe_curve_layout.py is a follow-up before the live-data phase. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p11-adopt-milestone-seat-task",
   "bot": "bot-00-chief",
   "branch": "bot-00-chief/v4-p11-adopt-milestone-seat-task",
