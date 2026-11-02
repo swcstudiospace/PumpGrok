@@ -21,7 +21,8 @@
     {"cmd": "python3 -P ci/gates/check_ownership.py --bot bot-00-chief --base origin/main", "exit_code": 1, "output_tail": "G-1 FAIL: foreign-owned files owned by other seats; PR 17 is on the CI waiver list by number"},
     {"cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/phase-9-followups.json", "exit_code": 0, "output_tail": "G-5/G-6 PASS: 1 deployment with a rollback plan, 0 destructive op(s) approved"},
     {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/phase-9-followups.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: approved_by is missing (intended until the owner reviews the diff)"},
-    {"cmd": "python3 -P ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-9-followups.json", "exit_code": 1, "output_tail": "2 gate(s) failed: G-1 and G-2; G-3, G-4, G-5/G-6 and G-7 passed"}
+    {"cmd": "python3 -P ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/phase-9-followups.json", "exit_code": 1, "output_tail": "2 gate(s) failed: G-1 and G-2; G-3, G-4, G-5/G-6 and G-7 passed"},
+    {"cmd": "python3 -c \"import json; d=json.load(open('.receipts/bot-00-chief/live-mark-at-fill.json')); e=json.load(open('.receipts/bot-00-chief/provider-record.json')); assert all('2026-11-02' in x['approval_note'] and '2026-11-02' in x['status'] for x in (d, e))\"", "exit_code": 0, "output_tail": "dates ok: True"}
   ],
   "claims": [
     {"claim": "The declared-space identity is sha256 over the sorted distinct per-entry content hashes, matching the content-hash keying of _declared_params", "evidence_command_index": 1},
@@ -37,7 +38,8 @@
     {"claim": "G-5/G-6 passes: the rollback plan names the command, the recovery time and the data implications", "evidence_command_index": 11},
     {"claim": "G-1 fails only on files owned by other seats; CI skips G-1 for PR 17 by its PR number", "evidence_command_index": 10, "expects_failure": true},
     {"claim": "G-2 fails only because approved_by is absent, which is intended until the owner reviews the diff", "evidence_command_index": 12, "expects_failure": true},
-    {"claim": "The gate runner reports exactly G-1 and G-2 failing; G-3, G-4, G-5/G-6 and G-7 pass", "evidence_command_index": 13, "expects_failure": true}
+    {"claim": "The gate runner reports exactly G-1 and G-2 failing; G-3, G-4, G-5/G-6 and G-7 pass", "evidence_command_index": 13, "expects_failure": true},
+    {"claim": "The approval dates in the PR 19 and PR 20 receipts are corrected to 2026-11-02, the day the owner answered after the 2026-11-02T07:20Z gate run", "evidence_command_index": 14}
   ],
   "unverified": [
     "approved_by is absent by design; the owner reviews the diff and records approval before any merge.",
