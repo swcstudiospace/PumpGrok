@@ -14,6 +14,7 @@ build/
 !.receipts/bot-00-chief/phase-6.json
 !.receipts/bot-00-chief/restore-hardening.json
 !.receipts/bot-00-chief/desk-built-ins.json
+!.receipts/bot-00-chief/live-mark-at-fill.json
 !.receipts/bot-00-chief/provider-record.json
 var/
 !var/.gitkeep
