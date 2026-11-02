@@ -14,6 +14,7 @@ check at most once per PROMOTION_CHECK_INTERVAL_S on the injected clock.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -115,11 +116,17 @@ def _check_and_apply(
     spec = _backtest_dataset(str(dataset_dir))
     declared = _declared_params(space)
     space_bytes = canonical_json({"candidates": [dict(entry) for entry in space]}).encode("utf-8")
+    entry_hashes = [
+        param_set_hash(canonical_json(dict(entry)).encode("utf-8")) for entry in space
+    ]
+    space_hash = hashlib.sha256(
+        canonical_json({"entry_hashes": sorted(entry_hashes)}).encode("utf-8")
+    ).hexdigest()
     manifest = build_manifest(
         spec.ref,
         seed,
         evaluated_settings_hash(ParamSet().candidate(), risk_budget=risk_budget, limits=limits),
-        param_set_hash(space_bytes),
+        space_hash,
     )
     events = load_dataset(spec.directory)
     stamps = tuple(event_epoch(event) for event in events.events)
