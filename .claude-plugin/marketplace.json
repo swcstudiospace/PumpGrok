@@ -6,8 +6,8 @@
   "plugins": [
     {
       "name": "pumpgrok",
-      "description": "Eight-role Solana memecoin trading desk with hard security constitution, RISK absolute veto, and Jupiter execution.",
-      "version": "1.0.0",
+      "description": "Ten-seat Solana memecoin trading desk with hard security constitution, RISK absolute veto, and Jupiter execution.",
+      "version": "0.1.0",
       "source": {
         "source": "url",
         "url": "https://github.com/your-org/pumpgrok.git"

@@ -8,10 +8,11 @@ Precondition 1 requires both effective mode live AND `[live] enabled = true`
 (R21 amendment, D4); every overlay ships `enabled = false`, so an explicit
 operator edit is needed before row 1 can hold.
 
-Fail closed: this release has no wallet allowlist or notional cap setting, no
-confirmation verifier, no adapter implementation and no readable halt, kill-switch or
-breaker state. Preconditions 5 to 9 therefore report unmet with the reason naming what
-is missing. Precondition 8 is always unmet by design (no live adapter ships).
+Fail closed: preconditions 5 and 6 read the wallet allowlist and the notional cap the
+caller passes in. Both default to empty or unset, so both report unmet. This release has
+no confirmation verifier, no adapter implementation and no readable halt, kill-switch or
+breaker state. Preconditions 7 to 9 therefore report unmet with the reason naming what is
+missing. Precondition 8 is always unmet by design (no live adapter ships).
 Preconditions 3 and 4 are computed on ledger events with source=paper only;
 any source=replay row refuses the metrics (F-B1, R21).
 """
@@ -26,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 
 MIN_PAPER_DAYS = 14
@@ -64,11 +66,15 @@ class LiveGate:
         environ: Mapping[str, str],
         root: Path,
         live_enabled: bool = False,
+        wallet_allowlist: Sequence[str] = (),
+        notional_cap_lamports: int | None = None,
     ) -> None:
         self._mode = mode
         self._environ = environ
         self._root = root
         self._live_enabled = live_enabled
+        self._wallet_allowlist = tuple(wallet_allowlist)
+        self._notional_cap_lamports = notional_cap_lamports
 
     def evaluate(self, *, now: str) -> tuple[Precondition, ...]:
         """Evaluate every precondition as of ``now``.
@@ -97,8 +103,8 @@ class LiveGate:
             ),
             (days_met, days_reason),
             (perf_met, perf_reason),
-            (False, "live.wallet_allowlist is not a setting in this release"),
-            (False, "live.notional_cap_sol is not a setting in this release"),
+            _allowlist_row(self._wallet_allowlist),
+            _cap_row(self._notional_cap_lamports),
             (
                 False,
                 "var/live_confirmation.json missing"
@@ -118,6 +124,23 @@ class LiveGate:
     def check(self, *, now: str) -> list[str]:
         """Ids of every unmet precondition, in R21 order. Empty means the gate is open."""
         return [item.id for item in self.evaluate(now=now) if not item.met]
+
+
+def _allowlist_row(allowlist: tuple[str, ...]) -> tuple[bool, str]:
+    """Precondition 5: at least one allowlisted public key."""
+    count = len(allowlist)
+    if count:
+        return (True, f"live.wallet_allowlist lists {count} public key(s)")
+    return (False, "live.wallet_allowlist is empty; no public key is allowlisted")
+
+
+def _cap_row(cap: int | None) -> tuple[bool, str]:
+    """Precondition 6: a notional cap in (0, 1 SOL]."""
+    if cap is None:
+        return (False, "live.notional_cap_lamports is not set")
+    if 0 < cap <= LAMPORTS_PER_SOL:
+        return (True, f"live.notional_cap_lamports is {cap} (ceiling 1 SOL)")
+    return (False, "live.notional_cap_lamports must satisfy 0 < value <= 1 SOL")
 
 
 def _paper_window(root: Path, now: str) -> tuple[bool, str, bool, str]:

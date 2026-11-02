@@ -1,0 +1,85 @@
+{
+  "task_id": "v3-closeout-followup",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v3-closeout-followup",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approved the PR 27 record follow-ups on 2026-11-01. This receipt covers the ROADMAP collapse, the STATE resume lines, the audit phase quoting and method note, the closeout debt entries, and the corrections listed below. The merged closeout receipt is not rewritten.",
+  "corrections": [
+    {
+      "field": "files_changed",
+      "note": "The closeout receipt lists 13 files. PR 27 changed 118 files; the complete list is produced by `git diff --name-only 0ca794d^1 0ca794d^2`. The omitted files include the LIV-01 code and tests (phase 20) and the DOC-03 documents and plugin manifests (phase 21)."
+    },
+    {
+      "field": "claims[3]",
+      "note": "The claim that the PR 28 entry makes CI skip this PR's G-1 steps is a reading of .github/workflows/gates.yml, not an observed CI result. The local evidence is the G-1 failure on the branch as built."
+    },
+    {
+      "field": "unverified[0]",
+      "note": "The PR 27 CI run has since completed. Its checks passed before merge, and the ship review scored 5 with no comments."
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --bot bot-00-chief --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-00-chief: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "for m in pumpgrok.cli pumpgrok.cli.backtest pumpgrok.cli.promotion; do uv run python -P -c \"import importlib,sys; importlib.import_module('$m'); print('$m adapter_loaded=' + str('pumpgrok.execution.live.live_adapter' in sys.modules))\"; done",
+      "exit_code": 0,
+      "output_tail": "pumpgrok.cli adapter_loaded=False | pumpgrok.cli.backtest adapter_loaded=False | pumpgrok.cli.promotion adapter_loaded=False"
+    },
+    {
+      "cmd": "uv run python -m pytest tests/docs -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "44 passed in 5.05s"
+    },
+    {
+      "cmd": "./scripts/check.sh",
+      "exit_code": 0,
+      "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked | PumpGrok repository structure looks healthy."
+    },
+    {
+      "cmd": "git diff --name-only 0ca794d^1 0ca794d^2 | wc -l",
+      "exit_code": 0,
+      "output_tail": "118"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The follow-up changes only bot-00-chief owned paths: G-1 passes in diff mode for bot-00-chief.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "In a fresh interpreter, importing pumpgrok.cli, pumpgrok.cli.backtest and pumpgrok.cli.promotion does not load pumpgrok.execution.live.live_adapter (LIV-01 closure, re-checked on the final tree).",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "tests/docs passes on the final tree (44 tests, no failures), so the DOC-03 closure still holds.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "check.sh passes on the final tree: ASCII, placeholder and structure checks over 322 markdown files.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "PR 27 changed 118 files, against the 13 listed in the closeout receipt.",
+      "evidence_command_index": 4
+    }
+  ],
+  "unverified": [
+    "The live CI run on this PR head and the G-2 result of this receipt are verified only in CI.",
+    "Greptile review of this PR is not complete when this receipt is written.",
+    "The closeout receipt itself is not rewritten; the corrections are recorded in this receipt so the merged record stays as approved.",
+    "The Notion Task row is not changed by this PR: the task's own PR (#27) is already recorded as merged, and PR 29 is a bot-02 follow-up."
+  ],
+  "files_changed": [
+    ".planning/ROADMAP.md",
+    ".planning/STATE.md",
+    ".planning/milestones/v3-CLOSEOUT.md",
+    ".planning/milestones/v3-MILESTONE-AUDIT.md",
+    ".receipts/bot-00-chief/v3-closeout-followup.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this pull request's merge commit with git revert. The four planning files return to their merged wording and the follow-up receipt is removed; no code, ledger or live state changes. Expected recovery time: about 5 minutes (one git revert and one CI run). Data implications: none."
+}

@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,7 +27,8 @@ from pumpgrok.config.settings import load_settings
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
-from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate, Precondition
+from pumpgrok.execution.live import PRECONDITION_IDS, LiveGate, Precondition
+from pumpgrok.execution.live.live_adapter import LiveAdapterStub
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -59,7 +61,16 @@ def test_live_run_exits_3_with_nine_ordered_lines(tmp_path: Path, monkeypatch, c
     code = main(["run", "--mode", "live", "--once"])
     assert code == 3
     err = capsys.readouterr().err
-    assert err.startswith("LIVE GATE: refusing to start in mode=live. 9 of 9")
+    # The count follows the default cap being met (live.notional_cap_lamports).
+    assert err.startswith("LIVE GATE: refusing to start in mode=live.")
+    total = len(PRECONDITION_IDS)
+    header = re.match(
+        rf"LIVE GATE: refusing to start in mode=live\. (\d+) of {total} preconditions unmet:\n",
+        err,
+    )
+    assert header is not None
+    unmet_rows = [line for line in err.splitlines() if line.startswith("  [ ] ")]
+    assert int(header.group(1)) == len(unmet_rows)
     marked = [line for line in err.splitlines() if line.startswith("  [")]
     assert len(marked) == 9
     ids = []

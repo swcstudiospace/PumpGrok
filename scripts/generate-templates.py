@@ -30,6 +30,7 @@ from prompt_sources import (
     PromptError,
     SeatSource,
     check_skills,
+    desk_cycle_markdown,
     expand,
     frontmatter,
     load_core,
@@ -40,7 +41,11 @@ from prompt_sources import (
 
 def render(seat: SeatSource, core: dict) -> str:
     body = expand(seat, core)
+    cycle = desk_cycle_markdown()
     text = f"---\n{frontmatter(seat)}---\n{body}"
+    if not text.endswith("\n"):
+        text += "\n"
+    text += cycle
     # The frontmatter must parse back to exactly the values it was built from.
     meta = yaml.safe_load(frontmatter(seat))
     same_name = meta["name"] == seat.name

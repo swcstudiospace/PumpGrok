@@ -2,6 +2,65 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v3 Phase 21: DOC-03 documentation accuracy
+
+### Fixed
+
+- DOC-03 (phase 21): both marketplace manifests (`.claude-plugin/marketplace.json`, `.grok-plugin/marketplace.json`) carry version `0.1.0` (was `1.0.0`) and describe a "Ten-seat" desk (was "Eight-role"). `tests/docs/test_doc_consistency.py` checks all six plugin manifests against the package version and rejects "Eight-role" in any plugin description.
+- DOC-03 (phase 21): `ARCHITECTURE.md` no longer names the absent `ticket_helper.py` and `paper_sim.py`; ticket IDs come from `pumpgrok ticket next` and paper fills from `pumpgrok run --mode paper`. `vendor/grokbot-pumpfun/` is described as absent from this checkout and formerly vendored (see `docs/VENDOR_PIN.md`). "eight persistent Bots" becomes "ten seats". The seat table lists SIGNAL and JOURNAL. `scout pipeline --candidates` is recorded as not implemented (exit 5). The `/workspace/trading-desk` path becomes `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh`.
+- DOC-03 (phase 21): `SETUP.md` counts 10 role files, lists all ten Bots in the desk record and receipt, checks `src/pumpgrok/tools` (the root `tools/` path it listed does not exist), and uses `~/trading-desk` in place of `/workspace/trading-desk`.
+- DOC-03 (phase 21): `README.md` no longer describes the vendored engine as present, and no longer says `pumpgrok paper` logs fills; `pumpgrok run --mode paper` drives the paper adapter and `pumpgrok paper buy|sell` refuse until the curve reader is verified.
+- DOC-03 (phase 21): `SETUP.md` and `README.md` list `pumpgrok ticket next --help` in their tool checks. The bare `pumpgrok ticket next` allocates a ticket id and writes a row to the paper ledger, so it is not a read-only check and is no longer listed as one.
+- DOC-03 (phase 21): `docs/VENDOR_PIN.md` no longer tells the reader to copy `config.example.yaml`. That file belonged to the vendored tree and is absent from this checkout.
+- DOC-03 (phase 21, round 2): `README.md` no longer calls the CLI or setup "read-only". It states what is written: `ticket next` and `create` append a row to the paper ledger `var/ledger.sqlite`, and setup writes local folders and files. "No keys, no real trades" is kept.
+- DOC-03 (phase 21, round 2): `ARCHITECTURE.md` no longer calls the CLIs "read-only" and names the local files they write under `var/`. The data-flow diagram drops the retired vendor engine, the `trades.jsonl` node and the unimplemented scout pipeline node, with their edges, because the vendor tree is absent and `pumpgrok scout pipeline` exits 5.
+- DOC-03 (phase 21, round 2): `SETUP.md` replaces "Setup is read-only" with the local folders and files setup writes (the repository clone in section 1 and `~/trading-desk` in sections 3 and 10).
+- DOC-01 (phase 21, round 2): `CLAUDE.md` replaces stale line ranges (`_run` at lines 57-67 and 68-83, and `replay_runtime.py:222`) with symbol names verified in the code, and cites the live-mode preconditions in `src/pumpgrok/execution/live/live_gate.py`.
+
+## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
+
+### Fixed
+
+- LIV-01 (phase 20): `pumpgrok.execution.live` no longer re-exports `LiveAdapterStub`, so importing the CLI, backtest or promotion modules no longer loads `pumpgrok.execution.live.live_adapter`. The import-graph guard follows parent package `__init__` edges, and a fresh-interpreter test proves the path is closed (tests/safety/test_cli_import_no_live_adapter.py). The replay hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is unchanged.
+
+## [Unreleased] - Desk built-ins: platform, wallet allowlist, notional cap, scheduled promotion
+
+### Added
+
+- `[platform]` (`PlatformSettings`): chain solana, venue pumpfun-bonding-curve, execution paper, quote-only Jupiter Swap V2. It declares what the desk trades on. It selects no endpoint and changes no mode.
+- `[wallet] allowlist` (`WalletSettings`): public keys only. Each entry must be base58 and decode to exactly 32 bytes. It ships empty. A secret-key-length value is refused, and the value is never echoed.
+- `[live] notional_cap_lamports` (`LiveSettings`): integer lamports, default 1 SOL, valid in (0, 1 SOL]. Live gate rows 5 and 6 now read the allowlist and the cap. Row 5 stays unmet while the allowlist is empty, so live stays refused. The refusal header counts the unmet rows: 8 of 9 with the default cap.
+- Scheduled promotion (`upgrade/scheduled.py`, `cli/promotion.py`, `upgrade/space.py`): a bounded search over the space the owner declares in `src/pumpgrok/config/upgrade_space.toml` (at most 20 candidates, inside `upgrade_bounds.toml`). The winner goes through the existing promotion gate and is applied only at autonomous-paper. The declared space ships empty, so the check is skipped until the owner lists candidates. Checks run at most once per `PROMOTION_CHECK_INTERVAL_S` (3600 s) on the injected clock. The cadence is stored in ledger meta.
+
+### Changed
+
+- The refusal tests parse each line by regex and check the header count against the unmet rows, instead of pinning the old "9 of 9" header.
+- `docs/RISK_POLICY.md` and `docs/TOOL_CATALOG.md` name `live.notional_cap_lamports`. `docs/LIVE_READINESS.md` and `docs/runbooks/go_live.md` state the allowlist and cap reasons.
+
+### Known limitations
+
+- The serve tick runs a promotion search synchronously, so a long search holds the tick until it returns.
+- The cadence meta row is written after each interval even when the check is skipped.
+- The weekly report builds the live gate without settings, so it shows rows 5 and 6 unmet.
+
+### Verified
+
+- Desk built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Desk built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- The rebased branch is re-verified by the full gate set before its PR is opened.
+
+## [Unreleased] - v3 follow-up: restore fails closed
+
+### Changed
+
+- `restore_active_set` refuses a caller that is not a `human:` or `gate:` writer.
+- `restore_active_set` refuses a prior hash with no valid stored content; both refusals happen before any ledger row is written.
+
+### Verified
+
+- v3 follow-up restore: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up restore: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
 ## [Unreleased] - v3 follow-up: provider record in STATE.md, fails closed
 
 ### Changed

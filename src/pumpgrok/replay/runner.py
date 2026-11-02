@@ -152,6 +152,7 @@ def run_replay(
     seed: int = DEFAULT_SEED,
     ledger_path: str | Path | None = None,
     active_set: ParamSet | None = None,
+    resume_existing: bool = False,
 ) -> ReplayResult:
     """Replay one fixture dataset into a fresh hash-chained ledger.
 
@@ -159,6 +160,9 @@ def run_replay(
     before the checkpoint verdict is judged, as ``open_replay_runtime`` does for the
     paper timeline. Exit settings never reach this verdict, so only the filter is applied.
     ``None`` leaves the replay unchanged.
+
+    ``resume_existing`` keeps an existing ledger at the target path instead of wiping it,
+    so a serve restart keeps the peak rows already in it. A missing ledger is built fresh.
     """
     if active_set is not None:
         filter_cfg = active_set.candidate().filter_settings()
@@ -200,47 +204,58 @@ def run_replay(
         if replay_llm is not None:
             llm_outcome = replay_llm.complete(llm_request_for(source.name, list(source)), clock)
             llm_clause = f"; llm outcome={llm_outcome.outcome} latency_s={llm_outcome.latency_s}"
-        recreate_ledger_db(target)
+        # A serve resume keeps the ledger the previous start wrote, so the peak rows in
+        # it survive the restart. Every other caller starts from an empty ledger.
+        resuming = resume_existing and Path(target).exists()
+        if not resuming:
+            recreate_ledger_db(target)
         store = LedgerStore(target)
         try:
-            stored = store.append_batch(
-                [
-                    {
-                        "ts_utc": clock.utc_iso(),
-                        "source": "replay",
-                        "correlation_id": str(cycle),
-                        "idempotency_key": derive_idempotency_key(
-                            "skip_cycle",
-                            CYCLE_SEAT,
-                            {"dataset": source.name, "events": len(source)},
-                            scope=str(cycle),
-                        ),
-                        "type": "JournalNote",
-                        "payload": {
-                            "source": "replay",
-                            "seat": CYCLE_SEAT,
-                            "note_kind": "verdict",
-                            "text": (
-                                f"replay engine cycle: {format_decision(decision)}; "
-                                "model resolution skipped (replay); "
-                                f"read {len(source)} fixture events from {source.name}; "
-                                "candidates judged on fixture evidence "
-                                "(name, image, created time, buyers, reserves)"
-                                f"{llm_clause}"
-                            ),
-                            "refs": [],
-                        },
-                    }
-                ]
+            verdict_key: str = derive_idempotency_key(
+                "skip_cycle",
+                CYCLE_SEAT,
+                {"dataset": source.name, "events": len(source)},
+                scope=str(cycle),
             )
+            verdict = {
+                "ts_utc": clock.utc_iso(),
+                "source": "replay",
+                "correlation_id": str(cycle),
+                "idempotency_key": verdict_key,
+                "type": "JournalNote",
+                "payload": {
+                    "source": "replay",
+                    "seat": CYCLE_SEAT,
+                    "note_kind": "verdict",
+                    "text": (
+                        f"replay engine cycle: {format_decision(decision)}; "
+                        "model resolution skipped (replay); "
+                        f"read {len(source)} fixture events from {source.name}; "
+                        "candidates judged on fixture evidence "
+                        "(name, image, created time, buyers, reserves)"
+                        f"{llm_clause}"
+                    ),
+                    "refs": [],
+                },
+            }
+            # A resumed ledger already holds this verdict from the run that wrote it;
+            # appending the same idempotency key again would be refused.
+            prior = store.by_key(verdict_key) if resuming else None
+            if resuming and prior is None:
+                # Resume is only for the ledger this same replay wrote. A foreign ledger
+                # is refused, not appended to, so two runs never share one chain.
+                raise LedgerInconsistent("resumed ledger holds no verdict for this replay")
+            stored = [prior] if prior is not None else store.append_batch([verdict])
             if not store.verify():
                 raise LedgerInconsistent("replay ledger failed verification")
         except Exception:
             # A failed append/verify must not leave a file that file-existence
             # checks mistake for a successful replay output: drop the
-            # just-created ledger (sqlite plus -wal/-shm) and re-raise.
-            with contextlib.suppress(OSError):
-                recreate_ledger_db(target)
+            # just-created ledger (sqlite plus -wal/-shm) and re-raise. A resumed
+            # ledger is never dropped, since it holds the peaks a serve must restore.
+            if not resuming:
+                with contextlib.suppress(OSError):
+                    recreate_ledger_db(target)
             raise
         finally:
             store.close()
