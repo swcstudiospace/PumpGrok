@@ -19,12 +19,17 @@ import itertools
 import json
 import random
 import re
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "replay"))
+
+from pin_support import pinned_process_state
 
 from pumpgrok.cli import main as cli_main
 from pumpgrok.core.adapter import OrderRequest
@@ -740,7 +745,7 @@ def test_identical_inputs_give_identical_decisions_across_fresh_ledgers(tmp_path
 def _verify(fixture: str) -> tuple[str, int, int]:
     """Run `pumpgrok verify --fixture <fixture>` in-process and parse its chain report."""
     captured = io.StringIO()
-    with contextlib.redirect_stdout(captured):
+    with pinned_process_state(), contextlib.redirect_stdout(captured):
         code = cli_main(["verify", "--fixture", fixture])
     output = captured.getvalue()
     assert code == 0

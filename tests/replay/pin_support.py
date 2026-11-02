@@ -55,7 +55,7 @@ class VerifyRun:
 
 
 @contextlib.contextmanager
-def _pinned_process_state() -> Iterator[None]:
+def pinned_process_state() -> Iterator[None]:
     """Hold the process state a pin depends on, and restore it on exit.
 
     Every PUMPGROK_* variable is removed for the run: an exported PUMPGROK_REPLAY__SEED
@@ -85,7 +85,7 @@ def _pinned_process_state() -> Iterator[None]:
 def verify_fixture(fixture: str) -> VerifyRun:
     """Run `pumpgrok verify --fixture <fixture>` in-process from the current directory."""
     captured = io.StringIO()
-    with _pinned_process_state(), contextlib.redirect_stdout(captured):
+    with pinned_process_state(), contextlib.redirect_stdout(captured):
         code = cli_main(["verify", "--fixture", fixture])
     output = captured.getvalue()
     if code != 0:
