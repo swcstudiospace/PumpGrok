@@ -156,7 +156,7 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] HARD-04 (owner confirmation pending): `pumpgrok upgrade rollback` restores the prior active set in one command, exits 0 and writes a ledger row, as a CLI test asserts. Check: `uv run pytest -q tests/hardening/test_rollback_verb.py`
 - [ ] HARD-05: Each module listed in ARCH-05 is either wired to a production importer or deleted, and an AST test fails on any src/pumpgrok module with no non-test importer that is not on an explicit empty allowlist. Check: `uv run pytest -q tests/hardening/test_no_orphan_modules.py`
 - [ ] HARD-06: The 60-line function-size guard covers every target directory under src/pumpgrok, and any function over 60 lines that is absent from a shrink-only allowlist (including _build_serve, 113 lines) fails the test. Check: `uv run pytest -q tests/hardening/test_function_size_all_dirs.py`
-- [ ] HARD-07: A resumed serve after a crash between OrderPlaced and FillRecorded places no second sniper BUY and records no second simulated fill for the same (mint, candidate), as a resumed-serve test asserts. Check: `uv run pytest -q tests/hardening/test_resume_buy_idempotent.py`
+- [ ] HARD-07: Any resumed serve, after a clean stop or a crash, places no second sniper BUY and records no second simulated fill for the same (mint, candidate). The guard is keyed on the candidate-to-decision link, not on timestamp equality, because OrderPlaced is written after the candidate stamp. A resumed-serve test asserts it. Check: `uv run pytest -q tests/hardening/test_resume_buy_idempotent.py`
 - [ ] HARD-08: Opening-equity and snapshot rows are hash-chained, and ledger open refuses to start when the baseline row is missing instead of falling back to the budget default, as a test that deletes and edits the row asserts. Check: `uv run pytest -q tests/hardening/test_baseline_chain.py`
 - [ ] HARD-09: An unreadable kill-latch file makes check() return a latch-unreadable verdict without raising, and exit and flatten sells remain permitted, as a test that makes the file unreadable asserts. Check: `uv run pytest -q tests/hardening/test_killswitch_unreadable.py`
 - [ ] HARD-10: The live-promotion gate fails on any unparsable ledger row instead of skipping it and computes profit factor and drawdown with integer or Decimal ratios, as a test with a corrupt row asserts. Check: `uv run pytest -q tests/hardening/test_live_gate_rows.py`
@@ -212,7 +212,7 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 ### Hosted runtime (HOST)
 
 - [ ] HOST-01: PUMPGROK_STATE_DIR must be an absolute path; a relative or empty value is refused at startup, and the ledger, desk, replay and reputation paths all resolve under that one directory with none left cwd-relative. Check: `uv run pytest -q tests/hosted/test_state_dir.py`
-- [ ] HOST-02: The compose desk service mounts one named volume at the state directory and no host bind mount for state. Precondition: the named volume is not enabled until the F1 resume defect is closed (HARD-07 passes). Check: `uv run pytest -q tests/hosted/test_compose_volume.py`
+- [ ] HOST-02: The compose desk service mounts one named volume at the state directory and no host bind mount for state. Precondition: no hosted run starts, with or without this volume, until HARD-07 passes, because the serve path resumes the existing ledger on every restart and the compose file already bind-mounts ./var. Check: `uv run pytest -q tests/hosted/test_compose_volume.py`
 - [ ] HOST-03 (owner design choice pending: halted state on /readyz): /livez returns 200 while the process loop runs, whatever the halted or kill-switch state, and /readyz returns 503 when the last per-tick ledger verification failed or the tick is stale; a halted desk is 200 on both, with the halt shown in the body. Check: `uv run pytest -q tests/hosted/test_health_probes.py`
 - [ ] HOST-04: The ledger_status in every health body comes from that tick's ledger verification and is never a constant, so a corrupted ledger reports a non-CONSISTENT status on the next tick. Check: `uv run pytest -q tests/hosted/test_health_ledger_status.py`
 - [ ] HOST-05: The health server serves only /livez, /readyz and /metrics, /healthz is removed with every caller migrated, and any other path returns 404 with an empty body. Check: `uv run pytest -q tests/hosted/test_health_routes.py`
@@ -226,6 +226,7 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] HOST-13: Hosted secrets reach the desk container only as Docker secrets mounted under /run/secrets; the compose file has no env_file entry and no secret-valued environment entry. Check: `uv run pytest -q ci/tests/test_compose_docker_secrets.py`
 - [ ] HOST-14: Every FROM image in the Dockerfile and every image in docker-compose.yml is pinned by sha256 digest. Check: `uv run pytest -q ci/tests/test_image_digest_pins.py`
 - [ ] HOST-15: Every health body and metric family from a hosted replay run (/livez, /readyz, /metrics) carries a replay-demo label (replay_demo true, ledger_source replay) until live-data paper lands, and the label cannot be false before then. Check: `uv run pytest -q tests/hosted/test_replay_demo_label.py`
+- [ ] HOST-16: The compose desk service runs the live-data paper root (the composition root of PRM-05 and MKT-09) and no longer the bundled fixture; the fixture command remains only in the replay demo profile. Gated on Phase 15 and on the OD-04 probe review. Check: `uv run pytest -q tests/hosted/test_compose_live_root.py`
 
 - Dedupe: findings HR-01, HR-03 to HR-06, SEC-06, SEC-07 and SEC-08 are held here; their HARD duplicates (HARD-13 to HARD-17, HARD-27 to HARD-29) are removed, see Hardening (HARD).
 - Dedupe: HOST-15 (replay-demo label, finding HR-02) is kept because the audit's HR-02 row is only partially covered by MKT-09 and REC-03, and REC-03 does not scope the image.
@@ -426,13 +427,14 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | HOST-13 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | HOST-14 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | HOST-15 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-16 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | FEE-01 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-01 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | RT-02 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-03 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RT-04 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 
-**Coverage: v4 requirements: 156 total, 156 mapped, 0 unmapped**
+**Coverage: v4 requirements: 157 total, 157 mapped, 0 unmapped**
 
 | Phase | Requirements |
 |-------|--------------|
@@ -444,4 +446,4 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | 16 Backtest v2 and autonomous evaluation | 8 |
 | 17 Risk hardening and promotion lifecycle | 14 |
 | 18 Dormant live path, amendment-gated | 21 |
-| 19 Observability, docs, hardening and milestone audit | 23 |
+| 19 Observability, docs, hardening and milestone audit | 24 |

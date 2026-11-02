@@ -4,12 +4,12 @@
 
 PumpGrok Desk v4 makes the paper desk event-driven and multi-strategy, and builds a fully tested but DORMANT live path that only a human can arm. Live trading stays disabled throughout: `run --mode live` exits 3 on every default start, no key or signing code enters the desk package, and the constitution amendment is drafted for the owner and applied only by a human-approved pull request. Nine phases continue the v3 numbering. Phase 11 lays the quality foundation first (pinned replay hashes, no PR-number waivers, a fast test path, coverage and complexity ratchets, the six hotspots split behind characterization tests), so every later phase edits small, pinned code. Phase 12 adds the typed event runtime as a library. Phase 13 corrects the curve layout and adds the read-only live feed and recorder. Phase 14 wakes seats on events and puts every Grok call behind one gateway. Phase 15 adds the strategy framework and four baseline strategies in paper. Phase 16 adds Metrics v2 and autonomous strategy backtests. Phase 17 adds per-strategy risk, the promotion lifecycle and the event desk composition root. Phase 18 builds the dormant live path and the segregated signer. Phase 19 adds observability, documentation, a nightly soak and the milestone audit. Every phase closes with the replay hash pairs recorded in CHANGELOG.md; the smoke-10m hash never moves, and the trading-smoke hash moves exactly once, in Phase 15.
 
-Coverage: all 156 v4 requirements map to exactly one phase (see Traceability in `.planning/REQUIREMENTS.md`).
+Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in `.planning/REQUIREMENTS.md`).
 
 ## Shipped
 
 - [x] **v2: PumpGrok Desk v2** - shipped 2026-10-23, 5 phases, 44 plans. Archived: [roadmap](milestones/v2-ROADMAP.md), [requirements](milestones/v2-REQUIREMENTS.md), [audit](milestones/v2-MILESTONE-AUDIT.md).
-- [x] **v3: PumpGrok Desk v3** - closed 2026-10-26, 5 phases, 35 plans, 34 requirements. Archived: [roadmap](milestones/v3-ROADMAP.md), [requirements](milestones/v3-REQUIREMENTS.md).
+- [x] **v3: PumpGrok Desk v3** - closed 2026-11-01 with 7 phases (6-10, 20, 21), tech_debt recorded, 35 plans, 34 requirements. Archived: [roadmap](milestones/v3-ROADMAP.md), [requirements](milestones/v3-REQUIREMENTS.md).
 
 ## Phases
 
@@ -21,7 +21,7 @@ Coverage: all 156 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] **Phase 16: Backtest v2 and autonomous evaluation** - Metrics v2, round trips, strategy-aware replay, gap segmentation, evidence grading, autonomous backtest scheduler, record and import verbs (8 requirements)
 - [ ] **Phase 17: Risk hardening and promotion lifecycle** - Strategy slices and kills, entry checks, feed health, promotion lifecycle, event desk composition root and restart recovery (14 requirements)
 - [ ] **Phase 18: Dormant live path, amendment-gated** - Dormant live path: real gate rows, arm scope, desk-signer service, instruction allowlist, shadow mode, amendment applied by a human-approved PR (21 requirements)
-- [ ] **Phase 19: Observability, docs, hardening and milestone audit** - Doctor v4, health and metrics sections, alert rules, v4 docs, nightly event soak, waiver removal and the milestone audit (23 requirements)
+- [ ] **Phase 19: Observability, docs, hardening and milestone audit** - Doctor v4, health and metrics sections, alert rules, v4 docs, nightly event soak, waiver removal and the milestone audit (24 requirements)
 
 ## Phase Details
 
@@ -328,7 +328,7 @@ Coverage: all 156 v4 requirements map to exactly one phase (see Traceability in 
 
 **Goal**: Operators can see the event runtime, sources, Grok budget, strategy stages and kills, and signer attestation in doctor, health.json and metrics; alert rules name only real metrics; the docs, skills and runbooks describe v4 and every documented command runs; a nightly event-mode soak guards the idle-zero-Grok invariant; the amendment waiver is gone; and a milestone audit traces every requirement to evidence and records that live is still refused.
 **Depends on**: Phases 17 and 18 (17-02, 17-03, 17-04, 18-02, 18-07, 18-10, 18-11); plans 11-03, 13-02, 14-04, 14-07 and 16-04 for CI, metrics and CLI lanes
-**Requirements**: PRC-06, PRC-08, OBS-01, OBS-02, OBS-03, OBS-04, OBS-05, OBS-06, HOST-01, HOST-02, HOST-03, HOST-04, HOST-05, HOST-06, HOST-07, HOST-08, HOST-09, HOST-10, HOST-11, HOST-12, HOST-13, HOST-14, HOST-15
+**Requirements**: PRC-06, PRC-08, OBS-01, OBS-02, OBS-03, OBS-04, OBS-05, OBS-06, HOST-01, HOST-02, HOST-03, HOST-04, HOST-05, HOST-06, HOST-07, HOST-08, HOST-09, HOST-10, HOST-11, HOST-12, HOST-13, HOST-14, HOST-15, HOST-16
 **Success Criteria** (what must be TRUE):
 
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0, `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0, `make cov` still meets its floor and `make test-all` exits 0 once (PRC-01)
@@ -342,8 +342,9 @@ Coverage: all 156 v4 requirements map to exactly one phase (see Traceability in 
   9. `for p in 11 12 13 14 15 16 17 18 19; do grep -qF "Phase $p: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md || exit 1; grep -qE "Phase $p: trading-smoke events.hash after: [0-9a-f]{64}" CHANGELOG.md || exit 1; done` exits 0; one journal CHANGELOG entry and one chief close record per phase (PRC-06)
   10. `uv run pytest -q tests/safety` exits 0 and `uv run pumpgrok run --mode live --once; test $? -eq 3` exits 0; live is still refused on the final tree (OBS-05)
   11. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b" && test "$a" = "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" && grep -qF "Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md && grep -qF "Phase 19: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0, `uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py` exits 0 and `p=$(python3 -c "import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])") && grep -qF "Phase 19: trading-smoke events.hash before: $p" CHANGELOG.md && grep -qF "Phase 19: trading-smoke events.hash after: $p" CHANGELOG.md` exits 0; both pairs are recorded and equal, because this phase does not move either hash (PRC-03)
-  12. `uv run pytest -q tests/hosted ci/tests/test_compose_docker_secrets.py ci/tests/test_image_digest_pins.py` exits 0; HOST-01 to HOST-14 hold, and the compose named volume (HOST-02) stays disabled until the F1 resume defect is closed (HARD-07 passes) (HOST-01 to HOST-14)
+  12. `uv run pytest -q tests/hosted ci/tests/test_compose_docker_secrets.py ci/tests/test_image_digest_pins.py` exits 0; HOST-01 to HOST-14 hold, and no hosted run starts, with or without the compose named volume (HOST-02), until HARD-07 passes (HOST-01 to HOST-14)
   13. HOST-15: a hosted replay run labels every health body and metric family as a replay demo until live-data paper lands.
+  14. HOST-16: the compose desk service runs the live-data paper root and no longer the bundled fixture; gated on Phase 15 and on the OD-04 probe review.
 
 **Checkpoint**: The audit file exists, every requirement is traced, `make check` is green, live is refused, and the human arm procedure is the only remaining step toward live.
 
@@ -356,7 +357,7 @@ Coverage: all 156 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] Nightly event-mode soak in `.github/workflows/ci.yml` and `tests/soak/test_soak_event_mode.py` (OBS-06)
 - [ ] Waiver removal in `.github/workflows/gates.yml` (PRC-08)
 - [ ] `.planning/milestones/v4-MILESTONE-AUDIT.md`, v4 archive and the final `CHANGELOG.md` closeout (OBS-05, PRC-06)
-- [ ] Hosted runtime family (HOST-01 to HOST-15): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, Docker secrets and digest pins, and the replay-demo label; the named volume (HOST-02) stays off until HARD-07 passes
+- [ ] Hosted runtime family (HOST-01 to HOST-15): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, Docker secrets and digest pins, and the replay-demo label; no hosted run starts, with or without the named volume (HOST-02), until HARD-07 passes
 
 **Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow. The plan decomposition for the new HOST requirements is produced by gsd-plan-phase when Phase 19 is planned.
 

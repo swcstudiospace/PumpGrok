@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (v4 section). Core value: the desk reacts to events in
 - Milestone: v4 (PumpGrok Desk v4), the only open milestone. v2 is shipped and archived; v3 is closed and archived on main by PR 27 (merge 0ca794d): .planning/milestones/v3-ROADMAP.md, v3-REQUIREMENTS.md, v3-MILESTONE-AUDIT.md.
 - Phase: 11 of 19 (Engineering foundation and quality), ready to plan. Status: ready to plan Phase 11. No plan has started, no SUMMARY file exists.
 - Progress: 0 of 9 phases, 0 of 74 plans (11, 5, 7, 9, 8, 7, 7, 11 and 9 plans in phases 11 to 19). Percent 0.
-- Plan source: `/tmp/v4/final/plans.json` is the single source for plans, seats, waves, dependencies, requirement ids and acceptance commands; `pr-plan.md` lists the 45 pull requests. The GSD workflow writes each plan's PLAN and SUMMARY files under `.planning/phases/NN-*/`.
+- Plan source: `.planning/research/v4/final/plans.json` is the single source for plans, seats, waves, dependencies, requirement ids and acceptance commands; `.planning/research/v4/final/pr-plan.md` lists the 45 pull requests. The GSD workflow writes each plan's PLAN and SUMMARY files under `.planning/phases/NN-*/`.
 - Replay hashes at planning time: smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (seq 2, 41 events, two runs identical). The trading `smoke` replay in a clean cwd gave bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (verify CONSISTENT, seq 11, 5 events) at repo HEAD 641927c; plan 11-01 re-measures it at the `v4-base` tag.
 - Repository facts at planning time (HEAD 641927c): draft PRs 17 to 20 are not on main, so `backtest/equity.py`, a public `is_writer` and `verify_stored_content` are not yet there; plan 11-01 carries preflight commands that fail until they merge. `VENUE_FEE_BPS = 100` in `execution/fees.py`. Live is refused (exit 3).
 - Integration branch: `v4/integration` collects merged plan PRs for the checkpoint runs; each plan has its own branch `bot-0N-seat/v4-pPHASE-slug` and receipt `.receipts/bot-0N-seat/slug.json`.
@@ -56,7 +56,7 @@ See: .planning/PROJECT.md (v4 section). Core value: the desk reacts to events in
 
 Settled 2026-10-28 (not open): live is armed once by a human, then autonomous inside caps; live limits stay inside the current rules (notional cap at most 1.0 SOL, D6 fractions); custody is a segregated signer process; amendments are drafted for the owner and applied only by a human-approved pull request; draft PRs 17 to 20 are approved for merge in the order 18, 19, 20, 17; receipts are approved as human:SomeRandmGuyy in batches at the ship checkpoints after phases 12, 14, 17 and 19.
 
-Open decisions below carry a recommended default. If no answer arrives by the needed-by point the default applies and the plan's receipt lists it in `unverified`, so execution is never blocked on a silent gap. Source: `/tmp/v4/final/owner-decisions.md`.
+Open decisions below carry a recommended default. If no answer arrives by the needed-by point the default applies and the plan's receipt lists it in `unverified`, so execution is never blocked on a silent gap. Source: `.planning/research/v4/final/owner-decisions.md`.
 
 | ID | Decision | Default | Plans | Needed by | If undecided | Status |
 |----|----------|---------|-------|-----------|--------------|--------|
@@ -81,6 +81,7 @@ Open decisions below carry a recommended default. If no answer arrives by the ne
 | OD-19 | Owner reads the v4 milestone audit (AUDIT-19 is human-gated) and confirms live is refused on the final tree. | Read at checkpoint 19. | 19-08 | Checkpoint 19 | Milestone not closed. | Open, default applies |
 | OD-20 | Event mode as the default (`wake_mode`) and removal of `stop_loss_poll_seconds` from bounds. | Keep `cadence` the default through v4 (config-gated everything); decide the flip in the next milestone after a week of live-paper evidence. | 15-04 | After checkpoint 17 | Default applies. | Open, default applies |
 | OD-21 | Confirm the four ship checkpoints (after Phases 12, 14, 17, 19) and the batch approval of receipts. | Confirm. | all human-gated PRs (pr-plan.md sections 4 and 5) | Now | Receipts are approved PR by PR. | Settled 2026-10-28: four checkpoints confirmed; receipts approved as human:SomeRandmGuyy |
+| OD-22 | Re-home the ten files merged under the PR 27 waiver (8 bot-02-risk, 1 bot-04-sniper, 1 bot-09-journal) to their owning seats, or accept them | accept and record as debt | none | before the v4 cleanup change | the files stay on main without owner review, recorded as debt | Open, default applies |
 
 Not decided here because they are not v4 scope: which strategy and parameter hash the owner arms first, and when; all arm and rollback steps (human-only runbooks).
 
