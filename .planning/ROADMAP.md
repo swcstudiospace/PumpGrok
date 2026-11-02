@@ -9,7 +9,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 ## Shipped
 
 - [x] **v2: PumpGrok Desk v2** - shipped 2026-10-23, 5 phases, 44 plans. Archived: [roadmap](milestones/v2-ROADMAP.md), [requirements](milestones/v2-REQUIREMENTS.md), [audit](milestones/v2-MILESTONE-AUDIT.md).
-- [x] **v3: PumpGrok Desk v3** - closed 2026-11-01 with 7 phases (6-10, 20, 21), tech_debt recorded, 35 plans, 34 requirements. Archived: [roadmap](milestones/v3-ROADMAP.md), [requirements](milestones/v3-REQUIREMENTS.md).
+- [x] **v3: PumpGrok Desk v3** - closed 2026-11-01 with 7 phases (6-10, 20, 21), tech_debt recorded, 36 plans, 34 requirements. Archived: [roadmap](milestones/v3-ROADMAP.md), [requirements](milestones/v3-REQUIREMENTS.md).
 
 ## Phases
 
@@ -357,7 +357,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] Nightly event-mode soak in `.github/workflows/ci.yml` and `tests/soak/test_soak_event_mode.py` (OBS-06)
 - [ ] Waiver removal in `.github/workflows/gates.yml` (PRC-08)
 - [ ] `.planning/milestones/v4-MILESTONE-AUDIT.md`, v4 archive and the final `CHANGELOG.md` closeout (OBS-05, PRC-06)
-- [ ] Hosted runtime family (HOST-01 to HOST-15): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, Docker secrets and digest pins, and the replay-demo label; no hosted run starts, with or without the named volume (HOST-02), until HARD-07 passes
+- [ ] Hosted runtime family (HOST-01 to HOST-16): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, Docker secrets and digest pins, the replay-demo label (HOST-15), and the compose live-data root (HOST-16); no hosted run starts, with or without the named volume (HOST-02), until HARD-07 passes
 
 **Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow. The plan decomposition for the new HOST requirements is produced by gsd-plan-phase when Phase 19 is planned.
 
