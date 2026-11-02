@@ -42,7 +42,14 @@
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 212 source files"},
     {"cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3", "exit_code": 3, "output_tail": "confirmation_record var/live_confirmation.json missing ... No transaction was attempted."},
     {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 974 tracked path(s), each with one declared owner"},
-    {"cmd": "git diff --name-only 6df40f4..HEAD; LC_ALL=C grep -n -P '[^\\x00-\\x7F]' on those files; grep -n -i todo on those files", "exit_code": 1, "output_tail": "(no matches: no non-ASCII bytes and no TODO text in the nine changed files; grep exits 1 on no match)"}
+    {"cmd": "git diff --name-only 6df40f4..HEAD; LC_ALL=C grep -n -P '[^\\x00-\\x7F]' on those files; grep -n -i todo on those files", "exit_code": 1, "output_tail": "(no matches: no non-ASCII bytes and no TODO text in the nine changed files; grep exits 1 on no match)"},
+    {"cmd": "uv run pytest -q tests/characterization/execution/test_paper_adapter_batch.py  [red: new pin still RED_PLACEHOLDER]", "exit_code": 1, "output_tail": "FAILED test_batch_scenario_matches_pinned_digest[direct_batch_refused_at_accepted] - assert 'c623616980d0...3fbecbd60d3d1' == 'RED_PLACEHOLDER'", "expects_failure": true},
+    {"cmd": "PYTHONPATH=<git archive of 2de00dd>/src .venv/bin/python /tmp/v4/11-06/collect_one.py <batch test file>  [unsplit digest; pumpgrok_from confirms the unsplit tree]", "exit_code": 0, "output_tail": "digest c623616980d023388071556df21896060528624e6b324505ffe3fbecbd60d3d1 / outcome seat_may_trade at ACCEPTED, rows OrderPlaced FillRecorded PositionOpened MarkToMarket OrderRejected"},
+    {"cmd": "uv run ruff format tests/characterization/execution/test_paper_adapter_batch.py", "exit_code": 0, "output_tail": "1 file reformatted"},
+    {"cmd": "uv run ruff check tests/characterization/execution/test_paper_adapter_batch.py", "exit_code": 0, "output_tail": "All checks passed!"},
+    {"cmd": "uv run ruff format --check tests/characterization/execution/test_paper_adapter_batch.py", "exit_code": 0, "output_tail": "1 file already formatted"},
+    {"cmd": "uv run pytest -q tests/characterization/execution/test_paper_adapter_batch.py  [green: digest pinned]", "exit_code": 0, "output_tail": "...........                                                              [100%]"},
+    {"cmd": "uv run pytest -q tests/characterization/execution tests/execution  [after batch refusal pin]", "exit_code": 0, "output_tail": "................................................................         [100%]"}
   ],
   "claims": [
     {"claim": "Characterization pins for sell (11 scenarios), batch (6) and confirm (8) record fills, refusals, ledger rows and hashes from the unsplit code, and the characterization and execution tests pass there.", "evidence_command_index": 7},
@@ -54,7 +61,11 @@
     {"claim": "mypy --strict on src/ is clean (212 files), and make lint and make typecheck exit 0.", "evidence_command_index": 24},
     {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and reports confirmation_record missing with no transaction attempted.", "evidence_command_index": 26, "expects_failure": true},
     {"claim": "The ownership manifest validates; tests/characterization/execution/** and src/pumpgrok/execution/** resolve to bot-04-sniper.", "evidence_command_index": 27},
-    {"claim": "The diff touches exactly the nine files listed in the plan files_modified; no file outside that list changed.", "evidence_command_index": 28, "expects_failure": true}
+    {"claim": "The diff touches exactly the nine files listed in the plan files_modified; no file outside that list changed.", "evidence_command_index": 28, "expects_failure": true},
+    {"claim": "The batch refusal at the ACCEPTED re-check (reason seat_may_trade, stage ACCEPTED, OrderRejected written, no sell OrderPlaced) is pinned by a new scenario; its digest was recorded from the unsplit parent commit 2de00dd.", "evidence_command_index": 30},
+    {"claim": "Before the digest was pinned, the new pin test failed with the placeholder value (exit 1); with the recorded digest it passes on head.", "evidence_command_index": 29, "expects_failure": true},
+    {"claim": "The characterization and execution suites pass on head after the new pin (exit 0).", "evidence_command_index": 35},
+    {"claim": "ruff check and ruff format --check pass on the touched batch characterization test file.", "evidence_command_index": 33}
   ],
   "unverified": [
     "make test, the full pytest -q run, the soak suite, run_all.py and the G-1..G-7 gate scripts were not run by this seat, per the protocol. The orchestrator runs them.",
