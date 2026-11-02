@@ -34,8 +34,8 @@
     {"claim": "Replay bytes are unchanged: smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "evidence_command_index": 7},
     {"claim": "run --mode live --once refuses with exit 3 and no transaction", "evidence_command_index": 8, "expects_failure": true},
     {"claim": "G-7 desk integrity passes", "evidence_command_index": 9},
-    {"claim": "G-5/G-6 passes: the rollback plan names the command, the recovery time and the data implications", "evidence_command_index": 10},
-    {"claim": "G-1 fails only on files owned by other seats; CI skips G-1 for PR 17 by its PR number", "evidence_command_index": 11, "expects_failure": true},
+    {"claim": "G-5/G-6 passes: the rollback plan names the command, the recovery time and the data implications", "evidence_command_index": 11},
+    {"claim": "G-1 fails only on files owned by other seats; CI skips G-1 for PR 17 by its PR number", "evidence_command_index": 10, "expects_failure": true},
     {"claim": "G-2 fails only because approved_by is absent, which is intended until the owner reviews the diff", "evidence_command_index": 12, "expects_failure": true},
     {"claim": "The gate runner reports exactly G-1 and G-2 failing; G-3, G-4, G-5/G-6 and G-7 pass", "evidence_command_index": 13, "expects_failure": true}
   ],
