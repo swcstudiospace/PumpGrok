@@ -226,9 +226,10 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] HOST-12: The health server closes any connection that has not sent a complete request within the configured read timeout (default 5 s). Check: `uv run pytest -q tests/hosted/test_health_read_timeout.py`
 - [ ] HOST-13: Hosted secrets reach the desk container only as Docker secrets mounted under /run/secrets; the compose file has no env_file entry and no secret-valued environment entry. Check: `uv run pytest -q ci/tests/test_compose_docker_secrets.py`
 - [ ] HOST-14: Every FROM image in the Dockerfile and every image in docker-compose.yml is pinned by sha256 digest. Check: `uv run pytest -q ci/tests/test_image_digest_pins.py`
+- [ ] HOST-15: Every health body and metric family from a hosted replay run (/livez, /readyz, /metrics) carries a replay-demo label (replay_demo true, ledger_source replay) until live-data paper lands, and the label cannot be false before then. Check: `uv run pytest -q tests/hosted/test_replay_demo_label.py`
 
 - Dedupe: findings HR-01, HR-03 to HR-06, SEC-06, SEC-07 and SEC-08 are held here; their HARD duplicates (HARD-13 to HARD-17, HARD-27 to HARD-29) are removed, see Hardening (HARD).
-- Dedupe: HOST-15 (replay-demo label, finding HR-02) is not added because HR-02 is covered elsewhere (REC-03).
+- Dedupe: HOST-15 (replay-demo label, finding HR-02) is kept because the audit's HR-02 row is only partially covered by MKT-09 and REC-03, and REC-03 does not scope the image.
 - Scope: this family does not build, push or deploy an image without owner approval.
 
 ### Paper fee model (FEE)
@@ -425,13 +426,14 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | HOST-12 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | HOST-13 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | HOST-14 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-15 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | FEE-01 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-01 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | RT-02 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-03 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RT-04 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 
-**Coverage: v4 requirements: 155 total, 155 mapped, 0 unmapped**
+**Coverage: v4 requirements: 156 total, 156 mapped, 0 unmapped**
 
 | Phase | Requirements |
 |-------|--------------|
@@ -443,4 +445,4 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | 16 Backtest v2 and autonomous evaluation | 8 |
 | 17 Risk hardening and promotion lifecycle | 14 |
 | 18 Dormant live path, amendment-gated | 21 |
-| 19 Observability, docs, hardening and milestone audit | 22 |
+| 19 Observability, docs, hardening and milestone audit | 23 |
