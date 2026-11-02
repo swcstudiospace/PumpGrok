@@ -7,6 +7,7 @@ events.hash, chain length and full row dump with the recorded pins. A move is a 
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -50,3 +51,23 @@ def test_full_row_dump_matches_the_pinned_rows(
 ) -> None:
     _, rows = trading_run
     assert rows == load_pin("trading_smoke_rows")
+
+
+def test_exported_replay_seed_does_not_move_the_trading_smoke_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A developer's exported PUMPGROK_REPLAY__SEED must not change the recorded pin.
+
+    The seed changes row ids and hashes, so the pin helper has to measure with the
+    replay seed the pin was recorded under, whatever the shell exports. The root logger
+    must also come back exactly as it was, because the verb configures logging in-process.
+    """
+    monkeypatch.setenv("PUMPGROK_REPLAY__SEED", "7")
+    root = logging.getLogger()
+    handlers_before = list(root.handlers)
+    level_before = root.level
+    monkeypatch.chdir(tmp_path)
+    run = verify_fixture(TRADING_SMOKE_FIXTURE)
+    assert run.events_hash == load_pin("trading_smoke")["events_hash"]
+    assert root.handlers == handlers_before
+    assert root.level == level_before
