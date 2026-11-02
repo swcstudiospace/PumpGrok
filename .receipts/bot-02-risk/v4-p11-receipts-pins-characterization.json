@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve all Phase 11 PRs in order (41, 34, then 35 to 39) once each CI is green, with the review points accepted as written. PR 34 review points: risk_json vs the 19 STEP_IDS wording and the backtest code_version pin. Recorded for G-2 only; the bot did not approve this work.",
   "plan_11_02_run": {
     "plan": "11-02: characterization of the risk engine, backtest verb, Settings surface and seat_task before the 11-04, 11-06 and 11-09 splits (QLT-05, RSK-08). Second plan on PR-01, branch bot-02-risk/v4-p11-receipts-pins-characterization.",
     "head_before_receipt": "b0fbe49",
