@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve all Phase 11 PRs in order (41, 34, then 35 to 39) once each CI is green, with the review points accepted as written. PR 35 review points: services glob narrowed to services/desk-signer/src is accepted; the desk-gateway mypy error is a follow-up. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p11-quality-foundation",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-quality-foundation",
@@ -34,14 +36,14 @@
       "output_tail": "2427 passed, 2 skipped, 1 deselected in 3339.77s; TOTAL branch coverage 90.90%"
     },
     {
-      "cmd": "uv run pytest -q tests/safety/test_compose_hardening.py (red, before compose edit)",
-      "exit_code": "nonzero, not captured",
-      "output_tail": "cap_drop, security_opt and read_only assertions failed"
+      "cmd": "uv run pytest -q tests/safety/test_compose_hardening.py (re-run now; the executor did not capture the red-before-change exit)",
+      "exit_code": 0,
+      "output_tail": "re-run on current tree: 11 tests, all passed (quiet output, 100%)"
     },
     {
-      "cmd": "uv run pytest -q ci/tests/test_sbom_step.py (red, before workflow edit)",
-      "exit_code": "nonzero, not captured",
-      "output_tail": "exactly one job must generate the CycloneDX SBOM"
+      "cmd": "uv run pytest -q ci/tests/test_sbom_step.py (re-run now; the executor did not capture the red-before-change exit)",
+      "exit_code": 0,
+      "output_tail": "re-run on current tree: 6 tests, all passed (quiet output, 100%)"
     },
     {
       "cmd": "uv run pytest -q ci/tests/test_sbom_step.py ci/tests/test_security_workflows.py",
@@ -64,9 +66,9 @@
       "output_tail": "no output"
     },
     {
-      "cmd": "uv run pytest -q tests/quality/test_fast_split.py (red, before Makefile targets)",
-      "exit_code": "nonzero, not captured",
-      "output_tail": "make -n test-soak failed: no rule"
+      "cmd": "uv run pytest -q tests/quality/test_fast_split.py (re-run now; the executor did not capture the red-before-change exit)",
+      "exit_code": 0,
+      "output_tail": "re-run on current tree: 8 tests, all passed (quiet output, 100%)"
     },
     {
       "cmd": "uv run pytest -q tests/quality/test_fast_split.py",
@@ -99,9 +101,9 @@
       "output_tail": "present (untracked, not committed)"
     },
     {
-      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py (red, before Makefile edit)",
-      "exit_code": "nonzero, not captured",
-      "output_tail": "services not in make -n audit output"
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py (re-run now; the executor did not capture the red-before-change exit)",
+      "exit_code": 0,
+      "output_tail": "re-run on current tree: 8 tests, all passed (quiet output, 100%)"
     },
     {
       "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py ci/tests/test_sbom_step.py",
@@ -359,7 +361,7 @@
     "Compose hardening was validated by parsing and docker compose config only. No container was started, so read-only root behaviour at runtime is unproven.",
     ".receipts/bot-02-risk/v4-p11-quality-foundation.json is written but not tracked: the base .gitignore ignores .receipts/**/*.json. Tracking depends on the D-06 glob from plan 11-01, which is not on this base.",
     "coverage.xml and .coverage are generated and left untracked; .gitignore is not in files_modified, so they are not ignored.",
-    "Several red runs in this list did not capture the exit code; they are recorded as nonzero, not captured.",
+    "The four red-before-change exit codes were not captured by the executor; those four tests were re-run on the current tree instead (rows marked re-run now), so no red exit code is claimed.",
     "Plan 11-04 did not run make test, the full pytest -q, the soak suite, run_all.py, or any gate script, per the plan rules; the orchestrator runs the gates.",
     "make cov was not re-run for 11-04; the coverage floor in pyproject.toml is unchanged, but the new modules were not measured against it.",
     "'one import and one field line per section' is implemented as one import statement per section module (core, engine, ops), not one import line per section, because files_modified allows only those three section modules.",
