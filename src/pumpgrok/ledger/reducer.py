@@ -132,10 +132,19 @@ def load_state(body: Mapping[str, Any]) -> LedgerState:
     return LedgerState.model_validate(dict(body))
 
 
+def position_value_lamports(pos: PositionView) -> int:
+    """Value of one open position: its last mark, or its cost basis until it has one.
+
+    The reducer leaves last_mtm_lamports at zero until the first MarkToMarket, so a
+    fresh fill would otherwise read as a loss of its whole cost in every equity view.
+    Pricing and close paths read last_mtm_lamports directly; this is valuation only.
+    """
+    return int(pos.last_mtm_lamports) if pos.last_mtm_ts_utc else int(pos.cost_basis_lamports)
+
+
 def _track_peak(state: LedgerState) -> LedgerState:
-    # Same sum as views.equity_lamports (kept inline to avoid a views import cycle).
     equity = int(state.cash_lamports) + sum(
-        pos.last_mtm_lamports for pos in state.positions.values() if pos.token_units > 0
+        position_value_lamports(pos) for pos in state.positions.values() if pos.token_units > 0
     )
     if equity > state.peak_equity_lamports:
         return state.model_copy(update={"peak_equity_lamports": equity})

@@ -61,6 +61,34 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - v3 follow-up restore: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - v3 follow-up restore: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 
+## [Unreleased] - v3 follow-up: live positions valued at cost until marked
+
+### Changed
+
+- An open position is valued at its fill cost until its first mark, so buys no longer read as a loss in the live equity, drawdown and daily-loss halt; the backtest and live ledger now use the same rule.
+- Known limit: a buy that adds to a position which already has a mark still reads its cost as a loss until the next mark. Fixing it changes the buy-fill path and the close pricing gate (`execution/paper_adapter/marks.py`), so it is not in this change.
+
+### Verified
+
+- v3 follow-up live: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up live: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- The four regression tests in tests/ledger/test_fill_valued_at_cost.py fail on origin/main (a phantom loss of 2 percent of equity per default-size unmarked buy) and pass with this change.
+
+## [Unreleased] - v3 follow-up: provider record in STATE.md, fails closed
+
+### Changed
+
+- The paid-RPC provider is recorded in .planning/STATE.md as `paid_rpc_provider: none` (no provider) or as a provider name.
+- The environment variable PUMPGROK_PAID_RPC_PROVIDER is no longer read.
+- A missing, unreadable, absent, duplicated or empty record counts as recorded, so BLIND stays KILL.
+- The image carries .planning/STATE.md.
+
+### Verified
+
+- v3 follow-up provider record: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up provider record: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Image built from this tree: /app/.planning holds only STATE.md, readable by the runtime user; the decision is recorded=False from /app and recorded=True from another directory; starting with PUMPGROK_PAID_RPC_PROVIDER set aborts with unknown setting.
+
 ## [Unreleased] - v3 follow-up: one identity, one valuation, constitution bytes
 
 ### Changed

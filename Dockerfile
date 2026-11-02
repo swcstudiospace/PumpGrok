@@ -44,6 +44,7 @@ COPY tests/fixtures/replay/smoke /app/tests/fixtures/replay/smoke
 # Desk gateway source for `python -m desk_gateway` (docker-compose.yml sets PYTHONPATH to it).
 # Its only dependencies are pumpgrok's, already in /opt/venv; no secrets are copied.
 COPY services/desk-gateway/src /app/services/desk-gateway/src
+COPY .planning/STATE.md /app/.planning/STATE.md
 USER pumpgrok
 # No image-level HEALTHCHECK: the default command is the one-shot replay cycle,
 # which never binds a port. Liveness for the serve path lives in

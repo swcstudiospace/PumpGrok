@@ -2,7 +2,8 @@
 .git
 .env
 .env.*
-.planning
+.planning/*
+!.planning/STATE.md
 .receipts
 .github
 .cursor-plugin
