@@ -1,13 +1,13 @@
 {
   "approved_by": "human:SomeRandmGuyy",
   "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: approve PR 41 (allowlist) for merge once its CI is green. Recorded for G-2 only; the bot did not approve this work.",
-  "task_id": "gitleaks-idempotency-allowlist",
+  "task_id": "v4-p11-gitleaks-allowlist",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/gitleaks-idempotency-allowlist",
   "phase": "phase-11-pr-allowlist",
   "plan": "Add four exact literal allowlist entries to ci/security/gitleaks.toml so PR 34 (plan 11-01) can pass its Gitleaks job. The four values are the deterministic idempotency keys of the trading smoke replay pin; they are hex digests derived from the fixture, not credentials. The file is owned by bot-02-risk, so the change is made under that seat.",
   "purpose": "Receipt for the scanner allowlist change that must land on main first, because security-pr.yml restores the scanner config from the base ref before scanning.",
-  "status": "draft. Validated locally: the TOML parses and the four literals are present. Gitleaks was not run locally (no binary here); CI is the evidence. approved_by is intentionally absent until the owner reviews this security change.",
+  "status": "approved for merge by the owner on 2026-11-02 (approved_by recorded). Validated locally: the TOML parses and the four literals are present. Gitleaks passed on the first head, 3e5ebad. The gate-self-test failure on that head was a receipt-name rule (a tracked receipt must match the v4-p allowlist), fixed by renaming the receipt to v4-p11-gitleaks-allowlist.json.",
   "rollback_plan": "Revert this PR on main with git revert (no force), or revert the single commit 13dde7e on this branch before the merge. Expected recovery time: about 5 minutes (one revert and one CI run). Data implications: none; only the allowlist changes, no ledger, live state or rule is touched. Reverting re-exposes PR 34's Gitleaks job to the four findings until a replacement is merged.",
   "commands": [
     {"cmd": "python3 -c \"import tomllib; d=tomllib.load(open('ci/security/gitleaks.toml','rb')); r=d['allowlist']['regexes']; print('toml ok; allowlist regexes:', len(r)); print('new literals present:', sum(1 for x in r if x in ('ab51bbdc86dc16bebe9a072ea0701301','6c0fdfec1710eb2320480c72c7df30bb','aea68c17eeaeb0972d242754d9ced5de','005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725')))\"", "exit_code": 0, "output_tail": "toml ok; allowlist regexes: 17 / new literals present: 4"}
@@ -16,8 +16,8 @@
     {"claim": "ci/security/gitleaks.toml still parses as TOML and the four literal entries are present", "evidence_command_index": 0}
   ],
   "unverified": [
-    "The Gitleaks job on this PR has not run yet. Its result on the head commit is the evidence that the four findings clear.",
-    "This PR changes a security scanner allowlist; it needs the owner's review before approved_by is recorded.",
+    "The Gitleaks job passed on the first head (3e5ebad). CI on the renamed receipt is the remaining evidence.",
+    "The owner reviewed and approved this security change on 2026-11-02 (approved_by recorded).",
     "PR 34's Gitleaks job and the stacked PRs 36 to 39 will be rerun only after this PR merges to main.",
     "The earlier draft under bot-00-chief (PR 40) was superseded because the file is owned by bot-02-risk; the old remote branch bot-00-chief/gitleaks-idempotency-allowlist is kept until the owner approves its deletion."
   ],

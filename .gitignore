@@ -26,3 +26,4 @@ prompts-assembled/*.xml.tmp
 !.receipts/bot-02-risk/pr-27-gate-waiver.json
 !.receipts/bot-00-chief/v3-closeout-followup.json
 !.receipts/bot-02-risk/pr-27-followup.json
+!.receipts/bot-02-risk/v4-p11-gitleaks-allowlist.json
