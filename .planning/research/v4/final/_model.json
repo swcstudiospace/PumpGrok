@@ -1,0 +1,1029 @@
+{
+ "plan_of": {
+  "PRC-RECEIPTS": "11-01",
+  "PRC-WAIVER": "11-01",
+  "Q05": "11-01",
+  "TSMOKE": "11-01",
+  "Q11c": "11-02",
+  "Q12c": "11-02",
+  "Q13c": "11-02",
+  "Q14c": "11-02",
+  "Q01": "11-03",
+  "Q40": "11-03",
+  "Q41": "11-03",
+  "Q02": "11-03",
+  "Q03": "11-03",
+  "Q06": "11-03",
+  "Q11s": "11-04",
+  "Q12s": "11-04",
+  "Q13s": "11-04",
+  "Q20r": "11-04",
+  "Q04": "11-05",
+  "Q30": "11-05",
+  "Q31": "11-05",
+  "Q09": "11-05",
+  "Q10c": "11-06",
+  "Q10s": "11-06",
+  "Q10b": "11-06",
+  "Q10f": "11-06",
+  "Q20g": "11-07",
+  "B01": "11-07",
+  "Q20s": "11-08",
+  "PLN-00": "11-09",
+  "Q14s": "11-09",
+  "B02": "11-09",
+  "PCL-11": "11-10",
+  "PLN-11": "11-11",
+  "SET0": "12-01",
+  "A0": "12-02",
+  "A1": "12-02",
+  "A2": "12-03",
+  "A3": "12-03",
+  "PCL-12": "12-04",
+  "PLN-12": "12-05",
+  "B06": "13-01",
+  "X1": "13-01",
+  "B09": "13-01",
+  "B07": "13-02",
+  "B08": "13-02",
+  "B04": "13-02",
+  "B04s": "13-03",
+  "FEE1": "13-03",
+  "PF1": "13-03",
+  "C-03s": "13-03",
+  "B03": "13-04",
+  "B05": "13-05",
+  "B05e": "13-05",
+  "PCL-13": "13-06",
+  "PLN-13": "13-07",
+  "A5": "14-01",
+  "GRKFX": "14-01",
+  "A6": "14-02",
+  "A4": "14-03",
+  "A7": "14-04",
+  "A9": "14-04",
+  "A8": "14-04",
+  "B04c": "14-04",
+  "RT1a": "14-05",
+  "RT1b": "14-06",
+  "A12": "14-07",
+  "A10": "14-07",
+  "A11": "14-08",
+  "PLN-14": "14-09",
+  "C-01": "15-01",
+  "R0": "15-01",
+  "FEE2": "15-01",
+  "B10": "15-02",
+  "B11": "15-03",
+  "REC": "15-03",
+  "B12": "15-04",
+  "B13": "15-04",
+  "B14": "15-05",
+  "B17": "15-06",
+  "RT2": "15-06",
+  "PCL-15": "15-07",
+  "PLN-15": "15-08",
+  "B15": "16-01",
+  "B16a": "16-02",
+  "B16b": "16-03",
+  "B18": "16-04",
+  "B19": "16-05",
+  "PCL-16": "16-06",
+  "PLN-16": "16-07",
+  "C-02": "17-01",
+  "C-03": "17-02",
+  "C-04": "17-02",
+  "C-05": "17-03",
+  "WIRE-17": "17-04",
+  "RT3": "17-04",
+  "RT4": "17-05",
+  "PCL-17": "17-06",
+  "PLN-17": "17-07",
+  "C-01b": "18-01",
+  "C-07": "18-01",
+  "C-08": "18-01",
+  "C-06": "18-02",
+  "C-09a": "18-03",
+  "C-09b": "18-04",
+  "C-10": "18-05",
+  "C-11": "18-06",
+  "C-17": "18-06",
+  "C-13": "18-07",
+  "C-14": "18-07",
+  "C-12": "18-08",
+  "C-15": "18-09",
+  "WIRE-18": "18-09",
+  "C-16": "18-10",
+  "PLN-18": "18-11",
+  "D19e": "19-01",
+  "D19s": "19-02",
+  "O2": "19-03",
+  "O1": "19-04",
+  "O5": "19-04",
+  "PRC-19": "19-04",
+  "O3": "19-05",
+  "D19r": "19-05",
+  "PCL-19": "19-06",
+  "D19c": "19-07",
+  "AUDIT-19": "19-08",
+  "PLN-19": "19-09"
+ },
+ "pr_plans": {
+  "P11-RISK-A": [
+   "11-01",
+   "11-02"
+  ],
+  "P11-RISK-B": [
+   "11-03",
+   "11-04",
+   "11-05"
+  ],
+  "P11-SNIPER": [
+   "11-06"
+  ],
+  "P11-RUG": [
+   "11-07"
+  ],
+  "P11-SCOUT": [
+   "11-08"
+  ],
+  "P11-CHIEF": [
+   "11-09"
+  ],
+  "P11-JOURNAL": [
+   "11-10"
+  ],
+  "P11-CLOSE": [
+   "11-11"
+  ],
+  "P12-RISK": [
+   "12-01",
+   "12-02",
+   "12-03"
+  ],
+  "P12-JOURNAL": [
+   "12-04"
+  ],
+  "P12-CLOSE": [
+   "12-05"
+  ],
+  "P13-RISK": [
+   "13-01",
+   "13-02"
+  ],
+  "P13-SNIPER": [
+   "13-03"
+  ],
+  "P13-RUG": [
+   "13-04",
+   "13-05"
+  ],
+  "P13-JOURNAL": [
+   "13-06"
+  ],
+  "P13-CLOSE": [
+   "13-07"
+  ],
+  "P14-RISK-1": [
+   "14-01"
+  ],
+  "P14-SIGNAL": [
+   "14-02"
+  ],
+  "P14-CHIEF": [
+   "14-03",
+   "14-04",
+   "14-05",
+   "14-06"
+  ],
+  "P14-RISK-2": [
+   "14-07"
+  ],
+  "P14-JOURNAL": [
+   "14-08"
+  ],
+  "P14-CLOSE": [
+   "14-09"
+  ],
+  "P15-RISK": [
+   "15-01",
+   "15-02",
+   "15-03",
+   "15-04",
+   "15-05"
+  ],
+  "P15-CHIEF": [
+   "15-06"
+  ],
+  "P15-JOURNAL": [
+   "15-07"
+  ],
+  "P15-CLOSE": [
+   "15-08"
+  ],
+  "P16-RISK": [
+   "16-01",
+   "16-02",
+   "16-03",
+   "16-04"
+  ],
+  "P16-JOURNAL": [
+   "16-05",
+   "16-06"
+  ],
+  "P16-CLOSE": [
+   "16-07"
+  ],
+  "P17-RISK": [
+   "17-01",
+   "17-02",
+   "17-03"
+  ],
+  "P17-CHIEF": [
+   "17-04",
+   "17-05"
+  ],
+  "P17-JOURNAL": [
+   "17-06"
+  ],
+  "P17-CLOSE": [
+   "17-07"
+  ],
+  "P18-RISK": [
+   "18-01",
+   "18-02",
+   "18-03",
+   "18-04",
+   "18-05",
+   "18-06"
+  ],
+  "P18-AMEND": [
+   "18-07"
+  ],
+  "P18-SNIPER": [
+   "18-08"
+  ],
+  "P18-CHIEF": [
+   "18-09"
+  ],
+  "P18-JOURNAL": [
+   "18-10"
+  ],
+  "P18-CLOSE": [
+   "18-11"
+  ],
+  "P19-SCOUT": [
+   "19-01"
+  ],
+  "P19-SIGNAL": [
+   "19-02"
+  ],
+  "P19-CHIEF-1": [
+   "19-03"
+  ],
+  "P19-RISK": [
+   "19-04",
+   "19-05"
+  ],
+  "P19-JOURNAL": [
+   "19-06"
+  ],
+  "P19-CHIEF-2": [
+   "19-07",
+   "19-08",
+   "19-09"
+  ]
+ },
+ "pr_meta": {
+  "P11-RISK-A": [
+   "bot-02-risk",
+   "v4-p11-receipts-pins-characterization"
+  ],
+  "P11-SNIPER": [
+   "bot-04-sniper",
+   "v4-p11-paper-adapter-split"
+  ],
+  "P11-RUG": [
+   "bot-05-rug",
+   "v4-p11-rug-excepts-event-decoder"
+  ],
+  "P11-SCOUT": [
+   "bot-01-scout",
+   "v4-p11-jupiter-excepts"
+  ],
+  "P11-CHIEF": [
+   "bot-00-chief",
+   "v4-p11-adopt-milestone-seat-task"
+  ],
+  "P11-RISK-B": [
+   "bot-02-risk",
+   "v4-p11-quality-foundation"
+  ],
+  "P11-JOURNAL": [
+   "bot-09-journal",
+   "v4-p11-changelog"
+  ],
+  "P11-CLOSE": [
+   "bot-00-chief",
+   "v4-p11-close"
+  ],
+  "P12-RISK": [
+   "bot-02-risk",
+   "v4-p12-settings-events-core"
+  ],
+  "P12-JOURNAL": [
+   "bot-09-journal",
+   "v4-p12-changelog"
+  ],
+  "P12-CLOSE": [
+   "bot-00-chief",
+   "v4-p12-close"
+  ],
+  "P13-RISK": [
+   "bot-02-risk",
+   "v4-p13-datafeed-recorder-probe"
+  ],
+  "P13-SNIPER": [
+   "bot-04-sniper",
+   "v4-p13-fees-paper-factory-hooks"
+  ],
+  "P13-RUG": [
+   "bot-05-rug",
+   "v4-p13-curve-layout-status-flips"
+  ],
+  "P13-JOURNAL": [
+   "bot-09-journal",
+   "v4-p13-changelog"
+  ],
+  "P13-CLOSE": [
+   "bot-00-chief",
+   "v4-p13-close"
+  ],
+  "P14-RISK-1": [
+   "bot-02-risk",
+   "v4-p14-grok-gateway"
+  ],
+  "P14-SIGNAL": [
+   "bot-08-signal",
+   "v4-p14-gateway-agents"
+  ],
+  "P14-CHIEF": [
+   "bot-00-chief",
+   "v4-p14-event-wake-cycles"
+  ],
+  "P14-RISK-2": [
+   "bot-02-risk",
+   "v4-p14-doctor-failure-suite-idle-gate"
+  ],
+  "P14-JOURNAL": [
+   "bot-09-journal",
+   "v4-p14-changelog"
+  ],
+  "P14-CLOSE": [
+   "bot-00-chief",
+   "v4-p14-close"
+  ],
+  "P15-RISK": [
+   "bot-02-risk",
+   "v4-p15-strategy-framework"
+  ],
+  "P15-CHIEF": [
+   "bot-00-chief",
+   "v4-p15-paper-root-router"
+  ],
+  "P15-JOURNAL": [
+   "bot-09-journal",
+   "v4-p15-changelog"
+  ],
+  "P15-CLOSE": [
+   "bot-00-chief",
+   "v4-p15-close"
+  ],
+  "P16-RISK": [
+   "bot-02-risk",
+   "v4-p16-backtest-v2"
+  ],
+  "P16-JOURNAL": [
+   "bot-09-journal",
+   "v4-p16-reports-changelog"
+  ],
+  "P16-CLOSE": [
+   "bot-00-chief",
+   "v4-p16-close"
+  ],
+  "P17-RISK": [
+   "bot-02-risk",
+   "v4-p17-risk-promotion"
+  ],
+  "P17-CHIEF": [
+   "bot-00-chief",
+   "v4-p17-event-desk-recovery"
+  ],
+  "P17-JOURNAL": [
+   "bot-09-journal",
+   "v4-p17-changelog"
+  ],
+  "P17-CLOSE": [
+   "bot-00-chief",
+   "v4-p17-close"
+  ],
+  "P18-AMEND": [
+   "bot-00-chief",
+   "v4-p18-amendment"
+  ],
+  "P18-RISK": [
+   "bot-02-risk",
+   "v4-p18-dormant-live-path"
+  ],
+  "P18-SNIPER": [
+   "bot-04-sniper",
+   "v4-p18-live-dispatch"
+  ],
+  "P18-CHIEF": [
+   "bot-00-chief",
+   "v4-p18-runbooks-live-wiring"
+  ],
+  "P18-JOURNAL": [
+   "bot-09-journal",
+   "v4-p18-changelog"
+  ],
+  "P18-CLOSE": [
+   "bot-00-chief",
+   "v4-p18-close"
+  ],
+  "P19-SCOUT": [
+   "bot-01-scout",
+   "v4-p19-market-data-skill"
+  ],
+  "P19-SIGNAL": [
+   "bot-08-signal",
+   "v4-p19-backtest-skill"
+  ],
+  "P19-CHIEF-1": [
+   "bot-00-chief",
+   "v4-p19-health-metrics"
+  ],
+  "P19-RISK": [
+   "bot-02-risk",
+   "v4-p19-doctor-soak-alerts-docs"
+  ],
+  "P19-JOURNAL": [
+   "bot-09-journal",
+   "v4-p19-changelog"
+  ],
+  "P19-CHIEF-2": [
+   "bot-00-chief",
+   "v4-p19-docs-audit-close"
+  ]
+ },
+ "pr_order": [
+  "P11-RISK-A",
+  "P11-SNIPER",
+  "P11-RUG",
+  "P11-SCOUT",
+  "P11-CHIEF",
+  "P11-RISK-B",
+  "P11-JOURNAL",
+  "P11-CLOSE",
+  "P12-RISK",
+  "P12-JOURNAL",
+  "P12-CLOSE",
+  "P13-RISK",
+  "P13-SNIPER",
+  "P13-RUG",
+  "P13-JOURNAL",
+  "P13-CLOSE",
+  "P14-RISK-1",
+  "P14-SIGNAL",
+  "P14-CHIEF",
+  "P14-RISK-2",
+  "P14-JOURNAL",
+  "P14-CLOSE",
+  "P15-RISK",
+  "P15-CHIEF",
+  "P15-JOURNAL",
+  "P15-CLOSE",
+  "P16-RISK",
+  "P16-JOURNAL",
+  "P16-CLOSE",
+  "P17-RISK",
+  "P17-CHIEF",
+  "P17-JOURNAL",
+  "P17-CLOSE",
+  "P18-AMEND",
+  "P18-RISK",
+  "P18-SNIPER",
+  "P18-CHIEF",
+  "P18-JOURNAL",
+  "P18-CLOSE",
+  "P19-SCOUT",
+  "P19-SIGNAL",
+  "P19-CHIEF-1",
+  "P19-RISK",
+  "P19-JOURNAL",
+  "P19-CHIEF-2"
+ ],
+ "pr_deps": {
+  "P11-RISK-A": [],
+  "P11-SNIPER": [
+   "P11-RISK-A"
+  ],
+  "P11-RUG": [
+   "P11-RISK-A"
+  ],
+  "P11-SCOUT": [
+   "P11-RISK-A"
+  ],
+  "P11-CHIEF": [
+   "P11-RISK-A"
+  ],
+  "P11-RISK-B": [
+   "P11-SNIPER",
+   "P11-RUG",
+   "P11-SCOUT",
+   "P11-CHIEF"
+  ],
+  "P11-JOURNAL": [
+   "P11-RISK-B"
+  ],
+  "P11-CLOSE": [
+   "P11-JOURNAL"
+  ],
+  "P12-RISK": [
+   "P11-RISK-B"
+  ],
+  "P12-JOURNAL": [
+   "P11-JOURNAL",
+   "P12-RISK"
+  ],
+  "P12-CLOSE": [
+   "P11-CLOSE",
+   "P12-JOURNAL"
+  ],
+  "P13-RISK": [
+   "P12-RISK"
+  ],
+  "P13-SNIPER": [
+   "P11-SNIPER"
+  ],
+  "P13-RUG": [
+   "P13-RISK",
+   "P13-SNIPER"
+  ],
+  "P13-JOURNAL": [
+   "P12-JOURNAL",
+   "P13-RUG"
+  ],
+  "P13-CLOSE": [
+   "P12-CLOSE",
+   "P13-JOURNAL"
+  ],
+  "P14-RISK-1": [
+   "P12-RISK"
+  ],
+  "P14-SIGNAL": [
+   "P14-RISK-1"
+  ],
+  "P14-CHIEF": [
+   "P13-RISK",
+   "P14-SIGNAL"
+  ],
+  "P14-RISK-2": [
+   "P14-CHIEF"
+  ],
+  "P14-JOURNAL": [
+   "P13-JOURNAL",
+   "P14-RISK-2"
+  ],
+  "P14-CLOSE": [
+   "P13-CLOSE",
+   "P14-JOURNAL"
+  ],
+  "P15-RISK": [
+   "P13-RISK",
+   "P13-SNIPER"
+  ],
+  "P15-CHIEF": [
+   "P14-CHIEF",
+   "P15-RISK"
+  ],
+  "P15-JOURNAL": [
+   "P14-JOURNAL",
+   "P15-CHIEF"
+  ],
+  "P15-CLOSE": [
+   "P14-CLOSE",
+   "P15-JOURNAL"
+  ],
+  "P16-RISK": [
+   "P14-RISK-2",
+   "P15-CHIEF"
+  ],
+  "P16-JOURNAL": [
+   "P15-JOURNAL",
+   "P16-RISK"
+  ],
+  "P16-CLOSE": [
+   "P15-CLOSE",
+   "P16-JOURNAL"
+  ],
+  "P17-RISK": [
+   "P16-RISK"
+  ],
+  "P17-CHIEF": [
+   "P17-RISK"
+  ],
+  "P17-JOURNAL": [
+   "P16-JOURNAL",
+   "P17-CHIEF"
+  ],
+  "P17-CLOSE": [
+   "P16-CLOSE",
+   "P17-JOURNAL"
+  ],
+  "P18-AMEND": [
+   "P11-CHIEF"
+  ],
+  "P18-RISK": [
+   "P17-RISK",
+   "P18-AMEND"
+  ],
+  "P18-SNIPER": [
+   "P18-RISK"
+  ],
+  "P18-CHIEF": [
+   "P17-CHIEF",
+   "P18-SNIPER"
+  ],
+  "P18-JOURNAL": [
+   "P17-JOURNAL",
+   "P18-CHIEF"
+  ],
+  "P18-CLOSE": [
+   "P17-CLOSE",
+   "P18-JOURNAL"
+  ],
+  "P19-SCOUT": [
+   "P13-RISK"
+  ],
+  "P19-SIGNAL": [
+   "P16-RISK"
+  ],
+  "P19-CHIEF-1": [
+   "P17-CHIEF"
+  ],
+  "P19-RISK": [
+   "P18-RISK",
+   "P19-CHIEF-1"
+  ],
+  "P19-JOURNAL": [
+   "P18-JOURNAL",
+   "P19-SCOUT",
+   "P19-SIGNAL",
+   "P19-RISK"
+  ],
+  "P19-CHIEF-2": [
+   "P18-CLOSE",
+   "P19-JOURNAL"
+  ]
+ },
+ "shared": [
+  [
+   ".github/workflows/ci.yml",
+   [
+    "11-03",
+    "14-07",
+    "19-04"
+   ]
+  ],
+  [
+   ".github/workflows/gates.yml",
+   [
+    "11-01",
+    "18-07",
+    "19-04"
+   ]
+  ],
+  [
+   ".planning/PROJECT.md",
+   [
+    "11-09",
+    "18-07"
+   ]
+  ],
+  [
+   ".planning/ROADMAP.md",
+   [
+    "11-09",
+    "12-05",
+    "13-07",
+    "14-09",
+    "15-08",
+    "16-07",
+    "17-07",
+    "18-11",
+    "19-09"
+   ]
+  ],
+  [
+   ".planning/STATE.md",
+   [
+    "11-11",
+    "12-05",
+    "13-07",
+    "14-09",
+    "15-08",
+    "16-07",
+    "17-07",
+    "18-11",
+    "19-09"
+   ]
+  ],
+  [
+   "AGENTS.md",
+   [
+    "18-07",
+    "19-05"
+   ]
+  ],
+  [
+   "ARCHITECTURE.md",
+   [
+    "18-07",
+    "19-05"
+   ]
+  ],
+  [
+   "CHANGELOG.md",
+   [
+    "11-10",
+    "12-04",
+    "13-06",
+    "14-08",
+    "15-07",
+    "16-06",
+    "17-06",
+    "18-10",
+    "19-06"
+   ]
+  ],
+  [
+   "Makefile",
+   [
+    "11-03",
+    "11-05",
+    "14-07"
+   ]
+  ],
+  [
+   "README.md",
+   [
+    "18-07",
+    "19-07"
+   ]
+  ],
+  [
+   "SETUP.md",
+   [
+    "18-07",
+    "19-07"
+   ]
+  ],
+  [
+   "ci/tests/test_no_pr_waivers.py",
+   [
+    "11-01",
+    "18-07",
+    "19-04"
+   ]
+  ],
+  [
+   "docker-compose.yml",
+   [
+    "11-03",
+    "18-03"
+   ]
+  ],
+  [
+   "pyproject.toml",
+   [
+    "11-03",
+    "11-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/cli/backtest.py",
+   [
+    "11-04",
+    "16-04"
+   ]
+  ],
+  [
+   "src/pumpgrok/cli/dispatch.py",
+   [
+    "12-02",
+    "16-04",
+    "17-03",
+    "18-02",
+    "18-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/cli/parsing.py",
+   [
+    "12-02",
+    "14-07",
+    "16-04",
+    "17-03",
+    "18-02",
+    "18-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/cli/verbs_ops.py",
+   [
+    "16-04",
+    "17-03",
+    "18-02",
+    "18-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/cli/verbs_state.py",
+   [
+    "14-07",
+    "16-04"
+   ]
+  ],
+  [
+   "src/pumpgrok/config/sections/paper_fees.py",
+   [
+    "12-01",
+    "15-01"
+   ]
+  ],
+  [
+   "src/pumpgrok/config/settings.py",
+   [
+    "11-04",
+    "12-01"
+   ]
+  ],
+  [
+   "src/pumpgrok/config/upgrade_bounds.toml",
+   [
+    "15-04",
+    "15-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/core/errors.py",
+   [
+    "12-02",
+    "13-01"
+   ]
+  ],
+  [
+   "src/pumpgrok/doctor.py",
+   [
+    "11-04",
+    "14-07",
+    "18-02",
+    "19-04"
+   ]
+  ],
+  [
+   "src/pumpgrok/execution/__init__.py",
+   [
+    "13-03",
+    "18-08"
+   ]
+  ],
+  [
+   "src/pumpgrok/risk/breakers.py",
+   [
+    "17-02",
+    "18-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/risk/engine/constants.py",
+   [
+    "17-01",
+    "17-02"
+   ]
+  ],
+  [
+   "src/pumpgrok/risk/engine/core.py",
+   [
+    "11-04",
+    "17-01"
+   ]
+  ],
+  [
+   "src/pumpgrok/risk/engine/steps.py",
+   [
+    "17-01",
+    "17-02",
+    "18-01",
+    "18-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/strategies/registry.py",
+   [
+    "15-02",
+    "15-03",
+    "15-04",
+    "15-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/strategies/runtime.py",
+   [
+    "15-02",
+    "15-03"
+   ]
+  ],
+  [
+   "src/pumpgrok/strategies/tape.py",
+   [
+    "15-02",
+    "15-03"
+   ]
+  ],
+  [
+   "src/pumpgrok/supervisor/live_paper.py",
+   [
+    "15-06",
+    "17-04",
+    "18-09"
+   ]
+  ],
+  [
+   "src/pumpgrok/supervisor/metrics_events.py",
+   [
+    "14-04",
+    "19-03"
+   ]
+  ],
+  [
+   "src/pumpgrok/supervisor/scheduler/wake.py",
+   [
+    "14-03",
+    "17-04",
+    "18-09"
+   ]
+  ],
+  [
+   "src/pumpgrok/supervisor/seat_task.py",
+   [
+    "11-09",
+    "14-03"
+   ]
+  ],
+  [
+   "src/pumpgrok/tools/onchain/curve_layout.py",
+   [
+    "13-04",
+    "13-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/tools/onchain/pump_events.py",
+   [
+    "11-07",
+    "13-05"
+   ]
+  ],
+  [
+   "src/pumpgrok/upgrade/gate.py",
+   [
+    "15-01",
+    "17-03"
+   ]
+  ],
+  [
+   "tests/fixtures/replay/pins/trading_smoke.json",
+   [
+    "11-01",
+    "15-01"
+   ]
+  ],
+  [
+   "tests/fixtures/replay/pins/trading_smoke_rows.json",
+   [
+    "11-01",
+    "15-01"
+   ]
+  ],
+  [
+   "tests/harness/faults.py",
+   [
+    "12-02",
+    "18-05"
+   ]
+  ]
+ ],
+ "errors": []
+}

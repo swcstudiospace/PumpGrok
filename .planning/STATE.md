@@ -1,41 +1,40 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3
-status: Awaiting next milestone
-last_updated: "2026-11-01T13:46:26.476Z"
-last_activity: 2026-11-01
-last_activity_desc: Milestone v3 completed and archived
-state_head: c8e81b0e8f1a53a42b8c400180e7f7783c108855
+milestone: v4
+milestone_name: PumpGrok Desk v4
+status: ready_to_plan
+stopped_at: v4 roadmap, requirements and plans written; ready to plan Phase 11.
+last_updated: "2026-10-28T00:00:00Z"
+last_activity: 2026-10-28
+last_activity_desc: v4 planning artifacts written (roadmap, requirements, project, state, 74 plans in plans.json); no plan started.
+current_phase: 11
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 36
-  completed_plans: 36
-  percent: 100
+  total_phases: 9
+  completed_phases: 0
   blocked_phases: 0
-milestone_name: PumpGrok Desk v3
-current_phase: none
-stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded. PR 27 merged as 0ca794d; waiver PR 28 merged as 9588bc0. Record corrections: PR 29 (bot-02, ARCHITECTURE wording and allowlist) and the bot-00 follow-up. Resume at .planning/milestones/v3-CLOSEOUT.md."
+  total_plans: 74
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs autonomously in paper mode for 2-4 weeks and produces honest, replayable reports; no code path can move real funds.
+See: .planning/PROJECT.md (v4 section). Core value: the desk reacts to events instead of polling, runs several bounded strategies in paper against live-recorded data, promotes and demotes them on recorded evidence, and carries a fully built but DORMANT live path that only a human can arm; no agent and no desk process can move real funds.
 
 ## Current Position
 
-Phase: Milestone v3 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-01 — Milestone v3 completed and archived
+- Milestone: v4 (PumpGrok Desk v4), the only open milestone. v2 is shipped and archived; v3 is closed and archived on main by PR 27 (merge 0ca794d): .planning/milestones/v3-ROADMAP.md, v3-REQUIREMENTS.md, v3-MILESTONE-AUDIT.md.
+- Phase: 11 of 19 (Engineering foundation and quality), ready to plan. Status: ready to plan Phase 11. No plan has started, no SUMMARY file exists.
+- Progress: 0 of 9 phases, 0 of 74 plans (11, 5, 7, 9, 8, 7, 7, 11 and 9 plans in phases 11 to 19). Percent 0.
+- Plan source: `/tmp/v4/final/plans.json` is the single source for plans, seats, waves, dependencies, requirement ids and acceptance commands; `pr-plan.md` lists the 45 pull requests. The GSD workflow writes each plan's PLAN and SUMMARY files under `.planning/phases/NN-*/`.
+- Replay hashes at planning time: smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (seq 2, 41 events, two runs identical). The trading `smoke` replay in a clean cwd gave bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (verify CONSISTENT, seq 11, 5 events) at repo HEAD 641927c; plan 11-01 re-measures it at the `v4-base` tag.
+- Repository facts at planning time (HEAD 641927c): draft PRs 17 to 20 are not on main, so `backtest/equity.py`, a public `is_writer` and `verify_stored_content` are not yet there; plan 11-01 carries preflight commands that fail until they merge. `VENUE_FEE_BPS = 100` in `execution/fees.py`. Live is refused (exit 3).
+- Integration branch: `v4/integration` collects merged plan PRs for the checkpoint runs; each plan has its own branch `bot-0N-seat/v4-pPHASE-slug` and receipt `.receipts/bot-0N-seat/slug.json`.
 
-## Discovery (2026-10-25)
+## Discovery (2026-10-25, carried forward)
 
-- Milestone: v3 is the only open milestone. ROADMAP.md names it and MILESTONES.md lists v2 as shipped. No conflict.
-- Discrepancy resolved: this file and the ROADMAP progress table read "Not started" for phase 6 after phase 6 artifacts existed. Artifacts win; both files now reflect them.
-- Artifacts on disk: phase 6 has CONTEXT, PLAN 01-09, SUMMARY 01-09 plus 01b, and VERIFICATION (status gaps_found, corrected in that file). Phase 7 has CONTEXT and PLAN 01-06, with no SUMMARY. Phases 8-10 have no artifacts.
 - Gates, verified present in Makefile and pyproject.toml:
   - format and lint: make lint (ruff check; ruff format --check)
   - type check: make typecheck (mypy --strict src/)
@@ -49,59 +48,108 @@ Last activity: 2026-11-01 — Milestone v3 completed and archived
   - dependency audit: make audit (pip-audit). Run at milestone close, not per phase.
   - build: defined by Dockerfile and docker-compose.yml; no make target; not run per phase; manual.
   - Absent gates: none. Format, lint, type check and test all exist.
-- Backlog source: no tracked backlog file. Zero task-marker words in src, tests, ci, scripts, services, skills, agents or contracts. Those words appear in docs/ and the v2 archive as historical design text, not active items. The open items are the session tracker, mapped below.
+  - Gates added by v4 plans (not present yet): `make cov` and `make test-all` and `make test-soak` and `make mutation-smoke` (plans 11-03, 11-05); `uv run python ci/gates/check_idle_grok.py` wired into `ci/gates/run_all.py`, the Makefile and `ci.yml` (plan 14-07); signer suite `cd services/desk-signer && uv run pytest -q` with its own lint, mypy and audit (plan 18-03); `python3 scripts/generate-templates.py --check` already exists and gates the amendment (plan 18-07).
+  - Run every hash command in a fresh git worktree (no `var/ledger.sqlite`): `verify` reads the active-set record from the working-directory ledger, which changes the hash.
+- The G-2 bypass family (collect-only test runs, tolerated failures, discarded stderr, forced or dry runs, inline live-enable variables) never appears in any plan or receipt command. Skip checks use `! uv run pytest PATH -rs | grep -q SKIPPED`.
 
-## Backlog mapping
+## Owner decisions
 
-| Backlog item | Disposition |
-|---|---|
-| Close v2 open items: R65 bonding-curve probe | Phase 6 INT-10. Probe script added; records ASSUMED with the exact error. VERIFIED needs a bonding-curve account, which was not supplied. |
-| Close v2 open items: G-4 consumer acks | Human action outside code. Backlog (out of scope in REQUIREMENTS.md). |
-| Close v2 open items: Phase 3 pending human items | TOOL-002 naming accepted; bonding-curve layout stays ASSUMED (see R65). Backlog. |
-| Code quality: fix R28 float money in engine and other packages | Phase 6 INT-01 done on branch. Residual float constant CURVE_COMPLETION_SOL (engine/monitor.py:46) backlogged. |
-| Code quality: decompose oversized modules with replay hash unchanged | Phase 6 INT-08 covers three functions. Wider decomposition backlogged (not in v3 requirements). |
-| Create CLAUDE.md at repo root | Phase 7 DOC-01 (plan 07-01, wave 1). |
-| Upgrade AGENTS.md | Phase 7 DOC-02 (plan 07-02, wave 2). |
-| Upgrade README, ARCHITECTURE, SETUP, docs banners, CHANGELOG | Phase 7 DOC-03 and DOC-04 (plans 07-03 to 07-06). |
-| Autonomy: verify autonomous-paper level end to end on replay | Phase 8 PAP-03. |
-| Backtesting harness: holdout, walk-forward, trial count, byte-identical reports | Phase 8 BT-01 to BT-07. |
-| Paper evaluation: backtest-to-paper divergence check | Phase 8 PAP-01 to PAP-03. |
-| Strategy upgrade: propose-only candidates; auto-promotion after amendment | Phase 9 UPG-01 to UPG-06. |
-| Live path: keep disabled, verify gate tests | Phase 10 LIV-01 and LIV-02. |
+Settled 2026-10-28 (not open): live is armed once by a human, then autonomous inside caps; live limits stay inside the current rules (notional cap at most 1.0 SOL, D6 fractions); custody is a segregated signer process; amendments are drafted for the owner and applied only by a human-approved pull request; draft PRs 17 to 20 are approved for merge in the order 18, 19, 20, 17; receipts are approved as human:SomeRandmGuyy in batches at the ship checkpoints after phases 12, 14, 17 and 19.
+
+Open decisions below carry a recommended default. If no answer arrives by the needed-by point the default applies and the plan's receipt lists it in `unverified`, so execution is never blocked on a silent gap. Source: `/tmp/v4/final/owner-decisions.md`.
+
+| ID | Decision | Default | Plans | Needed by | If undecided | Status |
+|----|----------|---------|-------|-----------|--------------|--------|
+| OD-01 | Approve the exact amendment text: `C-AMENDMENT-DRAFT.md` as corrected by `amendment-errata.md` (E1 to E5). | Approve with the errata. | 18-07 and all amendment_wait plans (18-03 to 18-06, 18-08, 18-09) | Checkpoint 17 (before Phase 18 merges) | Only 18-01 and 18-02 can land; signer, live adapter, shadow, runbooks stay drafts. Phases 11 to 17 and the rest of 19 are unaffected. | Open, default applies |
+| OD-02 | Desk caps for the multi-strategy paper desk: `max_open_positions` (today 3) and `max_trades_per_day` (today 20) cannot serve four strategies. | New overlay `paper-event.toml`: 6 open positions, 40 trades per day. Live overlay unchanged at 3 and 20 (live stays inside current rules). | 15-02 (B10), 12-01 | Start of Phase 15 | Overlay ships with 3 and 20; strategies starve each other, backtests show it. | Open, default applies |
+| OD-03 | REVIEW defaults the designs left open: holder concentration fraction, strategy daily loss fraction, consecutive losses, drift tolerance. | Holder fraction 0.30; strategy loss 0.25 of slice; 4 consecutive losses; `live.drift_tolerance_lamports` 5_000_000 (0.005 SOL, above ATA rent 2_039_280 plus creator-fee vault effects). | 12-01, 17-01, 17-02, 18-02, 18-05 | Before 17-01 (loss, losses), 17-02 (holder), 18-05 (drift); binding before any arm | Defaults apply and stay REVIEW-marked in the code and receipts. | Open, default applies |
+| OD-04 | Human review of the curve layout probe and the event decode record, and the two VERIFIED flips (LAYOUT_STATUS, EVENT_DECODE_STATUS). | Owner runs `scripts/probe_pump_accounts.py` read-only against mainnet (plan 11-09 delivers it), reviews the record in `docs/CURVE_LAYOUT_PROBE.md` and the decode fixtures, sets `reviewed_by: human:NAME`; plan 13-05 then flips both. | 11-09, 13-02, 13-05 | Checkpoint 14 | Both stay ASSUMED; prices from logs and curve reads are unverified and live-fed paper buys fail closed. The event desk then runs recorded datasets only; nothing else in v4 needs VERIFIED. | Open, default applies |
+| OD-05 | Paid RPC provider (HTTP and WebSocket). The public endpoint cannot carry 128 curve log subscriptions or about 100 MB per 30 s. | Choose a paid provider; endpoint and key via environment on the operator host, never git. Without a decision: public endpoint with `datafeed.watch_max` 32, logsSubscribe only for held mints, PumpPortal for new tokens. | 13-01, 13-02, 17-04 | Before the first live-fed paper run (after checkpoint 17) | Reduced watch set; recorded evidence grade stays research for coverage. | Open, default applies |
+| OD-06 | Ticket number width `SOL-YYYYMMDD-NNN` (3 digits) versus four strategies. | Keep 3 digits; tickets allocated for approved intents only (at most `max_trades_per_day`); C-01 refuses at 999 with a typed error. Widening needs a contract change acknowledged by all ten seats. | 15-01 | Start of Phase 15 | Default applies. | Open, default applies |
+| OD-07 | Maximum arm expiry. | `live.arm_max_expiry_hours` 72, hard ceiling 168; every arm is re-signed after expiry. | 12-01, 18-02 | Before 18-02 | Default applies. | Open, default applies |
+| OD-08 | Strand risk: live strategies exit before the curve completes (no PumpSwap sells in v4) versus supporting `pool=pump-amm` sells in the signer. | Exit before completion: `max_progress at most 0.85`, `exit_progress at most 0.92`, required for LIVE_ELIGIBLE. PumpSwap sells are a later milestone. | 15-04, 15-05, 17-03 | Start of Phase 15 | Default applies. | Open, default applies |
+| OD-09 | Paper fee model v2 constants and the Phase 15 trading-smoke re-pin. | v2 = current venue 100 bps plus PumpPortal 50 bps when the builder is PumpPortal, ATA rent 2_039_280 lamports on the first buy of a mint, signer priority-fee cap; a human checks them against the official fee pages (REVIEW). Approve the before and after pair at checkpoint 17. | 13-03, 15-01, 15-07 | Before 15-01 merges | FEE2 does not merge; v1 stays default and backtests understate live cost (documented). | Open, default applies |
+| OD-10 | Autonomy level for the live-paper desk: a human sets `autonomous-paper` (otherwise paper approvals are missing). | Owner sets it once on the live-paper ledger when the first live-fed run starts. Below it, RT2 journals refused intents and approves nothing. | 15-06, 17-04 | First live-fed paper run | Event desk runs but places no paper orders. | Open, default applies |
+| OD-11 | Signer deployment: separate container or host, uid and socket group, key file path. | Separate container on the same host, shared socket volume, group `desk-signer-clients`, socket mode 0660, key at `DESK_SIGNER_CREDENTIAL_PATH` (0400, signer uid), placed by the human. | 18-01, 18-03, 18-09 | Before 18-03 | Default compose service ships. | Open, default applies |
+| OD-12 | Funding rule versus the 200 USD throwaway limit when SOL is above 200 USD. | `cap_sol = min(1.0, 200 USD / SOL price minus fees)` computed at arm time; fund at most cap plus fees. Runbook and errata E4 state it. | 18-09, 18-07 | Before 18-09 | Runbook states the stricter reading (do not fund above 200 USD). | Open, default applies |
+| OD-13 | Hermes cutover in event mode: disable scout-discover, scout-pipeline, risk-audit-open-leads, chief-pickup, rug-watch-paper and the daily rollup. | Disable all six; the journal cycle performs the rollup on `Timer(daily_rollover)`. | 14-04, 14-06 | Checkpoint 14 | Cadence mode (default) is unchanged; event mode refuses to start (doctor) while a superseded job is enabled. | Open, default applies |
+| OD-14 | Transaction builder for the signer: PumpPortal trade-local behind a TxBuilder interface (third party) versus direct pump instruction building. | PumpPortal trade-local with the instruction-level allowlist and a pinned fee recipient; direct building is a later option behind the same interface. | 18-04 | Before 18-04 | Default applies. | Open, default applies |
+| OD-15 | Initial mint block and allow lists (`mint_lists.toml`, human-required file). | Empty blocklist, allowlist disabled. | 17-02 | Before 17-02 merges | Default applies. | Open, default applies |
+| OD-16 | Promotion thresholds beyond the LiveGate floors (the loader refuses looser values). | Floors: 14 days, 50 closed trades, profit factor 1.2, drawdown 0.15; plus `min_shadow_orders` 20, `max_shadow_slippage_gap_bps` 150, demotion when profit factor below 1.0 over the last 20 closed. | 17-03 | Before 17-03 merges | Default applies. | Open, default applies |
+| OD-17 | Strategy slice weights for four enabled strategies (sum at most 1). | legacy_screening, momentum_breakout, new_launch_sniper, mean_reversion at 0.20 each, 0.20 unallocated reserve. | 15-02 | Start of Phase 15 | Default applies. | Open, default applies |
+| OD-18 | Nightly soak schedule and CI minutes (3 virtual days of event-mode soak, about 50 minutes with the other soaks). | GitHub Actions `schedule` at 03:00 UTC. | 19-04 | Before 19-04 | Soak stays manual. | Open, default applies |
+| OD-19 | Owner reads the v4 milestone audit (AUDIT-19 is human-gated) and confirms live is refused on the final tree. | Read at checkpoint 19. | 19-08 | Checkpoint 19 | Milestone not closed. | Open, default applies |
+| OD-20 | Event mode as the default (`wake_mode`) and removal of `stop_loss_poll_seconds` from bounds. | Keep `cadence` the default through v4 (config-gated everything); decide the flip in the next milestone after a week of live-paper evidence. | 15-04 | After checkpoint 17 | Default applies. | Open, default applies |
+| OD-21 | Confirm the four ship checkpoints (after Phases 12, 14, 17, 19) and the batch approval of receipts. | Confirm. | all human-gated PRs (pr-plan.md sections 4 and 5) | Now | Receipts are approved PR by PR. | Settled 2026-10-28: four checkpoints confirmed; receipts approved as human:SomeRandmGuyy |
+
+Not decided here because they are not v4 scope: which strategy and parameter hash the owner arms first, and when; all arm and rollback steps (human-only runbooks).
+
+## Ship checkpoints
+
+| Checkpoint | Phases | Human receipts (PRs) | Decisions due |
+|------------|--------|----------------------|---------------|
+| CP12 | 11, 12 | PR-01, PR-05, PR-06, PR-09 | OD-02, OD-03 defaults, OD-09 review starts, OD-21 confirmed; OD-04 probe run may start |
+| CP14 | 13, 14 | PR-14, PR-20 | OD-04 (probe review and the two status flips), OD-05, OD-10, OD-13; OD-01 text circulating |
+| CP17 | 15, 16, 17 | PR-23, PR-30 | OD-01 (approved in writing before Phase 18 merges), OD-03, OD-06, OD-08, OD-09 (trading-smoke re-pin pair), OD-11, OD-14, OD-15, OD-16, OD-17 |
+| CP19 | 18, 19 | PR-34, PR-35, PR-36, PR-37, PR-43, PR-45 | OD-07, OD-12, OD-18, OD-19 (owner reads the audit) |
 
 ## Dependency levels and scheduling
 
-- Level 0: phase 6. Closed 2026-10-26 with owner-approved deviations; the phase PR is pending.
-- Level 1: phase 7. Phase 8 also depends only on phase 6, but runs after phase 7 in ROADMAP numeric order. Both edit CHANGELOG.md, so they are serialized.
-- Level 2: phase 9 (depends on phase 8). Level 3: phase 10 (depends on phase 9).
-- Rule: sequential by phase number. Parallelism only inside a wave of file-disjoint plans. The orchestrator is the only writer of this file and ROADMAP.md.
+Plan levels (longest chain of depends_on; plans on one level are independent and may run in parallel, subject to the shared-file order below):
+
+| Level | Plans |
+|-------|-------|
+| 0 | 11-01, 11-03, 18-01 |
+| 1 | 11-02, 11-06, 11-07, 11-08 |
+| 2 | 11-04, 11-09, 13-03 |
+| 3 | 11-05, 12-01, 18-07 |
+| 4 | 11-10, 12-02, 15-01 |
+| 5 | 11-11, 12-03, 13-01, 14-01, 16-01, 18-03 |
+| 6 | 12-04, 13-02, 14-02, 14-03, 15-02, 18-04 |
+| 7 | 12-05, 13-04, 14-04, 14-05, 15-03, 15-06, 19-01 |
+| 8 | 13-05, 14-06, 15-04, 15-05, 16-02 |
+| 9 | 13-06, 14-07, 15-07, 16-03 |
+| 10 | 13-07, 14-08, 15-08, 16-04, 16-05, 17-01 |
+| 11 | 14-09, 16-06, 17-02, 17-03, 19-02 |
+| 12 | 16-07, 17-04, 18-02 |
+| 13 | 17-05, 18-05, 19-03, 19-04 |
+| 14 | 17-06, 18-06, 18-08, 19-05, 19-07 |
+| 15 | 17-07, 18-09, 19-06 |
+| 16 | 18-10, 19-08 |
+| 17 | 18-11, 19-09 |
+
+Phase level view:
+
+- Level 0: Phase 11. Plans 11-01 (pins, waivers, receipt glob) and 11-03 (dev tooling, CI) start first, after draft PRs 16 to 20 are merged and tagged `v4-base`. 11-01 unblocks every other plan.
+- Level 1: Phase 12 needs only 11-01 and 11-04 (the settings split); the rest of Phase 11 may run in parallel. Phase 12 is developed as a draft stacked on the Phase 11 quality PR (depth 2) and retargeted when it merges.
+- Level 2: Phase 13. Plan 13-03 (sniper: fee model v2, paper factory, entry hook) needs only Phase 11 and may start early.
+- Level 3: Phase 14 (needs 13-02). Plans 14-01 and 14-03 need only Phase 12 and Phase 11 and may start early.
+- Level 4: Phase 15 (needs 14-03 and Phase 13). Plan 15-01 may start once Phases 12 and 13 land.
+- Level 5: Phase 16 (needs Phase 15 and 14-07).
+- Level 6: Phase 17 (needs Phases 15 and 16).
+- Level 7: Phase 18 (needs 17-02, 17-03, 17-04 for most plans). Plans 18-01 (stop state, additive live source, signer schema) and 18-07 (the amendment pull request) depend only on Phase 11 and may start early; 18-01 first, because the contract acknowledgements take a round trip.
+- Level 8: Phase 19 (needs Phases 17 and 18). Plans 19-01, 19-02 and 19-03 may start after Phases 13, 16 and 14 respectively.
+- Amendment gate: plans 18-03, 18-04, 18-05, 18-06, 18-08 and 18-09 are amendment_wait. They merge only after the owner approves the exact amendment text (OD-01) and plan 18-07 merges. Until then only 18-01 and 18-02 can land and the signer, live adapter, shadow mode and runbooks stay drafts; Phases 11 to 17 and the rest of Phase 19 are unaffected.
+- Human-gated plans: 13-05 (VERIFIED flips need a human reviewed_by; the default is to leave ASSUMED), 18-07 (the owner applies and merges the amendment), 19-08 (the owner reads the milestone audit).
+- Rule: a plan starts when its depends_on plans have merged. Parallelism only inside a wave of file-disjoint plans and different seats. At most three phases have open PRs, three open PRs per seat and eight overall. The orchestrator is the only writer of this file and ROADMAP.md; the chief close plan of each phase updates them.
+
+Shared-file merge order (a later plan merges only after the earlier one): `.planning/ROADMAP.md` and `.planning/STATE.md` 11-09 / 11-11 then 12-05, 13-07, 14-09, 15-08, 16-07, 17-07, 18-11, 19-09; `CHANGELOG.md` 11-10, 12-04, 13-06, 14-08, 15-07, 16-06, 17-06, 18-10, 19-06; `.github/workflows/gates.yml` 11-01, 18-07, 19-04; `src/pumpgrok/cli/dispatch.py` 12-02, 16-04, 17-03, 18-02, 18-05; `src/pumpgrok/doctor.py` 11-04, 14-07, 18-02, 19-04. The full table is in `pr-plan.md` section 8.
 
 ## Pauses and blockers (owner decisions)
 
-1. Phase 6 receipt approved_by: resolved 2026-10-26. approved_by is human:SomeRandmGuyy, the approver the owner selected.
-2. G-1 and G-2 route: resolved 2026-10-26. Route A chosen: a PR-bound owner waiver for G-1, G-2 and G-5/6 in .github/workflows/gates.yml, for the phase PR only (criterion 17). Route B and the re-own to CHIEF were declined. The 170 foreign-owned paths stay foreign-owned until a follow-up change.
-3. Tracker rows: Linear rows stay skipped (owner decision: free issue quota exceeded). ultrathink-kickoff track complete was not run, because it would create Linear rows. Notion rows exist.
-4. Ship: invoked after the closure records. The two rule gaps (verification status and roadmap completion) are cleared by the records. The phase PR is the remaining step.
+1. External prerequisite EXT:PRS-16-20-MERGED: plans 11-01, 11-03, 11-09 (and later phases through their dependencies) wait for the owner-approved merge of draft PRs 16 to 20 (order 18, 19, 20, 17 for 17 to 20). Nothing in v4 starts before it.
+2. EXT:OWNER-APPROVES-AMENDMENT-TEXT (OD-01): the exact text of the amendment draft as corrected by errata E1 to E5, approved in writing, before Phase 18 merges (checkpoint 17).
+3. EXT:HUMAN-REVIEWS-PROBE-RECORD and EXT:HUMAN-REVIEWS-EVENT-DECODE (OD-04): the owner runs `scripts/probe_pump_accounts.py` read-only against mainnet and reviews the record before plan 13-05 flips LAYOUT_STATUS and EVENT_DECODE_STATUS; without the review both stay ASSUMED and the event desk runs recorded datasets only.
+4. Tracker rows: Linear rows stay skipped (owner decision: free issue quota exceeded); Notion rows exist.
 
 ## Decisions
 
-- Clarification q1 (live scope): settled by the approved v3 roadmap. Paper execution and risk code are in scope. Live stays refused (Phase 10). No live-adapter enablement.
-- Clarification q2 (commits): one local commit per verified unit on the integration branch. No push. No branch deletion (AGENTS.md).
-- Clarification q3 (pauses): pause only for categories a, b and c. Safe defaults otherwise.
-- Phase commands run as orchestrated gsd-planner, gsd-executor, gsd-plan-checker and gsd-verifier subagents, not flat Skill() calls. Artifacts follow GSD formats. Recorded deviation.
-- Phase 7 plan corrections, recorded in each SUMMARY:
-  - OVERRIDE-A: the README version is 0.1.0. Plan 07-03's "plugin pack stays 1.0.0" is superseded by criterion 6.
-  - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
-  - OVERRIDE-C: manifest descriptions say ten-seat.
-- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See .planning/milestones/v3-phases/06-integrity-closure/06-VERIFICATION.md.
-- Phase 7 gates at HEAD 8e32f14: lint, typecheck, full test, check.sh, verify_doc_commands.sh and the smoke replay exit 0. The smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, identical to Phase 6. Live run exits 3. Criterion 5 is narrowed to the offline subset and recorded as such.
-- Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
-- Phase 8 correction set: the first Phase 8 evaluator scored candidates with a SHA-256 digest of the seed, parameter hash and fold ids. No fills fed it, and the report showed zero fees and no metrics. That was a fabricated evaluator. The correction set (08-08 to 08-10, see 08-CORRECTION.md) replaced it with replayed net realized lamports, measured metrics, and conservative eligibility (promotion_eligible false without a passing paper comparison). The plan checker had not caught it; its checklist now includes a hash-as-score check.
-- Phase 8 result: smoke-10m replay hash unchanged (b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d). Per-fill fields are in memory only (G-10), so the ledger bytes did not change. Criterion 12's rationale wording is inaccurate; the recording obligation is met.
-- gsd-autonomous run defaults (graph ut-mvocrh76-02f3c9a9): q1 touched code plus mapped TODOs; q2 current milestone only; q3 defer unmapped TODOs; q4 only paths a phase names. Disclosure: the decomposition edited risk/engine and execution/paper_adapter, which are safety paths, under the TODO scope. The changes are moves only, with gates green. The owner should accept or revert them.
-- Phase 6 routing decision: G-1 showed 170 foreign paths on the 223-commit branch (RISK 128, sniper 13, signal 12, rug 9, journal 3, scout 3, exit 2). The decomposition contributed 26: cli 10 and risk engine 6 owned by bot-02-risk, and paper_adapter 10 owned by bot-04-sniper. Route B as written (re-own all to CHIEF) was declined, because CHIEF never trades. The owner chose Hold, and Phase 6 stays gaps_found. The owner had already accepted the decomposition.
-- Ship readiness format (2026-10-26): ultrathink-ship reads phase completion from the YAML frontmatter status of each *-VERIFICATION.md and ignores body text. The v3 reports for phases 6-10 were re-verified at da6c071 and rewritten with that frontmatter (commit d542c72). The earlier 0/5 count was this format gap, not a verification failure. Assess now reports completedPhases 4 of 5, with Phase 6 as the only gap.
-- Owner closure 2026-10-26: Phase 6 closes with two owner-approved deviations (PROJECT V3-5). approved_by human:SomeRandmGuyy. Criterion 17: CI waiver for the phase PR only. Criterion 16: ready PR merged on green CI and Greptile 5/5. Squash merge (ship default).
+- v4 planning method: the three designs (events and Grok gateway, strategies backtest and data, risk promotion and live) were critiqued (N6, 29 ranked items) and every item was applied to the plan set (`changes-applied.md`); 74 plans over 127 units in 45 pull requests, seat-pure except the amendment pull request.
+- Requirements: 111 across 14 families; EVT-11, STR-02 and RSK-07 are merged into PRC-03 and carried by no plan. 16 requirements were added by the plan set (PRC-09 to PRC-11, EVT-14, STR-06, FEE-01, MKT-10, RT-01 to RT-04, RSK-09, LIV-17 to LIV-20).
+- Replay hash rule: smoke-10m never moves; the trading-smoke hash moves once, in Phase 15 (fee model v2 default, OD-09); every phase records both before and after pairs in CHANGELOG.md.
+- Live stays refused in every phase: criterion `uv run pumpgrok run --mode live --once; test $? -eq 3` is in every phase and in the milestone audit; every overlay ships `live.enabled = false`.
+- Phase commands run as orchestrated gsd-planner, gsd-executor, gsd-plan-checker and gsd-verifier subagents; one local commit per verified unit; no branch deletion (AGENTS.md); briefs use absolute worktree paths and no angle brackets.
+- Receipts: one per pull request, `task_id` = slug; human-gated receipts are committed WITHOUT approved_by and the PR stays draft with a failing G-2 by design until the owner approves the batch at the checkpoint.
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -139,26 +187,6 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Session Continuity
 
-- Last update: 2026-11-01, after PR 27 merged (0ca794d) and the record follow-ups.
-- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01). No v3 step remains open.
-- Next: none for v3. Owner decisions outstanding: push the local tag v3 (on 85e3e0d) and approve any re-home follow-up for the ten waived files.
-
-## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
-
-- Run start: 2026-11-01T05:49:18Z. Session 01a18b55-88d2-77ca-ade2-cca68b9e2d06. Graph ut-8a40d0d875-bac7f745.
-- Branch: bot-00-chief/v3-closeout, cut from origin/main 1cfd86a in worktree /root/src/repos/pumpgrok-wt/v3-closeout. The phase-6 checkout is superseded and was not used.
-- Pre-run snapshot: .planning/pre-run-snapshot/ (ROADMAP.md and STATE.md copies verified by cmp, planning file list, git status, hashes). Scratch: removed in cleanup, never committed.
-- Start state: worktree clean. No STATE entry records another active run. The substrate lists another omp graph (ut-8dd6e76c49-d129de1d) as Implementing; it is not recorded here, so it is noted and not treated as an active run in this file.
-- Tracking: Notion Task set to Implementing. Linear NOT_RUN: the free issue limit is reached (user chose Notion only).
-- User decisions (source user): proceed alongside the claude-code handoff, which this run supersedes; fresh bot branch from origin/main; archive after a passing audit; auto-merge at 5/5 through ultrathink-ship; readiness visibility deferred to a follow-up (PARKED).
-- Repository decision (source repository): milestone scope is v3 only. ROADMAP.md lists no next milestone.
-- Frozen phase list: none remaining. Phases 6-10 are Complete with CONTEXT, PLAN, SUMMARY and VERIFICATION present. Phase count 0; the per-phase wave is skipped and recorded here.
-- Baseline (make check on 1cfd86a): PASS. Lint 806 files formatted; typecheck 208 source files clean; test suite passed; pip-audit no known vulnerabilities; prompt, template and event-schema checks clean; check.sh healthy. Pre-existing failures: none.
-- Suppression and skip counts (baseline): noqa 33; type: ignore 107; pytest.mark.skip 5; pragma: no cover 10; pragma: allowlist 92; empty except-pass blocks 6.
-- Backlog inventory: .planning/BACKLOG-INVENTORY.md. 28 marker lines, all historical text in docs and planning records; none in source, tests, ci or scripts. Categories: IN_PHASE 0, ACTIONABLE 0, DECISION_NEEDED 0, PARKED 28, STALE 0.
-- Tracker items for this branch: SETUP.md section 8 is verified false (vendor/ absent; scout pipeline not implemented, exit 5). Classified ACTIONABLE and corrected in this run. Readiness visibility: PARKED. Other tracker items belong to other branches or repositories and stay PARKED with their owner decisions listed.
-- Next: correct SETUP.md section 8, run the canonical checks on the final tree, run the milestone audit, complete v3 after a passing audit, clean up run-created scratch, then ultrathink-ship (pr, review, merge at 5/5).
-
-## Operator Next Steps
-
-- Start the next milestone with /gsd-new-milestone
+- Last update: 2026-10-28, after the v4 roadmap, requirements, project and state were written from `plans.json`.
+- Resume: read this file, then `.planning/ROADMAP.md` (Phase 11) and `.planning/REQUIREMENTS.md`; the plan layer is `plans.json` (74 plans) and `pr-plan.md`.
+- Next: merge the owner-approved draft PRs 16 to 20 (order 18, 19, 20, 17), tag `v4-base`, then plan Phase 11 (`gsd-plan-phase 11`) and start plans 11-01 and 11-03. Plan 11-09 installs the v4 roadmap, requirements and project into the repository and archives v3.

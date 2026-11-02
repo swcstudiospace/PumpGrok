@@ -1,0 +1,4241 @@
+[
+ {
+  "id": "11-01",
+  "phase": 11,
+  "title": "Receipt glob, waiver removal and the two hash pins (smoke-10m and trading smoke)",
+  "seat": "bot-02-risk",
+  "includes": [
+   "PRC-RECEIPTS",
+   "PRC-WAIVER",
+   "Q05",
+   "TSMOKE"
+  ],
+  "files": [
+   ".gitignore",
+   "ci/tests/test_security_workflows.py",
+   ".github/workflows/gates.yml",
+   "ci/tests/test_no_pr_waivers.py",
+   "tests/replay/test_replay_hash_pin.py",
+   "tests/replay/test_trading_smoke_pin.py",
+   "tests/replay/pin_support.py",
+   "tests/fixtures/replay/pins/trading_smoke.json",
+   "tests/fixtures/replay/pins/trading_smoke_rows.json"
+  ],
+  "depends_on": [],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "PRC-05",
+   "PRC-04",
+   "PRC-03",
+   "PRC-09"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q ci/tests/test_security_workflows.py",
+   "grep -qF '!.receipts/bot-0*/v4-p*.json' .gitignore",
+   "python3 ci/gates/check_ownership.py --validate-manifest",
+   "! grep -nE 'pull_request\\.number' .github/workflows/gates.yml",
+   "uv run pytest -q ci/tests/test_no_pr_waivers.py ci/tests",
+   "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_runner_determinism.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 -c \"import json;d=json.load(open('tests/fixtures/replay/pins/trading_smoke.json'));assert d['fixture']=='smoke' and len(d['events_hash'])==64 and d['seq']>1\"",
+   "test -f src/pumpgrok/backtest/equity.py",
+   "grep -rq 'def is_writer' src/pumpgrok/ledger",
+   "grep -rq 'verify_stored_content' src/pumpgrok"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "First plan of the milestone. PRC-RECEIPTS replaces per-file .gitignore lines by one glob so non-risk seats never touch a risk path (cause of the PR 17 to 20 G-1 failures); PRC-WAIVER deletes every PR-number waiver. Q05 pins smoke-10m; TSMOKE pins the trading `smoke` ledger hash and full row dump BEFORE any engine unit (N6 item 9). Re-measure both hashes at tag v4-base after PRs 17 to 20 merge. All four are small; keep them as separate commits.",
+  "pr": "P11-RISK-A",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits .gitignore (.gitignore)",
+   "edits ci/ (gates, ratchet tests) (ci/tests/test_security_workflows.py)",
+   "edits a GitHub workflow (.github/workflows/gates.yml)",
+   "re-pins a hash oracle (tests/fixtures/replay/pins/trading_smoke.json)"
+  ],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "PRC-RECEIPTS": "Receipts must be tracked (gates.yml locates the receipt in the PR diff) and the tracked-receipt test accepts only literal allowlist lines. Without this unit every non-risk PR must edit the risk-owned .gitignore (the cause of the foreign-path failures on PRs 17-20).",
+   "PRC-WAIVER": "Runs after PRs 16 to 20 merged and the combined waiver list is on main. Test pins the waiver set to the empty tuple; the amendment PR later raises it to exactly one entry and PRC-19 returns it to empty.",
+   "Q05": "Moved out of A2 so the Phase 11 refactors have the safety net before they start.",
+   "TSMOKE": "N6 verdict (PRs 17 to 20 were not on main at HEAD 641927c, so claims about backtest/equity.py, is_writer and verify_stored_content were UNVERIFIED): the three preflight commands in this acceptance list FAIL until PRs 17 to 20 are merged, which is exactly the point; B15, C-01b and C-05 rely on those symbols. N6 section 3 item 1 and item 9. The smoke-10m hash covers only the verdict note and rollover rows (41 ticks, no admitted trade). The trading `smoke` fixture (5 events, seq 11, one entry and one take_profit exit) is the only existing fixture that exercises risk, adapter and exit code. Observed at repo HEAD 641927c in a clean cwd: events.hash bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, verify=CONSISTENT seq=11 events=5. The unit MUST re-measure at tag v4-base (after PRs 17 to 20) and pin that value plus every ledger row (seq, ts, type, source, idempotency_key, payload digest) as a JSON dump. The test runs the replay through the library entry used by `pumpgrok verify` with monkeypatch.chdir(tmp_path) so a persisted var/ledger.sqlite (operator_active_set) can never change the hash (N6 section 3 item 3). pin_support.py holds the regenerate helper (`python -m tests.replay.pin_support --regen` prints the new pin, never writes); a legitimate re-pin is a deliberate file edit plus a CHANGELOG before and after pair."
+  }
+ },
+ {
+  "id": "11-02",
+  "phase": 11,
+  "title": "Characterization tests for the risk engine, backtest CLI, Settings surface and seat_task before any hotspot split",
+  "seat": "bot-02-risk",
+  "includes": [
+   "Q11c",
+   "Q12c",
+   "Q13c",
+   "Q14c"
+  ],
+  "files": [
+   "tests/characterization/risk/test_engine_evaluate.py",
+   "tests/risk/test_step_rows_stable.py",
+   "tests/cli/test_backtest_verb_characterization.py",
+   "tests/config/test_settings_surface_characterization.py",
+   "tests/supervisor/test_seat_task_characterization.py"
+  ],
+  "depends_on": [
+   "11-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "QLT-05",
+   "RSK-08"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/characterization/risk tests/risk/test_step_rows_stable.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/cli tests/backtest",
+   "uv run pumpgrok backtest --fixture smoke-10m > /tmp/bt-a.md && uv run pumpgrok backtest --fixture smoke-10m > /tmp/bt-b.md && cmp /tmp/bt-a.md /tmp/bt-b.md",
+   "uv run pytest -q tests/config",
+   "uv run pytest -q tests/supervisor",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Test-only plan. Each test must pass on the pre-split code and on the split code (QLT-05). Q14c merges in the same PR as the pins so chief can split seat_task without waiting for the rest of the risk lane.",
+  "pr": "P11-RISK-A",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "Q13c": "Pins each PRE-v4 section separately (digest per section class) so a later unit that adds a section never edits this file; new sections bring their own test file."
+  }
+ },
+ {
+  "id": "11-03",
+  "phase": 11,
+  "title": "Dev tooling lock, fast and soak test split, coverage gate, CI wiring for services, SBOM and compose hardening",
+  "seat": "bot-02-risk",
+  "includes": [
+   "Q01",
+   "Q40",
+   "Q41",
+   "Q02",
+   "Q03",
+   "Q06"
+  ],
+  "files": [
+   "pyproject.toml",
+   "uv.lock",
+   ".github/workflows/security-pr.yml",
+   "ci/tests/test_sbom_step.py",
+   "docker-compose.yml",
+   "tests/safety/test_compose_hardening.py",
+   "Makefile",
+   ".github/workflows/ci.yml",
+   "tests/quality/test_fast_split.py",
+   "ci/tests/test_ci_covers_services.py"
+  ],
+  "depends_on": [],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "QLT-01",
+   "QLT-02",
+   "QLT-07",
+   "QLT-08",
+   "QLT-09",
+   "QLT-10",
+   "PRC-10"
+  ],
+  "acceptance_commands": [
+   "uv run python -c \"import tomllib;c=tomllib.load(open('pyproject.toml','rb'));m=str(c['tool']['pytest']['ini_options']['markers']);assert 'slow' in m\"",
+   "uv run python -c \"import hypothesis,mutmut,pytest_cov\"",
+   "uv run pytest -q ci/tests/test_sbom_step.py ci/tests/test_security_workflows.py",
+   "uv run pytest -q tests/safety/test_compose_hardening.py",
+   "uv run python -c \"import yaml;yaml.safe_load(open('docker-compose.yml'))\"",
+   "uv run pytest -q tests/quality/test_fast_split.py",
+   "make -n test | grep -q 'not slow'",
+   "make -n test-soak | grep -q 'm slow'",
+   "make cov",
+   "grep -n 'fail_under' pyproject.toml",
+   "test -f coverage.xml",
+   "uv run pytest -q ci/tests/test_ci_covers_services.py",
+   "make -n typecheck | grep -q services",
+   "make -n lint | grep -q services",
+   "make -n audit | grep -q services",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Q01 is the only unit that adds dev dependencies (uv.lock regenerated once). Q02, Q03, Q06 chain on Makefile and ci.yml. Q06 (new) makes lint, typecheck and audit path-conditional over services/ (N6 item 24). Acceptance no longer uses collect-only (G-2 bypass family, N6 section 4).",
+  "pr": "P11-RISK-B",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits a GitHub workflow (.github/workflows/security-pr.yml)",
+   "edits ci/ (gates, ratchet tests) (ci/tests/test_sbom_step.py)",
+   "edits docker-compose.yml (docker-compose.yml)"
+  ],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "Q01": "The ONLY unit that adds dev dependencies, so uv.lock is regenerated once. addopts gains -m 'not slow' so a bare pytest never runs the 49 minute soak test; nightly selects it with -m slow. N6 item 4 of section 4: the original collect-only acceptance matched the G-2 bypass family; replaced by a config assertion and an import check.",
+   "Q02": "N6 section 4 and item 10: acceptance no longer uses collect-only; test_fast_split.py asserts the Makefile and pyproject config.",
+   "Q03": "Runs on the soak-deselected suite; the floor is the measured baseline minus one point and only moves up. fail_under lives in pyproject.toml (set by Q01 as 0, raised here via Makefile --cov-fail-under so pyproject is not touched twice). Chain Q02 -> Q03 -> Q06 -> Q31 on Makefile and ci.yml.",
+   "Q06": "N6 section 4 (CI) and item 24. ci.yml runs only `make lint typecheck test audit` and `mypy src/` omits services/. Targets are made path-conditional with $(wildcard services/*/src) so they are no-ops while services/desk-signer does not exist and automatically cover it once C-09a lands; the signer keeps its own lock and its own pytest job (root testpaths = tests, so signer tests never import solders in the root suite). Chain on Makefile and ci.yml: Q02, Q03, Q06, Q31, A10g, O5."
+  }
+ },
+ {
+  "id": "11-04",
+  "phase": 11,
+  "title": "Split RiskEngine._evaluate, cli/backtest.py and config/settings.py; narrow the doctor and manifests excepts",
+  "seat": "bot-02-risk",
+  "includes": [
+   "Q11s",
+   "Q12s",
+   "Q13s",
+   "Q20r"
+  ],
+  "files": [
+   "src/pumpgrok/risk/engine/core.py",
+   "src/pumpgrok/risk/engine/rules.py",
+   "src/pumpgrok/cli/backtest.py",
+   "src/pumpgrok/cli/backtest_holdout.py",
+   "src/pumpgrok/cli/backtest_paper_gate.py",
+   "src/pumpgrok/config/settings.py",
+   "src/pumpgrok/config/sections/__init__.py",
+   "src/pumpgrok/config/sections/core.py",
+   "src/pumpgrok/config/sections/engine.py",
+   "src/pumpgrok/config/sections/ops.py",
+   "src/pumpgrok/doctor.py",
+   "src/pumpgrok/core/manifests.py",
+   "tests/core/test_manifests_errors.py",
+   "tests/test_doctor_errors.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "QLT-04",
+   "QLT-06"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/characterization/risk tests/risk tests/safety tests/replay",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run mypy src/",
+   "uv run pytest -q tests/cli tests/backtest",
+   "uv run pytest -q tests/config tests/characterization tests/safety",
+   "uv run pytest -q tests/core tests/test_doctor_probes.py tests/test_doctor_errors.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Refactors behind the 11-02 characterization tests; rows, risk_json and every hash byte-identical. Q13s is what Phase 12 waits for (settings sections). If the plan runs over three hours split Q13s into its own commit series; the plan boundary stays.",
+  "pr": "P11-RISK-B",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "Q13s": "After this unit a new settings section is a new module under config/sections plus one import and one field line in settings.py; that single anchor is the settings.py contention point."
+  }
+ },
+ {
+  "id": "11-05",
+  "phase": 11,
+  "title": "Complexity ratchet, property tests, mutation smoke and the ratchet-down after the hotspot splits",
+  "seat": "bot-02-risk",
+  "includes": [
+   "Q04",
+   "Q30",
+   "Q31",
+   "Q09"
+  ],
+  "files": [
+   "pyproject.toml",
+   "ci/tests/test_complexity_ratchet.py",
+   "tests/property/test_money_properties.py",
+   "tests/property/test_reducer_order_properties.py",
+   "tests/property/test_replay_determinism_properties.py",
+   "Makefile",
+   "docs/mutation-testing.md",
+   "tests/quality/test_function_size.py",
+   "tests/quality/test_no_plain_swallow.py"
+  ],
+  "depends_on": [
+   "11-03",
+   "11-04",
+   "11-06",
+   "11-07",
+   "11-08",
+   "11-09"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "QLT-03",
+   "QLT-07",
+   "QLT-08",
+   "QLT-04",
+   "QLT-06"
+  ],
+  "acceptance_commands": [
+   "uv run ruff check .",
+   "uv run pytest -q ci/tests/test_complexity_ratchet.py",
+   "uv run pytest -q tests/property",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make mutation-smoke",
+   "test -f docs/mutation-testing.md",
+   "uv run pytest -q tests/quality ci/tests/test_complexity_ratchet.py",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Q09 depends on every other Phase 11 plan (sniper, rug, scout, chief splits) so this plan merges last; its PR therefore merges last in Phase 11 and Phase 12 develops on a draft stacked on it (depth 2). Mutation smoke stays opt-in, not in make check.",
+  "pr": "P11-RISK-B",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits ci/ (gates, ratchet tests) (ci/tests/test_complexity_ratchet.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "Q04": "Any file not on the baseline list is checked, so every v4 package (events, grok, datafeed, strategies, promotion, services/desk-signer) is covered from its first commit. The ratchet test fails if the baseline list grows.",
+   "Q31": "Targets risk/limits.py, risk/sizing.py, execution/curve_math.py, execution/fees.py; threshold recorded in the doc.",
+   "Q09": "Also ratchets: the new packages (events, grok, datafeed, strategies, promotion, backtest v2, services/desk-signer) are outside the legacy baseline and stay outside it (N6 item 24 and QLT-03)."
+  }
+ },
+ {
+  "id": "11-06",
+  "phase": 11,
+  "title": "Characterize and split paper_adapter sell, batch and confirm",
+  "seat": "bot-04-sniper",
+  "includes": [
+   "Q10c",
+   "Q10s",
+   "Q10b",
+   "Q10f"
+  ],
+  "files": [
+   "tests/characterization/execution/test_paper_adapter_sell.py",
+   "tests/characterization/execution/test_paper_adapter_batch.py",
+   "tests/characterization/execution/test_paper_adapter_confirm.py",
+   "src/pumpgrok/execution/paper_adapter/sell.py",
+   "src/pumpgrok/execution/paper_adapter/sell_stages.py",
+   "src/pumpgrok/execution/paper_adapter/batch.py",
+   "src/pumpgrok/execution/paper_adapter/batch_stages.py",
+   "src/pumpgrok/execution/paper_adapter/confirm.py",
+   "src/pumpgrok/execution/paper_adapter/confirm_stages.py"
+  ],
+  "depends_on": [
+   "11-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "QLT-05",
+   "QLT-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/characterization/execution tests/execution",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/characterization/execution tests/execution tests/replay",
+   "uv run mypy src/",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Q10c first (characterization), then the three splits. Needs the TSMOKE pin because paper_adapter is the code the trading smoke exercises.",
+  "pr": "P11-SNIPER",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-04-sniper"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "Q10c": "Written and merged against UNCHANGED production code; must pass before and after the split."
+  }
+ },
+ {
+  "id": "11-07",
+  "phase": 11,
+  "title": "Narrow rug-owned plain-swallow excepts; pull forward the pump event decoder",
+  "seat": "bot-05-rug",
+  "includes": [
+   "Q20g",
+   "B01"
+  ],
+  "files": [
+   "src/pumpgrok/tools/onchain/authorities.py",
+   "src/pumpgrok/tools/onchain/holders.py",
+   "tests/tools/onchain/test_onchain_errors.py",
+   "src/pumpgrok/tools/onchain/pump_events.py",
+   "tests/tools/onchain/test_pump_events.py"
+  ],
+  "depends_on": [
+   "11-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "QLT-06",
+   "MKT-02"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/tools/onchain tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py",
+   "uv run pytest -q tests/tools/onchain/test_pump_events.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "B01 (decoder, MKT-02) has only PRC-RECEIPTS as dependency and no consumer until B07 (Phase 13); it is pulled forward into this rug PR (phases.md lists B01 to B03 as pull-forward candidates) so Phase 13 needs one rug PR instead of two. Observed fact: tests/tools/onchain/test_holders*.py and test_transfers*.py belong to whale, so the new test is named test_onchain_errors.py.",
+  "pr": "P11-RUG",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-05-rug"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "11-08",
+  "phase": 11,
+  "title": "Narrow the jupiter plain-swallow except",
+  "seat": "bot-01-scout",
+  "includes": [
+   "Q20s"
+  ],
+  "files": [
+   "src/pumpgrok/tools/market/jupiter.py",
+   "tests/tools/market/test_jupiter_errors.py"
+  ],
+  "depends_on": [
+   "11-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "QLT-06"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/tools/market tests/characterization/test_jupiter_quote.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "One-file narrowing with its own test.",
+  "pr": "P11-SCOUT",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-01-scout"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "11-09",
+  "phase": 11,
+  "title": "Adopt the v4 milestone, split seat_task, pull forward the read-only probe script",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-00",
+   "Q14s",
+   "B02"
+  ],
+  "files": [
+   ".planning/ROADMAP.md",
+   ".planning/REQUIREMENTS.md",
+   ".planning/PROJECT.md",
+   ".planning/milestones/v3-ROADMAP.md",
+   ".planning/milestones/v3-REQUIREMENTS.md",
+   "src/pumpgrok/supervisor/seat_task.py",
+   "src/pumpgrok/supervisor/seat_restart.py",
+   "src/pumpgrok/supervisor/seat_relay.py",
+   "scripts/probe_pump_accounts.py",
+   "tests/desk/test_probe_pump_accounts.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "PRC-06",
+   "QLT-04",
+   "MKT-03"
+  ],
+  "acceptance_commands": [
+   "test -f .planning/milestones/v3-ROADMAP.md",
+   "grep -qE 'Phase 11: Engineering foundation' .planning/ROADMAP.md",
+   "grep -qE 'Coverage: v4 requirements' .planning/REQUIREMENTS.md",
+   "./scripts/check.sh",
+   "uv run pytest -q tests/supervisor tests/replay",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run mypy src/",
+   "! uv run pytest tests/supervisor/test_seat_task_characterization.py -rs | grep -q SKIPPED",
+   "uv run pytest -q tests/desk/test_probe_pump_accounts.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-04 (human runs the probe against mainnet read-only; plan only ships the script)",
+  "notes": "PLN-00 installs the v4 ROADMAP and REQUIREMENTS including the requirement additions in changes-applied.md section R and the amended success criteria in section C. Q14s splits seat_task (chief-owned) behind Q14c. B02 (probe script, MKT-03) is pulled forward from Phase 13 so B04 never waits for a chief PR in Phase 13; it never writes VERIFIED.",
+  "pr": "P11-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [
+   "edits PROJECT.md (.planning/PROJECT.md)"
+  ],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "PLN-00": "Owns .planning/PROJECT.md edits for the v4 key decisions V4-1..; C-14 later edits other lines of the same file.",
+   "Q14s": "Chief unit with no tests of its own; its safety net is Q14c."
+  }
+ },
+ {
+  "id": "11-10",
+  "phase": 11,
+  "title": "CHANGELOG entry for Phase 11 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-11"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-02",
+   "11-03",
+   "11-04",
+   "11-05",
+   "11-06",
+   "11-07",
+   "11-08",
+   "11-09"
+  ],
+  "order_after": [],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 11: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 11: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 11: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 11: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Records smoke-10m and trading-smoke before and after lines (equal in this phase).",
+  "pr": "P11-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "11-11",
+  "phase": 11,
+  "title": "Phase 11 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-11"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-02",
+   "11-03",
+   "11-04",
+   "11-05",
+   "11-06",
+   "11-07",
+   "11-08",
+   "11-09",
+   "11-10"
+  ],
+  "order_after": [],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 11' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Runs the amended Phase 11 success criteria on the integration tree and records commands and exit codes in the receipt.",
+  "pr": "P11-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "12-01",
+  "phase": 12,
+  "title": "Settings skeleton: every v4 section, config-gated off, in one unit",
+  "seat": "bot-02-risk",
+  "includes": [
+   "SET0"
+  ],
+  "files": [
+   "src/pumpgrok/config/settings.py",
+   "src/pumpgrok/config/sections/events.py",
+   "src/pumpgrok/config/sections/grok_gateway.py",
+   "src/pumpgrok/config/sections/datafeed.py",
+   "src/pumpgrok/config/sections/recorder.py",
+   "src/pumpgrok/config/sections/strategies.py",
+   "src/pumpgrok/config/sections/backtest_v2.py",
+   "src/pumpgrok/config/sections/risk_strategy.py",
+   "src/pumpgrok/config/sections/promotion.py",
+   "src/pumpgrok/config/sections/live.py",
+   "src/pumpgrok/config/sections/signer.py",
+   "src/pumpgrok/config/sections/paper_fees.py",
+   "tests/config/test_v4_settings_skeleton.py",
+   "tests/config/test_events_settings.py",
+   "tests/config/test_live_settings_caps.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-04"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "EVT-01",
+   "PRC-11",
+   "LIV-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/config",
+   "uv run ruff check src/pumpgrok/config",
+   "uv run mypy src/pumpgrok/config",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-02, OD-03, OD-07 (defaults recorded as REVIEW values)",
+  "notes": "N6 item 21. No other v4 plan edits config/settings.py or adds a section module. Defaults must leave every replay hash unchanged (SMOKE and TSMOKE pins in acceptance).",
+  "pr": "P12-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "defines live caps (src/pumpgrok/config/sections/live.py)",
+   "defines signer limits (src/pumpgrok/config/sections/signer.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "SET0": "N6 item 21 and section 1 (contention). settings.py was edited by A0, B06, B09, B10, B16, C-02 and C-06 in a strict chain, with unowned keys (watch_max, mtm_refresh_s, gap_haircut_bps, signer keys). SET0 is the ONLY unit that edits config/settings.py after Q13s: one section module per area (events, grok_gateway, datafeed, recorder, strategies, backtest_v2, risk_strategy, promotion, live, signer, paper_fees), one import and one field line in Settings each, defaults that leave every behavior off (events.wake_mode cadence, strategies.runtime_enabled false, live.enabled false, execution.fees.version v1). It also owns the keys the designs forgot: datafeed.watch_max, datafeed.mtm_refresh_s, backtest.gap_haircut_bps, promotion.* thresholds path, live.arm_max_expiry_hours (hard ceiling 168), live.notional_cap_sol validator 0 < x <= 1.0 (ConfigError above), live.wallet_allowlist base58 shape, live.drift_tolerance_lamports, signer.socket_path, signer.socket_group, signer.fee_cap_lamports, signer.confirm_timeout_s, signer.nonce_window_s. N6 item 26: no setting name contains the substrings seed, span or an _at suffix (canonical_request_hash drops those keys), so request-shaping fields are renamed (rng_stream, not seed). Later units add NO field to settings.py and no new section file; they consume. The Q13c characterization test pins pre-v4 sections, so SET0 never edits it. Per-section tests live in tests/config/test_v4_settings_skeleton.py."
+  }
+ },
+ {
+  "id": "12-02",
+  "phase": 12,
+  "title": "Typed errors, harness fakes, the single event catalog, EventBus, store, DLQ and events CLI",
+  "seat": "bot-02-risk",
+  "includes": [
+   "A0",
+   "A1"
+  ],
+  "files": [
+   "src/pumpgrok/core/errors.py",
+   "tests/harness/faults.py",
+   "tests/harness/test_faults.py",
+   "src/pumpgrok/events/__init__.py",
+   "src/pumpgrok/events/models.py",
+   "src/pumpgrok/events/bus.py",
+   "src/pumpgrok/events/store.py",
+   "src/pumpgrok/events/dlq.py",
+   "src/pumpgrok/cli/events.py",
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/dispatch.py",
+   "docs/design/events-grok.md",
+   "tests/events/test_models.py",
+   "tests/events/test_bus_lanes.py",
+   "tests/events/test_bus_backpressure.py",
+   "tests/events/test_bus_dedup_coalesce.py",
+   "tests/events/test_bus_retry_dlq.py",
+   "tests/events/test_handler_idempotency.py",
+   "tests/events/test_bus_shutdown.py",
+   "tests/cli/test_events_cli.py",
+   "tests/events/test_models_v4_kinds.py"
+  ],
+  "depends_on": [
+   "11-04",
+   "12-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "EVT-01",
+   "EVT-02",
+   "EVT-03",
+   "EVT-04",
+   "EVT-05",
+   "EVT-06",
+   "EVT-07",
+   "EVT-14"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/harness tests/config",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/events tests/cli/test_events_cli.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "A1 is large (17 files): author models first, then bus, then DLQ/store/CLI; a numbered sub-PR split is allowed only for size and is recorded in the receipt. The catalog includes every Design B and C event (N6 item 11).",
+  "pr": "P12-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A0": "faults.py later also gains FaultySignerTransport in C-10. Settings moved to SET0 (N6 item 21); A0 keeps typed errors and the harness fakes FaultyEventSource and FaultyGrokTransport.",
+   "A1": "cli/dispatch.py added by the sequencer: a new verb needs a _VERB_HANDLERS entry (A.md lists parsing.py only). N6 item 11 and section 1 (event vocabulary): events/models.py is the ONE catalog. It contains Design A kinds (TokenLaunched, PriceTick, PositionTick, SourceStatus, Timer, ExitDeadline, Heartbeat, CandidateReady, StrategySignal, GrokVerdict, OrderOutcome, RiskEdge, PositionChange, Migration, LargeTransfer, HolderShift) AND every Design B and C kind: NewTokenSeen (alias view of TokenLaunched with the creation fields), CurveTick, FeedGap, FeedResynced, MintEvicted, DatasetSealed, LlmCallCompleted, BacktestCompleted, StrategyVersionRegistered, ParamsProposed. One publisher interface named EventPublisher (B's Publisher is removed). Priority stays a pure function of kind; a CurveTick for a held mint is emitted by the datafeed bridge as a PositionTick (P0 lane), never promoted inside the bus, and the mapping table is a tested constant. DeterministicBus ordering is (ts, priority_rank, source_seq); the backtest uses it unchanged (B16 may not order by (ts, line))."
+  }
+ },
+ {
+  "id": "12-03",
+  "phase": 12,
+  "title": "Deterministic drain with quiescence loop and trading-smoke parity; SourceSupervisor with the single SourceStateBook",
+  "seat": "bot-02-risk",
+  "includes": [
+   "A2",
+   "A3"
+  ],
+  "files": [
+   "src/pumpgrok/events/drain.py",
+   "tests/replay/test_event_drain_parity.py",
+   "src/pumpgrok/events/sources.py",
+   "tests/events/test_sources.py",
+   "tests/degradation/test_event_source_faults.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "12-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "EVT-08",
+   "EVT-09",
+   "EVT-14"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/replay/test_event_drain_parity.py -k determinism",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_event_drain_parity.py -k smoke_trading",
+   "! uv run pytest tests/replay/test_event_drain_parity.py -rs | grep -q SKIPPED",
+   "uv run pytest -q tests/events/test_sources.py tests/degradation/test_event_source_faults.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "A2 parity runs on the trading smoke fixture, not only smoke-10m (N6 section 3 item 2); the drain loop yields until quiescent (N6 section 3 item 5). A3 owns staleness for the whole desk (N6 item 12). The A4-dependent half of EVT-08 (wake_mode parity) completes in Phase 14.",
+  "pr": "P12-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A2": "Determinism half passes here; the fixture_compat parity half importorskips the wake module until A4. N6 section 3 items 2 and 5: parity runs on the trading `smoke` fixture (smoke-10m has no trades and cannot prove wake ordering) and compares to the pinned trading_smoke rows, not only to smoke-10m. DeterministicBus.drain yields to the loop until quiescent (in-flight coalescing futures, retry timers, FixtureClock FIFO continuation order) before advancing virtual time; a test pins this.",
+   "A3": "N6 item 12 (one staleness owner): SourceSupervisor owns staleness and publishes SourceStatus; it also owns a SourceStateBook (per-source state, last_frame_at on the injected Clock, stable_since). DegradedState.ws_data_stale (A4 DegradedBridge), FeedHealth (C-04) and LivePriceSource (B08) READ the book or the SourceStatus events; none of them keeps its own timer or last-tick clock, and nobody calls a separate note_tick path."
+  }
+ },
+ {
+  "id": "12-04",
+  "phase": 12,
+  "title": "CHANGELOG entry for Phase 12 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-12"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "12-01",
+   "12-02",
+   "12-03"
+  ],
+  "order_after": [
+   "11-10"
+  ],
+  "wave": 4,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 12: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 12: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 12: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Equal before and after lines for smoke-10m and trading smoke.",
+  "pr": "P12-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "12-05",
+  "phase": 12,
+  "title": "Phase 12 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-12"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/12-event-runtime-core/12-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "12-01",
+   "12-02",
+   "12-03",
+   "12-04"
+  ],
+  "order_after": [
+   "11-09",
+   "11-11"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 12' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/12-event-runtime-core/12-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt for the phase; checkpoint 12 batch is assembled from this plan's PR.",
+  "pr": "P12-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "13-01",
+  "phase": 13,
+  "title": "datafeed core, bridge onto the event catalog, live recorder and importer",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B06",
+   "X1",
+   "B09"
+  ],
+  "files": [
+   "src/pumpgrok/datafeed/__init__.py",
+   "src/pumpgrok/datafeed/events.py",
+   "src/pumpgrok/datafeed/mintbook.py",
+   "src/pumpgrok/datafeed/watchset.py",
+   "src/pumpgrok/datafeed/readonly.py",
+   "src/pumpgrok/core/errors.py",
+   "tests/datafeed/test_watchset.py",
+   "tests/datafeed/test_readonly.py",
+   "tests/datafeed/test_mintbook.py",
+   "src/pumpgrok/datafeed/bridge.py",
+   "tests/datafeed/test_bridge.py",
+   "src/pumpgrok/replay/live_recorder.py",
+   "src/pumpgrok/replay/import_data.py",
+   "src/pumpgrok/replay/trim.py",
+   "tests/replay/test_live_recorder.py",
+   "tests/replay/test_live_recorder_manifest_strings.py"
+  ],
+  "depends_on": [
+   "12-01",
+   "12-02"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "MKT-05",
+   "MKT-09",
+   "REC-01",
+   "REC-02"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/datafeed/test_watchset.py tests/datafeed/test_readonly.py tests/datafeed/test_mintbook.py tests/config",
+   "uv run pytest -q tests/events tests/datafeed/test_bridge.py",
+   "uv run pytest -q tests/replay tests/config",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-05 (paid RPC provider: bounds the watch-set defaults)",
+  "notes": "Bridge only (catalog is A1). Recorder writes string manifest values and lists every jsonl (N6 item 17). WatchSet cap, 30 per 10 s limiter and ReadOnlyRpc allowlist are config from SET0.",
+  "pr": "P13-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B06": "Settings section added by the sequencer (B.md names watch_max, probation_s, mtm_refresh_s but lists no settings file).",
+   "X1": "Gap found by the sequencer: A defines TokenLaunched/PriceTick/PositionTick/SourceStatus; B defines NewTokenSeen/CurveTick/FeedGap and consumes DatasetSealed, BacktestCompleted, StrategyVersionRegistered, ParamsProposed, LlmCallCompleted that A does not list. This unit adds the missing kinds to events/models.py and maps CurveTick to PositionTick (held mint) or PriceTick. Catalog moved into A1 (N6 item 11). X1 is the bridge only, with the explicit mapping table CurveTick(held) -> PositionTick, CurveTick(other) -> PriceTick, FeedGap -> SourceStatus(stale)+FeedGap, FeedResynced -> SourceStatus(resynced).",
+   "B09": "Settings section added by the sequencer (rotate_s, tick_min_interval_s, coverage). N6 item 17: FixtureManifest.sources is dict[str, str]; machine keys (integer counts, digests) are written as strings, and every recorded jsonl file is listed (unlisted files are rejected at load). A recorded dataset must load back through load_dataset in the same test. N6 row 27: load rejects timestamp regression (fixtures.py:183), so resynced events keep receipt time in ts and the original time in a separate bt field."
+  }
+ },
+ {
+  "id": "13-02",
+  "phase": 13,
+  "title": "Portal and logs sources on SourceSupervisor, LivePriceSource and marks, probe artifacts and status-agnostic tests",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B07",
+   "B08",
+   "B04"
+  ],
+  "files": [
+   "src/pumpgrok/datafeed/portal.py",
+   "src/pumpgrok/datafeed/logs.py",
+   "src/pumpgrok/datafeed/resync.py",
+   "src/pumpgrok/datafeed/fallback.py",
+   "tests/datafeed/test_feed.py",
+   "tests/conftest.py",
+   "src/pumpgrok/datafeed/price.py",
+   "src/pumpgrok/datafeed/graduation.py",
+   "src/pumpgrok/datafeed/marks.py",
+   "tests/datafeed/test_price_source.py",
+   "tests/datafeed/test_graduation.py",
+   "tests/datafeed/test_marks.py",
+   "tests/fixtures/rpc/**",
+   "docs/CURVE_LAYOUT_PROBE.md",
+   "tests/docs/test_verify_doc_commands_offline.py",
+   "tests/cli/test_review_trade_prices.py",
+   "tests/safety/test_blind_advisory.py"
+  ],
+  "depends_on": [
+   "11-07",
+   "11-09",
+   "12-02",
+   "12-03",
+   "13-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "MKT-06",
+   "MKT-07",
+   "MKT-08",
+   "MKT-03"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/datafeed/test_feed.py tests/test_network_block.py",
+   "uv run pytest -q tests/datafeed/test_price_source.py tests/datafeed/test_graduation.py tests/datafeed/test_marks.py",
+   "uv run pytest -q tests/docs tests/safety tests/cli",
+   "grep -q 'decoded_pending_review' docs/CURVE_LAYOUT_PROBE.md",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-04 (human reads the probe record), OD-05",
+  "notes": "B07 depends on A3 (one source layer, N6 item 11). B08 reads SourceStateBook (N6 item 12). B04 depends only on B02 and keeps the layout status ASSUMED; its tests are status-agnostic so they stay green across B03 and the flip. The REST fallback degrades, never assumes availability (N6 section 7).",
+  "pr": "P13-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B07": "N6 item 11: reconnect, staleness, resync and cursor logic are A3's. datafeed/* only decodes frames and implements the transport coroutines SourceSupervisor drives. N6 section 7: the pump.fun REST fallback (frontend-api.pump.fun) may be Cloudflare-blocked or down; the fallback degrades to SourceStatus(blind) and refuses buys, it never assumes availability.",
+   "B08": "N6 item 12: LivePriceSource reads SourceStateBook; no private staleness clock.",
+   "B04": "Needs one read-only mainnet run of B02 output; the record carries decoded_pending_review until a human sets reviewed_by. B04 depends only on B02: its tests are written against symbols that exist today (LAYOUT_STATUS, the decode entry points), so they stay green before and after B03. This order (agnostic tests first, then the layout change, then the human flip) removes the rug -> risk -> rug PR cycle."
+  }
+ },
+ {
+  "id": "13-03",
+  "phase": 13,
+  "title": "Status-agnostic execution tests, paper fee model v2 (selectable), paper factory, entry hook Protocol",
+  "seat": "bot-04-sniper",
+  "includes": [
+   "B04s",
+   "FEE1",
+   "PF1",
+   "C-03s"
+  ],
+  "files": [
+   "tests/execution/test_graduation_blind.py",
+   "tests/execution/test_curve_source_gate.py",
+   "src/pumpgrok/execution/fees.py",
+   "tests/execution/test_fee_model_v2.py",
+   "src/pumpgrok/execution/paper_factory.py",
+   "src/pumpgrok/execution/__init__.py",
+   "tests/execution/test_paper_factory.py",
+   "src/pumpgrok/execution/paper_adapter/adapter.py",
+   "tests/execution/test_entry_gate_hook.py",
+   "src/pumpgrok/execution/entry_hook.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-06"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "MKT-04",
+   "FEE-01",
+   "MKT-09",
+   "LIV-06",
+   "RSK-05"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/execution",
+   "uv run pytest -q tests/execution/test_fee_model_v2.py tests/execution",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pytest -q tests/execution/test_paper_factory.py tests/safety/test_import_graph_no_live.py",
+   "uv run pytest -q tests/execution tests/characterization/execution",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-09 (fee constants are REVIEW)",
+  "notes": "Four small sniper units in one plan. FEE1 defaults to v1 so no hash moves. PF1 keeps the paper root out of build_adapter (N6 item 18). C-03s moved here from Phase 17 and is defined against a Protocol so it needs no risk code.",
+  "pr": "P13-SNIPER",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-04-sniper"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B04s": "Same reasoning as B04: status-agnostic sniper tests merge before the layout rewrite.",
+   "FEE1": "N6 item 23, section 5 point 6, and C 4 Fees. VENUE_FEE_BPS is 100 (REVIEW) today. Live reality: PumpPortal takes 0.5 percent on Local trades (documented, /tmp/n1/research.md:8, N6 row 40) plus protocol and creator fees, and a first buy pays ATA rent (about 2_039_280 lamports, roughly 0.002 SOL, 20 percent of the 0.01 SOL minimum trade). FeeModel gains a `version` field and `FeeModel.for_version`; v1 is byte-identical to today so no hash moves in this unit; v2 constants are REVIEW-marked and listed in the receipt `unverified` list for the human reviewer (OD-09). Integer lamports only.",
+   "PF1": "N6 item 18 and section 4 (import graph): test_import_graph_no_live takes the transitive closure of supervisor, cli, backtest, upgrade and paper_adapter including function-level imports, so B17's paper root (inside the guarded supervisor prefix) must not import build_adapter. build_paper_adapter lives in its own module and never imports anything under execution/live. build_adapter keeps its signature and delegates to it for paper and replay. C-12 later adds the live branch by dotted-path import inside a separate live factory.",
+   "C-03s": "Gap found by the sequencer: C 1.6 says the adapter's place() calls EntryGate.refresh, but execution/** is sniper-owned and no C unit is sniper except C-12. Moved from Phase 17 to Phase 13 (saves a sniper PR): the hook is defined against a Protocol (EntryRefresh.refresh(mint)) in execution/entry_hook.py, tested with a fake gate; C-03 (risk) implements EntryGate against that Protocol. Config-gated by risk.entry.enabled (SET0, default false) so every hash is unchanged."
+  }
+ },
+ {
+  "id": "13-04",
+  "phase": 13,
+  "title": "Curve layout fix and allowlist price gate (status stays ASSUMED)",
+  "seat": "bot-05-rug",
+  "includes": [
+   "B03"
+  ],
+  "files": [
+   "src/pumpgrok/tools/onchain/curve_layout.py",
+   "tests/tools/onchain/test_curve_layout.py",
+   "tests/tools/onchain/test_price_gate.py",
+   "tests/tools/onchain/test_onchain_reads.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "13-02",
+   "13-03"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "MKT-01",
+   "MKT-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/tools tests/execution tests/safety",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Merges after B04 and B04s so every status-sensitive foreign test is already agnostic. Keeps CURVE_ACCOUNT_SIZE = 49 and adds CURVE_ACCOUNT_SIZE_V2 = 166 (N6 row 22).",
+  "pr": "P13-RUG",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-05-rug"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B03": "N6 section 2 row 22: CURVE_ACCOUNT_SIZE is imported by three other seats' tests (risk tests/safety, scout tests/tools/market, plus rug's own). B03 keeps the exported name CURVE_ACCOUNT_SIZE with its current value 49 (minimal legacy decode) and adds CURVE_ACCOUNT_SIZE_V2 = 166; no foreign import changes. If a foreign test still fails, a one-file companion plan by the owning seat merges first (contingent, not counted)."
+  }
+ },
+ {
+  "id": "13-05",
+  "phase": 13,
+  "title": "Human-reviewed status flips: LAYOUT_STATUS and EVENT_DECODE_STATUS",
+  "seat": "bot-05-rug",
+  "includes": [
+   "B05",
+   "B05e"
+  ],
+  "files": [
+   "src/pumpgrok/tools/onchain/curve_layout.py",
+   "tests/tools/onchain/test_probe_record.py",
+   "src/pumpgrok/tools/onchain/pump_events.py",
+   "tests/tools/onchain/test_event_decode_status.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-07",
+   "13-02",
+   "13-03",
+   "13-04"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "MKT-03",
+   "MKT-10",
+   "MKT-02"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/tools/onchain/test_probe_record.py tests/execution tests/safety tests/docs",
+   "uv run pytest -q tests/tools/onchain/test_event_decode_status.py tests/tools/onchain/test_pump_events.py tests/datafeed/test_price_source.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": true,
+  "amendment_wait": false,
+  "owner_decision": "OD-04 (both flips need human review; default: leave ASSUMED if not reviewed)",
+  "notes": "Skippable: if the probe fails or the human declines, the commit is dropped from the PR and the phase closes with ASSUMED plus the exact probe error. Without the flips, live-fed paper buys fail closed. Receipt is committed without approved_by; only the owner adds it.",
+  "pr": "P13-RUG",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-05-rug"
+  ],
+  "human_approver_reasons": [
+   "unit B05 is human-gated",
+   "unit B05e is human-gated"
+  ],
+  "external_prerequisites": [
+   "EXT:HUMAN-REVIEWS-EVENT-DECODE",
+   "EXT:HUMAN-REVIEWS-PROBE-RECORD"
+  ],
+  "unit_notes": {
+   "B05": "Skippable: if the probe fails or the human declines, the phase closes with ASSUMED and the exact probe error recorded (same closure shape as v3 INT-10). Nothing else in v4 requires VERIFIED.",
+   "B05e": "N6 item 22 and section 6 (e): EVENT_DECODE_STATUS is unowned by any unit, and without a human-reviewed VERIFIED value the price gate treats log-derived prices as unverified and refuses buys. Human-gated, same closure shape as B05: if the reviewer declines, the status stays ASSUMED, live-fed paper buys stay refused (fail closed), and the event desk runs recorded datasets only. Nothing in v4 flips it by default."
+  }
+ },
+ {
+  "id": "13-06",
+  "phase": 13,
+  "title": "CHANGELOG entry for Phase 13 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-13"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "13-01",
+   "13-02",
+   "13-03",
+   "13-04",
+   "13-05"
+  ],
+  "order_after": [
+   "12-04"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 13: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 13: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Equal before and after lines.",
+  "pr": "P13-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "13-07",
+  "phase": 13,
+  "title": "Phase 13 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-13"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/13-curve-truth-live-market-data-recorder/13-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "13-01",
+   "13-02",
+   "13-03",
+   "13-04",
+   "13-05",
+   "13-06"
+  ],
+  "order_after": [
+   "12-05"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 13' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/13-curve-truth-live-market-data-recorder/13-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt for the phase.",
+  "pr": "P13-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "14-01",
+  "phase": 14,
+  "title": "Grok gateway core with the explicit cache key payload, and the non-vacuous evidence fixture",
+  "seat": "bot-02-risk",
+  "includes": [
+   "A5",
+   "GRKFX"
+  ],
+  "files": [
+   "src/pumpgrok/grok/__init__.py",
+   "src/pumpgrok/grok/gateway.py",
+   "src/pumpgrok/grok/prefilter.py",
+   "src/pumpgrok/grok/cache.py",
+   "src/pumpgrok/grok/budget.py",
+   "src/pumpgrok/grok/sanitize.py",
+   "src/pumpgrok/grok/ledger.py",
+   "src/pumpgrok/grok/replay_backend.py",
+   "src/pumpgrok/core/llm.py",
+   "tests/grok/test_prefilter.py",
+   "tests/grok/test_cache.py",
+   "tests/grok/test_coalesce.py",
+   "tests/grok/test_budget.py",
+   "tests/grok/test_sanitize_injection.py",
+   "tests/grok/test_fallback_ladder.py",
+   "tests/grok/test_replay_backend.py",
+   "tests/safety/test_no_grok_in_exit_risk.py",
+   "tests/grok/test_cache_key_payload.py",
+   "tests/fixtures/replay/evidence-50/events.jsonl",
+   "tests/fixtures/replay/evidence-50/manifest.json",
+   "tests/fixtures/replay/evidence-50/llm.jsonl",
+   "tests/replay/test_evidence50_fixture.py"
+  ],
+  "depends_on": [
+   "12-02"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "GRK-01",
+   "GRK-02",
+   "GRK-03",
+   "GRK-04",
+   "GRK-05",
+   "GRK-06",
+   "GRK-07",
+   "GRK-08",
+   "GRK-11"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/grok tests/safety/test_no_grok_in_exit_risk.py tests/replay/test_replay_determinism.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_evidence50_fixture.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "N6 items 14 and 15. The cache key is an explicit payload of ints and strings (Decimals stringified); GRKFX supplies at least 50 admitted candidates.",
+  "pr": "P14-RISK-1",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A5": "N6 item 14 and section 3 item 6: the cache key payload is explicit and made only of ints and strings: {kind, agent, model, prompt_sha, schema, sanitizer, input} where every Decimal is rendered with str(); canonical_request_hash is NOT fed raw requests (its volatile-key regex drops keys containing _at, seed or span, and _freeze raises TypeError on Decimal). A test asserts a Decimal-bearing request yields a stable key and that renamed age-like fields do not vanish from the key. Also: GrokOps.precheck message must not read budget.max_per_day (absent on LayeredBudget), N6 row 7. N6 row 5 (claim corrected): the fallback ladder is tied to DegradedState.signal_scoring_mode whose actual values are llm, rule_fallback, observe_only_buys and replay (degraded.py:89-97); there is no degraded.bus_backlog, so the gateway does not read one. Real budget exhaustion (not a mocked limiter) is exercised end to end to prove the fallback (N6 section 6 d).",
+   "GRKFX": "N6 item 15 and section 3 item 8: GRK-11 on soak-3d is vacuous (2 mints, no evidence fields, no candidate passes the filter, so before and after are both 0). This fixture is hand-authored (coverage=fixture, never promotion evidence) with unique_buyers, name, symbol and creator fields so that passes_filter admits at least 50 candidates; the test asserts the count with the production filter. Manifest values are strings and every jsonl is listed (N6 row 26)."
+  }
+ },
+ {
+  "id": "14-02",
+  "phase": 14,
+  "title": "Agents behind the gateway (AgentPort adapters, strict parse)",
+  "seat": "bot-08-signal",
+  "includes": [
+   "A6"
+  ],
+  "files": [
+   "src/pumpgrok/engine/agents/base.py",
+   "src/pumpgrok/engine/agents/narrative.py",
+   "src/pumpgrok/engine/agents/auditor.py",
+   "src/pumpgrok/engine/agents/timing.py",
+   "src/pumpgrok/engine/agents/checker.py",
+   "src/pumpgrok/engine/agents/gateway_agents.py",
+   "tests/engine/test_gateway_agents.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "14-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "GRK-05",
+   "GRK-09"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/engine/test_gateway_agents.py tests/characterization/test_agents.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Signal seat never calls GrokAgent.run; strict single-object parse.",
+  "pr": "P14-SIGNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-08-signal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "14-03",
+  "phase": 14,
+  "title": "Supervisor event wake: WakeRouter, heartbeat and allowed timers, DegradedBridge, shutdown hook",
+  "seat": "bot-00-chief",
+  "includes": [
+   "A4"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/scheduler/wake.py",
+   "src/pumpgrok/supervisor/scheduler/supervisor.py",
+   "src/pumpgrok/supervisor/scheduler/degraded.py",
+   "src/pumpgrok/supervisor/scheduler/serve.py",
+   "src/pumpgrok/supervisor/seat_task.py",
+   "src/pumpgrok/supervisor/lifecycle.py",
+   "tests/desk/test_event_wake.py",
+   "tests/desk/test_event_mode_run_once.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-09",
+   "12-02",
+   "12-03"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "EVT-08",
+   "EVT-10",
+   "EVT-12"
+  ],
+  "acceptance_commands": [
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/desk/test_event_wake.py tests/desk/test_event_mode_run_once.py",
+   "! uv run pytest tests/desk/test_event_wake.py -rs | grep -q SKIPPED",
+   "uv run pytest -q tests/replay/test_event_drain_parity.py",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "N6 items 9 and 10: touches serve.py (hosts run_once_replay), tests are chief-owned under tests/desk, EVT-08 in acceptance, parity on `smoke`. Allowed timers include the 45 s MTM refresh while positions are open and reconcile-on-start (N6 item 12). wake_mode stays cadence by default.",
+  "pr": "P14-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A4": "N6 item 9 and 10, section 2 row 12, section 3 item 2. Correction of the design text: A4 DOES touch supervisor/scheduler/serve.py, which hosts run_once_replay (and `verify` calls it, cli/verbs_ops.py:190); 'untouched by construction' is replaced by 'unchanged by test': the trading-smoke row pin (TSMOKE) and smoke-10m hash both stay green and the A2 parity runs on `smoke`. Tests are chief-owned under tests/desk (EVT-08 is in this unit's acceptance); T4 is deleted. Allowed timers (EVT-10) gain: MTM refresh every datafeed.mtm_refresh_s (45 s) only while positions are open, and reconcile-on-start (N6 item 12 and section 1 Timers)."
+  }
+ },
+ {
+  "id": "14-04",
+  "phase": 14,
+  "title": "Event and Grok metrics, call measurement script, Hermes cron cutover, delete the superseded probe script",
+  "seat": "bot-00-chief",
+  "includes": [
+   "A7",
+   "A9",
+   "A8",
+   "B04c"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/metrics_events.py",
+   "src/pumpgrok/supervisor/metrics.py",
+   "tests/desk/test_metrics_events.py",
+   "scripts/measure_grok_calls.py",
+   "hermes/cron/jobs.yaml",
+   "hermes/cron/prompts/chief-journal.md",
+   "hermes/README.md",
+   "skills/hermes-cron-desk/SKILL.md",
+   "docs/runbooks/events.md",
+   "tests/desk/test_hermes_jobs_superseded.py",
+   "scripts/probe_curve_layout.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "12-02",
+   "13-02",
+   "14-01",
+   "14-02",
+   "14-03"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "GRK-10",
+   "GRK-11",
+   "EVT-13",
+   "MKT-03"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/supervisor/test_metrics.py tests/desk/test_metrics_events.py",
+   "! uv run pytest tests/desk/test_metrics_events.py -rs | grep -q SKIPPED",
+   "uv run python scripts/measure_grok_calls.py --dataset tests/fixtures/replay/evidence-50 --min-candidates 50 --max-ratio 0.2",
+   "uv run python scripts/measure_grok_calls.py --dataset tests/fixtures/replay/soak-3d --max-ratio 0.2",
+   "uv run pytest -q tests/desk/test_hermes_jobs_superseded.py",
+   "! uv run pytest tests/desk/test_hermes_jobs_superseded.py -rs | grep -q SKIPPED",
+   "python3 ci/gates/check_ownership.py --validate-manifest",
+   "! grep -rn probe_curve_layout src tests docs scripts skills Makefile .github",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-13 (disable Hermes rollup in event mode)",
+  "notes": "A8 disables the daily rollup too (N6 item 13); the journal cycle replaces it (14-06). A9 gates the ratio on evidence-50 as well as soak-3d. B04c deletes scripts/probe_curve_layout.py after B04 merged (moved here from Phase 13).",
+  "pr": "P14-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A7": "N6 item 10 and 27: tests moved to tests/desk (chief). Adds per-strategy P (performance: pnl, round trips, drawdown) and L (live path: arm state, signer attestation, kill) metric families alongside the Grok and event families, registered only in event mode so NINE_FAMILIES stays valid.",
+   "A9": "N6 item 15: the ratio gate runs on evidence-50 (at least 50 admitted candidates, non-vacuous) in addition to soak-3d. Report states modeled counts.",
+   "A8": "N6 item 13 and section 2 row 15: `require_activity` does not make idle cost 0 because [SILENT] is printed by the model inside an already running session. Decision: in event mode the Hermes chief-journal-rollup is DISABLED too (superseded_by: events) and the daily rollup is event-triggered by the supervisor journal cycle on Timer(daily_rollover) (RT1b), so an idle desk starts zero Hermes sessions. rug-watch is likewise disabled (it is gated only inside the session, prompts/rug-watch.md:14). Baseline measured about 12 sessions per hour, 10 of them idle."
+  }
+ },
+ {
+  "id": "14-05",
+  "phase": 14,
+  "title": "Event-mode seat cycle bodies, part 1: scout, signal, risk, sniper, exit",
+  "seat": "bot-00-chief",
+  "includes": [
+   "RT1a"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/scheduler/event_cycles.py",
+   "tests/desk/test_event_cycles.py",
+   "tests/desk/test_event_golden_hashes.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "14-01",
+   "14-02",
+   "14-03"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "RT-01",
+   "EVT-10"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/desk/test_event_cycles.py tests/desk/test_event_golden_hashes.py",
+   "! uv run pytest tests/desk/test_event_cycles.py -rs | grep -q SKIPPED",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "New unit RT1a (N6 item 5). Event mode only; cadence and replay code untouched. Produces the events-smoke-10m and events-soak-3d golden hashes.",
+  "pr": "P14-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "RT1a": "N6 item 5 and section 7: every seat cycle body exists only as _replay_* (supervisor/scheduler/replay_cycles.py:27-136); event mode needs real bodies. RT1a covers the entry chain: scout (TokenLaunched/Migration), signal (CandidateReady via the Grok gateway, never GrokAgent.run), risk (CandidateReady, PositionTick coalesced to 1/s, OrderOutcome, RiskEdge), sniper (BUY verdicts through exec.place) and exit (PositionTick, ExitDeadline) exactly as SEAT_WAKES says. wake_mode stays cadence by default, so cadence, replay and `verify` code paths are not edited. Golden hashes events-smoke-10m and events-soak-3d are produced here by running the event desk on the recorded datasets (recorded in CHANGELOG by the Phase 14 journal plan); the legacy hash lines stay equal."
+  }
+ },
+ {
+  "id": "14-06",
+  "phase": 14,
+  "title": "Event-mode seat cycle bodies, part 2: whale, rug, shill, journal rollup, chief, heartbeat",
+  "seat": "bot-00-chief",
+  "includes": [
+   "RT1b"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/scheduler/event_cycles_aux.py",
+   "tests/desk/test_event_cycles_aux.py",
+   "tests/desk/test_journal_rollup_event.py"
+  ],
+  "depends_on": [
+   "14-04",
+   "14-05"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "RT-01",
+   "EVT-13"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/desk/test_event_cycles_aux.py tests/desk/test_journal_rollup_event.py",
+   "! uv run pytest tests/desk/test_event_cycles_aux.py -rs | grep -q SKIPPED",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "New unit RT1b; the journal cycle performs the event-triggered daily rollup.",
+  "pr": "P14-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "RT1b": "Remaining seats (chief on RiskEdge/SourceStatus/escalation rows, whale on LargeTransfer, rug on held PositionTick/HolderShift/Migration, shill heartbeat only, journal on OrderOutcome/PositionChange/Timer(daily_rollover) with a flush only when dirty). The journal cycle performs the daily rollup that Hermes no longer does (A8, N6 item 13)."
+  }
+ },
+ {
+  "id": "14-07",
+  "phase": 14,
+  "title": "Event-mode CLI flag, doctor refusal and time-sync probe; cross-cutting failure suite and the idle-Grok gate in CI",
+  "seat": "bot-02-risk",
+  "includes": [
+   "A12",
+   "A10"
+  ],
+  "files": [
+   "src/pumpgrok/doctor.py",
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/verbs_state.py",
+   "tests/test_doctor_event_mode.py",
+   "tests/cli/test_wake_mode.py",
+   "tests/test_doctor_time_sync.py",
+   "tests/degradation/test_event_bus_faults.py",
+   "tests/degradation/test_event_recovery.py",
+   "tests/degradation/test_event_grok_faults.py",
+   "ci/gates/check_idle_grok.py",
+   "Makefile",
+   "tests/events/test_idle_zero_grok.py",
+   "tests/degradation/test_grok_hang_exit.py",
+   "ci/gates/run_all.py",
+   "ci/tests/test_idle_grok_gate.py",
+   ".github/workflows/ci.yml"
+  ],
+  "depends_on": [
+   "11-03",
+   "12-03",
+   "14-02",
+   "14-03",
+   "14-04",
+   "14-06"
+  ],
+  "order_after": [
+   "11-04",
+   "11-05"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "EVT-13",
+   "EVT-12",
+   "GRK-07"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/test_doctor_event_mode.py tests/cli/test_wake_mode.py tests/test_doctor_probes.py",
+   "uv run pytest -q tests/test_doctor_time_sync.py",
+   "uv run pytest -q tests/degradation",
+   "uv run python ci/gates/check_idle_grok.py",
+   "uv run pytest -q tests/events/test_idle_zero_grok.py tests/degradation/test_grok_hang_exit.py ci/tests/test_idle_grok_gate.py",
+   "grep -q check_idle_grok ci/gates/run_all.py",
+   "grep -q idle-grok .github/workflows/ci.yml",
+   "grep -q idle-grok Makefile",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "A10 wires the gate into run_all.py, a pytest wrapper, ci.yml and the Makefile together (N6 item 24). T4's tests (idle zero Grok, Grok hang) land here after the code they test exists.",
+  "pr": "P14-RISK-2",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits ci/ (gates, ratchet tests) (ci/gates/check_idle_grok.py)",
+   "edits a GitHub workflow (.github/workflows/ci.yml)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "A12": "Gap found by the sequencer: A8 requires doctor to refuse event mode, but doctor.py and cli/** are risk-owned and A8 is chief. A12 carries the code; A8 carries the data. N6 section 7 (time sync): doctor adds a read-only NTP/clock skew probe (compare against a configured reference, warn above the skew tolerance); event mode and live both refuse to start on failure because assert_no_skew (scheduler/degraded.py:52) refuses ledger appends on backward steps, and arm expiry is evaluated on two clocks. A12 also carries the missing doctor check named in N6 section 1: doctor refuses event mode while a superseded Hermes job is enabled.",
+   "A10": "N6 item 24 and section 4 (CI): ci/gates/ is overlaid from the base ref, so a new gate script is inert in its own PR and absent from run_all.py. The idle-Grok gate is therefore wired three ways at once: run_all.py (edited here, effective from the next PR), a pytest wrapper ci/tests/test_idle_grok_gate.py (active in `make test` immediately), and a ci.yml step plus the Makefile idle-grok target. test_idle_zero_grok and test_grok_hang_exit were T4 files and now live here, after the code they test exists (no importorskip)."
+  }
+ },
+ {
+  "id": "14-08",
+  "phase": 14,
+  "title": "CHANGELOG: golden hashes events-smoke-10m and events-soak-3d; both legacy hash pairs unchanged",
+  "seat": "bot-09-journal",
+  "includes": [
+   "A11"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "14-01",
+   "14-02",
+   "14-03",
+   "14-04",
+   "14-05",
+   "14-06",
+   "14-07"
+  ],
+  "order_after": [
+   "13-06"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 14: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 14: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 14: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "grep -qF 'events-smoke-10m events.hash' CHANGELOG.md",
+   "grep -qF 'events-soak-3d events.hash' CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Phase 14 changelog PR.",
+  "pr": "P14-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "14-09",
+  "phase": 14,
+  "title": "Phase 14 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-14"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/14-event-driven-desk-and-grok-gateway/14-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "14-01",
+   "14-02",
+   "14-03",
+   "14-04",
+   "14-05",
+   "14-06",
+   "14-07",
+   "14-08"
+  ],
+  "order_after": [
+   "13-07"
+  ],
+  "wave": 7,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 14' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/14-event-driven-desk-and-grok-gateway/14-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt; checkpoint 14 batch assembled here.",
+  "pr": "P14-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "15-01",
+  "phase": 15,
+  "title": "Ledger readers and allocation, ParamSet generalization, paper fee model v2 flip with the trading smoke re-pin",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-01",
+   "R0",
+   "FEE2"
+  ],
+  "files": [
+   "src/pumpgrok/ledger/tickets.py",
+   "src/pumpgrok/ledger/strategy_state.py",
+   "tests/ledger/test_strategy_state.py",
+   "tests/ledger/test_ticket_refs.py",
+   "src/pumpgrok/strategies/allocation.py",
+   "tests/strategies/test_allocation.py",
+   "src/pumpgrok/upgrade/params.py",
+   "src/pumpgrok/upgrade/bounds.py",
+   "src/pumpgrok/upgrade/gate.py",
+   "src/pumpgrok/backtest/candidate.py",
+   "src/pumpgrok/backtest/harness.py",
+   "src/pumpgrok/backtest/evaluate.py",
+   "tests/upgrade/test_paramset_strategy.py",
+   "tests/upgrade/test_paramset_hash_stable.py",
+   "tests/upgrade/test_bounds_strategy_sections.py",
+   "tests/backtest/test_harness_strategy_identity.py",
+   "tests/upgrade/fixtures/bounds_strategy_sample.toml",
+   "src/pumpgrok/config/sections/paper_fees.py",
+   "src/pumpgrok/cli/backtest*.py",
+   "tests/fixtures/replay/pins/trading_smoke.json",
+   "tests/fixtures/replay/pins/trading_smoke_rows.json",
+   "tests/config/test_paper_fees_default.py",
+   "tests/backtest/test_fee_parity.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "12-01",
+   "13-03"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "STR-03",
+   "STR-06",
+   "STR-01",
+   "FEE-01",
+   "PRC-03"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/ledger",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/upgrade tests/backtest/test_harness_strategy_identity.py",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pytest -q tests/config/test_paper_fees_default.py tests/backtest/test_fee_parity.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-06 (ticket width), OD-09 (fee v2 constants), OD-02",
+  "notes": "Foundations for the strategy runtime. C-01 now also holds allocation.py (breaks the B10 and C-02 cycle, N6 item 8). R0 keeps every legacy content_hash byte-identical (golden test). FEE2 is the only deliberate hash move in v4: trading-smoke before and after pair recorded by 15-07.",
+  "pr": "P15-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "re-pins a hash oracle (tests/fixtures/replay/pins/trading_smoke.json)"
+  ],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "C-01": "Sequencer change: strategy_of(store, ticket_id) lives here, not in risk/strategy_slice.py, to break the cycle B10 (attribution) -> C-02 (strategy_slice) -> B10 (allocation). stop_state.py is split out as C-01b (Phase 18). N6 item 8: B10 needed strategy_of and allocation.slice_lamports, C-02 needed B10's allocation.py, B10 needed C's ticket refs: a cycle. strategy_of (ledger/strategy_state.py) AND allocation.py (leaf module, integer floor math, no risk imports) now live in C-01; B10 and C-02 both depend on C-01 and neither depends on the other for these. N6 row 11: replay buys use the constant REPLAY_TICKET (supervisor/scheduler/orders.py:50), so per-strategy attribution does not exist on the replay path B16 reuses; allocate_ticket(strategy_id, param_set_hash) is the only attribution carrier and the router (RT2) allocates real tickets for strategy intents. OD-06: day ticket counter refuses allocation at 999 with a typed error (no 4-digit contract change, no silent wrap); tickets are allocated for approved intents only.",
+   "R0": "N6 item 4 and section 1 (param identity). Today ParamSet holds only `filter` and `exits` (upgrade/params.py:31-33), load_bounds reads only those sections (upgrade/bounds.py:86), and evaluate_candidate takes a ParamSet (upgrade/gate.py:84), so B's [strategy.ID.PARAM] bounds would be silently ignored and C's (strategy id, param hash) binding has no hash to bind. R0 adds an optional `strategy: {id: str, params: dict}` member (default None, extra=forbid kept), validated through the registered StrategyParams model (resolved lazily by id; unknown id or unknown/out-of-bounds key is a ValidationError, never clamped), makes load_bounds parse `[strategy.ID.PARAM]` sections with the same KeyBound/OutOfBoundsError semantics, and makes the harness TrialLedger identity include the strategy id and params hash. content_hash for every existing (strategy=None) ParamSet MUST stay byte-identical: tests/upgrade/test_paramset_hash_stable.py pins golden hashes for the legacy shapes, so PR 17/19 evidence stays valid. No bounds are added to upgrade_bounds.toml here (B12 to B14 do that). Runs before B10 and B12.",
+   "FEE2": "N6 item 23 (paper fee model with before and after hash lines). The ONLY unit in v4 that deliberately moves the trading smoke hash (fees change cash_delta and venue_fee_lamports in rows). smoke-10m has no trades and stays b69c.... Same unit makes the backtest CLI build FeeModel from settings (cli/backtest.py:628 hard-codes VENUE_FEE_BPS) so backtest and paper share one fee model. The pin JSON files are re-generated deliberately; the Phase 15 journal plan records `Phase 15: trading-smoke events.hash before: <old pin>` and `after: <new pin>`. Needs OD-09 review of the v2 constants before merge."
+  }
+ },
+ {
+  "id": "15-02",
+  "phase": 15,
+  "title": "Strategy core: protocol, registry, runtime, tape, attribution, paper-event overlay",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B10"
+  ],
+  "files": [
+   "src/pumpgrok/strategies/__init__.py",
+   "src/pumpgrok/strategies/base.py",
+   "src/pumpgrok/strategies/registry.py",
+   "src/pumpgrok/strategies/runtime.py",
+   "src/pumpgrok/strategies/tape.py",
+   "src/pumpgrok/strategies/attribution.py",
+   "tests/strategies/test_base.py",
+   "tests/strategies/test_registry.py",
+   "tests/strategies/test_attribution.py",
+   "tests/strategies/test_no_llm.py",
+   "src/pumpgrok/config/overlays/paper-event.toml",
+   "tests/config/test_paper_event_overlay.py"
+  ],
+  "depends_on": [
+   "11-04",
+   "12-01",
+   "12-02",
+   "13-01",
+   "15-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "STR-01",
+   "STR-03",
+   "STR-05"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/strategies/test_base.py tests/strategies/test_registry.py tests/strategies/test_attribution.py tests/strategies/test_no_llm.py tests/config",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-02 (desk caps), OD-17 (slice weights)",
+  "notes": "Depends on R0, SET0, A1 and C-01. Adds overlay paper-event.toml (new file, replay hashes untouched).",
+  "pr": "P15-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B10": "Settings come from SET0. The new overlay paper-event.toml carries the multi-strategy paper desk caps (OD-02: recommended max_open_positions 6, max_trades_per_day 40, runtime_enabled true, wake_mode event) and live.enabled=false; the existing overlays and therefore every replay hash are untouched, and test_live_disabled_overlays still iterates it. Live limits stay inside current rules: the live gate keeps min(2 percent per trade, 5 percent per token, notional_cap_sol <= 1.0 SOL)."
+  }
+ },
+ {
+  "id": "15-03",
+  "phase": 15,
+  "title": "memefilters, legacy_screening wrapper with parity, strategy restart-recovery state",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B11",
+   "REC"
+  ],
+  "files": [
+   "src/pumpgrok/strategies/memefilters.py",
+   "src/pumpgrok/strategies/legacy.py",
+   "src/pumpgrok/strategies/registry.py",
+   "tests/strategies/test_memefilters.py",
+   "tests/strategies/test_legacy_parity.py",
+   "src/pumpgrok/strategies/recovery.py",
+   "src/pumpgrok/strategies/tape.py",
+   "src/pumpgrok/strategies/runtime.py",
+   "tests/strategies/test_recovery.py"
+  ],
+  "depends_on": [
+   "12-02",
+   "15-01",
+   "15-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "STR-03",
+   "STR-04",
+   "RT-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/strategies/test_memefilters.py tests/strategies/test_legacy_parity.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/strategies/test_recovery.py tests/strategies",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Legacy parity: legacy_screening through the runtime equals run_once_replay fills on smoke. REC is the library half of restart recovery (N6 item 23).",
+  "pr": "P15-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "REC": "N6 item 23 and section 7 (restart recovery). Library half: StrategyRuntime.restore(snapshot) rebuilds MintTape rings from the recorder tail or the last N ticks, per-strategy trailing-stop peaks and entry prices from the ledger fold, probation/cooldown state from ledger rows, and the held-mint watch-set seeds from open positions; ExitDeadline times are recomputed from PositionOpened ts plus max_hold_s. Deterministic: a test kills the runtime mid-run on the strat-* fixtures, restores, and asserts the continued run equals the uninterrupted run (fills and hash). The chief wiring half is RT4 (Phase 17)."
+  }
+ },
+ {
+  "id": "15-04",
+  "phase": 15,
+  "title": "Strategies momentum_breakout and new_launch_sniper with bounds and fixtures",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B12",
+   "B13"
+  ],
+  "files": [
+   "src/pumpgrok/strategies/momentum.py",
+   "src/pumpgrok/strategies/registry.py",
+   "src/pumpgrok/config/upgrade_bounds.toml",
+   "tests/strategies/test_momentum.py",
+   "tests/fixtures/replay/strat-breakout/events.jsonl",
+   "tests/fixtures/replay/strat-breakout/manifest.json",
+   "src/pumpgrok/strategies/sniper.py",
+   "tests/strategies/test_sniper.py",
+   "tests/fixtures/replay/strat-launch/events.jsonl",
+   "tests/fixtures/replay/strat-launch/manifest.json"
+  ],
+  "depends_on": [
+   "15-01",
+   "15-02",
+   "15-03"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "STR-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/strategies/test_momentum.py tests/strategies/test_registry.py tests/upgrade",
+   "uv run pytest -q tests/strategies/test_sniper.py tests/strategies/test_registry.py tests/upgrade",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-08 (progress ceilings)",
+  "notes": "Bounds sections are alphabetical by strategy id; merges serialize B12 then B13. Progress ceilings keep live-eligible strategies from stranding on a completed curve (N6 item 22).",
+  "pr": "P15-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B12": "Parallel to the other two strategies, but registry.py and upgrade_bounds.toml merges are serialized B12, B13, B14. N6 item 22: exit_progress <= 0.92 and max_progress <= 0.85 are bounds so a LIVE_ELIGIBLE position cannot be stranded on a completed curve (no PumpSwap sells in v4). N6 item 29: stop_loss_poll_seconds is ignored under wake_mode=event; the bounds entry stays (cadence is default) and a test asserts it has no effect in event mode.",
+   "B13": "Parallel to the other two strategies, but registry.py and upgrade_bounds.toml merges are serialized B12, B13, B14. Same progress ceilings as B12."
+  }
+ },
+ {
+  "id": "15-05",
+  "phase": 15,
+  "title": "Strategy mean_reversion with bounds and fixture",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B14"
+  ],
+  "files": [
+   "src/pumpgrok/strategies/reversion.py",
+   "src/pumpgrok/strategies/registry.py",
+   "src/pumpgrok/config/upgrade_bounds.toml",
+   "tests/strategies/test_reversion.py",
+   "tests/fixtures/replay/strat-reversion/events.jsonl",
+   "tests/fixtures/replay/strat-reversion/manifest.json"
+  ],
+  "depends_on": [
+   "15-01",
+   "15-02",
+   "15-03"
+  ],
+  "order_after": [
+   "15-04"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "STR-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/strategies/test_reversion.py tests/strategies/test_registry.py tests/upgrade",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Same shared-file rules as 15-04.",
+  "pr": "P15-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B14": "Parallel to the other two strategies, but registry.py and upgrade_bounds.toml merges are serialized B12, B13, B14. Same progress ceilings as B12 (mean_reversion already caps progress at 0.80)."
+  }
+ },
+ {
+  "id": "15-06",
+  "phase": 15,
+  "title": "ExitRules ticket filter and live-data paper composition root; Intent to exec.place router with ticket and approval allocation",
+  "seat": "bot-00-chief",
+  "includes": [
+   "B17",
+   "RT2"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/exit_rules.py",
+   "src/pumpgrok/supervisor/live_paper.py",
+   "tests/desk/test_live_paper_root.py",
+   "tests/desk/test_exit_rules_filter.py",
+   "src/pumpgrok/supervisor/intent_router.py",
+   "tests/desk/test_intent_router.py",
+   "tests/desk/test_ticket_approval_allocation.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "13-01",
+   "13-02",
+   "13-03",
+   "14-03",
+   "15-01",
+   "15-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "MKT-09",
+   "RT-02",
+   "STR-03"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/desk/test_live_paper_root.py tests/desk/test_exit_rules_filter.py tests/datafeed/test_readonly.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/desk/test_intent_router.py tests/desk/test_ticket_approval_allocation.py",
+   "! uv run pytest tests/desk/test_intent_router.py -rs | grep -q SKIPPED",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-10 (human sets autonomous-paper for live-paper approvals)",
+  "notes": "Paper root uses the paper factory, never build_adapter (N6 item 18). RT2 is the missing hop between strategy Intents and sniper exec.place (N6 item 5); it never self-approves below autonomous-paper.",
+  "pr": "P15-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B17": "A4 added as a dependency by the sequencer: the root composes the bus, wake router and supervisor in event mode. N6 item 18: the paper root builds its adapter with execution.paper_factory.build_paper_adapter, never build_adapter, so the supervisor import closure never reaches execution/live.",
+   "RT2": "N6 item 5 and section 7: the missing hop between a strategy Intent and a sniper exec.place call. Enter intents: allocate_ticket(strategy_id, param_set_hash) (OD-06 guard), size via the allocator, mint the approval the current autonomy level allows (a paper fill needs the autonomy level a human set with `pumpgrok state autonomy`; below autonomous-paper the router does NOT mint and the intent is journaled as refused, never silently approved), then call exec.place through the same entry the replay path uses (supervisor/scheduler/orders.py), with one ledger transaction per intent and idempotency key exec_place_key(ticket, side, decision_id). Exit intents use the existing four exit reasons and the global exit book filtered by ticket (B17). The router has no Grok handle and no live handle. N6 section 6 (e): a human must set autonomous-paper, otherwise approval_missing; this is documented in the runbook and checked by a test."
+  }
+ },
+ {
+  "id": "15-07",
+  "phase": 15,
+  "title": "CHANGELOG entry for Phase 15: smoke-10m pair unchanged, trading-smoke pair moves (fee model v2)",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-15"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "15-01",
+   "15-02",
+   "15-03",
+   "15-04",
+   "15-05",
+   "15-06"
+  ],
+  "order_after": [
+   "14-08"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 15: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 15: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qE 'Phase 15: trading-smoke events.hash before: [0-9a-f]{64}' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 15: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "The ONE intentional before and after difference in the milestone: trading-smoke hash changes by FEE2; both lines recorded.",
+  "pr": "P15-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "15-08",
+  "phase": 15,
+  "title": "Phase 15 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-15"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/15-strategy-framework-and-multi-strategy-paper/15-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "15-01",
+   "15-02",
+   "15-03",
+   "15-04",
+   "15-05",
+   "15-06",
+   "15-07"
+  ],
+  "order_after": [
+   "14-09"
+  ],
+  "wave": 7,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 15' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/15-strategy-framework-and-multi-strategy-paper/15-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt.",
+  "pr": "P15-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "16-01",
+  "phase": 16,
+  "title": "Metrics v2 and round trips (one valuation function, undefined is None)",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B15"
+  ],
+  "files": [
+   "src/pumpgrok/backtest/metrics_v2.py",
+   "src/pumpgrok/backtest/roundtrip.py",
+   "tests/backtest/test_metrics_v2.py",
+   "tests/backtest/test_roundtrip.py"
+  ],
+  "depends_on": [
+   "15-01"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "BT-08",
+   "BT-09"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/backtest/test_metrics_v2.py tests/backtest/test_roundtrip.py tests/backtest/test_metrics.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Annualization under 7 days is invalid and None (N6 section 6 f).",
+  "pr": "P16-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "B15": "Annualization below 7 days: annualization_valid=false and annualized_return is None (N6 section 6 f)."
+  }
+ },
+ {
+  "id": "16-02",
+  "phase": 16,
+  "title": "Strategy-aware replay: event source with bisect index, strategy run, gaps, grading",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B16a"
+  ],
+  "files": [
+   "src/pumpgrok/backtest/event_source.py",
+   "src/pumpgrok/backtest/strategy_run.py",
+   "src/pumpgrok/backtest/gaps.py",
+   "src/pumpgrok/backtest/grading.py",
+   "tests/backtest/test_strategy_replay.py",
+   "tests/backtest/test_lookahead.py",
+   "tests/backtest/test_grading.py",
+   "tests/backtest/test_gaps.py",
+   "tests/backtest/test_dataset_curve_source_perf.py",
+   "tests/fixtures/replay/strat-gap/events.jsonl",
+   "tests/fixtures/replay/strat-gap/gaps.jsonl",
+   "tests/fixtures/replay/strat-gap/manifest.json"
+  ],
+  "depends_on": [
+   "12-03",
+   "13-01",
+   "15-01",
+   "15-02",
+   "15-03",
+   "16-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "BT-10",
+   "BT-11",
+   "BT-12",
+   "BT-13"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/backtest/test_strategy_replay.py tests/backtest/test_lookahead.py tests/backtest/test_grading.py tests/backtest/test_gaps.py tests/backtest/test_dataset_curve_source_perf.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "N6 section 3 items 4 and 5, item 17: bisect index per mint, DeterministicBus ordering, string manifest values.",
+  "pr": "P16-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B16a": "N6 section 3 items 4 and 5 and section 1 (ordering): DatasetCurveSource indexes ticks per mint and answers latest() with bisect (FixtureCurveSource._latest scans all ticks per call, replay/sources.py:58-75, quadratic over multi-day data; a perf-shaped test bounds comparisons). Backtest replays through A2's DeterministicBus ordered by (ts, priority_rank, source_seq), the same order as the live desk; it does not use (ts, line). Gap/segment replay reuses the drain-until-quiescent loop. Fixture manifest values are strings (N6 item 17)."
+  }
+ },
+ {
+  "id": "16-03",
+  "phase": 16,
+  "title": "Backtest scheduler, result store and BacktestEvidenceProvider",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B16b"
+  ],
+  "files": [
+   "src/pumpgrok/backtest/scheduler.py",
+   "src/pumpgrok/backtest/store.py",
+   "src/pumpgrok/backtest/evidence.py",
+   "tests/backtest/test_scheduler.py",
+   "tests/backtest/test_evidence_provider.py"
+  ],
+  "depends_on": [
+   "12-02",
+   "16-02"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "BT-10",
+   "BT-11",
+   "BT-12",
+   "BT-13"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/backtest/test_scheduler.py tests/backtest/test_evidence_provider.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Reacts to catalog events; run key uses rng_stream not seed (N6 item 26).",
+  "pr": "P16-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B16b": "Settings come from SET0 (backtest_v2). Reacts to DatasetSealed, StrategyVersionRegistered and ParamsProposed from the A1 catalog (no B-private events); run key = sha256(strategy_version_id, dataset_digest, params_hash, rng_stream)."
+  }
+ },
+ {
+  "id": "16-04",
+  "phase": 16,
+  "title": "CLI: run --record, live serve, replay trim, rebuild-ticks and import, backtest --strategy",
+  "seat": "bot-02-risk",
+  "includes": [
+   "B18"
+  ],
+  "files": [
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/dispatch.py",
+   "src/pumpgrok/cli/verbs_state.py",
+   "src/pumpgrok/cli/verbs_ops.py",
+   "src/pumpgrok/cli/backtest.py",
+   "tests/cli/test_record.py",
+   "tests/cli/test_strategy_backtest.py"
+  ],
+  "depends_on": [
+   "11-04",
+   "13-01",
+   "14-07",
+   "15-06",
+   "16-02",
+   "16-03"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "REC-03",
+   "BT-12"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/cli",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Serial CLI lane after Q12s; one parser function and one handler line per verb.",
+  "pr": "P16-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B18": "N6 row 25: `run --record` is an exit-5 stub today (cli/verbs_state.py:88); this unit implements it for real, on the B09 recorder."
+  }
+ },
+ {
+  "id": "16-05",
+  "phase": 16,
+  "title": "Per-strategy section in the daily and weekly reports",
+  "seat": "bot-09-journal",
+  "includes": [
+   "B19"
+  ],
+  "files": [
+   "src/pumpgrok/reporting/strategy_section.py",
+   "src/pumpgrok/reporting/weekly.py",
+   "tests/reporting/test_strategy_section.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "16-01",
+   "16-02",
+   "16-03"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "BT-09",
+   "OBS-07"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/reporting",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Journal-owned reporting code.",
+  "pr": "P16-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "B19": "Its CHANGELOG lines move to PCL-16 so each phase has exactly one journal CHANGELOG PR."
+  }
+ },
+ {
+  "id": "16-06",
+  "phase": 16,
+  "title": "CHANGELOG entry for Phase 16 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-16"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "16-01",
+   "16-02",
+   "16-03",
+   "16-04",
+   "16-05"
+  ],
+  "order_after": [
+   "15-07"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 16: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 16: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Equal pairs; per-strategy report note.",
+  "pr": "P16-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "16-07",
+  "phase": 16,
+  "title": "Phase 16 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-16"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/16-backtest-v2-and-autonomous-evaluation/16-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "16-01",
+   "16-02",
+   "16-03",
+   "16-04",
+   "16-05",
+   "16-06"
+  ],
+  "order_after": [
+   "15-08"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 16' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/16-backtest-v2-and-autonomous-evaluation/16-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt.",
+  "pr": "P16-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "17-01",
+  "phase": 17,
+  "title": "Strategy slice and strategy kill in RiskEngine on existing rows",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-02"
+  ],
+  "files": [
+   "src/pumpgrok/risk/strategy_slice.py",
+   "src/pumpgrok/risk/engine/constants.py",
+   "src/pumpgrok/risk/engine/core.py",
+   "src/pumpgrok/risk/engine/steps.py",
+   "tests/risk/test_strategy_slice.py",
+   "tests/risk/test_strategy_kill.py"
+  ],
+  "depends_on": [
+   "11-04",
+   "12-01",
+   "15-01",
+   "15-02",
+   "16-03"
+  ],
+  "order_after": [
+   "16-02"
+  ],
+  "wave": 1,
+  "requirement_ids": [
+   "RSK-01",
+   "RSK-02",
+   "RSK-08"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/risk tests/characterization/risk",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-03 (strategy loss fraction 0.25, consecutive losses 4)",
+  "notes": "STEP_IDS stays 19 and risk_json shape stays pinned (Q11c). Sells never see the new steps.",
+  "pr": "P17-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-02": "N6 item 1 (blocker, engine side) preparation: the new strategy-slice and kill steps never apply to sells, as for all EXIT_SKIP_STEPS. OD-03: strategy loss fraction default 0.25 of slice, N consecutive losses default 4 (REVIEW)."
+  }
+ },
+ {
+  "id": "17-02",
+  "phase": 17,
+  "title": "Entry checks and mint lists; feed health and live failure classes",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-03",
+   "C-04"
+  ],
+  "files": [
+   "src/pumpgrok/risk/entry_checks.py",
+   "src/pumpgrok/config/mint_lists.toml",
+   "src/pumpgrok/risk/engine/constants.py",
+   "src/pumpgrok/risk/engine/steps.py",
+   "tests/risk/test_entry_checks.py",
+   "src/pumpgrok/risk/feed_health.py",
+   "src/pumpgrok/risk/breakers.py",
+   "tests/risk/test_feed_health.py",
+   "tests/risk/test_exec_failure_breaker.py"
+  ],
+  "depends_on": [
+   "12-03",
+   "13-03",
+   "17-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "RSK-05",
+   "RSK-03",
+   "RSK-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/risk/test_entry_checks.py tests/risk/test_step_rows_stable.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/risk tests/degradation",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-03 (holder fraction 0.30), OD-15 (initial mint lists)",
+  "notes": "C-03 implements EntryGate against the Protocol from 13-03. C-04 reads SourceStateBook (no private clock). mint_lists.toml is human-required.",
+  "pr": "P17-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits mint lists (src/pumpgrok/config/mint_lists.toml)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-03": "engine constants and steps added by the sequencer: mapping entry_check_failed onto seat_may_trade lives there. N6 item 22 and section 5 point 8: entry checks also require the wallet's own ATA extensions (ImmutableOwner fine; CpiGuard and default-frozen reject) and the check is repeated immediately before send by the signer (C-09b). EntryGate implements the EntryRefresh Protocol defined by C-03s. OD-03: holder concentration fraction default 0.30 (REVIEW).",
+   "C-04": "N6 item 12: FeedHealth is fed from SourceStatus events and the A3 SourceStateBook; it owns no timer. Lazy evaluation at check() and on RiskEdge from a transport disconnect."
+  }
+ },
+ {
+  "id": "17-03",
+  "phase": 17,
+  "title": "Promotion package, thresholds, gate paper parameter, promotion demote verb",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-05"
+  ],
+  "files": [
+   "src/pumpgrok/promotion/__init__.py",
+   "src/pumpgrok/promotion/stages.py",
+   "src/pumpgrok/promotion/thresholds.py",
+   "src/pumpgrok/promotion/evaluator.py",
+   "src/pumpgrok/promotion/demotion.py",
+   "src/pumpgrok/config/promotion_thresholds.toml",
+   "src/pumpgrok/upgrade/gate.py",
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/dispatch.py",
+   "src/pumpgrok/cli/verbs_ops.py",
+   "tests/promotion/test_stages.py",
+   "tests/promotion/test_thresholds.py",
+   "tests/promotion/test_gate_reuse.py",
+   "tests/promotion/test_demotion.py",
+   "tests/promotion/test_no_timers.py",
+   "tests/promotion/test_writer_discipline.py",
+   "tests/upgrade/test_gate_paper_param.py"
+  ],
+  "depends_on": [
+   "12-02",
+   "12-03",
+   "15-01",
+   "16-03",
+   "16-04",
+   "17-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "PRM-01",
+   "PRM-02",
+   "PRM-03",
+   "PRM-04",
+   "PRM-05",
+   "PRM-06"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/promotion tests/upgrade",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-08, OD-16 (promotion thresholds)",
+  "notes": "Large (17 files). Thresholds file is human-required and its floors equal LiveGate. Stage rows live in the paper ledger and are mirrored by C-17 in Phase 18 (N6 item 20).",
+  "pr": "P17-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits promotion thresholds (src/pumpgrok/config/promotion_thresholds.toml)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-05": "Thresholds file (human-required) carries OD-08: LIVE_ELIGIBLE needs strategy max_progress <= 0.85 and exit_progress <= 0.92 (live strategies exit before curve completion; PumpSwap sells are out of scope for v4). Stage rows are ConfigChanged rows in the PAPER ledger (var/ledger.sqlite) written by gate:promotion; the live ledger gets a mirror (C-17, N6 item 20)."
+  }
+ },
+ {
+  "id": "17-04",
+  "phase": 17,
+  "title": "Event desk composition root and the risk, promotion and entry-gate wiring",
+  "seat": "bot-00-chief",
+  "includes": [
+   "WIRE-17",
+   "RT3"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/live_paper.py",
+   "src/pumpgrok/supervisor/scheduler/wake.py",
+   "tests/desk/test_live_paper_risk_wiring.py",
+   "src/pumpgrok/supervisor/event_desk.py",
+   "tests/desk/test_event_desk_e2e.py",
+   "tests/desk/test_event_desk_idle.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "12-02",
+   "12-03",
+   "13-02",
+   "13-03",
+   "14-01",
+   "14-02",
+   "14-03",
+   "14-06",
+   "15-02",
+   "15-06",
+   "17-01",
+   "17-02",
+   "17-03"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "PRM-05",
+   "RSK-01",
+   "RSK-03",
+   "RT-03",
+   "EVT-12"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/desk tests/supervisor",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/desk/test_event_desk_e2e.py tests/desk/test_event_desk_idle.py",
+   "! uv run pytest tests/desk/test_event_desk_e2e.py -rs | grep -q SKIPPED",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-05 (paid RPC provider for the first live-fed run)",
+  "notes": "N6 item 5: the full E2E runtime with the dependency list the critique names. Refuses to build unless the effective mode is paper.",
+  "pr": "P17-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "WIRE-17": "Gap found by the sequencer: the risk and promotion features are library code until the chief-owned composition root subscribes and constructs them. v3 closed with promotion library-only for exactly this reason. WIRE-17 stays the thin wiring of slice weights, FeedHealth, entry gate and the PromotionEvaluator subscription; RT3 is the full composition. They merge in one plan.",
+   "RT3": "N6 item 5: the missing E2E runtime unit with the dependency list the critique names (A1, A3, A4, A5, A6, B07, B08, B10, C-05). Wires WallClock-or-FixtureClock, SourceSupervisor with the B07 transports, the datafeed bridge, StrategyRuntime and per-strategy ExitRules, the GrokGateway, the RT1 seat cycles and the RT2 router, PaperAdapter from the paper factory, RiskEngine with slice weights and FeedHealth, the EntryGate, and the PromotionEvaluator subscribed to PositionChange(closed), RiskEdge, Timer(daily_rollover) and BacktestCompleted. E2E test: recorded `smoke` and strat-* datasets through the full desk to asserted fills, idle 24 virtual hours with zero Grok calls and zero Timers other than the allowed set. It still refuses to build unless the effective mode is paper (live stays exit 3)."
+  }
+ },
+ {
+  "id": "17-05",
+  "phase": 17,
+  "title": "Restart recovery wiring with crash tests",
+  "seat": "bot-00-chief",
+  "includes": [
+   "RT4"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/recovery.py",
+   "tests/desk/test_restart_recovery.py",
+   "tests/desk/test_restart_exit_deadlines.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "12-02",
+   "15-03",
+   "17-04"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "RT-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/desk/test_restart_recovery.py tests/desk/test_restart_exit_deadlines.py",
+   "! uv run pytest tests/desk/test_restart_recovery.py -rs | grep -q SKIPPED",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "make lint",
+   "make typecheck",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "N6 item 23: bus recover, tapes, watch set, ExitDeadline re-arm, exit peaks, reconcile-on-start.",
+  "pr": "P17-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "RT4": "N6 item 23 and section 7. On start: EventBus.recover() processes pending events once, the held-mint watch set and tapes are restored through StrategyRuntime.restore (REC), every open position gets its ExitDeadline timer re-armed from PositionOpened ts plus max_hold_s, per-strategy exit peaks come from the ledger fold, probation state from rows, and a one-time reconcile (store.verify, position/ledger fold) runs as the allowed reconcile-on-start timer. Crash tests: kill mid-run at three points on `smoke` and the strat-* fixtures, restart, and assert ledger rows equal the uninterrupted run and no position loses its exit."
+  }
+ },
+ {
+  "id": "17-06",
+  "phase": 17,
+  "title": "CHANGELOG entry for Phase 17 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-17"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "17-01",
+   "17-02",
+   "17-03",
+   "17-04",
+   "17-05"
+  ],
+  "order_after": [
+   "16-06"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 17: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 17: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Equal pairs.",
+  "pr": "P17-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "17-07",
+  "phase": 17,
+  "title": "Phase 17 close: STATE, verification record, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-17"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/17-risk-hardening-and-promotion-lifecycle/17-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "17-01",
+   "17-02",
+   "17-03",
+   "17-04",
+   "17-05",
+   "17-06"
+  ],
+  "order_after": [
+   "16-07"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 17' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/17-risk-hardening-and-promotion-lifecycle/17-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Integration receipt; checkpoint 17 batch assembled here.",
+  "pr": "P17-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "18-01",
+  "phase": 18,
+  "title": "Stop-state reader, live event source contract (additive) and signer protocol schema",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-01b",
+   "C-07",
+   "C-08"
+  ],
+  "files": [
+   "src/pumpgrok/ledger/stop_state.py",
+   "tests/ledger/test_stop_state.py",
+   "src/pumpgrok/ledger/events.py",
+   "src/pumpgrok/ledger/store.py",
+   "src/pumpgrok/ledger/paths.py",
+   "contracts/events/*.schema.json",
+   "contracts/changes/v4-live-source.yaml",
+   "tests/ledger/test_live_source.py",
+   "tests/contracts/test_live_source_contract.py",
+   "src/pumpgrok/risk/engine/steps.py",
+   "tests/ledger/test_event_source_literal_sites.py",
+   "src/pumpgrok/core/signer_protocol.py",
+   "tests/core/test_signer_protocol.py"
+  ],
+  "depends_on": [],
+  "order_after": [
+   "17-02"
+  ],
+  "wave": 1,
+  "requirement_ids": [
+   "LIV-05",
+   "LIV-14",
+   "LIV-20",
+   "LIV-09"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/ledger/test_stop_state.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/v4-live-source.yaml",
+   "python3 scripts/generate-event-schemas.py --check",
+   "uv run pytest -q tests/ledger tests/contracts",
+   "uv run pytest -q tests/core/test_signer_protocol.py",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-11 (signer host and socket group)",
+  "notes": "No amendment wait, may start in Phase 12 slack (C-07 acknowledgements take a round trip). C-07 lists every literal site and pins the narrow ones (N6 item 7). C-08 adds nonce window, signer time and attestation frames (N6 item 19).",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits a contract surface (contracts/events/*.schema.json)",
+   "edits the signer protocol (src/pumpgrok/core/signer_protocol.py)"
+  ],
+  "external_prerequisites": [
+   "EXT:PRS-16-20-MERGED"
+  ],
+  "unit_notes": {
+   "C-01b": "Pull-forward candidate: no dependency beyond the merged PRs, may be built during Phase 12 slack. N6 item 20 and section 5 point 3: read_stop_state takes the PAPER ledger path (stage rows, kills, halts as written by the desk) and the LIVE ledger path (orders, fills, UNKNOWN halts) explicitly and reports which ledger each fact came from. Stated plainly in docs: halts, stage and strategy kills come from a desk-writable ledger, so the signer's re-derivation is a CONSISTENCY check, not an independent control. The independent controls are the HMAC arm record, the wallet allowlist, the caps and the instruction-level tx verification.",
+   "C-07": "Pull-forward candidate (contract-first rule): non-breaking, acknowledgements informational, but a rejection blocks. Start in Phase 12 so the acknowledgement round trip is finished long before the signer lane needs it. N6 item 7 and section 2 row 28. All nine sites that spell the source literal: RISK-owned and changed here: ledger/events.py:31 (EventSource), ledger/store.py:31 (SOURCES), risk/engine/steps.py:222 (reputation escalation downgrades unknown sources to paper, which would mislabel a live row), plus the 18 schemas under contracts/events. Deliberately left NARROW (paper or manual only, must never emit live) and pinned by an AST test, tests/ledger/test_event_source_literal_sites.py: sniper tools/execution paper_adapter adapter.py:57, buy.py:36, marks.py:32 and execution/__init__.py:28; journal tools/portfolio/ledger_read.py:30 (filter) and ledger_write.py:38 (agent write tool, must not mint live rows). The tool roster contract (contracts/tool-rosters/bot-09-journal.yaml:56) therefore does not change. If mypy proves one of the narrow sites must widen, a one-file companion plan by the owning seat merges FIRST (contingent, not counted). G-4: declare breaking: false, `semantic_changes: []`, version the next minor, list EVERY regenerated schema file individually in `surfaces` (contracts/** does not satisfy G-4), regenerate with scripts/generate-event-schemas.py (checked by make check). contract_consumers for contracts/events/** is all ten seats; for a non-breaking change acknowledgements are informational but a recorded rejection blocks, so start this unit first in Phase 18 (or earlier).",
+   "C-08": "Pull-forward candidate: pure schema, no dependency. N6 items 19 and section 5 point 3: frames carry a nonce and a signer-clock timestamp; the signer persists a nonce window (signer.nonce_window_s) and refuses replays across restarts; `hello` returns signer time and the desk refuses to proceed on skew above tolerance (time-sync check, doctor reads it); `attest` and `identity` are frames served over the authenticated socket (never files in the shared var/ the desk can write, N6 section 5 point 3). The place frame carries strategy_id AND param_set_hash. Socket mode 0660 with group signer.socket_group (0600 with a separate uid cannot admit the desk). SO_PEERCRED across containers reads mapped uids and with one shared uid authenticates nothing beyond signer policy: the doc states that."
+  }
+ },
+ {
+  "id": "18-02",
+  "phase": 18,
+  "title": "Gate rows split for entries and exits, arm scope by strategy and param hash with maximum expiry, live status, confirm and disarm verbs",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-06"
+  ],
+  "files": [
+   "src/pumpgrok/execution/live/live_gate.py",
+   "src/pumpgrok/execution/live/arm.py",
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/dispatch.py",
+   "src/pumpgrok/cli/verbs_ops.py",
+   "src/pumpgrok/doctor.py",
+   "tests/live/test_gate_rows56.py",
+   "tests/live/test_arm_record.py",
+   "tests/safety/test_live_refusal_lists_nine.py",
+   "tests/test_live_gate.py",
+   "tests/live/test_gate_exit_rows.py",
+   "tests/live/test_arm_scope.py",
+   "tests/live/test_arm_expiry_ceiling.py"
+  ],
+  "depends_on": [
+   "11-04",
+   "12-01",
+   "17-03",
+   "18-01"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "LIV-03",
+   "LIV-04",
+   "LIV-07",
+   "LIV-11",
+   "RSK-09",
+   "LIV-17"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/live tests/safety tests/test_live_gate.py tests/test_doctor_probes.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-07 (arm maximum expiry), OD-03",
+  "notes": "N6 items 1 and 2 (BLOCKERS, gate side). Exit sells check rows 1, 2, 5, 6, 8 only. Foreign-test fallout rule applies to reason strings.",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits execution/live (src/pumpgrok/execution/live/live_gate.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-06": "Foreign-test fallout rule: if tests/execution or tests/reporting assert reason text changed here, a one-file companion PR by the owning seat merges first (checked at pr-topology section 6). N6 item 1 (BLOCKER) and item 2 (BLOCKER). Gate split: LiveGate exposes check_entry (all nine rows) and check_exit (rows 1, 2, 5, 6 and 8 only: mode, enabled, wallet allowlist, notional cap, adapter registered). Rows 3, 4, 7 (arm expiry) and 9 (no_active_stop) are NOT evaluated for exit sells, because a halt, kill, breaker or arm expiry is exactly when stop-loss, rug and flatten exits must still go out. Arm scope: the arm record lists (strategy id, param_set_hash) pairs, not ids; `live confirm` takes `--strategy id:hash` (repeatable); any param hash change (a new stage row for the strategy) invalidates its pair and needs a NEW arm. Maximum expiry: live.arm_max_expiry_hours (SET0, default 72, hard ceiling 168, OD-07); a record with expiry beyond it fails to load. The arm record binds the configuration hash AND the ledger-held param hashes (the Settings dump alone excludes ledger-held param sets, N6 section 5 point 2). Doctor additionally checks signer time sync and key custody (no key-like env names)."
+  }
+ },
+ {
+  "id": "18-03",
+  "phase": 18,
+  "title": "desk-signer core: IPC, nonce window, attestation over the socket, single send, reconcile",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-09a"
+  ],
+  "files": [
+   "services/desk-signer/pyproject.toml",
+   "services/desk-signer/Dockerfile",
+   "services/desk-signer/src/desk_signer/__init__.py",
+   "services/desk-signer/src/desk_signer/server.py",
+   "services/desk-signer/src/desk_signer/store.py",
+   "services/desk-signer/src/desk_signer/reconcile.py",
+   "services/desk-signer/src/desk_signer/attest.py",
+   "services/desk-signer/src/desk_signer/timesync.py",
+   "services/desk-signer/src/desk_signer/redact.py",
+   "services/desk-signer/tests/test_server_ipc.py",
+   "services/desk-signer/tests/test_nonce_window.py",
+   "services/desk-signer/tests/test_single_send.py",
+   "services/desk-signer/tests/test_reconcile.py",
+   "services/desk-signer/tests/test_import_allowlist.py",
+   "services/desk-signer/tests/test_attest_over_socket.py",
+   "docker-compose.yml",
+   "tests/safety/test_signer_isolation.py"
+  ],
+  "depends_on": [
+   "11-03",
+   "12-01",
+   "15-01",
+   "18-01",
+   "18-07"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "LIV-08",
+   "LIV-09",
+   "LIV-11",
+   "LIV-19"
+  ],
+  "acceptance_commands": [
+   "cd services/desk-signer && uv run pytest -q",
+   "uv run pytest -q tests/safety/test_signer_isolation.py",
+   "uv run ruff check services",
+   "uv run mypy services/desk-signer/src",
+   "make audit",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": "OD-11",
+  "notes": "Signer tests only under services/desk-signer/tests (N6 section 4). Develop on a stacked draft; merges after the amendment PR.",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "unit C-09a waits for the amendment",
+   "edits the signer service (services/desk-signer/pyproject.toml)",
+   "edits docker-compose.yml (docker-compose.yml)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-09a": "Replaces the first half of C-09. CI (Q06): the signer gets its own lint, mypy and pip-audit over its own lock (N6 item 24). N6 section 4 (dependencies) and item 19 and 24: signer tests live ONLY under services/desk-signer/tests (root testpaths is `tests`, and pyproject has no solders, base58 or crypto library, so a tests/services/desk_signer directory would import them in the root suite); the root suite gets only the dependency-free AST test tests/safety/test_signer_isolation.py. The signer has its own pyproject and lock and its own CI job (Q06). Single send: SIGNED row (signature, tx bytes, lastValidBlockHeight) committed with fsync of the file AND the directory before sendTransaction; maxRetries 0; no rebroadcast; a SIGNED row older than validity is DROPPED only after a finalized-commitment check; confirmation uses a SECOND RPC endpoint (one lying RPC must not fake success). UNKNOWN is never retried and blocks everything but its own reconcile. Logs redact base58 key-length strings, tx bytes and key paths. Compose service reuses Q41 hardening (read_only, cap_drop ALL, no-new-privileges), group-shared socket volume (OD-11). Merges only after the amendment PR."
+  }
+ },
+ {
+  "id": "18-04",
+  "phase": 18,
+  "title": "desk-signer transaction policy: instruction-level allowlist, signer-owned blockhash, final-bytes verification",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-09b"
+  ],
+  "files": [
+   "services/desk-signer/src/desk_signer/txbuilder.py",
+   "services/desk-signer/src/desk_signer/txpolicy.py",
+   "services/desk-signer/src/desk_signer/signing.py",
+   "services/desk-signer/src/desk_signer/fees.py",
+   "services/desk-signer/src/desk_signer/policy.py",
+   "services/desk-signer/tests/test_txpolicy_allowlist.py",
+   "services/desk-signer/tests/test_blockhash_signer_owned.py",
+   "services/desk-signer/tests/test_final_bytes_verify.py",
+   "services/desk-signer/tests/test_alt_refused.py",
+   "services/desk-signer/tests/test_token2022_wallet_ata.py",
+   "services/desk-signer/tests/test_policy_order.py"
+  ],
+  "depends_on": [
+   "18-03"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "LIV-18",
+   "LIV-08"
+  ],
+  "acceptance_commands": [
+   "cd services/desk-signer && uv run pytest -q tests/test_txpolicy_allowlist.py tests/test_blockhash_signer_owned.py tests/test_final_bytes_verify.py tests/test_alt_refused.py tests/test_token2022_wallet_ata.py tests/test_policy_order.py",
+   "uv run ruff check services",
+   "uv run mypy services/desk-signer/src",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": "OD-14 (PumpPortal trade-local as the v1 builder)",
+  "notes": "N6 item 3 (BLOCKER). Merges after the amendment PR.",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "unit C-09b waits for the amendment",
+   "edits the signer service (services/desk-signer/src/desk_signer/txbuilder.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-09b": "N6 item 3 (BLOCKER) and section 5 points 4 and 8, replacing C 4 Transaction build. A program-level allowlist is not enough. Instruction-level rules applied to the decoded transaction, fail closed: System program: Transfer ONLY, to the pinned fee recipient, amount at most fee_rate times size; reject Assign, Allocate, AdvanceNonce, CreateAccount to other owners. Token and Token-2022: reject Transfer, TransferChecked, Approve, ApproveChecked, SetAuthority, Burn, Freeze, and CloseAccount unless account owner and destination are the wallet. Associated Token Account program: create only for the wallet owner and the intent mint. Pump program: discriminator allowlist (buy, sell variants only); bonding curve and associated curve accounts must equal PDAs derived from the intent mint; user account is the wallet. ComputeBudget: limit and price within signer.fee_cap_lamports. Versioned v0 transactions: resolve address lookup tables from chain and apply the same rules, or refuse (default refuse). The signer owns the recent blockhash: it fetches it, rewrites or rebuilds the message with it, and never trusts the builder's blockhash. Verification runs on the FINAL signed bytes after compute-limit edits, not on the simulated copy. Mint facts and authorities are re-fetched immediately before send (Token-2022 extensions, authorities, wallet ATA extensions: CpiGuard and default-frozen reject). Builder is PumpPortal trade-local behind a TxBuilder interface (OD-14); the 0.5 percent portal fee is documented (N6 row 40), only the recipient account is pinned and unverified in docs, so the recipient is a configured allowlist entry. Merges only after the amendment PR."
+  }
+ },
+ {
+  "id": "18-05",
+  "phase": 18,
+  "title": "Live adapter client, registry, autonomous_live for entries and exit sells, reconcile verb, tightened guards",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-10"
+  ],
+  "files": [
+   "src/pumpgrok/execution/live/signer_client.py",
+   "src/pumpgrok/execution/live/registry.py",
+   "src/pumpgrok/execution/live/reconcile.py",
+   "src/pumpgrok/core/adapter.py",
+   "src/pumpgrok/core/approvals.py",
+   "src/pumpgrok/risk/engine/steps.py",
+   "src/pumpgrok/cli/parsing.py",
+   "src/pumpgrok/cli/dispatch.py",
+   "src/pumpgrok/cli/verbs_ops.py",
+   "tests/harness/faults.py",
+   "tests/live/test_registry.py",
+   "tests/live/test_reconcile.py",
+   "tests/live/test_autonomous_live.py",
+   "tests/live/test_single_send.py",
+   "tests/safety/test_risk_choke_point.py",
+   "tests/safety/test_signer_only_bypass.py",
+   "tests/safety/test_no_signing_outside_live_stub.py",
+   "tests/safety/test_import_graph_no_live.py",
+   "tests/safety/test_no_live_adapter_registered.py",
+   "tests/safety/test_live_adapter_raises.py",
+   "tests/safety/test_no_backtest_to_live_path.py",
+   "src/pumpgrok/risk/breakers.py",
+   "tests/live/test_exit_sells_autonomous_live.py",
+   "tests/live/test_tx_failed_onchain_latch.py",
+   "tests/live/test_reconcile_drift_tokens.py"
+  ],
+  "depends_on": [
+   "12-01",
+   "12-02",
+   "17-02",
+   "18-01",
+   "18-02",
+   "18-07"
+  ],
+  "order_after": [],
+  "wave": 3,
+  "requirement_ids": [
+   "LIV-06",
+   "LIV-10",
+   "LIV-13",
+   "LIV-15",
+   "RSK-06",
+   "RSK-09",
+   "LIV-19"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/live tests/safety tests/core",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": "OD-03 (drift tolerance)",
+  "notes": "N6 item 1 (BLOCKER, engine side) and item 18. Merges after the amendment PR.",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "unit C-10 waits for the amendment",
+   "edits execution/live (src/pumpgrok/execution/live/signer_client.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-10": "N6 item 1 (BLOCKER, engine side): _step_live_gate runs for sells today (steps.py:239-245; live_gate is not in EXIT_SKIP_STEPS, constants.py:32-47) and approval_missing needs a minted approval for rule exits (steps.py:249). The engine now calls check_exit for sells, and mints an autonomous_live approval for exit-rule and flatten sells while ANY live position is open, even when the arm has expired or a halt is set (entries are the only thing suspended). Demotion must not strand an open live position: sells keep flowing. N6 section 5 point 9: live `tx_failed_onchain` latches a HaltSet that only a human clears (the exec_errors breaker auto-resets after 900 s, breakers.py:65, so failed sends could otherwise resume without a human). N6 section 5 point 6: reconcile compares SOL AND on-chain token balances to ledger positions with ATA rent (about 0.002 SOL) and creator-fee vault effects inside live.drift_tolerance_lamports (OD-03) to avoid false wallet_drift halts. Registry loads the live class by dotted path only inside a separate live factory module (N6 item 18); test_import_graph_no_live text is updated: supervisor and CLI may reach the registry module but never the client module."
+  }
+ },
+ {
+  "id": "18-06",
+  "phase": 18,
+  "title": "Shadow-live adapter and the stage, kill and halt mirror into the live ledger",
+  "seat": "bot-02-risk",
+  "includes": [
+   "C-11",
+   "C-17"
+  ],
+  "files": [
+   "src/pumpgrok/execution/live/shadow.py",
+   "tests/live/test_shadow.py",
+   "src/pumpgrok/execution/live/mirror.py",
+   "tests/live/test_stage_mirror.py",
+   "docs/design/live-ledgers.md"
+  ],
+  "depends_on": [
+   "13-03",
+   "17-03",
+   "18-01",
+   "18-03",
+   "18-04",
+   "18-05",
+   "18-07"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "LIV-12",
+   "LIV-19"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/live/test_shadow.py tests/safety",
+   "uv run pytest -q tests/live/test_stage_mirror.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": null,
+  "notes": "N6 item 20. Merges after the amendment PR.",
+  "pr": "P18-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "unit C-11 waits for the amendment",
+   "unit C-17 waits for the amendment",
+   "edits execution/live (src/pumpgrok/execution/live/shadow.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-11": "Shadow gaps (paper expected-out versus simulated-out) feed min_shadow_orders and max_shadow_slippage_gap_bps thresholds in C-05 (read-only here).",
+   "C-17": "N6 item 20. Statement: strategy_stage:<id>:<hash> rows, strategy_kill rows and halts are written by gate:promotion and the risk engine into the PAPER ledger (var/ledger.sqlite). The signer folds the LIVE ledger (var/live/ledger.sqlite, source=live). mirror.py appends idempotent copies (key = source row idempotency key plus ledger id) into the live ledger on each promotion edge, kill edge and halt edge and at arm time, called from the composition root (WIRE-18), never by a timer. A test proves signer and gate see the same stage, kill and halt after a demotion, a kill and a halt. docs/design/live-ledgers.md records that this is consistency, not independence."
+  }
+ },
+ {
+  "id": "18-07",
+  "phase": 18,
+  "title": "Constitution amendment: one owner-applied pull request with every copy, the frozen oracle and one step-scoped G-1 waiver",
+  "seat": "owner-applied:multi-seat",
+  "includes": [
+   "C-13",
+   "C-14"
+  ],
+  "files": [
+   "rules/pumpgrok-team.mdc",
+   "prompts/_shared/core-directives.xml",
+   "docs/RISK_POLICY.md",
+   "SECURITY.md",
+   "docs/LIVE_READINESS.md",
+   "docs/SAFETY_INVARIANTS.md",
+   "tests/safety/amendment_2026_10_28_frozen.txt",
+   "tests/safety/test_constitution_amendment_2026_10_28.py",
+   "tests/safety/test_constitution_amendment.py",
+   ".github/workflows/gates.yml",
+   "ci/tests/test_no_pr_waivers.py",
+   "AGENTS.md",
+   "ARCHITECTURE.md",
+   "docs/ROSTER.md",
+   "skills/key-custody/SKILL.md",
+   "tests/safety/test_amendment_copies_complete.py",
+   "agents/*.md",
+   "prompts-assembled/*.xml",
+   "skills/desk-operating-model/SKILL.md",
+   ".planning/PROJECT.md",
+   "README.md",
+   "prompts/bot-00-chief.xml",
+   "SETUP.md",
+   "docs/runbooks/setup.md",
+   "prompts/bot-04-sniper.xml"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-09"
+  ],
+  "order_after": [
+   "11-01"
+  ],
+  "wave": 1,
+  "requirement_ids": [
+   "LIV-16",
+   "PRC-07"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/safety/test_constitution_amendment_2026_10_28.py tests/safety/test_constitution_amendment.py",
+   "python3 scripts/generate-templates.py --check",
+   "make prompts",
+   "make check",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": true,
+  "amendment_wait": false,
+  "owner_decision": "OD-01 (exact amendment text, including the errata, approved in writing before this plan starts)",
+  "notes": "N6 item 6. The ONLY non-seat-pure PR in v4. A human applies and merges it; agents may only run read-only checks. Contains risk-owned, chief-owned and sniper-owned paths (prompts/bot-04-sniper.xml). Procedure per pr-plan.md section 3. The waiver PR number and the approver are recorded in the receipt `unverified` list and in the pinned set of ci/tests/test_no_pr_waivers.py.",
+  "pr": "P18-AMEND",
+  "seat_pure": false,
+  "owners_of_files": [
+   "bot-00-chief",
+   "bot-02-risk",
+   "bot-04-sniper"
+  ],
+  "human_approver_reasons": [
+   "unit C-13 is human-gated",
+   "unit C-13 waits for the amendment",
+   "unit C-14 is human-gated",
+   "unit C-14 waits for the amendment",
+   "edits the constitution rules (rules/pumpgrok-team.mdc)",
+   "edits the amendment oracle (tests/safety/amendment_2026_10_28_frozen.txt)",
+   "edits a GitHub workflow (.github/workflows/gates.yml)",
+   "edits ci/ (gates, ratchet tests) (ci/tests/test_no_pr_waivers.py)",
+   "edits PROJECT.md (.planning/PROJECT.md)"
+  ],
+  "external_prerequisites": [
+   "EXT:OWNER-APPROVES-AMENDMENT-TEXT"
+  ],
+  "unit_notes": {
+   "C-13": "Ships in ONE pull request with C-14 (the only non-seat-pure PR in v4). Authored or applied by the owner; agents never apply it. gates.yml and test_no_pr_waivers.py carry the one step-scoped G-1 waiver for that PR number (removed again by PRC-19). N6 item 6 and section 4: HUMAN-APPLIED. The owner (or a human-approved executor working only from the approved text on a branch the owner opens) applies and merges. Copies the draft misses and this unit adds: prompts/bot-04-sniper.xml:6,27 (sniper-owned), prompts/bot-00-chief.xml:65 and agents/chief.md:72 ('never allow SNIPER without the exact human approval phrase'), AGENTS.md:91, ARCHITECTURE.md:170, SETUP.md:120,203,241, docs/ROSTER.md:116 (and the key-custody rows at 196, 238, 280), docs/runbooks/setup.md:27, skills/key-custody/SKILL.md:24 ('There is nothing to custody'), and RISK_POLICY 3.3 'R17: no live auto-exit exists' (docs/RISK_POLICY.md:128). test_amendment_copies_complete.py greps every quoting file for the superseded phrases.",
+   "C-14": "Same pull request as C-13 (OD-3: each half fails the other's check until both land). Same PR as C-13 (AMEND). Chief-owned additions from N6 section 4; the sniper-owned prompt is added by the AMEND plan itself."
+  }
+ },
+ {
+  "id": "18-08",
+  "phase": 18,
+  "title": "build_adapter dispatches to the live factory only when the gate is open",
+  "seat": "bot-04-sniper",
+  "includes": [
+   "C-12"
+  ],
+  "files": [
+   "src/pumpgrok/execution/__init__.py",
+   "tests/execution/test_build_adapter_registry.py",
+   "src/pumpgrok/execution/live_factory.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "11-06",
+   "18-05",
+   "18-07"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "LIV-06",
+   "LIV-07"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/execution",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": null,
+  "notes": "Dotted-path import in a separate live factory (N6 item 18). Merges after the amendment PR.",
+  "pr": "P18-SNIPER",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-04-sniper"
+  ],
+  "human_approver_reasons": [
+   "unit C-12 waits for the amendment"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-12": "N6 item 18: build_adapter dispatches to execution/live_factory.py only when the effective mode is live and the gate is open; live_factory imports the registered class by dotted path (importlib) and nothing else imports it, so the transitive closure of supervisor, cli, backtest, upgrade and paper_adapter never contains the signer client. The paper side is PF1."
+  }
+ },
+ {
+  "id": "18-09",
+  "phase": 18,
+  "title": "Arm, signer and rollback runbooks; dormant live wiring in the composition root",
+  "seat": "bot-00-chief",
+  "includes": [
+   "C-15",
+   "WIRE-18"
+  ],
+  "files": [
+   "docs/runbooks/go_live.md",
+   "docs/runbooks/signer.md",
+   "docs/runbooks/live_rollback.md",
+   "src/pumpgrok/supervisor/live_paper.py",
+   "src/pumpgrok/supervisor/scheduler/wake.py",
+   "tests/desk/test_live_wiring_dormant.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "17-04",
+   "18-03",
+   "18-04",
+   "18-05",
+   "18-06",
+   "18-07",
+   "18-08"
+  ],
+  "order_after": [],
+  "wave": 5,
+  "requirement_ids": [
+   "LIV-16",
+   "LIV-10",
+   "LIV-07"
+  ],
+  "acceptance_commands": [
+   "./scripts/check.sh",
+   "./scripts/verify_doc_commands.sh",
+   "uv run pytest -q tests/desk/test_live_wiring_dormant.py",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": true,
+  "owner_decision": "OD-12 (funding rule versus the 200 USD limit), OD-11",
+  "notes": "N6 section 5 point 9 and item 28 recorded in the runbook: operator-local PUMPGROK_CONFIG, no committed overlay with enabled=true. Merges after the amendment PR.",
+  "pr": "P18-CHIEF",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [
+   "unit C-15 waits for the amendment",
+   "unit WIRE-18 waits for the amendment"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "C-15": "N6 section 5 point 9 and item 28: step 4 of the arm runbook does NOT commit an overlay with enabled=true (the closing paragraph of the amendment says no overlay enables live); the human uses an operator-local file named by PUMPGROK_CONFIG outside git. Funding rule: the throwaway limit is 200 USD while the cap is 1.0 SOL; at a SOL price above 200 USD the rule `cap plus fees` breaks clause 1, so the runbook computes cap_sol = min(1.0, 200 USD / SOL price minus fees) at arm time (OD-12). Strand risk (N6 section 5 point 7) and the live exit rules are documented.",
+   "WIRE-18": "Gap found by the sequencer: reconcile at construction, on each fill and on Timer(daily_rollover) must be called from the chief-owned supervisor; with the overlay disabled it is inert. Also wires the mirror (C-17) at promotion, kill and halt edges and the arm check at startup; still no timers in the desk."
+  }
+ },
+ {
+  "id": "18-10",
+  "phase": 18,
+  "title": "CHANGELOG entry for Phase 18 with both hash pairs",
+  "seat": "bot-09-journal",
+  "includes": [
+   "C-16"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "18-01",
+   "18-02",
+   "18-03",
+   "18-04",
+   "18-05",
+   "18-06",
+   "18-07",
+   "18-08",
+   "18-09"
+  ],
+  "order_after": [
+   "17-06"
+  ],
+  "wave": 6,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 18: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 18: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 18: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 18: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Equal pairs.",
+  "pr": "P18-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "18-11",
+  "phase": 18,
+  "title": "Phase 18 close: STATE, verification record, arm-readiness checklist",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-18"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/18-dormant-live-path-amendment-gated/18-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "18-01",
+   "18-02",
+   "18-03",
+   "18-04",
+   "18-05",
+   "18-06",
+   "18-07",
+   "18-08",
+   "18-09",
+   "18-10"
+  ],
+  "order_after": [
+   "17-07"
+  ],
+  "wave": 7,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 18' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/18-dormant-live-path-amendment-gated/18-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Checklist lists every human step; nothing armed. Checkpoint 19 batch begins here.",
+  "pr": "P18-CLOSE",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-01",
+  "phase": 19,
+  "title": "Skill solana-market-data covers the live feed, watch set and fail-closed price rules",
+  "seat": "bot-01-scout",
+  "includes": [
+   "D19e"
+  ],
+  "files": [
+   "skills/solana-market-data/SKILL.md"
+  ],
+  "depends_on": [
+   "11-01",
+   "13-02"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "OBS-04"
+  ],
+  "acceptance_commands": [
+   "./scripts/verify_doc_commands.sh",
+   "uv run pytest -q tests/test_skill_manifests.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Scout-owned skill.",
+  "pr": "P19-SCOUT",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-01-scout"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-02",
+  "phase": 19,
+  "title": "Skill replay-and-backtest covers record, trim, import, strategy backtest and autonomous runs",
+  "seat": "bot-08-signal",
+  "includes": [
+   "D19s"
+  ],
+  "files": [
+   "skills/replay-and-backtest/SKILL.md"
+  ],
+  "depends_on": [
+   "11-01",
+   "16-04"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "OBS-04"
+  ],
+  "acceptance_commands": [
+   "./scripts/verify_doc_commands.sh",
+   "uv run pytest -q tests/test_skill_manifests.py",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Signal-owned skill.",
+  "pr": "P19-SIGNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-08-signal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-03",
+  "phase": 19,
+  "title": "health.json event and strategy sections, per-strategy P and live L metric families",
+  "seat": "bot-00-chief",
+  "includes": [
+   "O2"
+  ],
+  "files": [
+   "src/pumpgrok/supervisor/health.py",
+   "src/pumpgrok/supervisor/metrics_events.py",
+   "tests/desk/test_health_event_sections.py",
+   "tests/desk/test_metrics_strategy.py"
+  ],
+  "depends_on": [
+   "11-01",
+   "14-04",
+   "17-04"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "OBS-02"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/supervisor/test_metrics.py tests/desk/test_health_event_sections.py tests/desk/test_metrics_strategy.py",
+   "! uv run pytest tests/desk/test_health_event_sections.py -rs | grep -q SKIPPED",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Tests under tests/desk (N6 item 10, 27). O2t is deleted.",
+  "pr": "P19-CHIEF-1",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "O2": "N6 item 10: O2t (risk, importorskip) is deleted; chief ships its own tests under tests/desk."
+  }
+ },
+ {
+  "id": "19-04",
+  "phase": 19,
+  "title": "Doctor v4 report, nightly event-mode soak and removal of the amendment waiver",
+  "seat": "bot-02-risk",
+  "includes": [
+   "O1",
+   "O5",
+   "PRC-19"
+  ],
+  "files": [
+   "src/pumpgrok/doctor.py",
+   "tests/test_doctor_v4.py",
+   "tests/soak/test_soak_event_mode.py",
+   ".github/workflows/ci.yml",
+   ".github/workflows/gates.yml",
+   "ci/tests/test_no_pr_waivers.py"
+  ],
+  "depends_on": [
+   "11-03",
+   "14-07",
+   "17-02",
+   "17-03",
+   "17-04",
+   "18-02",
+   "18-07"
+  ],
+  "order_after": [],
+  "wave": 1,
+  "requirement_ids": [
+   "OBS-01",
+   "OBS-06",
+   "PRC-08"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/test_doctor_v4.py tests/test_doctor_probes.py tests/test_doctor_event_mode.py",
+   "PUMPGROK_REQUIRE_SOAK=1 uv run pytest -q -m slow tests/soak/test_soak_event_mode.py",
+   "! grep -nE 'pull_request\\.number' .github/workflows/gates.yml",
+   "uv run pytest -q ci/tests",
+   "make lint",
+   "make typecheck",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": "OD-18 (nightly soak schedule)",
+  "notes": "PRC-19 is the only unit allowed to follow the amendment PR in gates.yml.",
+  "pr": "P19-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [
+   "edits a GitHub workflow (.github/workflows/ci.yml)",
+   "edits ci/ (gates, ratchet tests) (ci/tests/test_no_pr_waivers.py)"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "O1": "Doctor reports signer attestation by calling the signer over the socket (N6 section 5 point 3), read-only.",
+   "O5": "Nightly job: schedule trigger in ci.yml; the soak golden hash is recorded in CHANGELOG by PCL-19. Full `pytest -q` including soak is about 50 minutes (N6 section 4), which is why per-plan acceptance uses the fast path.",
+   "PRC-19": "Restores the empty waiver set after the amendment PR (the pinned waiver tuple recorded the amendment PR number and the human approver)."
+  }
+ },
+ {
+  "id": "19-05",
+  "phase": 19,
+  "title": "Alert rules checked against the metric registry; risk-owned docs describe v4",
+  "seat": "bot-02-risk",
+  "includes": [
+   "O3",
+   "D19r"
+  ],
+  "files": [
+   "docs/observability/alerts.yaml",
+   "docs/observability/README.md",
+   "tests/docs/test_alert_rules.py",
+   "ARCHITECTURE.md",
+   "CLAUDE.md",
+   "AGENTS.md",
+   "docs/quality-gates.md"
+  ],
+  "depends_on": [
+   "14-04",
+   "18-07",
+   "19-03"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "OBS-03",
+   "OBS-04"
+  ],
+  "acceptance_commands": [
+   "uv run pytest -q tests/docs/test_alert_rules.py",
+   "./scripts/verify_doc_commands.sh",
+   "./scripts/check.sh",
+   "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "O3 after O2 (metric names); D19r after the amendment.",
+  "pr": "P19-RISK",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-02-risk"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-06",
+  "phase": 19,
+  "title": "CHANGELOG v4 closeout entry with the final hash lines",
+  "seat": "bot-09-journal",
+  "includes": [
+   "PCL-19"
+  ],
+  "files": [
+   "CHANGELOG.md"
+  ],
+  "depends_on": [
+   "19-01",
+   "19-02",
+   "19-03",
+   "19-04",
+   "19-05"
+  ],
+  "order_after": [
+   "18-10"
+  ],
+  "wave": 3,
+  "requirement_ids": [
+   "PRC-03",
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -qF 'Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "grep -qF 'Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+   "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 19: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 19: trading-smoke events.hash after: $p\" CHANGELOG.md",
+   "for p in 11 12 13 14 15 16 17 18 19; do grep -qF \"Phase $p: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\" CHANGELOG.md || exit 1; done",
+   "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Final lines for smoke-10m and trading smoke; records the nightly soak golden hash.",
+  "pr": "P19-JOURNAL",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-09-journal"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-07",
+  "phase": 19,
+  "title": "Docs (chief-owned): README, SETUP, desk skills, datafeed, recorder and promotion runbooks",
+  "seat": "bot-00-chief",
+  "includes": [
+   "D19c"
+  ],
+  "files": [
+   "README.md",
+   "SETUP.md",
+   "skills/desk-doctor/SKILL.md",
+   "skills/desk-monitoring/SKILL.md",
+   "docs/runbooks/datafeed.md",
+   "docs/runbooks/recorder.md",
+   "docs/runbooks/promotion.md"
+  ],
+  "depends_on": [
+   "11-01",
+   "16-04",
+   "18-07",
+   "19-04"
+  ],
+  "order_after": [],
+  "wave": 2,
+  "requirement_ids": [
+   "OBS-04"
+  ],
+  "acceptance_commands": [
+   "./scripts/verify_doc_commands.sh",
+   "./scripts/check.sh",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Every documented command runs (verify_doc_commands).",
+  "pr": "P19-CHIEF-2",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ },
+ {
+  "id": "19-08",
+  "phase": 19,
+  "title": "Milestone audit: every v4 requirement traced to evidence, live still refused",
+  "seat": "bot-00-chief",
+  "includes": [
+   "AUDIT-19"
+  ],
+  "files": [
+   ".planning/milestones/v4-MILESTONE-AUDIT.md",
+   ".planning/MILESTONES.md"
+  ],
+  "depends_on": [
+   "19-01",
+   "19-02",
+   "19-03",
+   "19-04",
+   "19-05",
+   "19-06",
+   "19-07"
+  ],
+  "order_after": [],
+  "wave": 4,
+  "requirement_ids": [
+   "OBS-05"
+  ],
+  "acceptance_commands": [
+   "test -f .planning/milestones/v4-MILESTONE-AUDIT.md",
+   "uv run pumpgrok run --mode live --once; test $? -eq 3",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": true,
+  "amendment_wait": false,
+  "owner_decision": "OD-19 (owner reads the audit)",
+  "notes": "Human gate. Audit needs PCL-19 (criterion 9 reads every phase's changelog lines).",
+  "pr": "P19-CHIEF-2",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [
+   "unit AUDIT-19 is human-gated"
+  ],
+  "external_prerequisites": [],
+  "unit_notes": {
+   "AUDIT-19": "The audit result is reported to the owner; the owner, not an agent, decides the arm procedure."
+  }
+ },
+ {
+  "id": "19-09",
+  "phase": 19,
+  "title": "Phase 19 close: STATE, milestone archive, progress table",
+  "seat": "bot-00-chief",
+  "includes": [
+   "PLN-19"
+  ],
+  "files": [
+   ".planning/STATE.md",
+   ".planning/ROADMAP.md",
+   ".planning/phases/19-observability-docs-hardening-and-milestone-audit/19-VERIFICATION.md"
+  ],
+  "depends_on": [
+   "19-01",
+   "19-02",
+   "19-03",
+   "19-04",
+   "19-05",
+   "19-06",
+   "19-07",
+   "19-08"
+  ],
+  "order_after": [
+   "18-11"
+  ],
+  "wave": 5,
+  "requirement_ids": [
+   "PRC-06"
+  ],
+  "acceptance_commands": [
+   "grep -q 'Phase 19' .planning/STATE.md",
+   "./scripts/check.sh",
+   "test -f .planning/phases/19-observability-docs-hardening-and-milestone-audit/19-VERIFICATION.md",
+   "python3 ci/gates/check_ownership.py --validate-manifest"
+  ],
+  "human_gate": false,
+  "amendment_wait": false,
+  "owner_decision": null,
+  "notes": "Last plan of the milestone.",
+  "pr": "P19-CHIEF-2",
+  "seat_pure": true,
+  "owners_of_files": [
+   "bot-00-chief"
+  ],
+  "human_approver_reasons": [],
+  "external_prerequisites": [],
+  "unit_notes": {}
+ }
+]
