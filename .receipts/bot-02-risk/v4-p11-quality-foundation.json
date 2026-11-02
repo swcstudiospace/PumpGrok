@@ -6,48 +6,350 @@
   "plan": "11-03: dev tooling lock, fast and soak split, branch coverage floor, services CI wiring, SBOM step, compose hardening (PR-06, first of three plans on this branch)",
   "purpose": "Receipt for plan 11-03 on bot-02-risk/v4-p11-quality-foundation. Records the five task commits (0a593bc, 6071e9e, c7d64df, 6146be7, e053582 on base 09f83be), the commands run with exit codes, and what was not verified. Written by the executor; no approval is recorded here.",
   "status": "executed; committed on the branch; awaiting agent review and orchestrator gates. approved_by is intentionally absent.",
-  "rollback_plan": "Revert the five plan-11-03 commits on this branch in reverse order (git revert e053582 6146be7 c7d64df 6071e9e 0a593bc), or close PR-06 without merging. The changes touch only pyproject.toml, uv.lock, Makefile, docker-compose.yml, .github/workflows/security-pr.yml and tests/ci test files; no src/ code changes.",
+  "rollback_plan": "Revert the five plan-11-03 commits on this branch in reverse order (git revert e053582 6146be7 c7d64df 6071e9e 0a593bc), or close PR-06 without merging. The changes touch only pyproject.toml, uv.lock, Makefile, docker-compose.yml, .github/workflows/security-pr.yml and tests/ci test files; no src/ code changes. Plan 11-04: revert the receipt commit that records this run, then 94b644e, b717d2a and c50791f in reverse order; the three code commits touch only src/pumpgrok risk, cli, config, core and doctor files plus two new error test files.",
   "commands": [
-    {"cmd": "uv add --dev --bounds major hypothesis mutmut pytest-cov", "exit_code": 0, "output_tail": "Resolved 66 packages; uv.lock diff is additions only (210 insertions, 0 deletions)"},
-    {"cmd": "uv run python -c \"import tomllib;c=tomllib.load(open('pyproject.toml','rb'));m=str(c['tool']['pytest']['ini_options']['markers']);assert 'slow' in m\"", "exit_code": 0, "output_tail": "slow marker ok"},
-    {"cmd": "uv run python -c \"import hypothesis,mutmut,pytest_cov\"", "exit_code": 0, "output_tail": "imports ok"},
-    {"cmd": "uv lock --check", "exit_code": 0, "output_tail": "Resolved 56 packages"},
-    {"cmd": "uv run pytest --cov=pumpgrok --cov-report=term (baseline measurement, fast suite via addopts -m 'not slow')", "exit_code": 0, "output_tail": "2427 passed, 2 skipped, 1 deselected in 3339.77s; TOTAL branch coverage 90.90%"},
-    {"cmd": "uv run pytest -q tests/safety/test_compose_hardening.py (red, before compose edit)", "exit_code": "nonzero, not captured", "output_tail": "cap_drop, security_opt and read_only assertions failed"},
-    {"cmd": "uv run pytest -q ci/tests/test_sbom_step.py (red, before workflow edit)", "exit_code": "nonzero, not captured", "output_tail": "exactly one job must generate the CycloneDX SBOM"},
-    {"cmd": "uv run pytest -q ci/tests/test_sbom_step.py ci/tests/test_security_workflows.py", "exit_code": 0, "output_tail": "all passed"},
-    {"cmd": "uv run pytest -q tests/safety/test_compose_hardening.py", "exit_code": 0, "output_tail": "11 passed"},
-    {"cmd": "uv run python -c \"import yaml;yaml.safe_load(open('docker-compose.yml'))\"", "exit_code": 0, "output_tail": "yaml ok"},
-    {"cmd": "docker compose config --quiet", "exit_code": 0, "output_tail": "no output"},
-    {"cmd": "uv run pytest -q tests/quality/test_fast_split.py (red, before Makefile targets)", "exit_code": "nonzero, not captured", "output_tail": "make -n test-soak failed: no rule"},
-    {"cmd": "uv run pytest -q tests/quality/test_fast_split.py", "exit_code": 0, "output_tail": "8 passed"},
-    {"cmd": "make -n test test-soak test-all cov", "exit_code": 0, "output_tail": "uv run pytest -q -m 'not slow' / -m slow / -m 'slow or not slow' / -m 'not slow' --cov=pumpgrok ... coverage.xml"},
-    {"cmd": "make cov (run 1, floor 90.4 from task-1 commit)", "exit_code": 0, "output_tail": "Required test coverage of 90.4% reached. Total coverage: 90.90%"},
-    {"cmd": "make cov (run 2, final, floor 89.9 in committed pyproject)", "exit_code": 0, "output_tail": "Required test coverage of 89.9% reached. Total coverage: 90.90%; Coverage XML written to file coverage.xml"},
-    {"cmd": "grep -n fail_under pyproject.toml", "exit_code": 0, "output_tail": "107:fail_under = 89.9"},
-    {"cmd": "test -f coverage.xml", "exit_code": 0, "output_tail": "present (untracked, not committed)"},
-    {"cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py (red, before Makefile edit)", "exit_code": "nonzero, not captured", "output_tail": "services not in make -n audit output"},
-    {"cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py ci/tests/test_sbom_step.py", "exit_code": 0, "output_tail": "all passed (after Makefile edit)"},
-    {"cmd": "make -n typecheck | grep -q services; make -n lint | grep -q services; make -n audit | grep -q services", "exit_code": 0, "output_tail": "all three exit 0 (echo branch: service steps absent)"},
-    {"cmd": "make -n typecheck audit SERVICE_SRC=services/desk-signer/src (true-branch expansion inspection only)", "exit_code": 0, "output_tail": "uv run mypy services/desk-signer/src; uv export --project services/desk-signer ... pip-audit"},
-    {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 4, "output_tail": "ERROR: file or directory not found: tests/replay/test_trading_smoke_pin.py (created by plan 11-01, not on v4-base)"},
-    {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; verify=CONSISTENT seq=2 events=41"},
-    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 965 tracked path(s), each with one declared owner"},
-    {"cmd": "ownership resolve_owner for every files_modified path", "exit_code": 0, "output_tail": "all resolve to bot-02-risk"},
-    {"cmd": "uv run ruff check ci/tests/test_sbom_step.py ci/tests/test_ci_covers_services.py tests/safety/test_compose_hardening.py tests/quality/test_fast_split.py", "exit_code": 0, "output_tail": "All checks passed!"},
-    {"cmd": "uv run ruff format --check (same four files)", "exit_code": 0, "output_tail": "4 files already formatted"},
-    {"cmd": "uv run --no-sync mypy services/desk-gateway/src (diagnostic for the wildcard choice)", "exit_code": 1, "output_tail": "services/desk-gateway/src/desk_gateway/server.py:385: error: Argument 1 to _authenticate has incompatible type str | None [arg-type]"},
-    {"cmd": "uv export --frozen --project services/desk-gateway --no-dev --no-emit-project --no-emit-package pumpgrok ... ; uv run --no-sync pip-audit -r <export> --strict (diagnostic)", "exit_code": 0, "output_tail": "No known vulnerabilities found"},
-    {"cmd": "uvx --from cyclonedx-bom==7.6.0 cyclonedx-py requirements req.txt --of JSON --output-reproducible -o sbom.cdx.json (in /tmp, from uv export of root)", "exit_code": 0, "output_tail": "CycloneDX 1.6, 18 components"}
+    {
+      "cmd": "uv add --dev --bounds major hypothesis mutmut pytest-cov",
+      "exit_code": 0,
+      "output_tail": "Resolved 66 packages; uv.lock diff is additions only (210 insertions, 0 deletions)"
+    },
+    {
+      "cmd": "uv run python -c \"import tomllib;c=tomllib.load(open('pyproject.toml','rb'));m=str(c['tool']['pytest']['ini_options']['markers']);assert 'slow' in m\"",
+      "exit_code": 0,
+      "output_tail": "slow marker ok"
+    },
+    {
+      "cmd": "uv run python -c \"import hypothesis,mutmut,pytest_cov\"",
+      "exit_code": 0,
+      "output_tail": "imports ok"
+    },
+    {
+      "cmd": "uv lock --check",
+      "exit_code": 0,
+      "output_tail": "Resolved 56 packages"
+    },
+    {
+      "cmd": "uv run pytest --cov=pumpgrok --cov-report=term (baseline measurement, fast suite via addopts -m 'not slow')",
+      "exit_code": 0,
+      "output_tail": "2427 passed, 2 skipped, 1 deselected in 3339.77s; TOTAL branch coverage 90.90%"
+    },
+    {
+      "cmd": "uv run pytest -q tests/safety/test_compose_hardening.py (red, before compose edit)",
+      "exit_code": "nonzero, not captured",
+      "output_tail": "cap_drop, security_opt and read_only assertions failed"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_sbom_step.py (red, before workflow edit)",
+      "exit_code": "nonzero, not captured",
+      "output_tail": "exactly one job must generate the CycloneDX SBOM"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_sbom_step.py ci/tests/test_security_workflows.py",
+      "exit_code": 0,
+      "output_tail": "all passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/safety/test_compose_hardening.py",
+      "exit_code": 0,
+      "output_tail": "11 passed"
+    },
+    {
+      "cmd": "uv run python -c \"import yaml;yaml.safe_load(open('docker-compose.yml'))\"",
+      "exit_code": 0,
+      "output_tail": "yaml ok"
+    },
+    {
+      "cmd": "docker compose config --quiet",
+      "exit_code": 0,
+      "output_tail": "no output"
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality/test_fast_split.py (red, before Makefile targets)",
+      "exit_code": "nonzero, not captured",
+      "output_tail": "make -n test-soak failed: no rule"
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality/test_fast_split.py",
+      "exit_code": 0,
+      "output_tail": "8 passed"
+    },
+    {
+      "cmd": "make -n test test-soak test-all cov",
+      "exit_code": 0,
+      "output_tail": "uv run pytest -q -m 'not slow' / -m slow / -m 'slow or not slow' / -m 'not slow' --cov=pumpgrok ... coverage.xml"
+    },
+    {
+      "cmd": "make cov (run 1, floor 90.4 from task-1 commit)",
+      "exit_code": 0,
+      "output_tail": "Required test coverage of 90.4% reached. Total coverage: 90.90%"
+    },
+    {
+      "cmd": "make cov (run 2, final, floor 89.9 in committed pyproject)",
+      "exit_code": 0,
+      "output_tail": "Required test coverage of 89.9% reached. Total coverage: 90.90%; Coverage XML written to file coverage.xml"
+    },
+    {
+      "cmd": "grep -n fail_under pyproject.toml",
+      "exit_code": 0,
+      "output_tail": "107:fail_under = 89.9"
+    },
+    {
+      "cmd": "test -f coverage.xml",
+      "exit_code": 0,
+      "output_tail": "present (untracked, not committed)"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py (red, before Makefile edit)",
+      "exit_code": "nonzero, not captured",
+      "output_tail": "services not in make -n audit output"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py ci/tests/test_sbom_step.py",
+      "exit_code": 0,
+      "output_tail": "all passed (after Makefile edit)"
+    },
+    {
+      "cmd": "make -n typecheck | grep -q services; make -n lint | grep -q services; make -n audit | grep -q services",
+      "exit_code": 0,
+      "output_tail": "all three exit 0 (echo branch: service steps absent)"
+    },
+    {
+      "cmd": "make -n typecheck audit SERVICE_SRC=services/desk-signer/src (true-branch expansion inspection only)",
+      "exit_code": 0,
+      "output_tail": "uv run mypy services/desk-signer/src; uv export --project services/desk-signer ... pip-audit"
+    },
+    {
+      "cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+      "exit_code": 4,
+      "output_tail": "ERROR: file or directory not found: tests/replay/test_trading_smoke_pin.py (created by plan 11-01, not on v4-base)"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+      "exit_code": 0,
+      "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; verify=CONSISTENT seq=2 events=41"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 965 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "ownership resolve_owner for every files_modified path",
+      "exit_code": 0,
+      "output_tail": "all resolve to bot-02-risk"
+    },
+    {
+      "cmd": "uv run ruff check ci/tests/test_sbom_step.py ci/tests/test_ci_covers_services.py tests/safety/test_compose_hardening.py tests/quality/test_fast_split.py",
+      "exit_code": 0,
+      "output_tail": "All checks passed!"
+    },
+    {
+      "cmd": "uv run ruff format --check (same four files)",
+      "exit_code": 0,
+      "output_tail": "4 files already formatted"
+    },
+    {
+      "cmd": "uv run --no-sync mypy services/desk-gateway/src (diagnostic for the wildcard choice)",
+      "exit_code": 1,
+      "output_tail": "services/desk-gateway/src/desk_gateway/server.py:385: error: Argument 1 to _authenticate has incompatible type str | None [arg-type]"
+    },
+    {
+      "cmd": "uv export --frozen --project services/desk-gateway --no-dev --no-emit-project --no-emit-package pumpgrok ... ; uv run --no-sync pip-audit -r <export> --strict (diagnostic)",
+      "exit_code": 0,
+      "output_tail": "No known vulnerabilities found"
+    },
+    {
+      "cmd": "uvx --from cyclonedx-bom==7.6.0 cyclonedx-py requirements req.txt --of JSON --output-reproducible -o sbom.cdx.json (in /tmp, from uv export of root)",
+      "exit_code": 0,
+      "output_tail": "CycloneDX 1.6, 18 components"
+    },
+    {
+      "cmd": "uv run pytest -q tests/characterization/risk tests/risk tests/safety tests/replay (11-04 baseline, before any edit)",
+      "exit_code": 0,
+      "output_tail": "[100%] all dots, no failures"
+    },
+    {
+      "cmd": "uv run pytest -q tests/core/test_manifests_errors.py tests/test_doctor_errors.py (red, before narrowing the excepts)",
+      "exit_code": 1,
+      "output_tail": "3 failed: RuntimeError wrapped as ValueError in _grants and manifest validation; unexpected doctor RuntimeError reported as warn (DID NOT RAISE)"
+    },
+    {
+      "cmd": "uv run ruff check src/pumpgrok/risk/engine/ && uv run ruff format --check src/pumpgrok/risk/engine/ && uv run mypy src/pumpgrok/risk/engine/",
+      "exit_code": 0,
+      "output_tail": "Ruff: No issues found; 6 files already formatted; mypy: No issues found"
+    },
+    {
+      "cmd": "python3 /tmp/fnlen.py src/pumpgrok/risk/engine/core.py src/pumpgrok/risk/engine/rules.py",
+      "exit_code": 0,
+      "output_tail": "core.py: __init__ 43, check 44, _new_ctx 41, _halt_clear_rows 48; rules.py: none at or above 40 lines"
+    },
+    {
+      "cmd": "python3 /tmp/astcmp.py HEAD src/pumpgrok/cli/backtest.py src/pumpgrok/cli/backtest.py src/pumpgrok/cli/backtest_holdout.py src/pumpgrok/cli/backtest_paper_gate.py",
+      "exit_code": 0,
+      "output_tail": "every backtest definition 'same' vs HEAD (22 defs); only extra name is __all__"
+    },
+    {
+      "cmd": "python3 /tmp/astcmp.py HEAD src/pumpgrok/config/settings.py src/pumpgrok/config/settings.py src/pumpgrok/config/sections/core.py src/pumpgrok/config/sections/engine.py src/pumpgrok/config/sections/ops.py",
+      "exit_code": 0,
+      "output_tail": "every settings definition 'same' vs HEAD (no DIFFERS, no MISSING); only extra name is __all__"
+    },
+    {
+      "cmd": "uv run ruff check src/pumpgrok/cli src/pumpgrok/config src/pumpgrok/risk && uv run ruff format --check src/pumpgrok/cli src/pumpgrok/config src/pumpgrok/risk",
+      "exit_code": 0,
+      "output_tail": "All checks passed!; 30 files already formatted"
+    },
+    {
+      "cmd": "python3 resolve_owner (check_ownership.resolve_owner) over every changed and new path",
+      "exit_code": 0,
+      "output_tail": "14 paths, all resolve to bot-02-risk"
+    },
+    {
+      "cmd": "python3 ASCII and TODO scan over the 14 changed and new paths",
+      "exit_code": 0,
+      "output_tail": "no non-ASCII bytes; no TODO text"
+    },
+    {
+      "cmd": "uv run pytest -q tests/characterization/risk tests/risk tests/safety tests/replay",
+      "exit_code": 0,
+      "output_tail": "[100%] all dots, no failures"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+      "exit_code": 0,
+      "output_tail": "cycle_end ... events_read 41 ... (grep -q matched the pinned events hash)"
+    },
+    {
+      "cmd": "uv run mypy src/",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 216 source files"
+    },
+    {
+      "cmd": "uv run pytest -q tests/cli tests/backtest",
+      "exit_code": 0,
+      "output_tail": "[100%] all dots, no failures"
+    },
+    {
+      "cmd": "uv run pytest -q tests/config tests/characterization tests/safety",
+      "exit_code": 0,
+      "output_tail": "[100%] all dots, no failures (PRE-v4 section digests match)"
+    },
+    {
+      "cmd": "uv run pytest -q tests/core tests/test_doctor_probes.py tests/test_doctor_errors.py",
+      "exit_code": 0,
+      "output_tail": "[100%] all dots, no failures"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "844 files already formatted; services: services/desk-signer/src absent; service lint skipped"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 216 source files; service typecheck skipped"
+    },
+    {
+      "cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+      "exit_code": 0,
+      "output_tail": ".... [100%]"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3",
+      "exit_code": 0,
+      "output_tail": "live gate refused: unmet preconditions listed; No transaction was attempted (test $? -eq 3 passed)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 987 tracked path(s), each with one declared owner"
+    }
   ],
   "claims": [
-    {"claim": "Dev deps hypothesis, mutmut and pytest-cov are locked; uv.lock changed only by additions from a single uv add", "evidence_command_index": 0},
-    {"claim": "The slow marker is registered and addopts deselects it; soak test is marked slow; make test is the fast path and make test-soak selects slow", "evidence_command_index": 12},
-    {"claim": "Branch coverage is measured by make cov over the fast suite: 90.90 percent total; floor is 89.9 (measured baseline minus one point) and the gate passed", "evidence_command_index": 15},
-    {"claim": "SBOM job generates CycloneDX JSON from the locked export via a pinned ephemeral cyclonedx-bom 7.6.0 and uploads it as an artifact; the generator command was run locally and produced 18 components", "evidence_command_index": 30},
-    {"claim": "Every compose service is read-only with tmpfs /tmp, cap_drop ALL and no-new-privileges; topology unchanged; compose config validates", "evidence_command_index": 8},
-    {"claim": "lint, typecheck and audit are path-conditional on services/desk-signer/src; no-ops today, as the plan requires", "evidence_command_index": 20},
-    {"claim": "Ownership manifest validates and every files_modified path resolves to bot-02-risk", "evidence_command_index": 24}
+    {
+      "claim": "Dev deps hypothesis, mutmut and pytest-cov are locked; uv.lock changed only by additions from a single uv add",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The slow marker is registered and addopts deselects it; soak test is marked slow; make test is the fast path and make test-soak selects slow",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "Branch coverage is measured by make cov over the fast suite: 90.90 percent total; floor is 89.9 (measured baseline minus one point) and the gate passed",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "SBOM job generates CycloneDX JSON from the locked export via a pinned ephemeral cyclonedx-bom 7.6.0 and uploads it as an artifact; the generator command was run locally and produced 18 components",
+      "evidence_command_index": 30
+    },
+    {
+      "claim": "Every compose service is read-only with tmpfs /tmp, cap_drop ALL and no-new-privileges; topology unchanged; compose config validates",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "lint, typecheck and audit are path-conditional on services/desk-signer/src; no-ops today, as the plan requires",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Ownership manifest validates and every files_modified path resolves to bot-02-risk",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "RiskEngine._evaluate is split into rules.py stages; step order, skip rules, probe ownership and the risk_json rows are unchanged, and no function in core.py or rules.py exceeds 60 lines (QLT-04)",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "The risk characterization, risk, safety and replay suites pass on the split code, and the baseline before any edit also passed (QLT-04)",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "The smoke-10m events hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is re-proven on the final tree (QLT-04)",
+      "evidence_command_index": 41
+    },
+    {
+      "claim": "cli/backtest.py is split into backtest_holdout.py and backtest_paper_gate.py; every definition is AST-identical to HEAD (QLT-04)",
+      "evidence_command_index": 35
+    },
+    {
+      "claim": "The backtest verb, review and CLI suites pass on the split modules (QLT-04)",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": "Settings sections moved to config/sections core, engine and ops; every definition is AST-identical to HEAD (QLT-04)",
+      "evidence_command_index": 36
+    },
+    {
+      "claim": "The config, characterization and safety suites pass, including the PRE-v4 section digest surface test (QLT-04)",
+      "evidence_command_index": 44
+    },
+    {
+      "claim": "The doctor and manifest plain excepts are narrowed to typed error tuples; unexpected errors propagate; the new error tests failed before the change (QLT-06)",
+      "evidence_command_index": 32,
+      "expects_failure": true
+    },
+    {
+      "claim": "The narrowed doctor and manifest error suites and the core suite pass on the final tree (QLT-06)",
+      "evidence_command_index": 45
+    },
+    {
+      "claim": "make lint is clean on the final tree",
+      "evidence_command_index": 46
+    },
+    {
+      "claim": "make typecheck is clean on the final tree",
+      "evidence_command_index": 47
+    },
+    {
+      "claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction is attempted",
+      "evidence_command_index": 49
+    },
+    {
+      "claim": "Every changed and new path resolves to bot-02-risk (checked over 14 paths)",
+      "evidence_command_index": 38
+    },
+    {
+      "claim": "The ownership manifest validates: 10 bots, 192 rules, each tracked path with one declared owner",
+      "evidence_command_index": 50
+    }
   ],
   "unverified": [
     "tests/replay/test_trading_smoke_pin.py is not on v4-base; it is created by plan 11-01 on bot-02-risk/v4-p11-receipts-pins-characterization. Its acceptance command fails here (exit 4) until PR-01 merges. The trading smoke hash was not re-proven in this branch.",
@@ -57,10 +359,39 @@
     "Compose hardening was validated by parsing and docker compose config only. No container was started, so read-only root behaviour at runtime is unproven.",
     ".receipts/bot-02-risk/v4-p11-quality-foundation.json is written but not tracked: the base .gitignore ignores .receipts/**/*.json. Tracking depends on the D-06 glob from plan 11-01, which is not on this base.",
     "coverage.xml and .coverage are generated and left untracked; .gitignore is not in files_modified, so they are not ignored.",
-    "Several red runs in this list did not capture the exit code; they are recorded as nonzero, not captured."
+    "Several red runs in this list did not capture the exit code; they are recorded as nonzero, not captured.",
+    "Plan 11-04 did not run make test, the full pytest -q, the soak suite, run_all.py, or any gate script, per the plan rules; the orchestrator runs the gates.",
+    "make cov was not re-run for 11-04; the coverage floor in pyproject.toml is unchanged, but the new modules were not measured against it.",
+    "'one import and one field line per section' is implemented as one import statement per section module (core, engine, ops), not one import line per section, because files_modified allows only those three section modules.",
+    "settings.py and cli/backtest.py re-export section and helper names through explicit __all__ lists so that promotion.py, scoring.py, analyzer.py and the test modules keep their imports unchanged; those importer files are outside files_modified and were not migrated.",
+    "An owner-checkout incident: two edit calls with a relative path landed in /root/src/repos/pumpgrok (core.py, branch bot-00-chief/phase-6-integrity). Main restored that file to HEAD; the owner checkout was not re-verified by this executor after the restore.",
+    "The doctor probe still reports typed network failures as warn lines (never fatal). Only unexpected exceptions now propagate; no live endpoint was started for the new error tests, which use stubbed urlopen."
   ],
   "carry_over": {
     "wildcard_choice": "Replace services/desk-signer with the generic wildcard once services/desk-gateway/src/desk_gateway/server.py:385 is fixed by its owner.",
     "floor_history": "The task-1 commit set fail_under 90.4 (baseline minus 0.5 by mistake); the task-4 commit corrected it to 89.9 before the final make cov run."
+  },
+  "plan_11_04": {
+    "plan": "11-04: split RiskEngine._evaluate, cli backtest and Settings behind the 11-02 characterization; narrow doctor and manifests plain excepts (PR-06, second of three plans on this branch)",
+    "commits": [
+      {
+        "sha": "c50791f",
+        "task": "Split RiskEngine._evaluate into rule stages (QLT-04)"
+      },
+      {
+        "sha": "b717d2a",
+        "task": "Split cli backtest and Settings into modules (QLT-04)"
+      },
+      {
+        "sha": "94b644e",
+        "task": "Narrow plain swallows to typed error tuples (QLT-06)"
+      }
+    ],
+    "files_modified_outside_list": [],
+    "deviations": [
+      "The owner-checkout incident described in unverified; no commit was made from it.",
+      "Re-exports through __all__ in cli/backtest.py and config/settings.py, to keep importer files unchanged (see unverified).",
+      "Section grouping: one module each for core, engine and ops (the files_modified paths), not one module per section."
+    ]
   }
 }
