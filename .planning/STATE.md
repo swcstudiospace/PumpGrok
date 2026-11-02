@@ -17,6 +17,7 @@ milestone_name: PumpGrok Desk v3
 current_phase: none
 stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded. PR 27 merged as 0ca794d; waiver PR 28 merged as 9588bc0. Record corrections: PR 29 (bot-02, ARCHITECTURE wording and allowlist) and the bot-00 follow-up. Resume at .planning/milestones/v3-CLOSEOUT.md."
 ---
+paid_rpc_provider: none
 
 # Project State
 

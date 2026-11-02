@@ -188,8 +188,13 @@ async def test_kill_on_top5_hard_veto() -> None:
     assert out.verdict_recommendation == "KILL"
 
 
-async def test_blind_never_raises_and_forces_kill(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PUMPGROK_PAID_RPC_PROVIDER", "test-provider")
+async def test_blind_never_raises_and_forces_kill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = tmp_path / ".planning" / "STATE.md"
+    record.parent.mkdir(parents=True)
+    record.write_text("paid_rpc_provider: test-provider\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
     reg, bot = _run_with(
         _handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in()
     )
@@ -201,9 +206,12 @@ async def test_blind_never_raises_and_forces_kill(monkeypatch: pytest.MonkeyPatc
 
 
 async def test_blind_holder_pair_is_advisory_without_provider(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("PUMPGROK_PAID_RPC_PROVIDER", raising=False)
+    record = tmp_path / ".planning" / "STATE.md"
+    record.parent.mkdir(parents=True)
+    record.write_text("paid_rpc_provider: none\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
     reg, bot = _run_with(
         _handler(freeze_live=False, supply="1000000000000", holders_ok=False), _clear_in()
     )
