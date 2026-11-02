@@ -4,7 +4,7 @@
 
 PumpGrok Desk v4 makes the paper desk event-driven and multi-strategy, and builds a fully tested but DORMANT live path that only a human can arm. Live trading stays disabled throughout: `run --mode live` exits 3 on every default start, no key or signing code enters the desk package, and the constitution amendment is drafted for the owner and applied only by a human-approved pull request. Nine phases continue the v3 numbering. Phase 11 lays the quality foundation first (pinned replay hashes, no PR-number waivers, a fast test path, coverage and complexity ratchets, the six hotspots split behind characterization tests), so every later phase edits small, pinned code. Phase 12 adds the typed event runtime as a library. Phase 13 corrects the curve layout and adds the read-only live feed and recorder. Phase 14 wakes seats on events and puts every Grok call behind one gateway. Phase 15 adds the strategy framework and four baseline strategies in paper. Phase 16 adds Metrics v2 and autonomous strategy backtests. Phase 17 adds per-strategy risk, the promotion lifecycle and the event desk composition root. Phase 18 builds the dormant live path and the segregated signer. Phase 19 adds observability, documentation, a nightly soak and the milestone audit. Every phase closes with the replay hash pairs recorded in CHANGELOG.md; the smoke-10m hash never moves, and the trading-smoke hash moves exactly once, in Phase 15.
 
-Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in `.planning/REQUIREMENTS.md`).
+Coverage: all 155 v4 requirements map to exactly one phase (see Traceability in `.planning/REQUIREMENTS.md`).
 
 ## Shipped
 
@@ -13,15 +13,15 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 
 ## Phases
 
-- [ ] **Phase 11: Engineering foundation and quality** - Pinned replay hashes, waivers removed, soak split, coverage and complexity ratchet, six hotspots split behind characterization tests, v4 planning adopted (15 requirements)
+- [ ] **Phase 11: Engineering foundation and quality** - Pinned replay hashes, waivers removed, soak split, coverage and complexity ratchet, six hotspots split behind characterization tests, v4 planning adopted (35 requirements)
 - [ ] **Phase 12: Event runtime core** - Settings skeleton, single event catalog, EventBus with P0 lane, DLQ, deterministic drain and SourceSupervisor (10 requirements)
 - [ ] **Phase 13: Curve truth, live market data and recorder** - Token-first curve layout, read-only live feed, fail-closed LivePriceSource, marks, recorder, fee model v2 selectable, human-reviewed status flips (11 requirements)
-- [ ] **Phase 14: Event-driven desk and Grok gateway** - Event-mode supervisor wake, one Grok gateway, ten seat cycles, Hermes cutover, idle-zero-Grok gate and measurement (16 requirements)
+- [ ] **Phase 14: Event-driven desk and Grok gateway** - Event-mode supervisor wake, one Grok gateway, ten seat cycles, Hermes cutover, idle-zero-Grok gate and measurement (26 requirements)
 - [ ] **Phase 15: Strategy framework and multi-strategy paper** - Strategy protocol and runtime, four baseline strategies, parameter identity, fee model v2 default, live-data paper root and Intent router (8 requirements)
 - [ ] **Phase 16: Backtest v2 and autonomous evaluation** - Metrics v2, round trips, strategy-aware replay, gap segmentation, evidence grading, autonomous backtest scheduler, record and import verbs (8 requirements)
 - [ ] **Phase 17: Risk hardening and promotion lifecycle** - Strategy slices and kills, entry checks, feed health, promotion lifecycle, event desk composition root and restart recovery (14 requirements)
 - [ ] **Phase 18: Dormant live path, amendment-gated** - Dormant live path: real gate rows, arm scope, desk-signer service, instruction allowlist, shadow mode, amendment applied by a human-approved PR (21 requirements)
-- [ ] **Phase 19: Observability, docs, hardening and milestone audit** - Doctor v4, health and metrics sections, alert rules, v4 docs, nightly event soak, waiver removal and the milestone audit (8 requirements)
+- [ ] **Phase 19: Observability, docs, hardening and milestone audit** - Doctor v4, health and metrics sections, alert rules, v4 docs, nightly event soak, waiver removal and the milestone audit (22 requirements)
 
 ## Phase Details
 
@@ -29,7 +29,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 
 **Goal**: The test and quality scaffolding every later phase leans on exists before any feature lands: the trading `smoke` and smoke-10m hashes are pinned, every PR-number waiver is gone, every seat can track its receipt without touching a foreign path, the soak test is out of the default path, coverage and a complexity ratchet are measured, the six hotspots (paper_adapter sell, batch and confirm, RiskEngine._evaluate, cli/backtest, config/settings.py, supervisor/seat_task.py) are split behind characterization tests with the replay hashes unchanged, property tests, a mutation smoke target, an SBOM step, compose hardening and CI coverage of services/ are in place, and the v4 roadmap and requirements are adopted.
 **Depends on**: Nothing in v4. The branches start from main after the owner-approved merge of draft PRs 16 to 20 (order 18, 19, 20, 17 for 17 to 20; tag `v4-base`); plans 11-01, 11-03 and 11-09 carry the external prerequisite EXT:PRS-16-20-MERGED
-**Requirements**: QLT-01, QLT-02, QLT-03, QLT-04, QLT-05, QLT-06, QLT-07, QLT-08, QLT-09, QLT-10, PRC-03, PRC-04, PRC-05, PRC-09, PRC-10
+**Requirements**: QLT-01, QLT-02, QLT-03, QLT-04, QLT-05, QLT-06, QLT-07, QLT-08, QLT-09, QLT-10, PRC-03, PRC-04, PRC-05, PRC-09, PRC-10, HARD-01, HARD-02, HARD-03, HARD-04, HARD-05, HARD-06, HARD-07, HARD-08, HARD-09, HARD-10, HARD-11, HARD-12, HARD-19, HARD-24, HARD-25, HARD-26, HARD-30, HARD-31, HARD-32, HARD-33
 **Success Criteria** (what must be TRUE):
 
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0 and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0 (PRC-01)
@@ -51,6 +51,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
   17. `test -f .planning/milestones/v3-ROADMAP.md && test -f .planning/milestones/v3-REQUIREMENTS.md && grep -qE 'Phase 11: Engineering foundation' .planning/ROADMAP.md && grep -qE 'Coverage: v4 requirements' .planning/REQUIREMENTS.md` exits 0 and `test -f .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md && grep -q 'Phase 11' .planning/STATE.md` exits 0; v3 is archived, the v4 roadmap and requirements are installed and the phase closes with one chief-owned record (PRC-06)
   18. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b" && test "$a" = "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" && grep -qF "Phase 11: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md && grep -qF "Phase 11: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0, `uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py` exits 0 and `p=$(python3 -c "import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])") && grep -qF "Phase 11: trading-smoke events.hash before: $p" CHANGELOG.md && grep -qF "Phase 11: trading-smoke events.hash after: $p" CHANGELOG.md` exits 0; both pairs are recorded and equal, because this phase does not move either hash (PRC-03)
   19. `uv run pumpgrok run --mode live --once; test $? -eq 3` exits 0; live stays refused (LIV-07)
+  20. `uv run pytest -q tests/hardening ci/tests/test_check_receipt_bypass.py ci/tests/test_check_receipt_reexec.py ci/tests/test_check_secrets_skips.py ci/tests/test_gates_yml_no_mask.py` exits 0; HARD-01 to HARD-12, HARD-19, HARD-24 to HARD-26 and HARD-30 to HARD-33 hold, and HARD-04 remains pending owner confirmation (HARD-01 to HARD-33)
 
 **Checkpoint**: `make test` is fast, coverage and complexity are measured, both replay hashes are pinned, the hotspots are small and characterized, no PR-number waiver remains, and a non-risk seat can open a clean PR.
 
@@ -63,8 +64,9 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] `tools/onchain/pump_events.py` decoder and `scripts/probe_pump_accounts.py` read-only probe, pulled forward from the live-data phase (MKT-02, MKT-03)
 - [ ] v4 `.planning/` adoption: archived v3 roadmap and requirements, installed v4 ROADMAP, REQUIREMENTS and PROJECT (PRC-06)
 - [ ] `CHANGELOG.md` Phase 11 entry with the smoke-10m and trading-smoke before and after pairs (PRC-03)
+- [ ] Hardening family: `tests/hardening/` and `ci/tests/` checks and the code fixes they name in `src/pumpgrok/`, `ci/gates/`, `.github/workflows/gates.yml` and `tools/desk/receipt_check.py` (HARD-01 to HARD-12, HARD-19, HARD-24 to HARD-26, HARD-30 to HARD-33)
 
-**Plans**: 11 planned (11-01 to 11-11) in 6 waves. Plan ids: 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/11-*/` by the GSD workflow.
+**Plans**: 11 planned (11-01 to 11-11) in 6 waves. Plan ids: 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/11-*/` by the GSD workflow. The plan decomposition for the new HARD requirements is produced by gsd-plan-phase when Phase 11 is planned.
 
 ### Phase 12: Event runtime core
 
@@ -139,7 +141,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 
 **Goal**: The supervisor wakes seats on events instead of cadence polling (cadence mode stays the default and byte-identical), every Grok call is a consequence of an event and passes one gateway (prefilter, sanitize, cache, in-flight coalescing, layered persisted budget, fallback ladder), exits and risk can never wait on Grok, ten event-mode seat cycle bodies exist, Hermes cron sessions that duplicate events are disabled, and an idle desk makes zero Grok calls.
 **Depends on**: Phase 12 (12-02, 12-03: bus, sources, drain); Phase 13 (13-02: live price source and marks); Phase 11 plans 11-01, 11-03, 11-04, 11-05 and 11-09 (pins, CI, splits, seat_task)
-**Requirements**: EVT-08, EVT-10, EVT-12, EVT-13, GRK-01, GRK-02, GRK-03, GRK-04, GRK-05, GRK-06, GRK-07, GRK-08, GRK-09, GRK-10, GRK-11, RT-01
+**Requirements**: EVT-08, EVT-10, EVT-12, EVT-13, GRK-01, GRK-02, GRK-03, GRK-04, GRK-05, GRK-06, GRK-07, GRK-08, GRK-09, GRK-10, GRK-11, RT-01, ONB-01, ONB-02, ONB-03, ONB-04, ONB-05, ONB-06, ONB-07, ONB-08, ONB-09, ONB-10
 **Success Criteria** (what must be TRUE):
 
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0 and `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0 (PRC-01)
@@ -160,6 +162,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
   16. `test "$(git diff --name-only v4-base -- contracts | wc -l)" -eq 0` exits 0; no contract surface changed in this phase (`v4-base` is the tag on the commit where draft PRs 16 to 20 are merged) (EVT-10)
   17. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b" && test "$a" = "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" && grep -qF "Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md && grep -qF "Phase 14: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0, `uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py` exits 0 and `p=$(python3 -c "import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])") && grep -qF "Phase 14: trading-smoke events.hash before: $p" CHANGELOG.md && grep -qF "Phase 14: trading-smoke events.hash after: $p" CHANGELOG.md` exits 0; both pairs are recorded and equal, because this phase does not move either hash; `grep -qF 'events-smoke-10m events.hash' CHANGELOG.md && grep -qF 'events-soak-3d events.hash' CHANGELOG.md` also exits 0 and records the new event-mode golden hashes (PRC-03)
   18. `uv run pumpgrok run --mode live --once; test $? -eq 3` exits 0; live stays refused (LIV-07)
+  19. `uv run pytest -q tests/onboarding` exits 0, `{ env -i PATH="$PATH" HOME="$HOME" uv run pumpgrok doctor --json --mode live >/dev/null; test $? -ne 0; }` exits 0 and `{ env -i PATH="$PATH" HOME="$HOME" uv run pumpgrok run --mode paper --once >/dev/null 2>&1; test $? -ne 0; }` exits 0; ONB-01 to ONB-10 hold, and the paper start is refused until its required inputs and seat access decisions are recorded (ONB-01 to ONB-10)
 
 **Checkpoint**: With wake_mode=event the desk runs the recorded smoke dataset through the bus to the same hash, an idle desk is silent, a hung Grok cannot delay an exit, and cadence mode is unchanged.
 
@@ -171,8 +174,9 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] Hermes cron cutover in `hermes/cron/jobs.yaml`, `docs/runbooks/events.md`, doctor refusal, time-sync probe and the `--wake-mode` flag (EVT-13)
 - [ ] `scripts/measure_grok_calls.py`, the `evidence-50` fixture, `ci/gates/check_idle_grok.py` wired into `run_all.py`, the Makefile and `ci.yml` (EVT-12, GRK-11)
 - [ ] `CHANGELOG.md` Phase 14 entry with both hash pairs and the `events-smoke-10m` and `events-soak-3d` golden hashes (PRC-03)
+- [ ] Grok operator onboarding family (ONB-01 to ONB-10): `tests/onboarding/` checks, the input inventory, the `doctor --json` missing-input report, the paper start gate, seat access approval, and the wallet and RPC choice record
 
-**Plans**: 9 planned (14-01 to 14-09) in 7 waves. Plan ids: 14-01, 14-02, 14-03, 14-04, 14-05, 14-06, 14-07, 14-08, 14-09. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/14-*/` by the GSD workflow.
+**Plans**: 9 planned (14-01 to 14-09) in 7 waves. Plan ids: 14-01, 14-02, 14-03, 14-04, 14-05, 14-06, 14-07, 14-08, 14-09. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/14-*/` by the GSD workflow. The plan decomposition for the new ONB requirements is produced by gsd-plan-phase when Phase 14 is planned.
 
 ### Phase 15: Strategy framework and multi-strategy paper
 
@@ -324,7 +328,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 
 **Goal**: Operators can see the event runtime, sources, Grok budget, strategy stages and kills, and signer attestation in doctor, health.json and metrics; alert rules name only real metrics; the docs, skills and runbooks describe v4 and every documented command runs; a nightly event-mode soak guards the idle-zero-Grok invariant; the amendment waiver is gone; and a milestone audit traces every requirement to evidence and records that live is still refused.
 **Depends on**: Phases 17 and 18 (17-02, 17-03, 17-04, 18-02, 18-07, 18-10, 18-11); plans 11-03, 13-02, 14-04, 14-07 and 16-04 for CI, metrics and CLI lanes
-**Requirements**: PRC-06, PRC-08, OBS-01, OBS-02, OBS-03, OBS-04, OBS-05, OBS-06
+**Requirements**: PRC-06, PRC-08, OBS-01, OBS-02, OBS-03, OBS-04, OBS-05, OBS-06, HOST-01, HOST-02, HOST-03, HOST-04, HOST-05, HOST-06, HOST-07, HOST-08, HOST-09, HOST-10, HOST-11, HOST-12, HOST-13, HOST-14
 **Success Criteria** (what must be TRUE):
 
   1. `make lint`, `make typecheck`, `make test`, `./scripts/check.sh` each exit 0, `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke` exits 0, `make cov` still meets its floor and `make test-all` exits 0 once (PRC-01)
@@ -338,6 +342,7 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
   9. `for p in 11 12 13 14 15 16 17 18 19; do grep -qF "Phase $p: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md || exit 1; grep -qE "Phase $p: trading-smoke events.hash after: [0-9a-f]{64}" CHANGELOG.md || exit 1; done` exits 0; one journal CHANGELOG entry and one chief close record per phase (PRC-06)
   10. `uv run pytest -q tests/safety` exits 0 and `uv run pumpgrok run --mode live --once; test $? -eq 3` exits 0; live is still refused on the final tree (OBS-05)
   11. `a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n "$a" && test "$a" = "$b" && test "$a" = "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" && grep -qF "Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d" CHANGELOG.md && grep -qF "Phase 19: smoke-10m events.hash after: $a" CHANGELOG.md` exits 0, `uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py` exits 0 and `p=$(python3 -c "import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])") && grep -qF "Phase 19: trading-smoke events.hash before: $p" CHANGELOG.md && grep -qF "Phase 19: trading-smoke events.hash after: $p" CHANGELOG.md` exits 0; both pairs are recorded and equal, because this phase does not move either hash (PRC-03)
+  12. `uv run pytest -q tests/hosted ci/tests/test_compose_docker_secrets.py ci/tests/test_image_digest_pins.py` exits 0; HOST-01 to HOST-14 hold, and the compose named volume (HOST-02) stays disabled until the F1 resume defect is closed (HARD-07 passes) (HOST-01 to HOST-14)
 
 **Checkpoint**: The audit file exists, every requirement is traced, `make check` is green, live is refused, and the human arm procedure is the only remaining step toward live.
 
@@ -350,8 +355,9 @@ Coverage: all 111 v4 requirements map to exactly one phase (see Traceability in 
 - [ ] Nightly event-mode soak in `.github/workflows/ci.yml` and `tests/soak/test_soak_event_mode.py` (OBS-06)
 - [ ] Waiver removal in `.github/workflows/gates.yml` (PRC-08)
 - [ ] `.planning/milestones/v4-MILESTONE-AUDIT.md`, v4 archive and the final `CHANGELOG.md` closeout (OBS-05, PRC-06)
+- [ ] Hosted runtime family (HOST-01 to HOST-14): `tests/hosted/` and `ci/tests/` checks for the state directory, health probes and routes, shutdown exit, ledger backup and restore, log level, gateway bind and tokens, health bind and read timeout, and Docker secrets and digest pins; the named volume (HOST-02) stays off until HARD-07 passes
 
-**Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow.
+**Plans**: 9 planned (19-01 to 19-09) in 5 waves. Plan ids: 19-01, 19-02, 19-03, 19-04, 19-05, 19-06, 19-07, 19-08, 19-09. Human-gated: 19-08. Source of truth: `plans.json`; the per-plan PLAN and SUMMARY files are written under `.planning/phases/19-*/` by the GSD workflow. The plan decomposition for the new HOST requirements is produced by gsd-plan-phase when Phase 19 is planned.
 
 ## Progress
 

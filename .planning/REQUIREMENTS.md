@@ -37,6 +37,28 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] GRK-10: Event and Grok metric families are exposed in event mode while the nine existing families are unchanged. Check: `uv run pytest -q tests/supervisor/test_metrics.py tests/desk/test_metrics_events.py`
 - [ ] GRK-11: The measurement script reports before and after JSON on a fixture with at least 50 admitted candidates, and calls_after is at most 20 percent of calls_before on evidence-50 and soak-3d. Check: `uv run python scripts/measure_grok_calls.py --dataset tests/fixtures/replay/evidence-50 --min-candidates 50 --max-ratio 0.2 && uv run python scripts/measure_grok_calls.py --dataset tests/fixtures/replay/soak-3d --max-ratio 0.2`
 
+### Grok operator onboarding (ONB)
+
+- [ ] ONB-01: The onboarding inventory lists every operator input in the table above with a required, optional, forbidden or not-read value for paper and for live, and a snapshot test pins the table. Check: `uv run pytest -q tests/onboarding/test_input_inventory.py`
+- [ ] ONB-02: `doctor --json --mode <paper|live>` prints one record per input with name, required_for_mode, status and source (env, config, ledger, default or none), and exits non-zero when a required input is missing or a forbidden input is present for the requested mode. Check: `{ env -i PATH="$PATH" HOME="$HOME" uv run pumpgrok doctor --json --mode live >/dev/null; test $? -ne 0; } && uv run pytest -q tests/onboarding/test_doctor_json.py`
+- [ ] ONB-03: `run --mode paper` refuses to start, exits non-zero and names each missing required input, until the required paper inputs are complete and every enabled seat has a recorded access decision. Check: `{ env -i PATH="$PATH" HOME="$HOME" uv run pumpgrok run --mode paper --once >/dev/null 2>&1; test $? -ne 0; } && uv run pytest -q tests/onboarding/test_paper_start_gate.py`
+- [ ] ONB-04: Each seat's tool access is listed from its tool roster for operator approval, and a grant exists only as an operator-choice row in the ledger, so no seat has a grant by default. Check: `uv run pytest -q tests/onboarding/test_access_approval.py`
+- [ ] ONB-05: No secret value is echoed, stored, logged or written to the ledger, and doctor, run and onboarding rows report only presence and source, as shown by a sentinel-value test over stdout, stderr, the log output and the ledger file. Check: `uv run pytest -q tests/onboarding/test_no_secret_echo.py`
+- [ ] ONB-06: A wallet public address is accepted only when it base58-decodes to exactly 32 bytes and passes an Ed25519 curve-point check, and a refusal names the field without echoing the value. Check: `uv run pytest -q tests/onboarding/test_wallet_address.py`
+- [ ] ONB-07: Paper needs no wallet, so the wallet field is never read on the paper path and a paper start with no address, or with a malformed one, is not blocked by it. Check: `uv run pytest -q tests/onboarding/test_paper_no_wallet.py`
+- [ ] ONB-08: The RPC endpoint is recorded as an explicit operator choice by host only (scheme, host and port, never path, query, userinfo or key), and with no recorded choice doctor reports the public endpoint as status default and does not record it as a choice. Check: `uv run pytest -q tests/onboarding/test_rpc_choice.py`
+- [ ] ONB-09: When any Grok seat is enabled the x.ai key is a required input for paper and live, an empty value counts as missing, and no request is ever sent with an empty bearer. Check: `uv run pytest -q tests/onboarding/test_grok_key_required.py`
+- [ ] ONB-10: In a live desk environment the HMAC confirmation key is a forbidden input, so doctor reports it present or absent by name and source only, and a present key fails the live onboarding check. Check: `uv run pytest -q tests/onboarding/test_hmac_forbidden.py`
+
+- Dedupe: requirement IDs ONB-01 to ONB-10 are not audit findings; finding IDs ONB-01 to ONB-06 are named explicitly below.
+- Dedupe ONB-01 (finding): kept here in ONB-06 and ONB-07; HARD-18 is removed.
+- Dedupe ONB-02 (finding, SEC-04): stays in HARD-19; ONB-10 is the HMAC presence check (LIV-11) and claims no finding ID.
+- Dedupe ONB-03 (finding): kept here in ONB-09; HARD-20 is removed.
+- Dedupe ONB-04 (finding): kept here in ONB-02; HARD-21 is removed.
+- Dedupe ONB-05 (finding): kept here in ONB-08; HARD-22 is removed.
+- Dedupe ONB-06 (finding): kept here in ONB-01, ONB-03 and ONB-04; HARD-23 is removed.
+- ONB-01 refers to the input table in the ONB draft (archive/v4-families-drafts/ONB.md); that table is not copied into this file.
+
 ### Curve truth and live market data (MKT)
 
 - [ ] MKT-01: The bonding-curve layout matches the official token-first account (49 and 166 byte accounts) and a bad discriminator is rejected. Check: `uv run pytest -q tests/tools/onchain/test_curve_layout.py`
@@ -127,6 +149,45 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] QLT-09: An SBOM (CycloneDX) is produced as a CI artifact. Check: `uv run pytest -q ci/tests/test_sbom_step.py`
 - [ ] QLT-10: Compose services run read-only with tmpfs, all capabilities dropped and no-new-privileges. Check: `uv run pytest -q tests/safety/test_compose_hardening.py`
 
+### Hardening (HARD)
+
+- [ ] HARD-01: Settings loading refuses any non-default min_total_score or scoring weight in every overlay, including live.toml, with a ConfigError that names the key, until a decision-path reader consumes it. Check: `uv run pytest -q tests/hardening/test_scoring_knobs_refused.py`
+- [ ] HARD-02: Every broad except in src/pumpgrok/supervisor/ is narrowed to typed exceptions and each remaining handler logs with exc_info, as an AST guard over that package asserts. Check: `uv run pytest -q tests/hardening/test_supervisor_excepts.py`
+- [ ] HARD-03: Import-linter fails when risk imports engine or execution imports tools, and importing the tools package no longer loads the full tool registry. Check: `uv run pytest -q tests/hardening/test_layering_contracts.py`
+- [ ] HARD-04 (owner confirmation pending): `pumpgrok upgrade rollback` restores the prior active set in one command, exits 0 and writes a ledger row, as a CLI test asserts. Check: `uv run pytest -q tests/hardening/test_rollback_verb.py`
+- [ ] HARD-05: Each module listed in ARCH-05 is either wired to a production importer or deleted, and an AST test fails on any src/pumpgrok module with no non-test importer that is not on an explicit empty allowlist. Check: `uv run pytest -q tests/hardening/test_no_orphan_modules.py`
+- [ ] HARD-06: The 60-line function-size guard covers every target directory under src/pumpgrok, and any function over 60 lines that is absent from a shrink-only allowlist (including _build_serve, 113 lines) fails the test. Check: `uv run pytest -q tests/hardening/test_function_size_all_dirs.py`
+- [ ] HARD-07: A resumed serve after a crash between OrderPlaced and FillRecorded places no second sniper BUY and records no second simulated fill for the same (mint, candidate), as a resumed-serve test asserts. Check: `uv run pytest -q tests/hardening/test_resume_buy_idempotent.py`
+- [ ] HARD-08: Opening-equity and snapshot rows are hash-chained, and ledger open refuses to start when the baseline row is missing instead of falling back to the budget default, as a test that deletes and edits the row asserts. Check: `uv run pytest -q tests/hardening/test_baseline_chain.py`
+- [ ] HARD-09: An unreadable kill-latch file makes check() return a latch-unreadable verdict without raising, and exit and flatten sells remain permitted, as a test that makes the file unreadable asserts. Check: `uv run pytest -q tests/hardening/test_killswitch_unreadable.py`
+- [ ] HARD-10: The live-promotion gate fails on any unparsable ledger row instead of skipping it and computes profit factor and drawdown with integer or Decimal ratios, as a test with a corrupt row asserts. Check: `uv run pytest -q tests/hardening/test_live_gate_rows.py`
+- [ ] HARD-11: The float sizing API in risk/sizing.py is deleted and halt and export ratios use Decimal, as an AST scan of those modules asserts. Check: `uv run pytest -q tests/hardening/test_no_float_ratios.py`
+- [ ] HARD-12: evaluate_halts raises InconsistentLedgerError on an inconsistent ledger instead of returning None, as a test of the replay-only caller asserts. Check: `uv run pytest -q tests/hardening/test_evaluate_halts_inconsistent.py`
+- [ ] HARD-19: Live confirm stores the hash of the effective wallet allowlist and refuses to confirm when that allowlist is empty, as a test asserts the refusal's exit code. Check: `uv run pytest -q tests/hardening/test_live_confirm_binding.py`
+- [ ] HARD-24: G-3 accepts only paths inside the repository or an allowlisted directory, runs its child process with a minimal environment and returns masked output only, as a test asserts that an outside path is refused and no gateway secret reaches the child. Check: `uv run pytest -q tests/hardening/test_receipt_check_containment.py`
+- [ ] HARD-25: Startup refuses an RPC URL that carries a provider key in userinfo or path, httpx logging is capped at WARNING, and URL path segments that look like keys are redacted in logs, as a test asserts each. Check: `uv run pytest -q tests/hardening/test_rpc_key_redaction.py`
+- [ ] HARD-26: Credentialed endpoints and webhook URLs must match a configured host allowlist and credentialed httpx clients are built with trust_env=False, as a test asserts that a non-allowlisted host is refused. Check: `uv run pytest -q tests/hardening/test_credentialed_endpoints.py`
+- [ ] HARD-30: The G-2 bypass pattern refuses a receipt whose command contains --collect-only, as a test with that receipt asserts a non-zero exit. Check: `uv run pytest -q ci/tests/test_check_receipt_bypass.py`
+- [ ] HARD-31: G-2 re-executes each receipt command in CI and fails when the re-run exit code differs from the recorded one, as a fixture test asserts a non-zero exit on mismatch. Check: `uv run pytest -q ci/tests/test_check_receipt_reexec.py`
+- [ ] HARD-32: G-3 skips only the top-level paths in an anchored allowlist and no inline pragma skips a line, as a test asserts that a secret under build/ and a secret on a pragma line are both reported. Check: `uv run pytest -q ci/tests/test_check_secrets_skips.py`
+- [ ] HARD-33: gates.yml fails on git errors in the receipt-lookup and change-detection steps with no or-true masking, and the G-2 bypass scan covers gates.yml, as a test asserts both. Check: `uv run pytest -q ci/tests/test_gates_yml_no_mask.py`
+
+- Dedupe HARD-13: finding HR-01 is kept in HOST-04 (health and runtime scope).
+- Dedupe HARD-14: finding HR-03 is kept in HOST-06 (shutdown and runtime scope).
+- Dedupe HARD-15: finding HR-04 is kept in HOST-07 (ledger state scope; HOST-07 also verifies before replacing).
+- Dedupe HARD-16: finding HR-05 is kept in HOST-03 and HOST-05 (probes and routes).
+- Dedupe HARD-17: finding HR-06 is kept in HOST-01 and HOST-02 (state directory and volume).
+- Dedupe HARD-18: finding ONB-01 is kept in ONB-06 and ONB-07 (wallet input scope).
+- Dedupe HARD-20: finding ONB-03 is kept in ONB-09 (x.ai key is an input); the draft's .env.example comment fix has no line in this plan.
+- Dedupe HARD-21: finding ONB-04 is kept in ONB-02 (doctor required inputs and non-zero exit).
+- Dedupe HARD-22: finding ONB-05 is kept in ONB-08 (RPC endpoint choice).
+- Dedupe HARD-23: finding ONB-06 is kept in ONB-01, ONB-03 and ONB-04; ONB-02 already gives doctor --json, so the machine-readable half is not repeated.
+- Dedupe HARD-27: finding SEC-06 is kept in HOST-09 and HOST-10 (gateway exposure).
+- Dedupe HARD-28: finding SEC-07 is kept in HOST-13 and HOST-14 (container and secrets).
+- Dedupe HARD-29: finding SEC-08 is kept in HOST-05, HOST-11 and HOST-12 (health server).
+- Constraint on HARD-19: the HMAC key minimum-length clause is removed because the desk holds no HMAC value (ONB-10, LIV-11); the 32-byte floor belongs to the signer under LIV-04 and LIV-08 (Phase 18) and is not added here.
+- Finding ONB-02 (SEC-04) stays in HARD-19 for the allowlist hash and the empty-allowlist refusal; ONB-10 covers the HMAC presence check and claims no finding ID.
+
 ### Process (PRC)
 
 - [ ] PRC-03: smoke-10m events.hash stays b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d at every phase close, and the trading smoke ledger hash is pinned and checked in a clean cwd; each phase records a CHANGELOG before and after pair for both (equal pairs are recorded, not skipped; the trading-smoke pair moves once, in Phase 15, with the paper fee model v2 default flip). The ids EVT-11, STR-02 and RSK-07 of the three designs state this same invariant and are enforced here. Check: `uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py && uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d`
@@ -148,6 +209,27 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] OBS-05: A milestone audit traces every v4 requirement to evidence and records that live is still refused. Check: `test -f .planning/milestones/v4-MILESTONE-AUDIT.md && { uv run pumpgrok run --mode live --once; test $? -eq 3; }`
 - [ ] OBS-06: The nightly event-mode soak passes with zero idle Grok calls and its golden hash. Check: `PUMPGROK_REQUIRE_SOAK=1 uv run pytest -q -m slow tests/soak/test_soak_event_mode.py`
 - [ ] OBS-07: Daily and weekly reports carry a per-strategy section whose parts sum to the desk view. Check: `uv run pytest -q tests/reporting/test_strategy_section.py`
+
+### Hosted runtime (HOST)
+
+- [ ] HOST-01: PUMPGROK_STATE_DIR must be an absolute path; a relative or empty value is refused at startup, and the ledger, desk, replay and reputation paths all resolve under that one directory with none left cwd-relative. Check: `uv run pytest -q tests/hosted/test_state_dir.py`
+- [ ] HOST-02: The compose desk service mounts one named volume at the state directory and no host bind mount for state. Precondition: the named volume is not enabled until the F1 resume defect is closed (HARD-07 passes). Check: `uv run pytest -q tests/hosted/test_compose_volume.py`
+- [ ] HOST-03: /livez returns 200 while the process loop runs, whatever the halted or kill-switch state, and /readyz returns 503 when the last per-tick ledger verification failed or the tick is stale; a halted desk is 200 on both, with the halt shown in the body. Check: `uv run pytest -q tests/hosted/test_health_probes.py`
+- [ ] HOST-04: The ledger_status in every health body comes from that tick's ledger verification and is never a constant, so a corrupted ledger reports a non-CONSISTENT status on the next tick. Check: `uv run pytest -q tests/hosted/test_health_ledger_status.py`
+- [ ] HOST-05: The health server serves only /livez, /readyz and /metrics, /healthz is removed with every caller migrated, and any other path returns 404 with an empty body. Check: `uv run pytest -q tests/hosted/test_health_routes.py`
+- [ ] HOST-06: A final snapshot, export or health write that fails during shutdown makes the process exit non-zero and records the failure in the final health output. Check: `uv run pytest -q tests/hosted/test_shutdown_exit.py`
+- [ ] HOST-07: `pumpgrok ledger backup` writes a ledger copy, and `pumpgrok ledger restore` verifies the candidate's hash chain before atomically replacing the active file; a failed verification leaves the active file byte-identical and exits non-zero. Check: `uv run pytest -q tests/hosted/test_ledger_backup_restore.py`
+- [ ] HOST-08: PUMPGROK_LOG_LEVEL accepts only DEBUG, INFO, WARNING or ERROR, any other value is refused at startup, and log output is JSON in every profile. Check: `uv run pytest -q tests/hosted/test_log_config.py`
+- [ ] HOST-09: The gateway refuses a non-loopback bind unless a TLS or reverse-proxy flag is set, and the refusal exits non-zero before the gateway serves any request. Check: `uv run pytest -q tests/hosted/test_gateway_bind.py`
+- [ ] HOST-10: The gateway refuses a bearer token shorter than 32 bytes and refuses startup when two configured tokens are equal. Check: `uv run pytest -q tests/hosted/test_gateway_tokens.py`
+- [ ] HOST-11: The health server binds 127.0.0.1 by default in the container, and /metrics returns 401 without a configured token whenever the server binds beyond loopback. Check: `uv run pytest -q tests/hosted/test_health_bind.py`
+- [ ] HOST-12: The health server closes any connection that has not sent a complete request within the configured read timeout (default 5 s). Check: `uv run pytest -q tests/hosted/test_health_read_timeout.py`
+- [ ] HOST-13: Hosted secrets reach the desk container only as Docker secrets mounted under /run/secrets; the compose file has no env_file entry and no secret-valued environment entry. Check: `uv run pytest -q ci/tests/test_compose_docker_secrets.py`
+- [ ] HOST-14: Every FROM image in the Dockerfile and every image in docker-compose.yml is pinned by sha256 digest. Check: `uv run pytest -q ci/tests/test_image_digest_pins.py`
+
+- Dedupe: findings HR-01, HR-03 to HR-06, SEC-06, SEC-07 and SEC-08 are held here; their HARD duplicates (HARD-13 to HARD-17, HARD-27 to HARD-29) are removed, see Hardening (HARD).
+- Dedupe: HOST-15 (replay-demo label, finding HR-02) is not added because HR-02 is covered elsewhere (REC-03).
+- Scope: this family does not build, push or deploy an image without owner approval.
 
 ### Paper fee model (FEE)
 
@@ -217,6 +299,16 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | GRK-09 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | GRK-10 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | GRK-11 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-01 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-02 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-03 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-04 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-05 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-06 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-07 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-08 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-09 | Phase 14 Event-driven desk and Grok gateway | Pending |
+| ONB-10 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | MKT-01 | Phase 13 Curve truth, live market data and recorder | Pending |
 | MKT-02 | Phase 13 Curve truth, live market data and recorder | Pending |
 | MKT-03 | Phase 13 Curve truth, live market data and recorder | Pending |
@@ -283,6 +375,26 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | QLT-08 | Phase 11 Engineering foundation and quality | Pending |
 | QLT-09 | Phase 11 Engineering foundation and quality | Pending |
 | QLT-10 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-01 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-02 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-03 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-04 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-05 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-06 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-07 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-08 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-09 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-10 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-11 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-12 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-19 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-24 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-25 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-26 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-30 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-31 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-32 | Phase 11 Engineering foundation and quality | Pending |
+| HARD-33 | Phase 11 Engineering foundation and quality | Pending |
 | PRC-03 | Phase 11 Engineering foundation and quality | Pending |
 | PRC-04 | Phase 11 Engineering foundation and quality | Pending |
 | PRC-05 | Phase 11 Engineering foundation and quality | Pending |
@@ -299,22 +411,36 @@ Which phases cover which requirements. Populated from `plans.json`; each require
 | OBS-05 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | OBS-06 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | OBS-07 | Phase 16 Backtest v2 and autonomous evaluation | Pending |
+| HOST-01 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-02 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-03 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-04 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-05 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-06 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-07 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-08 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-09 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-10 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-11 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-12 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-13 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
+| HOST-14 | Phase 19 Observability, docs, hardening and milestone audit | Pending |
 | FEE-01 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-01 | Phase 14 Event-driven desk and Grok gateway | Pending |
 | RT-02 | Phase 15 Strategy framework and multi-strategy paper | Pending |
 | RT-03 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RT-04 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 
-**Coverage: v4 requirements: 111 total, 111 mapped, 0 unmapped**
+**Coverage: v4 requirements: 155 total, 155 mapped, 0 unmapped**
 
 | Phase | Requirements |
 |-------|--------------|
-| 11 Engineering foundation and quality | 15 |
+| 11 Engineering foundation and quality | 35 |
 | 12 Event runtime core | 10 |
 | 13 Curve truth, live market data and recorder | 11 |
-| 14 Event-driven desk and Grok gateway | 16 |
+| 14 Event-driven desk and Grok gateway | 26 |
 | 15 Strategy framework and multi-strategy paper | 8 |
 | 16 Backtest v2 and autonomous evaluation | 8 |
 | 17 Risk hardening and promotion lifecycle | 14 |
 | 18 Dormant live path, amendment-gated | 21 |
-| 19 Observability, docs, hardening and milestone audit | 8 |
+| 19 Observability, docs, hardening and milestone audit | 22 |
