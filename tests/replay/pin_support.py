@@ -95,10 +95,9 @@ def ledger_rows(ledger: Path) -> list[dict[str, Any]]:
     ]
 
 
-def load_pin(name: str) -> dict[str, Any]:
-    """The recorded pin stored as tests/fixtures/replay/pins/<name>.json."""
-    loaded: dict[str, Any] = json.loads((PINS_DIR / f"{name}.json").read_text(encoding="utf-8"))
-    return loaded
+def load_pin(name: str) -> Any:
+    """The recorded pin tests/fixtures/replay/pins/<name>.json: an object or a row list."""
+    return json.loads((PINS_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
 def measure_pins() -> dict[str, Any]:
