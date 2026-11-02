@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from pumpgrok.core.errors import DataStale
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+
+# Payload shapes the mint parser cannot walk; each becomes a failed check.
+_MALFORMED = (AttributeError, KeyError, TypeError, ValueError)
 
 
 async def check_mint(mint: str, rpc: RpcClient) -> dict[str, Any]:
@@ -45,7 +49,7 @@ async def check_mint(mint: str, rpc: RpcClient) -> dict[str, Any]:
             "hasMintAuthority": mint_authority is not None,
             "hasFreezeAuthority": freeze_authority is not None,
         }
-    except RpcError as exc:
+    except (RpcError, DataStale) as exc:
         return {"ok": False, "error": str(exc), "mint": mint}
-    except Exception:
+    except _MALFORMED:
         return {"ok": False, "error": "authority check failed", "mint": mint}

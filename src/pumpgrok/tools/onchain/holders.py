@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from pumpgrok.core.errors import DataStale
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+
+# Payload shapes the holder parser cannot walk; each becomes a failed check.
+_MALFORMED = (AttributeError, KeyError, TypeError, ValueError)
 
 
 async def holder_snapshot(mint: str, rpc: RpcClient, limit: int = 20) -> dict[str, Any]:
@@ -53,7 +57,7 @@ async def holder_snapshot(mint: str, rpc: RpcClient, limit: int = 20) -> dict[st
                 "Cross-check with Solscan / gmgn for production decisions."
             ),
         }
-    except RpcError as exc:
+    except (RpcError, DataStale) as exc:
         return {"ok": False, "error": str(exc), "mint": mint}
-    except Exception:
+    except _MALFORMED:
         return {"ok": False, "error": "holder check failed", "mint": mint}
