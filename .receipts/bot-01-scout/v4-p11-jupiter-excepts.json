@@ -1,0 +1,138 @@
+{
+  "task_id": "v4-p11-jupiter-excepts",
+  "bot": "bot-01-scout",
+  "branch": "bot-01-scout/v4-p11-jupiter-excepts",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-08: narrow the jupiter plain-swallow except to typed errors (QLT-06). PR-04, depends on 11-01.",
+  "purpose": "Seat receipt for PR-04 plan 11-08. Records the task commit on the branch above base 6df40f4 and the verification commands run at the branch head before this receipt commit.",
+  "status": "awaiting agent review (bot-02-risk reviews the PR-04 diff) and the human batch approval at checkpoint CP12. approved_by is intentionally absent; the executor never writes it.",
+  "commits": [
+    {
+      "sha": "ef7922c",
+      "task": "Narrow jupiter quote except (task 1, red and green)",
+      "files": [
+        "src/pumpgrok/tools/market/jupiter.py",
+        "tests/tools/market/test_jupiter_errors.py"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "git merge-base --is-ancestor 6df40f4 HEAD",
+      "exit_code": 0,
+      "output_tail": "(no output; exit 0 means 6df40f4 is an ancestor of HEAD)"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py",
+      "exit_code": 1,
+      "output_tail": "F......F; 2 failed (HTTPStatusError not logged; RuntimeError not raised), 6 passed. Red phase before the src change."
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market tests/characterization/test_jupiter_quote.py",
+      "exit_code": 0,
+      "output_tail": "Pytest: No tests collected (wrapper summary; exit 0). Not trusted alone; cross-checked below."
+    },
+    {
+      "cmd": "uv run python -m pytest -q tests/tools/market tests/characterization/test_jupiter_quote.py --junitxml=<tmp>",
+      "exit_code": 0,
+      "output_tail": ".........................  junit: tests=25 failures=0 errors=0 skipped=0"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "ruff check: All checks passed!; ruff format --check: 827 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "mypy src/: Success: no issues found in 209 source files"
+    },
+    {
+      "cmd": "LC_ALL=C grep -nP '[^\\x00-\\x7F]' src/pumpgrok/tools/market/jupiter.py tests/tools/market/test_jupiter_errors.py",
+      "exit_code": 1,
+      "output_tail": "(no output; 1 means no non-ASCII bytes)"
+    },
+    {
+      "cmd": "grep -n -i todo src/pumpgrok/tools/market/jupiter.py tests/tools/market/test_jupiter_errors.py",
+      "exit_code": 1,
+      "output_tail": "(no output; 1 means no TODO text)"
+    },
+    {
+      "cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+      "exit_code": 0,
+      "output_tail": "....  (4 pass)"
+    },
+    {
+      "cmd": "uv run python -m pytest -q tests/replay/test_trading_smoke_pin.py --junitxml=<tmp>",
+      "exit_code": 0,
+      "output_tail": "junit: tests=4 failures=0 errors=0 skipped=0"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+      "exit_code": 0,
+      "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; verify=CONSISTENT seq=2 events=41"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3",
+      "exit_code": 0,
+      "output_tail": "LIVE GATE: refusing to start in mode=live. 8 of 9 preconditions unmet. No transaction was attempted. (run exit 3)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 969 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "resolve_owner(path, load_manifest(DEFAULT_MANIFEST)) for the 3 touched paths",
+      "exit_code": 0,
+      "output_tail": "bot-01-scout, contract_surface=False for jupiter.py, test_jupiter_errors.py and the receipt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Base 6df40f4 is an ancestor of the branch head; no rebase or ff needed.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The new error test was red before the src change (2 failing) and is green after (8 pass).",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "tests/tools/market and tests/characterization/test_jupiter_quote.py pass: 25 tests, 0 failures, 0 errors.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "make lint and make typecheck exit 0.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Touched files contain only ASCII and no TODO text.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Trading smoke pin passes: 4 tests, 0 failures.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "smoke-10m events.hash is unchanged at b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "Live mode is still refused with exit 3 and no transaction attempted.",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The ownership manifest validates and every touched path resolves to bot-01-scout.",
+      "evidence_command_index": 12
+    }
+  ],
+  "unverified": [
+    "make test, the full pytest -q run, the soak suite, run_all.py and the G-1..G-7 gate scripts were not run by this seat, per the protocol. The orchestrator runs them.",
+    "ci/gates/check_receipt.py was not run against this receipt; the orchestrator runs the gate.",
+    "The 11-05 no-plain-swallow guard (tests/quality/test_no_plain_swallow.py) does not exist at this base, so the key_link to it is not verified here.",
+    "The literal command 'uv run pytest -q' printed 'Pytest: No tests collected' with exit 0 in this sandbox wrapper. Collection was cross-checked with 'uv run python -m pytest' and JUnit XML (tests=25 and tests=4, 0 failures); the literal line's text was not trusted.",
+    "Task 2 of the plan made no file change, so it has no commit; its verification commands are recorded above.",
+    "A live --once run created the gitignored worktree-local var/ledger.sqlite (run after the pin and verify commands). It is not tracked and does not affect the pins."
+  ],
+  "rollback_plan": "Revert commit ef7922c through a new pull request (git revert on the branch before merge, or git revert -m 1 <merge-sha> after merge). The revert restores the bare except Exception in jupiter.py and removes tests/tools/market/test_jupiter_errors.py. Reverting the receipt commit removes the receipt file. No data migration: no ledger, var or live state changes; the smoke-10m and trading smoke hashes are unchanged by this PR."
+}
