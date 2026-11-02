@@ -53,5 +53,5 @@
     "The 11-05 no-plain-swallow guard was not run because it is not on this base.",
     "make test, the full pytest -q run, the soak suite and run_all.py were not run, per the seat rules. The orchestrator runs gates."
   ],
-  "rollback_plan": "Revert commits 0e4bade and 3ee541c on this branch (git revert, no force). authorities.py and holders.py return to their broad except Exception handlers; pump_events.py and its test are removed. No schema, ledger, config or live state is touched, so no data rollback is needed."
+  "rollback_plan": "Before the merge, revert commits 0e4bade and 3ee541c on this branch (git revert, no force) or close the draft pull request. After the merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). authorities.py and holders.py return to their broad except Exception handlers; pump_events.py and its test are removed. No schema, ledger, config or live state is touched, so no data rollback is needed. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
 }
