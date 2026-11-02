@@ -47,7 +47,11 @@ async def get_quote(
     api_key: SecretStr | None = None,
     timeout_seconds: float = 12.0,
 ) -> dict[str, Any]:
-    """Fetch a quote-only order; ``{"ok": False}`` with no raise on failure."""
+    """Fetch a quote-only order.
+
+    Transport, HTTP-status and decode failures return ``{"ok": False}`` and log
+    the error class. Programming errors propagate; they are never swallowed.
+    """
     key = api_key if api_key is not None else SecretStr("")
     keyless = not key.get_secret_value()
     logger.info("jupiter quote keyless=%s", keyless)
@@ -97,5 +101,6 @@ async def get_quote(
             "requestId": data.get("requestId"),
             "raw": data,
         }
-    except Exception:
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("jupiter quote failed error=%s", type(exc).__name__)
         return {"ok": False, "error": "jupiter quote failed"}
