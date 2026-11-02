@@ -1,0 +1,69 @@
+{
+  "task_id": "pr-27-gate-waiver",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/gate-waiver-pr-27",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner chose the owner-waiver ship path for PR 27 (bot-00-chief v3 closeout, 2026-11-01) after G-1 reported ten foreign files on that branch. This change only adds 27 to the G-1 waiver list and allowlists the two PR 27 receipts in .gitignore.",
+  "commands": [
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --bot bot-02-risk --base origin/main --files .github/workflows/gates.yml .gitignore .receipts/bot-02-risk/pr-27-gate-waiver.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-02-risk: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 10 bots, 192 rules; 938 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "uv run python -c \"import yaml; yaml.safe_load(open('.github/workflows/gates.yml'))\"",
+      "exit_code": 0,
+      "output_tail": "gates.yml parses"
+    },
+    {
+      "cmd": "git diff -U0 origin/main -- .github/workflows/gates.yml .gitignore | rg '^[+-][^+-]'",
+      "exit_code": 0,
+      "output_tail": "two if: lines changed from [16,17,18,19,20,22] to [16,17,18,19,20,22,27]; two .receipts allowlist lines added"
+    },
+    {
+      "cmd": "uv run python -m pytest ci/tests/test_security_workflows.py -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "51 passed in 0.73s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "PR 27 is added to the G-1 waiver list in both G-1 if: conditions of .github/workflows/gates.yml; no other waiver entry changed.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Both PR 27 receipt paths are allowlisted in .gitignore (.receipts/bot-00-chief/v3-closeout.json and .receipts/bot-02-risk/pr-27-gate-waiver.json), and the receipt allowlist test passes.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The change touches only bot-02-risk owned paths: G-1 for bot-02-risk passes on the three files.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "ownership.yaml still validates: 10 bots, 938 tracked paths, one declared owner each.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The workflow file still parses as YAML.",
+      "evidence_command_index": 2
+    }
+  ],
+  "unverified": [
+    "PR 27's own G-1 skip is verified only by PR 27's CI run after this change is on main; not run locally.",
+    "PR 27's G-2 receipt (bot-00-chief) is not part of this change; it is verified in PR 27.",
+    "The live GitHub Actions run for this PR's gates.yml; checked by this PR's own CI run, not locally.",
+    "Greptile review of this PR was not reviewed by this session."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    ".gitignore",
+    ".receipts/bot-02-risk/pr-27-gate-waiver.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this pull request's merge commit. The G-1 waiver list returns to [16,17,18,19,20,22] and the two receipt allowlist lines are removed. PR 27 would then fail G-1 until its paths are re-homed or it is waived again."
+}

@@ -45,6 +45,7 @@ from prompt_sources import (  # noqa: E402
     load_core,
     load_roster,
     load_seats,
+    desk_cycle_xml,
 )
 
 
@@ -75,7 +76,9 @@ def assemble(seat: SeatSource, core: dict) -> str:
             f" side_effect={quoteattr(tool['side_effect'])}"
             f" gates={quoteattr(','.join(tool['gates']))}/>"
         )
-    lines += ["  </roster>", "</prompt>"]
+    lines += ["  </roster>"]
+    lines.extend(desk_cycle_xml().splitlines())
+    lines += ["</prompt>"]
     text = "\n".join(lines) + "\n"
     match = PLACEHOLDER_RE.search(text)
     if match:

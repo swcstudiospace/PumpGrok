@@ -109,14 +109,20 @@ def _backtest_params(raw: str | None) -> tuple[bytes, dict[str, Any]]:
     return (data, parsed)
 
 
-def _read_window_ledger(ledger_path: Path) -> tuple[list[dict[str, Any]], str | None]:
+def _read_window_ledger(
+    ledger_path: Path, *, verify: bool = False
+) -> tuple[list[dict[str, Any]], str | None]:
     """Every row plus the initial-equity meta of one ledger, read-only.
 
     LedgerStore.read documents itself read-only: no locks, no chain
-    mutation. This helper owns open and close around the read.
+    mutation. This helper owns open and close around the read. With
+    ``verify`` the hash chain is recomputed before any row is read; a
+    mismatch raises LedgerInconsistent, which the CLI maps to its ledger exit.
     """
     store = LedgerStore(ledger_path)
     try:
+        if verify:
+            store.verify()
         rows = store.read(limit=None)
         meta = store.get_meta("initial_equity_lamports")
     finally:
@@ -255,6 +261,72 @@ def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tu
     if pending:
         curve.append(_equity_lamports(state))
     return tuple(curve)
+
+
+_SETTLEMENT_ROWS = frozenset({"PositionOpened", "PositionClosed"})
+
+
+def _equity_path(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
+    """Equity before the first window row, then at each settled point, in ledger order.
+
+    A settlement is a FillRecorded row and the PositionOpened or PositionClosed row
+    appended with it. The fill debits or credits cash before its position row lands,
+    so the state between the two is not a settled point and is never recorded.
+    Every other row can move equity, including a mark on a position open at the
+    window boundary that never produces a fill, so each of those rows is recorded.
+    """
+    state = genesis
+    path = [_equity_lamports(state)]
+    unsettled = False
+    for row in rows:
+        kind = row.get("type")
+        if unsettled and kind not in _SETTLEMENT_ROWS:
+            # A fill that no position row followed is settled as it stands.
+            path.append(_equity_lamports(state))
+        state = reduce(state, row)
+        if kind == "FillRecorded":
+            unsettled = True
+            continue
+        unsettled = False
+        path.append(_equity_lamports(state))
+    if unsettled:
+        path.append(_equity_lamports(state))
+    return tuple(path)
+
+
+def _window_metrics(
+    fills: Sequence[Fill],
+    *,
+    genesis: LedgerState,
+    rows: Sequence[Mapping[str, Any]],
+    elapsed_days: Decimal,
+) -> MetricsReport:
+    """Window metrics whose return and drawdown cover every row, not only fills.
+
+    summarize takes one equity point per fill, so a window with no fills reads as
+    flat and a loss on a position open at the boundary, marked without a fill,
+    never reaches total return or drawdown. Those two figures here come from the
+    full equity path: return from opening to closing equity, drawdown from the
+    running peak over every point. Fill-count statistics stay with summarize.
+    """
+    path = _equity_path(genesis, rows)
+    opening, closing = path[0], path[-1]
+    report = summarize(
+        fills,
+        MetricsContext(
+            initial_equity_lamports=opening,
+            equity_curve_lamports=_window_curve(genesis, rows),
+            elapsed_days=elapsed_days,
+        ),
+    )
+    total_return = Decimal(closing - opening) / Decimal(opening) if opening > 0 else Decimal(0)
+    peak = opening
+    max_drawdown = Decimal(0)
+    for equity in path:
+        peak = max(peak, equity)
+        if peak > 0:
+            max_drawdown = max(max_drawdown, Decimal(peak - equity) / Decimal(peak))
+    return replace(report, total_return=total_return, max_drawdown=max_drawdown)
 
 
 def _paper_window(
@@ -400,14 +472,7 @@ def _evaluate_holdout(
         elapsed_days = (Decimal(str(last_stamp)) - Decimal(str(first_stamp))) / Decimal(86400)
     else:
         elapsed_days = Decimal(0)
-    window_metrics = summarize(
-        fills,
-        MetricsContext(
-            initial_equity_lamports=initial,
-            equity_curve_lamports=_window_curve(genesis, rows),
-            elapsed_days=elapsed_days,
-        ),
-    )
+    window_metrics = _window_metrics(fills, genesis=genesis, rows=rows, elapsed_days=elapsed_days)
     backtest_result = SharedResult.from_fills(
         run_id=run_id,
         dataset=spec.name,
@@ -447,7 +512,8 @@ def _paper_gate(
     """Same-window paper comparison and the D7 promotion gate (PAP-02, G-08).
 
     Without a paper ledger path promotion stays ineligible with reason
-    divergence not compared. With one, the paper rows over the holdout window
+    divergence not compared. With one, the paper ledger's hash chain is verified
+    first (LedgerInconsistent on failure), then the paper rows over the holdout window
     (from the cutoff to the window end) build the paper summary,
     opened at the equity the paper ledger held at the cutoff. SharedResult.compare
     enforces window equality before divergence.check, and a breach prints the
@@ -459,19 +525,14 @@ def _paper_gate(
     paper_file = Path(paper_ledger)
     if not paper_file.is_file():
         raise UsageError(f"bad --paper-ledger {paper_ledger!r}: want a ledger sqlite file")
-    paper_rows, paper_meta = _read_window_ledger(paper_file)
+    paper_rows, paper_meta = _read_window_ledger(paper_file, verify=True)
     paper_initial = int(paper_meta) if paper_meta is not None else initial_fallback
     opening, window_rows = _paper_window(
         paper_rows, cutoff=cutoff, window_end=window_end, initial=paper_initial
     )
     paper_fills, _ = _fills_from_rows(window_rows)
-    paper_metrics = summarize(
-        paper_fills,
-        MetricsContext(
-            initial_equity_lamports=_equity_lamports(opening),
-            equity_curve_lamports=_window_curve(opening, window_rows),
-            elapsed_days=elapsed_days,
-        ),
+    paper_metrics = _window_metrics(
+        paper_fills, genesis=opening, rows=window_rows, elapsed_days=elapsed_days
     )
     paper_result = SharedResult.from_ledger_rows(
         run_id=run_id,

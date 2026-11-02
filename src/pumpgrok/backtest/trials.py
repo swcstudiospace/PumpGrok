@@ -14,6 +14,7 @@ CorruptState instead of being trusted. Pure local file I/O: no wall clock
 
 from __future__ import annotations
 
+import fcntl
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,23 +145,33 @@ class TrialLedger:
         Trial numbers past MAX_ELIGIBLE_TRIALS flag eligible_for_promotion
         false; the trial past MAX_ALLOWED_TRIALS raises TooManyTrialsError
         and is never stored.
+
+        The number is derived from the file as it stands under an exclusive
+        flock held across the read, limit check and append, so instances that
+        share a path never hand out the same number.
         """
         if not params_hash:
             raise ValueError("params_hash must be a non-empty digest")
-        trial_number = len(self._trials) + 1
-        if trial_number > MAX_ALLOWED_TRIALS:
-            raise TooManyTrialsError(
-                f"trial {trial_number} passes the {MAX_ALLOWED_TRIALS} trial limit",
-                run_id=self._run_id,
-                trial_number=trial_number,
-            )
-        verdict = TrialVerdict(
-            trial_number=trial_number,
-            params_hash=params_hash,
-            eligible_for_promotion=trial_number <= MAX_ELIGIBLE_TRIALS,
-        )
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(_record_of(verdict), sort_keys=True) + "\n")
-        self._trials.append(verdict)
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                persisted = _read_ledger(self._path)
+                trial_number = len(persisted) + 1
+                if trial_number > MAX_ALLOWED_TRIALS:
+                    raise TooManyTrialsError(
+                        f"trial {trial_number} passes the {MAX_ALLOWED_TRIALS} trial limit",
+                        run_id=self._run_id,
+                        trial_number=trial_number,
+                    )
+                verdict = TrialVerdict(
+                    trial_number=trial_number,
+                    params_hash=params_hash,
+                    eligible_for_promotion=trial_number <= MAX_ELIGIBLE_TRIALS,
+                )
+                handle.write(json.dumps(_record_of(verdict), sort_keys=True) + "\n")
+                handle.flush()
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        self._trials = [*persisted, verdict]
         return verdict

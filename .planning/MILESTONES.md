@@ -1,5 +1,21 @@
 # Milestones
 
+## v3 PumpGrok Desk v3 (Shipped: 2026-11-01)
+
+**Phases completed:** 7 phases, 36 plans, 10 tasks
+
+**Key accomplishments:**
+- Phase 6 integrity closure: audited invariants closed or proven present (INT-01 to INT-09), integer money with one SOL conversion, trailing-stop peaks restored after a serve restart, a read-only bonding-curve probe script (INT-10) with the layout kept ASSUMED and RPC-derived curve entries failing closed (the live mainnet probe has not run), and PRC-01/02 phase gates.
+- Phase 7 documentation upgrade: CLAUDE.md codebase map, AGENTS.md trimmed to rules and links, README, ARCHITECTURE, SETUP and the replay skill corrected, historical design banners, plugin manifests aligned to the package version.
+- Phase 8 backtest and paper evaluation: run manifests, holdout and trial accounting, `pumpgrok backtest` over one shared result schema, and the D7 divergence gate (2 percentage points or 0.5 Sharpe) that blocks promotion.
+- Phase 9 bounded paper self-upgrade: content-hashed parameter sets within bounds, promotion gate (holdout, divergence, trial limit, autonomy level), exact one-operation rollback verified by tests, escalation for ineligible candidates, BLIND advisory rule and the approved constitution amendment.
+- Phase 10 live readiness, kept disabled: `run --mode live` refuses with exit 3 and lists the nine preconditions, no live adapter registered, and a deferred live-readiness record (docs/LIVE_READINESS.md).
+- Phase 20 close gap LIV-01: the CLI import path no longer loads the live adapter; the import guard follows parent package edges; a fresh-interpreter runtime probe pins it.
+- Phase 21 close gap DOC-03: six plugin manifests at 0.1.0 under a red-first test, ARCHITECTURE diagram and read-only wording corrected to the code, CLAUDE.md line anchors resolved.
+- Known debt at close (see milestones/v3-MILESTONE-AUDIT.md): no operator rollback command (UPG-03 met by its own test, accepted by the owner); SUMMARY requirement metadata missing for 31 requirements; Nyquist validation files absent; design documents outside the DOC-04 set still use the retired wording.
+
+---
+
 ## v2 PumpGrok Desk v2 (Shipped: 2026-10-23)
 
 **Phases completed:** 5 phases, 44 plans, 100 tasks
