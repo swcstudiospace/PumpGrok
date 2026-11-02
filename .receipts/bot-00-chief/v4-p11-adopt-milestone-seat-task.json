@@ -35,7 +35,7 @@
     {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed! / 836 files already formatted"},
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 211 source files"},
     {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "...."},
-    {"cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3", "exit_code": 0, "output_tail": "live refused, checklist unmet; the chain exit 0 means the process exited 3"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "live refused, checklist unmet; no transaction attempted (exit 3)"},
     {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 978 tracked path(s), each with one declared owner"},
     {"cmd": "! grep -nE 'sendTransaction|send_transaction|requestAirdrop|signTransaction' scripts/probe_pump_accounts.py", "exit_code": 0, "output_tail": "(no match)"}
   ],
@@ -46,7 +46,7 @@
     {"claim": "probe is read-only with no send path and never writes VERIFIED; a decoded account is decoded_pending_review, any other outcome ASSUMED with the exact error", "evidence": ["red then green test run of tests/desk/test_probe_pump_accounts.py", "! grep -nE 'sendTransaction|send_transaction|requestAirdrop|signTransaction' scripts/probe_pump_accounts.py"]},
     {"claim": "credential-bearing endpoints and malformed accounts are refused with exit 2 before any RPC call", "evidence": ["probe CLI refusal runs (exit 2)", "test_credential_endpoint_refused_before_any_call (3 cases)"]},
     {"claim": "both replay hashes unchanged: smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and trading smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (seq 11)", "evidence": ["verify --fixture smoke-10m grep exit 0", "uv run pytest -q tests/replay/test_trading_smoke_pin.py exit 0", "no file under tests/fixtures changed (git diff f38fc7e..HEAD names only the eight planned paths)"]},
-    {"claim": "live stays refused: run --mode live --once exits 3", "evidence": ["uv run pumpgrok run --mode live --once; test $? -eq 3 exit 0"]},
+    {"claim": "live stays refused: run --mode live --once exits 3", "evidence": ["uv run pumpgrok run --mode live --once exit 3 (no transaction attempted)"]},
     {"claim": "ownership: every touched path resolves to bot-00-chief or a declared owner; manifest validates", "evidence": ["python3 ci/gates/check_ownership.py --validate-manifest exit 0"]},
     {"claim": "lint and type checks clean across the repository", "evidence": ["make lint exit 0", "make typecheck exit 0"]}
   ],
@@ -65,5 +65,5 @@
     "The probe imports pumpgrok.tools.onchain.curve_layout.decode_curve_account instead of duplicating the layout, so it runs under uv run. It writes only var/probe/pump_accounts.json (gitignored); it does not touch docs/CURVE_LAYOUT_PROBE.md or tests/fixtures.",
     "Observation outside this plan: scripts/probe_curve_layout.py (INT-10) writes layout_status VERIFIED automatically when the owner and discriminator match. That conflicts with MKT-03 (VERIFIED only after a human reviewed_by). It was not changed here because it is outside files_modified; flag for the owner before the live-data phase."
   ],
-  "rollback_plan": "Revert in reverse order through a new pull request: the receipt commit, then 3366065 (probe), then bdcdaac (split), then 544d909 (planning adoption). The change set is planning, supervisor and script files plus tests. No ledger, var, fixture, replay pin, CHANGELOG or ownership file changed, and no approved_by was written. Both replay hashes stay b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54."
+  "rollback_plan": "Revert the merge commit of this PR on main through a new pull request (git revert -m 1 <merge-sha>). Before the merge, revert on this branch with git revert, in reverse order and without force: the receipt commit, then 3366065 (probe), then bdcdaac (split), then 544d909 (planning adoption); or close the draft pull request. The change set is planning, supervisor and script files plus tests. No ledger, var, fixture, replay pin, CHANGELOG or ownership file changed, and no approved_by was written. Both replay hashes stay b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
 }
