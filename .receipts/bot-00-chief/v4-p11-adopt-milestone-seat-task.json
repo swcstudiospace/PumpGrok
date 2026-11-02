@@ -1,0 +1,69 @@
+{
+  "task_id": "v4-p11-adopt-milestone-seat-task",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-p11-adopt-milestone-seat-task",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-09: adopt the v4 milestone planning files, split seat_task into seat_restart and seat_relay behind characterization, and pull forward the read-only probe script (PRC-06, QLT-04, MKT-03; owner decision OD-04). PR-05, base f38fc7e (PR-01 tip).",
+  "purpose": "Seat receipt for plan 11-09. Records the three task commits on the branch above the base f38fc7e and the verification commands run at the branch head before this receipt commit. The receipt commit itself is the last commit on the branch.",
+  "status": "awaiting agent review (chief reviews its own planning and supervisor work; a non-chief reviewer should read the seat_task split) and the human batch approval at checkpoint CP12. approved_by is intentionally absent; the executor never writes it.",
+  "commits": [
+    {"sha": "544d909", "task": "Adopt the v4 milestone planning files", "files": [".planning/ROADMAP.md", ".planning/REQUIREMENTS.md", ".planning/PROJECT.md"]},
+    {"sha": "bdcdaac", "task": "Split seat_task behind characterization: restart and relay modules", "files": ["src/pumpgrok/supervisor/seat_task.py", "src/pumpgrok/supervisor/seat_relay.py", "src/pumpgrok/supervisor/seat_restart.py"]},
+    {"sha": "3366065", "task": "Read-only pump account probe, red test then green script", "files": ["scripts/probe_pump_accounts.py", "tests/desk/test_probe_pump_accounts.py"]}
+  ],
+  "commands": [
+    {"cmd": "uv run pytest -q tests/supervisor/test_seat_task_characterization.py -rs (baseline, before the split)", "exit_code": 0, "output_tail": "..................... [100%]  (21 tests, no SKIPPED lines)"},
+    {"cmd": "uv run ruff format src/pumpgrok/supervisor/seat_task.py src/pumpgrok/supervisor/seat_relay.py src/pumpgrok/supervisor/seat_restart.py; uv run ruff check <same three>", "exit_code": 0, "output_tail": "All checks passed!"},
+    {"cmd": "uv run mypy --strict <the three supervisor files>", "exit_code": 0, "output_tail": "Success: no issues found in 3 source files"},
+    {"cmd": "uv run pytest -o addopts= -q -rs tests/supervisor tests/replay (after the split)", "exit_code": 0, "output_tail": "180 passed in 112.70s; zero SKIPPED lines"},
+    {"cmd": "uv run pytest -o addopts= -q -rs tests/degradation tests/integrity tests/risk/test_equity_source.py tests/harness/test_faults.py (every other directory importing seat_task)", "exit_code": 0, "output_tail": "112 passed in 39.11s"},
+    {"cmd": "uv run pytest -o addopts= -q tests/desk/test_probe_pump_accounts.py (red: script absent)", "exit_code": 2, "output_tail": "ERROR collecting tests/desk/test_probe_pump_accounts.py: FileNotFoundError scripts/probe_pump_accounts.py"},
+    {"cmd": "uv run pytest -o addopts= -q tests/desk/test_probe_pump_accounts.py -rs (green)", "exit_code": 0, "output_tail": "12 passed in 0.30s"},
+    {"cmd": "uv run ruff check scripts/probe_pump_accounts.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "All checks passed!"},
+    {"cmd": "uv run python scripts/probe_pump_accounts.py --help", "exit_code": 0, "output_tail": "usage: probe_pump_accounts.py [-h] [--account ...] [--endpoint ...] [--out ...]"},
+    {"cmd": "uv run python scripts/probe_pump_accounts.py --account <valid pubkey> --endpoint 'https://user:pw@rpc.example.test/' --out <tmp>", "exit_code": 2, "output_tail": "refused: RPC endpoint carries userinfo credentials; URL not echoed; no record written"},
+    {"cmd": "uv run python scripts/probe_pump_accounts.py --account 'bad!'", "exit_code": 2, "output_tail": "refused: --account must be a base58 public key"},
+    {"cmd": "test -f .planning/milestones/v3-ROADMAP.md", "exit_code": 0, "output_tail": "(no output)"},
+    {"cmd": "grep -qE 'Phase 11: Engineering foundation' .planning/ROADMAP.md", "exit_code": 0, "output_tail": "(no output; match)"},
+    {"cmd": "grep -qE 'Coverage: v4 requirements' .planning/REQUIREMENTS.md", "exit_code": 0, "output_tail": "(no output; match)"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "ok: 35 skills, 10 agents, 323 markdown files checked / PumpGrok repository structure looks healthy."},
+    {"cmd": "uv run pytest -q tests/supervisor tests/replay", "exit_code": 0, "output_tail": "all dots, 100%"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "(grep -q matched the events.hash line)"},
+    {"cmd": "uv run mypy src/", "exit_code": 0, "output_tail": "Success: no issues found in 211 source files"},
+    {"cmd": "! uv run pytest tests/supervisor/test_seat_task_characterization.py -rs | grep -q SKIPPED", "exit_code": 0, "output_tail": "(no SKIPPED line; 21 passed)"},
+    {"cmd": "uv run pytest -q tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "12 passed"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed! / 836 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 211 source files"},
+    {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "...."},
+    {"cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3", "exit_code": 0, "output_tail": "live refused, checklist unmet; the chain exit 0 means the process exited 3"},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 978 tracked path(s), each with one declared owner"},
+    {"cmd": "! grep -nE 'sendTransaction|send_transaction|requestAirdrop|signTransaction' scripts/probe_pump_accounts.py", "exit_code": 0, "output_tail": "(no match)"}
+  ],
+  "claims": [
+    {"claim": "v3 roadmap and requirements are archived and v4 roadmap, requirements and project are installed; Phase 11 and Coverage markers present", "evidence": ["test -f .planning/milestones/v3-ROADMAP.md", "grep Phase 11", "grep Coverage: v4"], "note": "the archive files were already the committed v3 archive and are unchanged; see deviations"},
+    {"claim": "seat_task split into seat_restart and seat_relay; every function in the successors is at most 60 lines; SeatTask constructor reduced to 44 lines", "evidence": ["uv run pytest tests/supervisor (180 passed, zero SKIPPED)", "mypy src/", "AST comparison of moved nodes against HEAD of f38fc7e (identical except the _resume_after to resume_after rename and the exit-halt extraction)"]},
+    {"claim": "characterization green with zero skipped tests", "evidence": ["uv run pytest -q tests/supervisor/test_seat_task_characterization.py -rs (21 passed)", "! ... | grep -q SKIPPED exit 0"]},
+    {"claim": "probe is read-only with no send path and never writes VERIFIED; a decoded account is decoded_pending_review, any other outcome ASSUMED with the exact error", "evidence": ["red then green test run of tests/desk/test_probe_pump_accounts.py", "! grep -nE 'sendTransaction|send_transaction|requestAirdrop|signTransaction' scripts/probe_pump_accounts.py"]},
+    {"claim": "credential-bearing endpoints and malformed accounts are refused with exit 2 before any RPC call", "evidence": ["probe CLI refusal runs (exit 2)", "test_credential_endpoint_refused_before_any_call (3 cases)"]},
+    {"claim": "both replay hashes unchanged: smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and trading smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (seq 11)", "evidence": ["verify --fixture smoke-10m grep exit 0", "uv run pytest -q tests/replay/test_trading_smoke_pin.py exit 0", "no file under tests/fixtures changed (git diff f38fc7e..HEAD names only the eight planned paths)"]},
+    {"claim": "live stays refused: run --mode live --once exits 3", "evidence": ["uv run pumpgrok run --mode live --once; test $? -eq 3 exit 0"]},
+    {"claim": "ownership: every touched path resolves to bot-00-chief or a declared owner; manifest validates", "evidence": ["python3 ci/gates/check_ownership.py --validate-manifest exit 0"]},
+    {"claim": "lint and type checks clean across the repository", "evidence": ["make lint exit 0", "make typecheck exit 0"]}
+  ],
+  "unverified": [
+    "No mainnet read was made. Running scripts/probe_pump_accounts.py against mainnet is human-only under OD-04 and was not exercised.",
+    "The probe record format is not reviewed by a human; decoded_pending_review remains the only success status and nothing here sets reviewed_by.",
+    "check_receipt and the full gate runner (run_all.py) were not run; the orchestrator runs gates per the shared facts.",
+    "Full pytest -q, the soak suite and the -q summary line were not used. Test outcomes come from exit codes and captured output files; the -q addopts plus an extra -q suppresses the summary line, so dot lines are the evidence.",
+    "A bare `uv run pytest` invocation rendered 'No tests collected' in the tool output during the session, while the same command redirected to a file printed the dot lines and passed. Captured files and exit codes were used for every reported result."
+  ],
+  "deviations": [
+    "milestones/v3-ROADMAP.md and milestones/v3-REQUIREMENTS.md are listed in files_modified but were not changed. The committed archives on this base already hold the full v3 content (main commit 81353e7 restored the archive wording). The copies on the v4/plan-scratch branch have reworded archive text (for example UPG-02 and Phase 9 lines), so copying them would lose the archived wording. The v4 roadmap replaces the v3 stub at .planning/ROADMAP.md; the stub's shipped list is superseded by the archives and is in git history.",
+    "seat_task keeps re-exporting the names its importers use (via __all__): about twenty test and source modules outside files_modified import from pumpgrok.supervisor.seat_task. Migrating those imports to seat_relay and seat_restart needs edits outside the listed files, so the re-export surface stays. Follow-up: migrate the importers and drop the re-exports.",
+    "The private helper _resume_after is renamed to resume_after because it is now used across modules. No caller outside the split referenced the private name.",
+    "SeatTask's exit-halt restore block moved into a method _restore_latched_exit_halt so the constructor is under 60 lines (QLT-04 applies to seat_task). The block is cut and pasted unchanged; the test-visible methods _append_exit_halt and _initial_equity stay on SeatTask.",
+    "The probe imports pumpgrok.tools.onchain.curve_layout.decode_curve_account instead of duplicating the layout, so it runs under uv run. It writes only var/probe/pump_accounts.json (gitignored); it does not touch docs/CURVE_LAYOUT_PROBE.md or tests/fixtures.",
+    "Observation outside this plan: scripts/probe_curve_layout.py (INT-10) writes layout_status VERIFIED automatically when the owner and discriminator match. That conflicts with MKT-03 (VERIFIED only after a human reviewed_by). It was not changed here because it is outside files_modified; flag for the owner before the live-data phase."
+  ],
+  "rollback_plan": "Revert in reverse order through a new pull request: the receipt commit, then 3366065 (probe), then bdcdaac (split), then 544d909 (planning adoption). The change set is planning, supervisor and script files plus tests. No ledger, var, fixture, replay pin, CHANGELOG or ownership file changed, and no approved_by was written. Both replay hashes stay b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54."
+}
