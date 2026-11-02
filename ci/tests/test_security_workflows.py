@@ -13,6 +13,7 @@ They do not run the scanners (that needs network access and the tools installed)
 from __future__ import annotations
 
 import datetime
+import fnmatch
 import importlib.util
 import subprocess
 import tomllib
@@ -28,6 +29,43 @@ BANDIT_SARIF_CONVERTER = REPO_ROOT / "ci" / "security" / "bandit_json_to_sarif.p
 EXCEPTIONS_GATE = REPO_ROOT / "ci" / "security" / "check_exceptions.py"
 
 WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
+
+# D-06: one glob admits every v4 receipt from every non-chief seat, so no seat edits .gitignore.
+# The v3 receipts tracked before the glob landed are frozen here: this set may shrink, never grow.
+RECEIPT_GLOB = "!.receipts/bot-0*/v4-p*.json"
+LEGACY_TRACKED_RECEIPTS = frozenset(
+    {
+        ".receipts/bot-00-chief/complete-phase-5.json",
+        ".receipts/bot-00-chief/desk-built-ins.json",
+        ".receipts/bot-00-chief/live-mark-at-fill.json",
+        ".receipts/bot-00-chief/phase-6.json",
+        ".receipts/bot-00-chief/phase-9-followups.json",
+        ".receipts/bot-00-chief/provider-record.json",
+        ".receipts/bot-00-chief/restore-hardening.json",
+        ".receipts/bot-00-chief/v3-closeout-followup.json",
+        ".receipts/bot-00-chief/v3-closeout.json",
+        ".receipts/bot-02-risk/00057-omega-ci-runners.json",
+        ".receipts/bot-02-risk/pr-27-followup.json",
+        ".receipts/bot-02-risk/pr-27-gate-waiver.json",
+    }
+)
+
+
+def _receipt_allowlist() -> list[str]:
+    """The `!.receipts/...json` allowlist lines in .gitignore, in file order."""
+    lines = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    return [line for line in lines if line.startswith("!.receipts/") and line.endswith(".json")]
+
+
+def _admits(line: str, path: str) -> bool:
+    """True when one allowlist line admits the path; '*' matches within one segment only."""
+    pattern_parts = line.removeprefix("!").split("/")
+    path_parts = path.split("/")
+    return len(pattern_parts) == len(path_parts) and all(
+        fnmatch.fnmatchcase(segment, pattern)
+        for pattern, segment in zip(pattern_parts, path_parts, strict=True)
+    )
+
 
 # The bypass snippets G-2 rejects in a receipt, checked in the scanner workflow itself: a step
 # that masks its own exit code is the same failure in a different file.
@@ -335,7 +373,17 @@ class TestReceiptDirectories:
         for seat in seats:
             assert (REPO_ROOT / ".receipts" / seat / ".gitkeep").is_file(), seat
 
-    def test_only_gitignore_allowlisted_receipt_json_is_tracked(self):
+    def test_the_allowlist_is_the_single_v4_glob(self):
+        assert _receipt_allowlist() == [RECEIPT_GLOB]
+
+    def test_glob_admits_v4_receipts_one_directory_deep_only(self):
+        v4_receipt = ".receipts/bot-02-risk/v4-p11-receipts-pins-characterization.json"
+        assert _admits(RECEIPT_GLOB, v4_receipt)
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-02-risk/pr-27-followup.json")
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-02-risk/nested/v4-p1.json")
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-10-x/v4-p1.json")
+
+    def test_only_glob_admitted_receipt_json_is_tracked(self):
         tracked = subprocess.run(
             ["git", "ls-files", "--", ".receipts"],
             capture_output=True,
@@ -343,10 +391,9 @@ class TestReceiptDirectories:
             check=True,
             cwd=REPO_ROOT,
         ).stdout.split()
-        allowed = {
-            line.removeprefix("!")
-            for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-            if line.startswith("!.receipts/") and line.endswith(".json")
-        }
+        allowed = _receipt_allowlist()
         tracked_json = {path for path in tracked if path.endswith(".json")}
-        assert tracked_json <= allowed, sorted(tracked_json - allowed)
+        unadmitted = {
+            path for path in tracked_json if not any(_admits(line, path) for line in allowed)
+        }
+        assert unadmitted <= LEGACY_TRACKED_RECEIPTS, sorted(unadmitted - LEGACY_TRACKED_RECEIPTS)
