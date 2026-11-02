@@ -20,10 +20,13 @@ import contextlib
 import hashlib
 import io
 import json
+import logging
+import os
 import re
 import sqlite3
 import sys
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -51,10 +54,38 @@ class VerifyRun:
     ledger: Path
 
 
+@contextlib.contextmanager
+def _pinned_process_state() -> Iterator[None]:
+    """Hold the process state a pin depends on, and restore it on exit.
+
+    Every PUMPGROK_* variable is removed for the run: an exported PUMPGROK_REPLAY__SEED
+    or PUMPGROK_PROFILE would move the pinned row ids and hashes. The root logger's
+    handlers and level are saved and restored, because the verb configures logging
+    in-process and would otherwise leave its handler and INFO level behind.
+    """
+    exported = {name: value for name, value in os.environ.items() if name.startswith("PUMPGROK_")}
+    for name in exported:
+        del os.environ[name]
+    root = logging.getLogger()
+    handlers_before = list(root.handlers)
+    level_before = root.level
+    try:
+        yield
+    finally:
+        for name in [name for name in os.environ if name.startswith("PUMPGROK_")]:
+            del os.environ[name]
+        os.environ.update(exported)
+        for handler in list(root.handlers):
+            if handler not in handlers_before:
+                handler.close()
+        root.handlers[:] = handlers_before
+        root.setLevel(level_before)
+
+
 def verify_fixture(fixture: str) -> VerifyRun:
     """Run `pumpgrok verify --fixture <fixture>` in-process from the current directory."""
     captured = io.StringIO()
-    with contextlib.redirect_stdout(captured):
+    with _pinned_process_state(), contextlib.redirect_stdout(captured):
         code = cli_main(["verify", "--fixture", fixture])
     output = captured.getvalue()
     if code != 0:
