@@ -1,0 +1,56 @@
+{
+  "task_id": "v4-p11-receipts-pins-characterization",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/v4-p11-receipts-pins-characterization",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-01: receipt glob (D-06), PR-number waiver removal (D-07), smoke-10m pin (D-08, Q05) and trading smoke pin with row dump (D-08, D-09, TSMOKE). PR-01, merge order first with 11-02.",
+  "purpose": "Seat receipt for PR-01 plan 11-01. Records the four task commits on the branch above the base v4-base (09f83be), and the verification commands run at the branch head before this receipt commit.",
+  "status": "awaiting agent review (chief reviews risk-authored work) and the human batch approval at checkpoint CP12. approved_by is intentionally absent; the executor never writes it.",
+  "commits": [
+    {"sha": "dd90a1f", "task": "PRC-RECEIPTS", "files": [".gitignore", "ci/tests/test_security_workflows.py"]},
+    {"sha": "74acf4e", "task": "PRC-WAIVER", "files": [".github/workflows/gates.yml", "ci/tests/test_no_pr_waivers.py"]},
+    {"sha": "7376a5b", "task": "Q05", "files": ["tests/replay/pin_support.py", "tests/replay/test_replay_hash_pin.py"]},
+    {"sha": "0278815", "task": "TSMOKE", "files": ["tests/replay/pin_support.py", "tests/replay/test_trading_smoke_pin.py", "tests/fixtures/replay/pins/trading_smoke.json", "tests/fixtures/replay/pins/trading_smoke_rows.json"]}
+  ],
+  "commands": [
+    {"cmd": "git merge-base --is-ancestor v4-base HEAD", "exit_code": 0, "output_tail": "(no output; exit 0 means v4-base 09f83be is an ancestor of the branch head)"},
+    {"cmd": "test -f src/pumpgrok/backtest/equity.py", "exit_code": 0, "output_tail": "(no output)"},
+    {"cmd": "grep -rq 'def is_writer' src/pumpgrok/ledger", "exit_code": 0, "output_tail": "(no output)"},
+    {"cmd": "grep -rq 'verify_stored_content' src/pumpgrok", "exit_code": 0, "output_tail": "(no output)"},
+    {"cmd": "uv run pytest -q ci/tests/test_security_workflows.py", "exit_code": 0, "output_tail": ".....................................................                    [100%]"},
+    {"cmd": "grep -qF '!.receipts/bot-0*/v4-p*.json' .gitignore", "exit_code": 0, "output_tail": "(no output)"},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 967 tracked path(s), each with one declared owner"},
+    {"cmd": "! grep -nE 'pull_request\\.number' .github/workflows/gates.yml", "exit_code": 0, "output_tail": "(no output; the inverted grep succeeds because gates.yml names no pull_request.number)"},
+    {"cmd": "uv run pytest -q ci/tests/test_no_pr_waivers.py ci/tests", "exit_code": 0, "output_tail": ".................................................                        [100%]"},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_runner_determinism.py", "exit_code": 0, "output_tail": ".........                                                                [100%]"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d / verify=CONSISTENT seq=2 events=41"},
+    {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "....                                                                     [100%]"},
+    {"cmd": "python3 -c \"import json;d=json.load(open('tests/fixtures/replay/pins/trading_smoke.json'));assert d['fixture']=='smoke' and len(d['events_hash'])==64 and d['seq']>1\"", "exit_code": 0, "output_tail": "(no output; the assertion holds)"},
+    {"cmd": "uv run python -m tests.replay.pin_support --regen", "exit_code": 0, "output_tail": "prints smoke-10m and trading_smoke pins as JSON; trading_smoke events_hash bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, seq 11, row_count 11; writes nothing"}
+  ],
+  "claims": [
+    {"claim": "The branch starts from main at v4-base (09f83be): v4-base is an ancestor of the branch head.", "evidence_command_index": 0},
+    {"claim": "The preflight symbol src/pumpgrok/backtest/equity.py exists.", "evidence_command_index": 1},
+    {"claim": "The preflight symbol def is_writer exists under src/pumpgrok/ledger.", "evidence_command_index": 2},
+    {"claim": "The preflight symbol verify_stored_content exists under src/pumpgrok.", "evidence_command_index": 3},
+    {"claim": "The tracked-receipt test passes: the allowlist is the single v4 glob, glob-admitted receipts pass, and tracked v3 receipts match the frozen legacy set.", "evidence_command_index": 4},
+    {"claim": "The .gitignore carries the single receipt glob !.receipts/bot-0*/v4-p*.json.", "evidence_command_index": 5},
+    {"claim": "The ownership manifest validates: 10 bots, 192 rules, 967 tracked paths, each with one declared owner.", "evidence_command_index": 6},
+    {"claim": "gates.yml names no pull_request.number, so no PR-number waiver remains in the gate workflow.", "evidence_command_index": 7},
+    {"claim": "The waiver set is pinned to the empty tuple and the full ci/tests directory passes.", "evidence_command_index": 8},
+    {"claim": "The smoke-10m replay hash test passes and the determinism test passes.", "evidence_command_index": 9},
+    {"claim": "pumpgrok verify --fixture smoke-10m prints events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d with seq 2 and 41 events.", "evidence_command_index": 10},
+    {"claim": "The trading smoke pin test passes: hash, chain length and the full row dump match the recorded pins.", "evidence_command_index": 11},
+    {"claim": "pins/trading_smoke.json asserts fixture smoke, a 64-character events_hash and seq greater than 1.", "evidence_command_index": 12},
+    {"claim": "The pin regeneration entry prints measured pins without writing them; the trading smoke hash bdcbe2d3... is unchanged from HEAD 641927c.", "evidence_command_index": 13}
+  ],
+  "unverified": [
+    "make lint, make typecheck, ruff check and ruff format --check were not run by this seat: plan 11-01 changes no file under src/, and the protocol limits this seat to the plan's listed commands. The orchestrator runs them.",
+    "make test, the full pytest -q run, the soak suite, run_all.py and the G-1..G-7 gate scripts were not run by this seat, per the protocol.",
+    "EXT-PRS-16-20-MERGED is evidenced from git history only (merge 1405e61 for PR 16, d3775ca for PR 18, merges 1ecdfa0, a4df834 and 09f83be for PRs 19, 20 and 17). The GitHub merge state and owner approval were not queried.",
+    "Removing the twelve per-file receipt allowlist lines is an interpretation of plan wording: the tracked-receipt test freezes those twelve v3 receipts in LEGACY_TRACKED_RECEIPTS so the set can only shrink. The plan text and CONTEXT D-06 did not spell out the legacy handling.",
+    "With the waivers removed, PRs 16, 17, 18, 19, 20, 22 and 27 are gated on G-1 and G-2 by their paths and receipts. Any of those branches still open will face the gates it was waived from; none was checked here.",
+    "Cross-seat ownership was checked with resolve_owner for every planned path (all bot-02-risk); no foreign path was touched."
+  ],
+  "rollback_plan": "Revert the four task commits in reverse order (0278815 TSMOKE, 7376a5b Q05, 74acf4e PRC-WAIVER, dd90a1f PRC-RECEIPTS), then this receipt commit, through a new pull request (git revert on the branch before merge, or git revert -m 1 <merge-sha> after merge). Reverting PRC-WAIVER restores the PR-number waivers in gates.yml. No data migration: no ledger, var or live state changes; smoke-10m events.hash stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and the trading smoke hash stayed bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, so no CHANGELOG pair is needed for this plan alone. Expected recovery time: about 10 minutes."
+}
