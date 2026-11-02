@@ -116,9 +116,7 @@ def _check_and_apply(
     spec = _backtest_dataset(str(dataset_dir))
     declared = _declared_params(space)
     space_bytes = canonical_json({"candidates": [dict(entry) for entry in space]}).encode("utf-8")
-    entry_hashes = [
-        param_set_hash(canonical_json(dict(entry)).encode("utf-8")) for entry in space
-    ]
+    entry_hashes = [param_set_hash(canonical_json(dict(entry)).encode("utf-8")) for entry in space]
     space_hash = hashlib.sha256(
         canonical_json({"entry_hashes": sorted(entry_hashes)}).encode("utf-8")
     ).hexdigest()
