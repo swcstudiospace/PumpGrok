@@ -274,7 +274,7 @@ prompts:         ## assemble prompts and regenerate agent templates
 	bash scripts/assemble-prompts.sh
 	python3 scripts/generate-templates.py
 
-check: lint typecheck test audit  ## everything ci.yml runs
+check: lint typecheck cov audit  ## everything ci.yml runs (cov enforces the coverage floor)
 	bash scripts/assemble-prompts.sh --check
 	python3 scripts/generate-templates.py --check
 	./scripts/check.sh
