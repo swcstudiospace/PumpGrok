@@ -59,6 +59,20 @@ _OPAQUE_PATH_SEGMENT = re.compile(r"[A-Za-z0-9_-]{20,}")
 _URL_IN_TEXT = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+")
 _ASSIGNMENT_IN_TEXT = re.compile(r"(?i)(api[-_]?key|token|secret|password|key)=\S*")
 
+_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+PUBKEY_BYTES = 32
+
+
+def _base58_decode(text: str) -> bytes:
+    """Decode base58 with the Solana alphabet; each leading '1' is one zero byte."""
+    number = 0
+    for char in text:
+        number = number * 58 + _BASE58_ALPHABET.index(char)
+    body = number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
+    leading = len(text) - len(text.lstrip("1"))
+    return b"\x00" * leading + body
+
+
 AccountFetch = Callable[[str, str, float], Mapping[str, Any] | None]
 
 
@@ -236,9 +250,9 @@ def main(
     parser.add_argument("--endpoint", default=os.environ.get("RPC_ENDPOINT", DEFAULT_ENDPOINT))
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args(argv)
-    if not _PUBKEY.fullmatch(args.account):
+    if not _PUBKEY.fullmatch(args.account) or len(_base58_decode(args.account)) != PUBKEY_BYTES:
         print(
-            "refused: --account must be a base58 public key "
+            "refused: --account must be a base58 public key that decodes to 32 bytes "
             "(set --account or BONDING_CURVE_ACCOUNT)",
             file=sys.stderr,
         )

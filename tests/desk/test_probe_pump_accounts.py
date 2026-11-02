@@ -226,3 +226,29 @@ def test_http_status_is_recorded_without_the_url(monkeypatch: pytest.MonkeyPatch
         == "RPC request failed (HTTP 429); endpoint not echoed; layout stays ASSUMED"
     )
     assert "TOPSECRET" not in json.dumps(record)
+
+
+def test_account_that_is_not_32_bytes_is_refused_before_any_call(tmp_path: Path) -> None:
+    # 33 base58 '1' characters decode to 33 zero bytes: 33 characters pass the shape check.
+    fetch = _Fetch(_account_value())
+    out = tmp_path / "p.json"
+    rc = probe_mod.main(
+        ["--account", "1" * 33, "--endpoint", ENDPOINT, "--out", str(out)],
+        fetch=fetch,
+        clock=FixtureClock(),
+    )
+    assert rc == 2
+    assert fetch.calls == []
+    assert not out.exists()
+
+
+def test_valid_32_byte_public_key_is_accepted(tmp_path: Path) -> None:
+    assert len(probe_mod._base58_decode(ACCOUNT)) == 32
+    out = tmp_path / "p.json"
+    rc = probe_mod.main(
+        ["--account", ACCOUNT, "--endpoint", ENDPOINT, "--out", str(out)],
+        fetch=_Fetch(_account_value()),
+        clock=FixtureClock(),
+    )
+    assert rc == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["status"] == "decoded_pending_review"
