@@ -106,6 +106,39 @@
     "approved_by_changed": false,
     "rollback_plan": "Revert 273fad5 then 4ce382f through a new pull request; both files are test-only. No ledger, var, fixture, pin or CHANGELOG change; smoke-10m and trading smoke hashes are unchanged, so no CHANGELOG pair is needed."
   },
+  "pr34_greptile_fix_run_2": {
+    "plan": "PR 34 Greptile finding 2: the direct cli_main call in the risk characterization file bypassed the cleanup. pinned_process_state is now public and the characterization verify call runs inside it.",
+    "commits": [
+      {"sha": "2ad787c", "task": "make pinned_process_state public in tests/replay/pin_support.py (verify_fixture uses it); wrap the direct cli_main call in tests/characterization/risk/test_engine_evaluate.py with it; import via a sys.path insert to tests/replay (the repo's in-file precedent)", "files": ["tests/replay/pin_support.py", "tests/characterization/risk/test_engine_evaluate.py"]}
+    ],
+    "commands": [
+      {"cmd": "uv run ruff check tests/characterization/risk/test_engine_evaluate.py tests/replay/pin_support.py", "exit_code": 0, "output_tail": "All checks passed!"},
+      {"cmd": "uv run ruff format --check tests/characterization/risk/test_engine_evaluate.py tests/replay/pin_support.py", "exit_code": 0, "output_tail": "2 files already formatted"},
+      {"cmd": "uv run pytest -q tests/characterization/risk/test_engine_evaluate.py (bare run, before the sys.path insert)", "exit_code": 2, "output_tail": "ModuleNotFoundError: No module named 'pin_support' (collection error; the import form is not resolvable from this file alone)"},
+      {"cmd": "uv run pytest -q tests/characterization/risk/test_engine_evaluate.py (tests.replay import form)", "exit_code": 2, "output_tail": "ModuleNotFoundError: No module named 'tests' (the tests.replay form is not resolvable either)"},
+      {"cmd": "uv run pytest -q tests/characterization/risk/test_engine_evaluate.py (after the sys.path insert)", "exit_code": 0, "output_tail": "..............................                                           [100%]"},
+      {"cmd": "uv run pytest -q tests/characterization/risk tests/risk/test_step_rows_stable.py", "exit_code": 0, "output_tail": "....................................                                     [100%]"},
+      {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "(grep -q matched the events.hash line)"},
+      {"cmd": "PUMPGROK_REPLAY__SEED=7 uv run pytest -q /tmp/redcheck/test_old_engine.py -k replay_hash_and_chain (pre-change file from HEAD 5916481)", "exit_code": 1, "output_tail": "2 failed, 28 deselected (red: the exported seed moves the replay hashes in the old file)"},
+      {"cmd": "PUMPGROK_REPLAY__SEED=7 uv run pytest -q tests/characterization/risk/test_engine_evaluate.py -k replay_hash_and_chain (current file)", "exit_code": 0, "output_tail": "(green: the replay hash tests pass with the exported seed)"}
+    ],
+    "claims": [
+      {"claim": "The direct cli_main call in the risk characterization file runs inside pinned_process_state, so the exported PUMPGROK_* variables are cleared and the root logger is restored for it.", "evidence_command_index": 4},
+      {"claim": "The characterization file's assertions are unchanged; only the call is wrapped and the helper import added.", "evidence_command_index": 5},
+      {"claim": "The pre-change file fails both replay-hash tests with PUMPGROK_REPLAY__SEED=7 exported (exit 1).", "evidence_command_index": 7},
+      {"claim": "The current file passes the replay-hash tests with PUMPGROK_REPLAY__SEED=7 exported (exit 0).", "evidence_command_index": 8},
+      {"claim": "The two touched files pass ruff check.", "evidence_command_index": 0},
+      {"claim": "The two touched files pass ruff format --check.", "evidence_command_index": 1},
+      {"claim": "smoke-10m still prints events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 6}
+    ],
+    "unverified": [
+      "The import form the instruction named, tests.replay.pin_support, is not resolvable from a test run (no repo root on sys.path; exit 2). The file uses a sys.path insert to tests/replay instead, following tests/risk/test_engine.py. Reviewer should confirm this deviation.",
+      "Ruff format --check was run on the two files and passed; mypy is not run on tests (excluded by pyproject).",
+      "make test, the full pytest -q suite and the G-gates were not run, per the directive."
+    ],
+    "approved_by_changed": false,
+    "rollback_plan": "Revert 2ad787c through a new pull request; both files are test-only. No ledger, var, fixture, pin or CHANGELOG change; hashes are unchanged, so no CHANGELOG pair is needed."
+  },
   "task_id": "v4-p11-receipts-pins-characterization",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-receipts-pins-characterization",
