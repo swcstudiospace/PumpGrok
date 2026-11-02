@@ -15,6 +15,7 @@ import base64
 import importlib.util
 import json
 import struct
+import urllib.error
 from pathlib import Path
 from typing import Any
 
@@ -171,3 +172,57 @@ def test_invalid_account_is_refused_before_any_call(tmp_path: Path) -> None:
     )
     assert rc == 2
     assert fetch.calls == []
+
+
+class _Response:
+    """Minimal stand-in for the urlopen response context manager."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+
+def test_rpc_error_keeps_code_and_sanitized_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    endpoint = "https://rpc.example.test/v2/SECRETPATHKEY1234567890?api-key=TOPSECRET"
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": "pump-accounts-probe",
+            "error": {
+                "code": -32602,
+                "message": f"Invalid param: could not reach {endpoint} token=TOPSECRET",
+            },
+        }
+    ).encode("utf-8")
+    monkeypatch.setattr(probe_mod.urllib.request, "urlopen", lambda _req, timeout: _Response(body))
+    record = probe_mod.probe_account(ACCOUNT, endpoint, probe_mod.fetch_account, FixtureClock())
+    assert record["status"] == "ASSUMED"
+    assert record["error"].startswith("RPC error -32602: Invalid param")
+    assert record["error"].endswith("; layout stays ASSUMED")
+    text = json.dumps(record)
+    assert "TOPSECRET" not in text
+    assert "SECRETPATHKEY" not in text
+    assert "<url redacted>" in record["error"]
+
+
+def test_http_status_is_recorded_without_the_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    endpoint = "https://rpc.example.test/?api-key=TOPSECRET"
+
+    def _refuse(_req: object, timeout: float) -> _Response:
+        raise urllib.error.HTTPError(endpoint, 429, "Too Many Requests", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(probe_mod.urllib.request, "urlopen", _refuse)
+    record = probe_mod.probe_account(ACCOUNT, endpoint, probe_mod.fetch_account, FixtureClock())
+    assert (
+        record["error"]
+        == "RPC request failed (HTTP 429); endpoint not echoed; layout stays ASSUMED"
+    )
+    assert "TOPSECRET" not in json.dumps(record)

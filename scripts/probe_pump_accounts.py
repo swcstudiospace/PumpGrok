@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -54,6 +55,9 @@ _PUBKEY = re.compile(r"[1-9A-HJ-NP-Za-km-z]{32,44}")
 _CREDENTIAL_NAME = re.compile(r"api[-_]?key|token|secret|password|key", re.IGNORECASE)
 # A long opaque path segment is a provider key in the URL path, e.g. /v2/<key>.
 _OPAQUE_PATH_SEGMENT = re.compile(r"[A-Za-z0-9_-]{20,}")
+# Any URL inside free text (an RPC error may echo the endpoint) and any credential assignment.
+_URL_IN_TEXT = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+")
+_ASSIGNMENT_IN_TEXT = re.compile(r"(?i)(api[-_]?key|token|secret|password|key)=\S*")
 
 AccountFetch = Callable[[str, str, float], Mapping[str, Any] | None]
 
@@ -95,6 +99,30 @@ def redact_endpoint(endpoint: str) -> str:
     return urlunsplit((parts.scheme, host, path, "", ""))
 
 
+class RpcFailure(RuntimeError):
+    """A JSON-RPC error or malformed reply: the code and a sanitized message, never the URL."""
+
+    def __init__(self, code: int | None, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _sanitize_message(message: object, endpoint: str) -> str:
+    """Make an RPC message safe to record: no URL, no credential value, ASCII, short."""
+    text = "" if message is None else str(message)
+    if endpoint:
+        text = text.replace(endpoint, "<url redacted>")
+    text = _URL_IN_TEXT.sub("<url redacted>", text)
+    text = _ASSIGNMENT_IN_TEXT.sub(lambda m: f"{m.group(1)}=REDACTED", text)
+    text = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in text)
+    return " ".join(text.split())[:200]
+
+
+def _rpc_error_text(code: int | None, message: str) -> str:
+    return f"RPC error {code}: {message}" if code is not None else f"RPC error: {message}"
+
+
 def fetch_account(endpoint: str, account: str, timeout: float) -> Mapping[str, Any] | None:
     """One read-only getAccountInfo call; returns the ``value`` member, None when absent."""
     if not endpoint.startswith("https://"):
@@ -112,15 +140,24 @@ def fetch_account(endpoint: str, account: str, timeout: float) -> Mapping[str, A
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
         payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, dict) or "error" in payload:
-        raise RuntimeError("rpc returned an error or a non-object body")
+    if not isinstance(payload, dict):
+        raise RpcFailure(None, "reply is not a JSON object")
+    if "error" in payload:
+        err = payload["error"]
+        if isinstance(err, dict):
+            code = err.get("code")
+            raise RpcFailure(
+                code if isinstance(code, int) else None,
+                _sanitize_message(err.get("message"), endpoint),
+            )
+        raise RpcFailure(None, _sanitize_message(err, endpoint))
     result = payload.get("result")
     if not isinstance(result, dict):
-        raise RuntimeError("rpc result is not an object")
+        raise RpcFailure(None, "result is not a JSON object")
     value = result.get("value")
     if value is None or isinstance(value, dict):
         return value
-    raise RuntimeError("rpc account value is not an object")
+    raise RpcFailure(None, "account value is not a JSON object")
 
 
 def _raw_bytes(value: Mapping[str, Any]) -> bytes | None:
@@ -166,7 +203,15 @@ def probe_account(account: str, endpoint: str, fetch: AccountFetch, clock: Clock
     }
     try:
         value = fetch(endpoint, account, DEFAULT_TIMEOUT_S)
-    except Exception as exc:  # any transport or RPC failure becomes the probe error
+    except RpcFailure as exc:
+        record["error"] = f"{_rpc_error_text(exc.code, exc.message)}; layout stays ASSUMED"
+        return record
+    except urllib.error.HTTPError as exc:
+        record["error"] = (
+            f"RPC request failed (HTTP {exc.code}); endpoint not echoed; layout stays ASSUMED"
+        )
+        return record
+    except Exception as exc:  # any other transport failure: class name only, never its text
         record["error"] = (
             f"RPC request failed ({type(exc).__name__}); endpoint not echoed; layout stays ASSUMED"
         )
