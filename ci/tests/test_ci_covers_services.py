@@ -35,7 +35,18 @@ def _check_job_runs() -> str:
 
 
 def test_ci_check_job_runs_the_service_aware_make_targets():
-    assert "make lint typecheck test audit" in _check_job_runs()
+    assert "make lint typecheck cov audit" in _check_job_runs()
+
+
+def test_ci_check_job_enforces_the_coverage_floor_through_make_cov():
+    cov = _make_dry_run("cov")
+    assert "--cov=pumpgrok" in cov
+    assert "pytest -q -m 'not slow'" in cov
+
+
+def test_make_check_enforces_the_coverage_floor_not_only_the_fast_suite():
+    recipe = _make_dry_run("check")
+    assert "--cov=pumpgrok" in recipe
 
 
 def test_makefile_service_wildcard_is_path_conditional_on_desk_signer():

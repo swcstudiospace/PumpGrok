@@ -265,7 +265,7 @@ class TestGitleaksConfig:
 class TestCiWorkflow:
     def test_runs_the_canonical_make_targets(self):
         runs = " ".join(_run_blocks(_load_yaml("ci.yml")))
-        assert "make lint typecheck test audit" in runs
+        assert "make lint typecheck cov audit" in runs
 
     def test_pins_uv_to_the_lockfile_version(self):
         runs = " ".join(_run_blocks(_load_yaml("ci.yml")))

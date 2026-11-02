@@ -68,7 +68,7 @@ prompts:         ## assemble prompts and regenerate agent templates
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh
 	$(UV) run python scripts/generate-templates.py
 
-check: lint typecheck test audit  ## everything ci.yml runs
+check: lint typecheck cov audit  ## everything ci.yml runs (cov is the fast suite with the floor)
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh --check
 	$(UV) run python scripts/generate-templates.py --check
 	$(UV) run python scripts/generate-event-schemas.py --check
