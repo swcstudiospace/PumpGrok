@@ -71,6 +71,41 @@
     ],
     "rollback_plan": "Revert the receipt commit, then b0fbe49, 0e7b4c1 and da11be2, in that order, through a new pull request: git revert on the branch before merge, or git revert -m 1 <merge-sha> after merge. The change is test-only: no src, ledger, var, fixture, pin or CHANGELOG file changes. Both replay hashes stayed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, so no CHANGELOG pair is needed. Expected recovery time: about 10 minutes."
   },
+  "pr34_greptile_fix_run": {
+    "plan": "PR 34 Greptile fix: the trading smoke pin measures with the recorded replay seed (PUMPGROK_* cleared for the run) and the verify entry leaves the root logger as it found it.",
+    "commits": [
+      {"sha": "4ce382f", "task": "regression test: exported PUMPGROK_REPLAY__SEED=7 must not move the trading smoke pin; root logger handlers and level unchanged", "files": ["tests/replay/test_trading_smoke_pin.py"]},
+      {"sha": "273fad5", "task": "helper fix: _pinned_process_state removes PUMPGROK_* for the run and restores them, saves and restores root logger handlers and level; verify_fixture wraps cli_main with it", "files": ["tests/replay/pin_support.py"]}
+    ],
+    "commands": [
+      {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py::test_exported_replay_seed_does_not_move_the_trading_smoke_pin (before the helper fix)", "exit_code": 1, "output_tail": "AssertionError: assert 'fade7d1e6081...404bf9d2079c9' == 'bdcbe2d321ee...53500f5093e54' (red: seed 7 moves the trading smoke hash)"},
+      {"cmd": "probe: verify_fixture('smoke-10m') then compare root handlers and level (before the helper fix)", "exit_code": 0, "output_tail": "HANDLERS_CHANGED True before 0 after 1; LEVEL_CHANGED True before WARNING after INFO (probe exit 0; the observed state is the leak, red)"},
+      {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py::test_exported_replay_seed_does_not_move_the_trading_smoke_pin (after the helper fix)", "exit_code": 0, "output_tail": ".                                                                        [100%]"},
+      {"cmd": "probe: verify_fixture('smoke-10m') then compare root handlers and level (after the helper fix)", "exit_code": 0, "output_tail": "HANDLERS_CHANGED False before 0 after 0; LEVEL_CHANGED False before WARNING after WARNING"},
+      {"cmd": "uv run ruff check tests/replay/pin_support.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "Ruff: No issues found"},
+      {"cmd": "uv run ruff format --check tests/replay/pin_support.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "2 files already formatted"},
+      {"cmd": "uv run pytest -q tests/replay", "exit_code": 0, "output_tail": "......  [100%] (56.52 s wall)"},
+      {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "(grep -q matched the events.hash line)"}
+    ],
+    "claims": [
+      {"claim": "An exported PUMPGROK_REPLAY__SEED moved the trading smoke events.hash on the unfixed helper; the regression test is red with exit 1.", "evidence_command_index": 0},
+      {"claim": "The unfixed verify entry left one root handler and moved the root level from WARNING to INFO; the probe observed it.", "evidence_command_index": 1},
+      {"claim": "With _pinned_process_state wrapping cli_main, the trading smoke pin test is green with exit 0 and the exported seed no longer moves the recorded hash bdcbe2d3.", "evidence_command_index": 2},
+      {"claim": "With the fix, the verify entry leaves the root logger handlers and level unchanged.", "evidence_command_index": 3},
+      {"claim": "The two touched files pass ruff check.", "evidence_command_index": 4},
+      {"claim": "The two touched files pass ruff format --check.", "evidence_command_index": 5},
+      {"claim": "The replay directory suite passes with exit 0.", "evidence_command_index": 6},
+      {"claim": "smoke-10m still prints events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 7}
+    ],
+    "unverified": [
+      "The regression test commit 4ce382f is red at its own commit: it was committed before the helper fix, so bisecting through it fails by design. The helper commit 273fad5 turns it green.",
+      "The logger assertion inside the regression test was not reached on the red run (the hash assertion fails first); its red state was shown separately by the probe (command 1).",
+      "No file under src/ changed; make lint and make typecheck were not run for this fix.",
+      "make test, the full pytest -q run, soak, run_all.py and the G-gates were not run, per the directive to run only tests/replay."
+    ],
+    "approved_by_changed": false,
+    "rollback_plan": "Revert 273fad5 then 4ce382f through a new pull request; both files are test-only. No ledger, var, fixture, pin or CHANGELOG change; smoke-10m and trading smoke hashes are unchanged, so no CHANGELOG pair is needed."
+  },
   "task_id": "v4-p11-receipts-pins-characterization",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-receipts-pins-characterization",
