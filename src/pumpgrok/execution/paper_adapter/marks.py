@@ -175,7 +175,22 @@ class _MarksMixin:
         held = {m: p for m, p in state.positions.items() if p.token_units > 0 and not p.mtm_frozen}
         if not held:
             return None
-        now = self._clock.now()
+        marks, values = await self._price_held(held, self._clock.now())
+        if not marks:
+            return None
+        return self._append_mark_row(
+            state,
+            held,
+            marks=marks,
+            values=values,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
+
+    async def _price_held(
+        self, held: dict[str, PositionView], now: float
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+        """Read each held mint's curve; a mint with no usable curve keeps its last mark."""
         marks: dict[str, dict[str, Any]] = {}
         values: dict[str, int] = {}
         for mint, pos in held.items():
@@ -196,8 +211,19 @@ class _MarksMixin:
             }
             self._last_reserves[mint] = (curve.s_lamports, curve.t_units)
             self._last_price_ts[mint] = recorded
-        if not marks:
-            return None
+        return marks, values
+
+    def _append_mark_row(
+        self,
+        state: Any,
+        held: dict[str, PositionView],
+        *,
+        marks: dict[str, dict[str, Any]],
+        values: dict[str, int],
+        ledger_source: str,
+        correlation_id: str,
+    ) -> dict[str, Any] | None:
+        """Append one MarkToMarket row unless this exact priced state is already on the ledger."""
         cash = int(state.cash_lamports)
         equity = cash + sum(values.values())
         basis = sum(int(p.cost_basis_lamports) for p in held.values())
@@ -337,75 +363,152 @@ class _MarksMixin:
             return None
         proceeds, venue_fee, network_cost = valued
         realized = proceeds - int(pos.cost_basis_lamports)
+        pnl_pct, hold_seconds = self._close_stats(pos, realized)
+        venue_tx_ref = f"dry_run:{self._ids.ulid()}"
+        order_id = self._ids.ulid()
+        price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
+        rows = [
+            self._force_close_fill_row(
+                mint,
+                order_id=order_id,
+                venue_tx_ref=venue_tx_ref,
+                proceeds=proceeds,
+                venue_fee=venue_fee,
+                network_cost=network_cost,
+                units=pos.token_units,
+                price_exit=price_exit,
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
+            ),
+            self._force_close_position_row(
+                mint,
+                reason=reason,
+                proceeds=proceeds,
+                realized=realized,
+                pnl_pct=pnl_pct,
+                hold_s=hold_seconds,
+                venue_tx_ref=venue_tx_ref,
+                price_exit=price_exit,
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
+            ),
+            self._force_close_escalation_row(
+                mint,
+                reason=reason,
+                proceeds=proceeds,
+                ticket_id=ticket_id,
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
+            ),
+        ]
+
+        stored = self._store.append_batch(rows)
+        self._frozen_marks[mint] = proceeds
+        self._last_price_ts.pop(mint, None)
+        return stored[1]
+
+    def _close_stats(self, pos: PositionView, realized: int) -> tuple[Decimal, int]:
+        """PnL fraction against cost basis, and hold seconds floored at zero."""
         basis = int(pos.cost_basis_lamports)
         pnl_pct = Decimal(realized) / Decimal(basis) if basis else Decimal("0")
         try:
             hold_s = int(self._clock.now() - parse_ts_utc(pos.opened_ts_utc))
         except ValueError:
             hold_s = 0
-        venue_tx_ref = f"dry_run:{self._ids.ulid()}"
-        order_id = self._ids.ulid()
-        price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
-        rows: list[dict[str, Any]] = [
-            {
-                "ts_utc": self._now_ts(),
+        return pnl_pct, max(hold_s, 0)
+
+    def _force_close_fill_row(
+        self,
+        mint: str,
+        *,
+        order_id: str,
+        venue_tx_ref: str,
+        proceeds: int,
+        venue_fee: int,
+        network_cost: int,
+        units: int,
+        price_exit: str,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        return {
+            "ts_utc": self._now_ts(),
+            "source": ledger_source,
+            "correlation_id": correlation_id,
+            "idempotency_key": f"fill|{order_id}",
+            "type": "FillRecorded",
+            "payload": {
                 "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"fill|{order_id}",
-                "type": "FillRecorded",
-                "payload": {
-                    "source": ledger_source,
-                    "order_id": order_id,
-                    "decision_id": "",
-                    "side": "sell",
-                    "mint": mint,
-                    "filled_lamports": proceeds,
-                    "filled_units": pos.token_units,
-                    "filled_fraction": "1",
-                    "price_avg": price_exit,
-                    "venue_fee_lamports": venue_fee,
-                    "network_cost_lamports": network_cost,
-                    "cash_delta_lamports": proceeds,
-                    "venue_tx_ref": venue_tx_ref,
-                    "route": "curve",
-                },
+                "order_id": order_id,
+                "decision_id": "",
+                "side": "sell",
+                "mint": mint,
+                "filled_lamports": proceeds,
+                "filled_units": units,
+                "filled_fraction": "1",
+                "price_avg": price_exit,
+                "venue_fee_lamports": venue_fee,
+                "network_cost_lamports": network_cost,
+                "cash_delta_lamports": proceeds,
+                "venue_tx_ref": venue_tx_ref,
+                "route": "curve",
             },
-            {
-                "ts_utc": self._now_ts(),
+        }
+
+    def _force_close_position_row(
+        self,
+        mint: str,
+        *,
+        reason: str,
+        proceeds: int,
+        realized: int,
+        pnl_pct: Decimal,
+        hold_s: int,
+        venue_tx_ref: str,
+        price_exit: str,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        return {
+            "ts_utc": self._now_ts(),
+            "source": ledger_source,
+            "correlation_id": correlation_id,
+            "idempotency_key": f"close|{reason}|{mint}|{self._now_ts()}",
+            "type": "PositionClosed",
+            "payload": {
                 "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"close|{reason}|{mint}|{self._now_ts()}",
-                "type": "PositionClosed",
-                "payload": {
-                    "source": ledger_source,
-                    "mint": mint,
-                    "price_exit": str(Decimal(proceeds) / Decimal(pos.token_units))
-                    if pos.token_units
-                    else "0",
-                    "proceeds_lamports": proceeds,
-                    "realized_pnl_lamports": realized,
-                    "reason": reason,
-                    "pnl_pct": str(pnl_pct),
-                    "hold_seconds": max(hold_s, 0),
-                    "venue_tx_ref": venue_tx_ref,
-                },
+                "mint": mint,
+                "price_exit": price_exit,
+                "proceeds_lamports": proceeds,
+                "realized_pnl_lamports": realized,
+                "reason": reason,
+                "pnl_pct": str(pnl_pct),
+                "hold_seconds": hold_s,
+                "venue_tx_ref": venue_tx_ref,
             },
-            {
-                "ts_utc": self._now_ts(),
+        }
+
+    def _force_close_escalation_row(
+        self,
+        mint: str,
+        *,
+        reason: str,
+        proceeds: int,
+        ticket_id: str,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        return {
+            "ts_utc": self._now_ts(),
+            "source": ledger_source,
+            "correlation_id": correlation_id,
+            "idempotency_key": f"escalation|{reason}|{mint}|{self._now_ts()}",
+            "type": "Escalation",
+            "payload": {
                 "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"escalation|{reason}|{mint}|{self._now_ts()}",
-                "type": "Escalation",
-                "payload": {
-                    "source": ledger_source,
-                    "kind": reason,
-                    "seat": "bot-06-exit",
-                    "detail": f"{reason} mint={mint} mtm_lamports={proceeds} frozen=true"
-                    + (f" ticket={ticket_id}" if ticket_id else ""),
-                },
+                "kind": reason,
+                "seat": "bot-06-exit",
+                "detail": f"{reason} mint={mint} mtm_lamports={proceeds} frozen=true"
+                + (f" ticket={ticket_id}" if ticket_id else ""),
             },
-        ]
-        stored = self._store.append_batch(rows)
-        self._frozen_marks[mint] = proceeds
-        self._last_price_ts.pop(mint, None)
-        return stored[1]
+        }
