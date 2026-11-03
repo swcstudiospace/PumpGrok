@@ -615,6 +615,54 @@ class TestG5G6RollbackAndDestructive:
         )
         assert hits == []
 
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'grep -rn "send-transaction" docs/',
+            "grep -rn 'wallet-transfer' docs",
+            'grep -rn "sendTransaction" ci/gates',
+            'grep -rn "rm -rf var" docs',
+        ],
+    )
+    def test_read_only_grep_quoting_a_destructive_pattern_is_not_flagged(self, rollback_gate, cmd):
+        assert rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DESTRUCTIVE_PATTERNS) == []
+
+    def test_read_only_grep_quoting_a_deployment_pattern_is_not_flagged(self, rollback_gate):
+        cmd = 'grep -rn "pumpgrok run --mode live" docs/'
+        assert rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DEPLOY_PATTERNS) == []
+
+    @pytest.mark.parametrize(
+        "cmd,category",
+        [
+            ("node scripts/send.js --rpc sendTransaction", "trade"),
+            ("sendTransaction --sign", "trade"),
+            ("send_transaction --sign", "trade"),
+            ("grep -rn x docs; sendTransaction", "trade"),
+            ('grep -rn x docs && node -e "$(sendTransaction)"', "trade"),
+            ("grep -l x docs | xargs rm -rf var/replay", "fs"),
+        ],
+    )
+    def test_real_send_or_delete_is_still_flagged_next_to_a_grep(
+        self, rollback_gate, cmd, category
+    ):
+        hits = rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DESTRUCTIVE_PATTERNS)
+        assert hits and hits[0][2] == category
+
+    def test_deployment_after_a_grep_is_still_flagged(self, rollback_gate):
+        cmd = "grep -rn x docs; uv run pumpgrok run --mode live --once"
+        assert rollback_gate.find_matches([{"cmd": cmd}], rollback_gate.DEPLOY_PATTERNS)
+
+    def test_grep_quoting_a_trade_pattern_passes_the_gate(self, rollback_gate, tmp_path):
+        receipt = {"commands": [{"cmd": 'grep -rn "send-transaction" docs/', "exit_code": 0}]}
+        r = _run_rollback(rollback_gate, tmp_path, receipt)
+        assert r.returncode == 0, r.stderr
+
+    def test_send_transaction_without_approval_fails_the_gate(self, rollback_gate, tmp_path):
+        receipt = {"commands": [{"cmd": "node scripts/send.js sendTransaction", "exit_code": 0}]}
+        r = _run_rollback(rollback_gate, tmp_path, receipt)
+        assert r.returncode == 1
+        assert "NO approvals" in r.stderr
+
     def test_blast_radius_must_name_a_notional(self, rollback_gate):
         assert rollback_gate.TRADE_BLAST_RADIUS_RE.match("max_notional_sol=0.25")
         assert not rollback_gate.TRADE_BLAST_RADIUS_RE.match("unbounded")
