@@ -1,0 +1,31 @@
+{
+  "task_id": "v4-desk-gateway-mypy",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-desk-gateway-mypy",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Desk-gateway mypy: narrow the seat-id type in the POST handler so mypy passes on services/desk-gateway/src. Draft pull request against main; not merged.",
+  "purpose": "services/desk-gateway/src/desk_gateway/server.py:385 passed str | None to _authenticate, so mypy on services/desk-gateway/src failed with one arg-type error. The guard on line 381 now tests short as well as seat_id. seat_id is None whenever short is falsy, so the early 404 branch is taken for exactly the same inputs as before.",
+  "status": "draft pull request; awaiting owner review. No approved_by is recorded here, because the executor never writes it. G-2 strict therefore reports the missing approved_by until the owner adds it.",
+  "commands": [
+    {"cmd": "uv run mypy services/desk-gateway/src", "exit_code": 0, "output_tail": "Success: no issues found in 4 source files"},
+    {"cmd": "cd services/desk-gateway && uv run pytest", "exit_code": 0, "output_tail": "59 passed, 3 warnings in 118.51s"},
+    {"cmd": "uv run ruff check services/desk-gateway/src/desk_gateway/server.py", "exit_code": 0, "output_tail": "All checks passed!"},
+    {"cmd": "uv run ruff format --check services/desk-gateway/src/desk_gateway/server.py", "exit_code": 0, "output_tail": "1 file already formatted"},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK — 10 bots, 192 rules; 1007 tracked path(s), each with one declared owner"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-desk-gateway-mypy.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: the reason line is 'approved_by' is missing; this receipt carries no approved_by by design (see status)"}
+  ],
+  "claims": [
+    {"claim": "mypy on services/desk-gateway/src exits 0 after the narrowing", "evidence": ["uv run mypy services/desk-gateway/src: Success, 4 source files"], "evidence_command_index": 0},
+    {"claim": "the desk-gateway tests pass with the runner its pyproject declares", "evidence": ["cd services/desk-gateway && uv run pytest: 59 passed"], "evidence_command_index": 1},
+    {"claim": "the changed file is lint-clean and formatted", "evidence": ["ruff check and ruff format --check on server.py: exit 0"], "evidence_command_index": 2},
+    {"claim": "this receipt fails check_receipt --strict only on the missing approved_by reason", "evidence": ["check_receipt --strict on this receipt exits 1 with the approved_by reason line"], "evidence_command_index": 5, "expects_failure": true}
+  ],
+  "unverified": [
+    "This receipt records no approved_by. check_receipt --strict fails on that until the owner adds it, which the executor never writes.",
+    "The draft pull request has not been reviewed or merged; the bot does not approve or merge it.",
+    "Running the declared desk-gateway runner (uv run pytest from services/desk-gateway) rewrites services/desk-gateway/uv.lock: it adds hypothesis, mutmut and pytest-cov to the dev metadata, which the service pyproject does not declare. That change was reverted and kept out of this commit; the drift is a separate finding.",
+    "Running uv run pytest from the repository root does not run the desk-gateway suite: the root pyproject collects the root suite instead, so the service must run from services/desk-gateway.",
+    "services/desk-gateway stays outside the typecheck gate in the Makefile (its comment names this finding). That gate is not changed here."
+  ],
+  "rollback_plan": "Revert the single-line change in services/desk-gateway/src/desk_gateway/server.py and this receipt through a new pull request (git revert on this branch before merge, or git revert -m 1 <merge-sha> after merge). No ledger, var, fixture, replay pin or ownership file changed. Data implications: none."
+}
