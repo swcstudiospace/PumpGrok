@@ -1,0 +1,41 @@
+{
+  "task_id": "v4-p11-buy-marks-split",
+  "bot": "bot-04-sniper",
+  "branch": "bot-04-sniper/v4-p11-buy-marks-split",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Follow-up to PR 38 (plan 11-06): split the five paper_adapter functions over 60 lines in buy.py and marks.py into stage helpers with identical behaviour.",
+  "purpose": "PR 38 left _buy_confirm (69), _buy_fill_rows (74), _buy_settle (64), mark_open_positions (67) and _force_close (89) over the 60-line budget. This change splits them into helpers. Public method names, signatures and the stage names the function-length guard requires (_buy_confirm, _buy_fill_rows, _buy_settle) are kept. No characterization or execution test was edited.",
+  "status": "draft PR for review. approved_by is intentionally absent; the executor never writes it.",
+  "commits": [
+    {"sha": "df86f42", "task": "Split buy and marks functions over 60 lines", "files": ["src/pumpgrok/execution/paper_adapter/buy.py", "src/pumpgrok/execution/paper_adapter/marks.py"]}
+  ],
+  "commands": [
+    {"cmd": "git rev-parse --show-toplevel", "exit_code": 0, "output_tail": "/root/src/repos/pumpgrok-wt/v4-11-07-buy-marks"},
+    {"cmd": "python3 /tmp/v4/buy_marks_fn.py src/pumpgrok/execution/paper_adapter/buy.py src/pumpgrok/execution/paper_adapter/marks.py  [before, on origin/main c7ef904, ast end_lineno-lineno+1]", "exit_code": 0, "output_tail": "OVER60: [('buy.py', '_buy_confirm', 69), ('buy.py', '_buy_fill_rows', 74), ('buy.py', '_buy_settle', 64), ('marks.py', 'mark_open_positions', 67), ('marks.py', '_force_close', 89)]"},
+    {"cmd": "uv run pytest -q tests/characterization/execution tests/execution -o addopts=  [baseline on origin/main]", "exit_code": 0, "output_tail": "136 passed in 160.59s"},
+    {"cmd": "python3 -c <ast check over buy.py and marks.py, span end_lineno-lineno+1, asserts <= 60>  [after]", "exit_code": 0, "output_tail": "max_lines (60, 'marks.py', '_force_close') / over60 [] / ast_ok"},
+    {"cmd": "uv run pytest -q tests/characterization/execution tests/execution -o addopts=  [after]", "exit_code": 0, "output_tail": "136 passed in 123.01s"},
+    {"cmd": "uv run pytest -q tests/integrity/test_function_length.py -o addopts=", "exit_code": 0, "output_tail": "2 passed in 3.01s"},
+    {"cmd": "uv run pytest -q tests/replay -o addopts=", "exit_code": 0, "output_tail": "78 passed in 116.61s"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "events.hash line matched; verify CONSISTENT seq=2 events=41 (run output omitted from receipt tail)"},
+    {"cmd": "uv run mypy src/", "exit_code": 0, "output_tail": "Success: no issues found in 222 source files"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "859 files already formatted; services/desk-signer/src absent; service lint skipped"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "services/desk-signer/src absent; service typecheck skipped; mypy strict on src/ passed"}
+  ],
+  "claims": [
+    {"claim": "Before the split, five functions in buy.py and marks.py exceeded 60 lines: _buy_confirm 69, _buy_fill_rows 74, _buy_settle 64, mark_open_positions 67, _force_close 89.", "evidence_command_index": 1},
+    {"claim": "After the split, no function in buy.py or marks.py exceeds 60 lines; the largest is _force_close at 60 (59 by the guard's end-minus-start measure).", "evidence_command_index": 3},
+    {"claim": "The 136 characterization and execution tests pass before and after the split, with no test file edited.", "evidence_command_index": 4},
+    {"claim": "The function-length guard test passes, so _buy_confirm, _buy_fill_rows and _buy_settle still exist as stage functions and _place_buy and _place_order remain within budget.", "evidence_command_index": 5},
+    {"claim": "The 78 replay tests pass and the smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is unchanged, so ledger rows and hashes are unchanged.", "evidence_command_index": 6},
+    {"claim": "The smoke-10m hash grep exits 0 on this head.", "evidence_command_index": 7},
+    {"claim": "mypy --strict on src/ and make lint and make typecheck exit 0.", "evidence_command_index": 9},
+    {"claim": "The diff touches only src/pumpgrok/execution/paper_adapter/buy.py and marks.py plus this receipt.", "evidence_command_index": 0}
+  ],
+  "unverified": [
+    "make test, the full pytest -q run, the soak suite, run_all.py and the G-1..G-7 gates were not run by this seat, per the protocol. The orchestrator runs them.",
+    "The AST measurement counts end_lineno minus lineno plus one; the guard counts end minus start. Both are at or below 60 after the split.",
+    "No live path, signer or send path was exercised; the change is paper-adapter internal refactoring only."
+  ],
+  "rollback_plan": "Rollback procedure: git revert the single commit on this branch (or git revert -m 1 of the merge commit after merge) and open a new pull request. The change is a behaviour-preserving refactor that moves code into helper methods, touches no data, and changes no ledger rows or hashes, so no data migration is needed. Expected recovery time: about 10 minutes."
+}
