@@ -378,7 +378,7 @@ class _Handler(BaseHTTPRequestHandler):
         state = self.server.gateway_state  # type: ignore[attr-defined]
         short = _short_from_path(self.path)
         seat_id = state["shorts"].get(short) if short else None
-        if seat_id is None:
+        if short is None or seat_id is None:
             self._send_json(404, {"error": {"code": "unknown_seat", "message": "unknown seat"}})
             log.info("seat=%s status=%s", short, 404)
             return
