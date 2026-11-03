@@ -22,21 +22,21 @@ import pytest
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.supervisor.seat_task import (
-    BACKOFF_CAP_S,
+from pumpgrok.supervisor.seat_relay import (
     CLOCK_SKEW_S,
-    RESTART_CAPACITY,
-    RESTART_WINDOW_S,
-    STALE_CADENCES,
     ClockSkew,
-    ObserveOnly,
-    RestartPolicy,
-    SeatContext,
-    SeatTask,
     append_escalation,
     escalation_severity,
     relay_tail,
 )
+from pumpgrok.supervisor.seat_restart import (
+    BACKOFF_CAP_S,
+    RESTART_CAPACITY,
+    RESTART_WINDOW_S,
+    ObserveOnly,
+    RestartPolicy,
+)
+from pumpgrok.supervisor.seat_task import STALE_CADENCES, SeatContext, SeatTask
 
 BASE = 1_000_000.0
 SNIPER = "bot-04-sniper"

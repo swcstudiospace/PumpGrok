@@ -1,0 +1,86 @@
+{
+  "task_id": "v4-p11-seat-task-cutover-tests",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/v4-p11-seat-task-cutover-tests",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Staged seat_task cutover, step 1 of 2: test importers take names from the module that defines them after the 11-09 split. Step 2 (chief seat) removes the re-exports from seat_task.py.",
+  "purpose": "Receipt for an import-only change in test files. Names that seat_task.py re-exports from seat_relay.py (CLOCK_SKEW_S, ClockSkew, KIND_*, append_escalation, escalation_severity, relay_tail) and from seat_restart.py (BACKOFF_CAP_S, ObserveOnly, RESTART_*, RestartPolicy) are now imported from those modules. Names defined in seat_task.py itself (SeatContext, SeatTask, STALE_CADENCES) are unchanged. No assertion, fixture, patch target or test logic changed. No file under src/pumpgrok/supervisor is touched.",
+  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR.",
+  "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change is import lines in 12 test files plus this receipt; no runtime or src behaviour changes. Expected recovery time: under 5 minutes. Step 2 must not merge before this PR is on main.",
+  "commands": [
+    {
+      "cmd": "git fetch origin main && git worktree add -b bot-02-risk/v4-p11-seat-task-cutover-tests /root/src/repos/pumpgrok-wt/v4-seat-cutover origin/main",
+      "exit_code": 0,
+      "output_tail": "origin/main at c7ef904; worktree created"
+    },
+    {
+      "cmd": "git grep -n \"pumpgrok.supervisor.seat_task import\" origin/main -- tests (before the edit)",
+      "exit_code": 0,
+      "output_tail": "20 files, 22 import lines"
+    },
+    {
+      "cmd": "python3 definition check: each name imported from seat_task, seat_relay or seat_restart is defined in the module it is imported from (AST over src/pumpgrok/supervisor/{seat_task,seat_relay,seat_restart}.py)",
+      "exit_code": 0,
+      "output_tail": "mismatches: []"
+    },
+    {
+      "cmd": "uv run pytest -q tests/degradation tests/harness tests/integrity tests/risk tests/supervisor -o addopts=",
+      "exit_code": 0,
+      "output_tail": "373 passed in 252.17s"
+    },
+    {
+      "cmd": "git grep -n \"pumpgrok.supervisor.seat_task import\" -- tests (after the edit)",
+      "exit_code": 0,
+      "output_tail": "15 files, 15 import lines; every remaining name (SeatContext, SeatTask, STALE_CADENCES) is defined in seat_task.py"
+    },
+    {
+      "cmd": "uv run ruff check <12 changed test files>",
+      "exit_code": 0,
+      "output_tail": "All checks passed!"
+    },
+    {
+      "cmd": "uv run ruff format --check <12 changed test files>",
+      "exit_code": 0,
+      "output_tail": "12 files already formatted"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "service lint skipped (desk-signer absent)"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 222 source files"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Every name imported from seat_relay or seat_restart by a test file is defined in the module it is imported from",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The targeted test directories pass after the import change: 373 passed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The remaining seat_task test imports name only SeatContext, SeatTask or STALE_CADENCES, which are defined in seat_task.py",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "make lint and make typecheck pass after the change",
+      "evidence_command_index": 7
+    }
+  ],
+  "unverified": [
+    "Approval is pending. The owner has not approved this PR; approved_by is absent by design.",
+    "The verify line 'git grep -n pumpgrok.supervisor.seat_task import -- tests must show no tests file' is not satisfiable as written: 15 test files still import SeatContext, SeatTask or STALE_CADENCES, which are defined in seat_task.py, so those imports are correct and were left unchanged.",
+    "Only 12 of the 20 listed importer files needed an edit. The other 8 import only names defined in seat_task.py (test_llm_failure, test_faults, test_paper_genesis_meta, test_equity_source, test_lifecycle, test_metrics, test_review_scheduler, test_scheduler) and were not changed.",
+    "No patch target through the seat_task module was found; no test patches a name via a string path or module attribute.",
+    "Step 2 (src/pumpgrok/supervisor/seat_task.py re-exports, chief seat) is not done here and must land after this PR merges.",
+    "The full ci/tests suite and make test were not run in this worktree; CI runs them."
+  ],
+  "carry_over": {
+    "step_2": "Chief seat removes the seat_relay and seat_restart re-exports from seat_task.py once this PR is on main."
+  }
+}

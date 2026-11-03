@@ -22,7 +22,8 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.supervisor.lifecycle import shutdown
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor
-from pumpgrok.supervisor.seat_task import SeatContext, SeatTask, append_escalation
+from pumpgrok.supervisor.seat_relay import append_escalation
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 MINT = "TESTMINT"
 EQUITY = 10_000_000_000

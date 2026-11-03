@@ -22,7 +22,7 @@ from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.breakers import DataStaleBreaker
 from pumpgrok.supervisor.scheduler import DegradedState
-from pumpgrok.supervisor.seat_task import append_escalation
+from pumpgrok.supervisor.seat_relay import append_escalation
 
 BASE = 1767225600.0
 MINT = "So11111111111111111111111111111111111111112"
