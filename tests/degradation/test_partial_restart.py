@@ -15,7 +15,8 @@ from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.breakers import BreakerSet
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor
-from pumpgrok.supervisor.seat_task import ObserveOnly, SeatContext, SeatTask
+from pumpgrok.supervisor.seat_restart import ObserveOnly
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 BASE = 1767225600.0
 

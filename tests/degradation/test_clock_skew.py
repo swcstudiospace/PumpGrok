@@ -14,7 +14,7 @@ import pytest
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc, parse_ts_utc
 from pumpgrok.supervisor.scheduler import DegradedState, assert_no_skew
-from pumpgrok.supervisor.seat_task import CLOCK_SKEW_S, ClockSkew, append_escalation
+from pumpgrok.supervisor.seat_relay import CLOCK_SKEW_S, ClockSkew, append_escalation
 
 HEAD_TS = 1_000.0
 

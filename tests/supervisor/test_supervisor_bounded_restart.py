@@ -30,7 +30,8 @@ from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.supervisor.health import is_ok, write_health_json
 from pumpgrok.supervisor.lifecycle import shutdown
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor
-from pumpgrok.supervisor.seat_task import ObserveOnly, SeatContext, SeatTask
+from pumpgrok.supervisor.seat_restart import ObserveOnly
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 BASE = 1_000_000.0
 MINT = "B" * 44

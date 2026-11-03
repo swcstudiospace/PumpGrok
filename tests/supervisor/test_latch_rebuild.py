@@ -14,13 +14,13 @@ from typing import Any
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.supervisor.seat_task import (
+from pumpgrok.supervisor.seat_relay import (
     KIND_HEARTBEAT_STALE,
     KIND_RESTART_EXHAUSTED,
-    ObserveOnly,
-    SeatTask,
     append_escalation,
 )
+from pumpgrok.supervisor.seat_restart import ObserveOnly
+from pumpgrok.supervisor.seat_task import SeatTask
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 SEAT = "bot-04-sniper"
