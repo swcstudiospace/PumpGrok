@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #55, the Phase 11 close (approve_55).",
   "task_id": "v4-p11-close",
   "bot": "bot-00-chief",
   "branch": "bot-00-chief/v4-p11-close",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "11-11: Phase 11 close. STATE.md closes Phase 11 with its hash evidence, 11-VERIFICATION.md is the chief-owned close record, and this receipt records the acceptance commands. PR-08 (agent review by bot-02-risk), base origin/main 8e8c4c3.",
   "purpose": "Closes Phase 11 (PRC-06) so Phase 12 can stack on the quality scaffolding. Touches only .planning/STATE.md, .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md and this receipt. No source, test, config or pin file changes.",
-  "status": "Draft pull request against main, not merged. approved_by is absent by design: the executor never writes it, and the owner adds it in a batch at the Phase 11 ship checkpoint. G-2 fails only on that field.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "commits": [
     {"sha": "ef3788b", "task": "Close Phase 11 in STATE.md with hash evidence (PRC-06)", "files": [".planning/STATE.md"]},
     {"sha": "d8cbcd4", "task": "Add the Phase 11 verification record (PRC-06)", "files": [".planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md"]}
