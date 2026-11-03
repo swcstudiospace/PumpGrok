@@ -11,7 +11,14 @@
   "commits": [
     {"sha": "544d909", "task": "Adopt the v4 milestone planning files", "files": [".planning/ROADMAP.md", ".planning/REQUIREMENTS.md", ".planning/PROJECT.md"]},
     {"sha": "bdcdaac", "task": "Split seat_task behind characterization: restart and relay modules", "files": ["src/pumpgrok/supervisor/seat_task.py", "src/pumpgrok/supervisor/seat_relay.py", "src/pumpgrok/supervisor/seat_restart.py"]},
-    {"sha": "3366065", "task": "Read-only pump account probe, red test then green script", "files": ["scripts/probe_pump_accounts.py", "tests/desk/test_probe_pump_accounts.py"]}
+    {"sha": "3366065", "task": "Read-only pump account probe, red test then green script", "files": ["scripts/probe_pump_accounts.py", "tests/desk/test_probe_pump_accounts.py"]},
+    {"sha": "8aeb0b2", "task": "Probe records the RPC error code and a sanitized message, never the endpoint (post-approval review fix)", "files": ["scripts/probe_pump_accounts.py", "tests/desk/test_probe_pump_accounts.py"]},
+    {"sha": "76642c6", "task": "Probe refuses an --account that does not decode to 32 bytes (post-approval review fix)", "files": ["scripts/probe_pump_accounts.py", "tests/desk/test_probe_pump_accounts.py"]},
+    {"sha": "8d4eda8", "task": "PROJECT.md states 157 v4 requirements in 17 families and adds ONB, HARD and HOST to Active", "files": [".planning/PROJECT.md"]},
+    {"sha": "3f35574", "task": "Plan index stated as absent; references to the plan index file removed", "files": [".planning/ROADMAP.md", ".planning/PROJECT.md", ".planning/REQUIREMENTS.md"]},
+    {"sha": "efb8225", "task": "Receipt commands made runnable shell commands; annotations moved to output_tail", "files": [".receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json"]},
+    {"sha": "a24bf45", "task": "Frozen project-strategy-row text restored verbatim in PROJECT.md (amendment oracle test)", "files": [".planning/PROJECT.md"]},
+    {"sha": "272af57", "task": "Citations of two review notes removed from planning files; owner review items stated instead", "files": [".planning/PROJECT.md", ".planning/REQUIREMENTS.md"]}
   ],
   "commands": [
     {"cmd": "uv run pytest -q tests/supervisor/test_seat_task_characterization.py -rs", "exit_code": 0, "output_tail": "baseline, before the split: ..................... [100%]  (21 tests, no SKIPPED lines)"},
@@ -39,7 +46,21 @@
     {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "...."},
     {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "unmet preconditions listed; No transaction was attempted (exit 3, run by the orchestrator on this branch)"},
     {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 978 tracked path(s), each with one declared owner"},
-    {"cmd": "! grep -niE 'send.?transaction|request.?airdrop|sign.?transaction' scripts/probe_pump_accounts.py", "exit_code": 0, "output_tail": "(no match; run by the orchestrator on this branch)"}
+    {"cmd": "! grep -niE 'send.?transaction|request.?airdrop|sign.?transaction' scripts/probe_pump_accounts.py", "exit_code": 0, "output_tail": "(no match; run by the orchestrator on this branch)"},
+    {"cmd": "git worktree add --detach /tmp/probe-red 8aeb0b2^ && cp tests/desk/test_probe_pump_accounts.py /tmp/probe-red/tests/desk/ && cd /tmp/probe-red && uv run pytest -q -o addopts= tests/desk/test_probe_pump_accounts.py -k 'rpc_error_keeps_code_and_sanitized_message or http_status_is_recorded_without_the_url'", "exit_code": 1, "output_tail": "red on the parent of 8aeb0b2 (3b91b76, probe without the fix, new test copied in): 2 failed, 14 deselected; the detached worktree was removed afterwards with git worktree remove --force"},
+    {"cmd": "uv run pytest -q -o addopts= tests/desk/test_probe_pump_accounts.py::test_rpc_error_keeps_code_and_sanitized_message", "exit_code": 0, "output_tail": "1 passed in 0.10s (RPC error code and sanitized message recorded; endpoint and credentials absent)"},
+    {"cmd": "uv run python scripts/probe_pump_accounts.py --account 111111111111111111111111111111111 --endpoint https://api.mainnet-beta.solana.com --out /tmp/probe-ones.json", "exit_code": 2, "output_tail": "refused: --account must be a base58 public key that decodes to 32 bytes (set --account or BONDING_CURVE_ACCOUNT); no record written. The literal is 33 characters."},
+    {"cmd": "uv run pytest -q -o addopts= tests/desk/test_probe_pump_accounts.py::test_account_that_is_not_32_bytes_is_refused_before_any_call", "exit_code": 0, "output_tail": "1 passed in 4.12s (33 base58 ones refused before any RPC call)"},
+    {"cmd": "uv run pytest -q -o addopts= tests/desk/test_probe_pump_accounts.py::test_valid_32_byte_public_key_is_accepted", "exit_code": 0, "output_tail": "1 passed in 0.30s (valid 32-byte public key accepted; decoded_pending_review record written)"},
+    {"cmd": "grep -cE '^\\| [A-Z]+-[0-9]+ \\|' .planning/REQUIREMENTS.md", "exit_code": 0, "output_tail": "157 (traceability rows; the checkbox regex alone gives 155 because HARD-04 and HOST-03 carry parenthetical text)"},
+    {"cmd": "grep -oE '^\\| [A-Z]+-[0-9]+ \\|' .planning/REQUIREMENTS.md | sed -E 's/^\\| ([A-Z]+)-.*/\\1/' | sort -u | wc -l", "exit_code": 0, "output_tail": "17 (requirement families)"},
+    {"cmd": "! grep -rn 'plans[.]json' .planning .receipts docs", "exit_code": 0, "output_tail": "(no match; the pattern is bracket-escaped so this receipt does not match its own command text)"},
+    {"cmd": "! grep -rn 'changes-applie[d]\\|pr-pla[n]' .planning .receipts docs", "exit_code": 0, "output_tail": "(no match; bracket-escaped for the same reason)"},
+    {"cmd": "uv run pytest -q tests/safety/test_constitution_amendment.py -o addopts=", "exit_code": 0, "output_tail": "12 passed in 0.37s"},
+    {"cmd": "make audit", "exit_code": 0, "output_tail": "uv run pip-audit -r /tmp/pumpgrok-req.txt --strict / No known vulnerabilities found"},
+    {"cmd": "python3 -P ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json", "exit_code": 0, "output_tail": "All gates passed: G-1, G-2, G-3, G-4, G-5/G-6, G-7 PASS (observed before the three gate entries were appended)"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json --bot bot-00-chief --strict", "exit_code": 0, "output_tail": "G-2 PASS: 37 command(s), 9 substantiated claim(s), 7 unverified item(s) (observed before the three gate entries were appended)"},
+    {"cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json", "exit_code": 0, "output_tail": "G-5/G-6 PASS: 1 deployment(s) with a rollback plan, 0 destructive op(s) approved (observed before the three gate entries were appended)"}
   ],
   "claims": [
     {"claim": "v3 roadmap and requirements are archived and v4 roadmap, requirements and project are installed; Phase 11 and Coverage markers present", "evidence": ["test -f .planning/milestones/v3-ROADMAP.md", "grep Phase 11", "grep Coverage: v4"], "note": "the archive files were already the committed v3 archive and are unchanged; see deviations", "evidence_command_index": 12},
@@ -55,7 +76,9 @@
   "unverified": [
     "No mainnet read was made. Running scripts/probe_pump_accounts.py against mainnet is human-only under OD-04 and was not exercised.",
     "The probe record format is not reviewed by a human; decoded_pending_review remains the only success status and nothing here sets reviewed_by.",
-    "check_receipt and the full gate runner (run_all.py) were not run; the orchestrator runs gates per the shared facts.",
+    "The 74-plan count was not re-verified; the v4 plan index is not in this repository, so the count is taken from the adopted planning text only.",
+    "Command bodies recorded before the owner approval were only parse-checked (bash -n), except the refusal command, which was rerun. Commands added after the approval were run in this session and carry the exit codes shown.",
+    "make test was not run locally in full; the CI check job is the run of record for it.",
     "Full pytest -q, the soak suite and the -q summary line were not used. Test outcomes come from exit codes and captured output files; the -q addopts plus an extra -q suppresses the summary line, so dot lines are the evidence.",
     "A bare `uv run pytest` invocation rendered 'No tests collected' in the tool output during the session, while the same command redirected to a file printed the dot lines and passed. Captured files and exit codes were used for every reported result."
   ],
