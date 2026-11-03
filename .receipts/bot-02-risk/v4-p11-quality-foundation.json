@@ -301,9 +301,10 @@
       "output_tail": "2 files already formatted"
     },
     {
-      "cmd": "mkdir -p services/desk-signer/src; uv run pytest -q ci/tests/test_ci_covers_services.py (red: previous version pinned absence of services/desk-signer; then rm -rf services/desk-signer)",
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py",
       "exit_code": 1,
-      "output_tail": "FAILED test_no_service_tree_is_present_for_the_gate_today, test_typecheck_stays_a_no_op..., test_audit_stays_a_no_op..."
+      "output_tail": "FAILED test_no_service_tree_is_present_for_the_gate_today, test_typecheck_stays_a_no_op..., test_audit_stays_a_no_op...",
+      "note": "Red run of the previous version of the file. A temporary services/desk-signer/src directory was created before the run and removed afterwards; no repository path was changed. The previous version pinned the absence of services/desk-signer."
     },
     {
       "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py (rewritten file, services/desk-signer/src absent)",
@@ -311,9 +312,10 @@
       "output_tail": "12 passed"
     },
     {
-      "cmd": "mkdir -p services/desk-signer/src; uv run pytest -q ci/tests/test_ci_covers_services.py (rewritten file, directory present; then rm -rf services/desk-signer)",
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py",
       "exit_code": 0,
-      "output_tail": "12 passed"
+      "output_tail": "12 passed",
+      "note": "Run with the directory present. A temporary services/desk-signer/src directory was created before the run and removed afterwards; no repository path was changed."
     },
     {
       "cmd": "uv run ruff check ci/tests/test_ci_covers_services.py",
