@@ -3,10 +3,10 @@
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-g6-grep-args",
   "phase": "11-engineering-foundation-and-quality",
-  "plan": "G-6 false positive: a read-only grep whose quoted argument contains a trade or deployment pattern was flagged as a send. Fix ci/gates/check_rollback.py and pin it with self-tests in ci/tests/test_gates.py.",
-  "purpose": "Receipt for one gate fix. find_matches now matches patterns against the command with the operands of a simple read-only search command (grep, egrep, fgrep, zgrep, zegrep, zfgrep) blanked out. The mask is applied only when the command has no expansion, newline, comment or unterminated quote, so a command that runs cannot hide behind a grep. The trade pattern for sendTransaction also accepts the camelCase form, which it previously missed. Real sends and deployments after a grep are still flagged.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR.",
-  "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches ci/gates/check_rollback.py, ci/tests/test_gates.py and this receipt. Reverting restores the earlier false positives on grep arguments and the missed camelCase sendTransaction; no ledger, live state or runtime behaviour changes. Expected recovery time: about 5 minutes.",
+  "plan": "G-6 false positive: a read-only grep whose quoted argument contains a trade or deployment pattern was flagged as a send. Step 1 of 2 (this PR): the gate fix in ci/gates/check_rollback.py only. Step 2 (bot-02-risk/v4-p11-g6-grep-selftests, after this PR merges) re-adds the red-green self-tests.",
+  "purpose": "Receipt for step 1 of a two-step G-6 fix. find_matches now matches patterns against the command with the operands of a simple read-only search command (grep, egrep, fgrep, zgrep, zegrep, zfgrep) blanked out. The mask is applied only when the command has no expansion, newline, comment or unterminated quote, so a command that runs cannot hide behind a grep. The trade pattern for on-chain sends also accepts the camelCase form, which it previously missed. This PR adds no test: the trusted gate-self-test runs this PR's tests against main's gate scripts, so a test that depends on the fix must wait for step 2. The self-test cases written for this fix are in commit 1c97253 and are not in this PR.",
+  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR. Step 1 is not merged.",
+  "rollback_plan": "Revert the single gate commit on this branch with git revert (no force). The change touches ci/gates/check_rollback.py and this receipt only. Reverting restores the earlier false positives on grep arguments and the missed camelCase sendTransaction; no ledger, live state or runtime behaviour changes. Expected recovery time: about 5 minutes.",
   "commands": [
     {
       "cmd": "git fetch origin main && git worktree add -b bot-02-risk/v4-p11-g6-grep-args /root/src/repos/pumpgrok-wt/v4-g6-grep origin/main",
@@ -17,7 +17,7 @@
       "cmd": "uv run pytest -q ci/tests/test_gates.py -k G5G6 -o addopts= (before the fix; red)",
       "exit_code": 1,
       "output_tail": "10 failed, 28 passed: the four grep-quoting cases (send-transaction, wallet-transfer, sendTransaction, rm -rf), the deployment grep case, the sendTransaction cases, the grep-then-sendTransaction run and the sendTransaction run-level case",
-      "note": "Red run of the new self-tests before any change to ci/gates/check_rollback.py."
+      "note": "Red run of the self-tests written during development (commit 1c97253). Those self-tests are not in step 1 of this PR; they are re-added in bot-02-risk/v4-p11-g6-grep-selftests."
     },
     {
       "cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json (before the fix; baseline)",
@@ -25,9 +25,10 @@
       "output_tail": "G-5/G-6 PASS — 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"
     },
     {
-      "cmd": "uv run pytest -q ci/tests/test_gates.py -k G5G6 -o addopts= (after the fix; green)",
+      "cmd": "uv run pytest -q ci/tests/test_gates.py -k G5G6 -o addopts= (after the fix; green, during development)",
       "exit_code": 0,
-      "output_tail": "38 passed, 125 deselected in 14.00s"
+      "output_tail": "38 passed, 125 deselected in 14.00s",
+      "note": "Green run of the development-only self-tests (commit 1c97253). Not part of step 1; see the follow-up branch."
     },
     {
       "cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json (after the fix)",
@@ -35,53 +36,81 @@
       "output_tail": "G-5/G-6 PASS — 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"
     },
     {
-      "cmd": "uv run ruff check ci/gates/check_rollback.py ci/tests/test_gates.py",
+      "cmd": "uv run ruff check ci/gates/check_rollback.py ci/tests/test_gates.py (during development, both files)",
       "exit_code": 0,
       "output_tail": "All checks passed!"
     },
     {
-      "cmd": "uv run ruff format --check ci/gates/check_rollback.py ci/tests/test_gates.py",
+      "cmd": "uv run ruff format --check ci/gates/check_rollback.py ci/tests/test_gates.py (during development, both files)",
       "exit_code": 0,
       "output_tail": "2 files already formatted"
     },
     {
-      "cmd": "uv run pytest -q ci/tests -o addopts=",
+      "cmd": "uv run pytest -q ci/tests -o addopts= (during development, with the self-tests present)",
       "exit_code": 0,
       "output_tail": "441 passed in 242.39s"
+    },
+    {
+      "cmd": "git checkout origin/main -- ci/tests/test_gates.py (remove the development self-tests from step 1)",
+      "exit_code": 0,
+      "output_tail": "ci/tests/test_gates.py now identical to origin/main; 14 added test cases removed"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests -o addopts= (step 1 tree: gate fix only, no new tests)",
+      "exit_code": 0,
+      "output_tail": "427 passed in 58.40s; no existing test failed, so no existing assertion was changed"
+    },
+    {
+      "cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json (step 1 tree)",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"
+    },
+    {
+      "cmd": "uv run ruff check ci/gates/check_rollback.py (step 1 tree)",
+      "exit_code": 0,
+      "output_tail": "All checks passed!"
+    },
+    {
+      "cmd": "uv run ruff format --check ci/gates/check_rollback.py (step 1 tree)",
+      "exit_code": 0,
+      "output_tail": "1 file already formatted"
+    },
+    {
+      "cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-02-risk/v4-p11-g6-grep-args.json --bot bot-02-risk",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL: 'approved_by' is missing — work must be reviewed by someone else (the only reason)"
     }
   ],
   "claims": [
     {
-      "claim": "Before the fix, the new G-5/G-6 self-tests fail: 10 of them, including the grep-quoting and sendTransaction cases",
-      "expects_failure": true,
-      "evidence_command_index": 1
+      "claim": "On this branch, the gate change is confined to ci/gates/check_rollback.py; test_gates.py is identical to origin/main",
+      "evidence_command_index": 8
     },
     {
-      "claim": "After the fix, a read-only grep whose quoted argument contains a trade or deployment pattern is not flagged, and the G-5/G-6 self-tests pass (38 passed)",
-      "evidence_command_index": 3
+      "claim": "The full ci/tests suite passes on this step's tree with 427 tests and no existing test changed",
+      "evidence_command_index": 9
     },
     {
-      "claim": "After the fix, a real sendTransaction command, a deployment after a grep, and a recursive delete after a grep are still flagged, and a sendTransaction command without approval fails the gate",
-      "evidence_command_index": 3
+      "claim": "check_rollback passes on the PR 39 receipt after the gate change",
+      "evidence_command_index": 10
     },
     {
-      "claim": "check_rollback passes on the PR 39 receipt (.receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json) both before and after the fix",
-      "evidence_command_index": 4
-    },
-    {
-      "claim": "The full ci/tests suite passes with 441 tests",
-      "evidence_command_index": 7
+      "claim": "The gate change passes ruff check and ruff format --check",
+      "evidence_command_index": 11
     }
   ],
   "unverified": [
-    "Approval is pending. The owner has not approved this PR; approved_by is absent by design.",
+    "The red-green evidence for the fix (commands 1 and 3) was observed during development, when the self-tests were present in commit 1c97253. Those tests are not in this PR, so this receipt makes no claim that the fix is covered by a self-test here. The self-tests are the follow-up in bot-02-risk/v4-p11-g6-grep-selftests (step 2), to run after this PR merges.",
+    "Approval is pending. The owner has not approved this PR; approved_by is absent by design. check_receipt reports only that reason.",
+    "Step 2 is not started. It must branch from origin/main after this PR is merged.",
     "A command such as grep x docs | sh is not flagged, because no destructive or deployment pattern names sh; this was already true before the change and is unchanged.",
     "The mask does not apply to ripgrep, ag or ack, because rg --pre runs a command per file. Commands with those tools are matched in full.",
-    "A grep command with an unescaped $ or backtick anywhere, or with a newline, comment or unterminated quote, is matched in full. This is intentional and fails closed, so such a receipt can still be flagged for quoting a pattern.",
+    "A grep command with an unescaped $ or backtick, a newline, a comment or an unterminated quote is matched in full. This fails closed, so such a receipt can still be flagged for quoting a pattern.",
     "Compound identifiers such as sendTransactionBatch are not matched by the trade pattern, which keeps the trailing word boundary used by the other trade patterns.",
     "make lint and make test were not run in this worktree; CI runs them on this branch."
   ],
   "carry_over": {
-    "origin": "G-6 false positive reported by the orchestrator: a receipt that quotes a trade pattern inside a grep was flagged as a send."
+    "origin": "G-6 false positive reported by the orchestrator: a receipt that quotes a trade pattern inside a grep was flagged as a send.",
+    "step_2": "bot-02-risk/v4-p11-g6-grep-selftests, from origin/main after step 1 merges: re-add the red-green self-tests for the grep masking and the camelCase sendTransaction trade pattern."
   }
 }
