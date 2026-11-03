@@ -1,0 +1,74 @@
+{
+  "task_id": "v4-p11-followups",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/v4-p11-followups",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Follow-up on merged main: ignore the coverage artifacts that make test and make cov write, and correct the PR 41 receipt status and unverified[0] to cite the post-merge Gitleaks run",
+  "purpose": "Receipt for two small changes. .gitignore gains exact .coverage and coverage.xml lines, so the artifacts written by make test and make cov stay out of git status. The PR 41 receipt (.receipts/bot-02-risk/v4-p11-gitleaks-allowlist.json) now states that this PR's own Gitleaks job used the base configuration and could not test the new exceptions, and that the post-merge Gitleaks job on main at 26e4875 passed (Security PR Gate run 41535016738). Its gate-self-test fix is attributed to the exact .gitignore line (f799c9d). approved_by in that receipt is unchanged.",
+  "status": "draft pull request; approval pending. approved_by is intentionally absent from this receipt; the owner has not approved this PR.",
+  "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches only .gitignore and two receipts; no runtime, CI or data behaviour changes. Expected recovery time: under 5 minutes.",
+  "commands": [
+    {
+      "cmd": "git fetch origin main",
+      "exit_code": 0,
+      "output_tail": "ok fetched (1 new refs); origin/main at c7ef904"
+    },
+    {
+      "cmd": "git switch -c bot-02-risk/v4-p11-followups origin/main",
+      "exit_code": 0,
+      "output_tail": "Switched to a new branch 'bot-02-risk/v4-p11-followups'"
+    },
+    {
+      "cmd": "printf '.coverage\\ncoverage.xml\\n' >> .gitignore",
+      "exit_code": 0,
+      "output_tail": "two lines appended to .gitignore"
+    },
+    {
+      "cmd": "git check-ignore -v .coverage coverage.xml",
+      "exit_code": 0,
+      "output_tail": ".gitignore:19:.coverage\t.coverage; .gitignore:20:coverage.xml\tcoverage.xml"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests -o addopts=",
+      "exit_code": 0,
+      "output_tail": "427 passed in 26.52s"
+    },
+    {
+      "cmd": "gh run list --branch main --json databaseId,headSha,name,status,conclusion --limit 30 (filtered to headSha 26e48750)",
+      "exit_code": 0,
+      "output_tail": "Security PR Gate databaseId 41535016738 headSha 26e48750db17470170d96f943b9da6399decaeb1 conclusion success; CI 41535016710 success; Quality Gates 41535016826 success"
+    },
+    {
+      "cmd": "python3 -c \"import json; json.load(open('.receipts/bot-02-risk/v4-p11-gitleaks-allowlist.json'))\"",
+      "exit_code": 0,
+      "output_tail": "json ok; approved_by present and unchanged; command 0 exit 0; claim 0 cites command 0"
+    }
+  ],
+  "claims": [
+    {
+      "claim": ".coverage and coverage.xml are ignored by the new .gitignore lines",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The ci/tests suite passes with the .gitignore change, with 427 tests passing",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The Security PR Gate run that passed on main at 26e4875 is run ID 41535016738",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The PR 41 receipt still parses, keeps its approved_by and its command and claim indexes valid",
+      "evidence_command_index": 6
+    }
+  ],
+  "unverified": [
+    "Approval is pending. The owner has not approved this PR; approved_by is absent from this receipt by design.",
+    "The full make test and make cov were not re-run for this change. The change only adds two ignore lines.",
+    "PR 41's own Gitleaks job could not test its new exceptions; the pass cited in its receipt is the post-merge run on main at 26e4875.",
+    "The stacked PRs and PR 34's Gitleaks job were not re-run as part of this PR."
+  ],
+  "carry_over": {
+    "pr41_receipt": "Status and unverified[0] corrected; the rest of .receipts/bot-02-risk/v4-p11-gitleaks-allowlist.json is unchanged."
+  }
+}
