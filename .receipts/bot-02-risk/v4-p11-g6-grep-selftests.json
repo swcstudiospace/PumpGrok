@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #52 (approve_52).",
   "task_id": "v4-p11-g6-grep-selftests",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-g6-grep-selftests",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "G-6 follow-up, step 2 of 2: re-add the red-green self-tests for the grep-operand masking and the camelCase sendTransaction trade pattern. The gate fix itself merged in PR 47 (61b39af).",
   "purpose": "Receipt for a test-only change. Adds 14 self-test cases to TestG5G6RollbackAndDestructive in ci/tests/test_gates.py: read-only grep arguments containing trade or deployment patterns are not flagged; real sends and deletes next to a grep are still flagged; a sendTransaction command without approval fails the gate. The cases are the same ones written in commit 1c97253 and applied here unchanged. No gate script is touched.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR. Not merged.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches ci/tests/test_gates.py and this receipt only; no gate, runtime or CI behaviour changes. Expected recovery time: under 5 minutes.",
   "commands": [
     {
