@@ -1,21 +1,19 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3
-status: Awaiting next milestone
-last_updated: "2026-11-01T13:46:26.476Z"
-last_activity: 2026-11-01
-last_activity_desc: Milestone v3 completed and archived
-state_head: c8e81b0e8f1a53a42b8c400180e7f7783c108855
+milestone: v4
+milestone_name: PumpGrok Desk v4
+status: "Phase 11 closed; Phase 12 not started"
+last_updated: "2026-11-03"
+last_activity: 2026-11-03
+last_activity_desc: Phase 11 closed (engineering foundation and quality); draft PR for plan 11-11
+state_head: 8e8c4c3f09f2ce4f1e366d10ea56cb6db832c931
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 36
-  completed_plans: 36
-  percent: 100
+  total_phases: 9
+  completed_phases: 1
+  percent: 11
   blocked_phases: 0
-milestone_name: PumpGrok Desk v3
 current_phase: none
-stopped_at: "Milestone v3 archived 2026-11-01 with tech_debt recorded. PR 27 merged as 0ca794d; waiver PR 28 merged as 9588bc0. Record corrections: PR 29 (bot-02, ARCHITECTURE wording and allowlist) and the bot-00 follow-up. Resume at .planning/milestones/v3-CLOSEOUT.md."
+stopped_at: "Phase 11 closed 2026-11-03 on bot-00-chief/v4-p11-close (draft PR, not merged). Resume at .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md. Next: Phase 12, a draft stacked on the Phase 11 quality PR."
 ---
 paid_rpc_provider: none
 
@@ -27,10 +25,10 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-Phase: Milestone v3 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-01 — Milestone v3 completed and archived
+Milestone: v4 (PumpGrok Desk v4). Phase: 11 of 19, Engineering foundation and quality, closed 2026-11-03 by plan 11-11.
+Plan: 11-11 (Phase 11 close), branch bot-00-chief/v4-p11-close, draft pull request, not merged.
+Status: Phase 11 closed; Phase 12 not started. Owner answer: the hosting target is deferred to Phase 19.
+Last activity: 2026-11-03, Phase 11 close record (11-VERIFICATION.md) and receipt .receipts/bot-00-chief/v4-p11-close.json.
 
 ## Discovery (2026-10-25)
 
@@ -138,11 +136,22 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 | process | Omega CI runner migration (main 5b5d6a1, 9772655) was merged by another seat and not reviewed in the v2 audit | deferred-beyond-v3 | none (needs a separate review) |
 | process | Planning on main was stale until the v2 closeout merged | resolved | v2 archive on main; this branch starts from it |
 
+## Phase 11 close (v4, plan 11-11)
+
+- Close record: .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md (chief-owned). Receipt: .receipts/bot-00-chief/v4-p11-close.json. The receipt carries no approved_by; the owner adds it at the ship checkpoint.
+- Base: origin/main 8e8c4c3 (PR #54). Tag v4-base: 09f83be (merge of PR #17).
+- Hash evidence, events.hash, identical before and after Phase 11:
+  - smoke-10m: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (before and after). Pin: tests/replay/test_replay_hash_pin.py.
+  - trading smoke: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (before and after). Pin: tests/fixtures/replay/pins/trading_smoke.json, rows in trading_smoke_rows.json. The trading hash moves only in plan 15-01.
+- Merged to main in Phase 11 (merge SHAs from git): #34 66a1714, #35 0d0da21, #36 ffeeb0f, #37 cf3b168, #38 67a7110, #39 c7ef904, #41 26e4875, #42 3182763, #43 45f0b7e, #44 41c1f5d, #45 c2a7973, #46 42cffd9, #47 61b39af, #48 76a898a, #49 c6317b8, #50 e5c9eef, #51 549ebb9, #52 46b9315, #53 e8c51aa, #54 8e8c4c3.
+- Open items, not done: INT-10. scripts/probe_curve_layout.py still writes Status: VERIFIED on its own (lines 278 and 295); fix before the live-data phase. Stale-branch deletion: listed as open here; the owner approved it, and this record does not verify that it was carried out.
+- Fixed in Phase 11: the desk-gateway mypy error, fixed in PR #49 (c6317b8).
+
 ## Session Continuity
 
-- Last update: 2026-11-01, after PR 27 merged (0ca794d) and the record follow-ups.
-- Resume: read .planning/milestones/v3-CLOSEOUT.md. v3 is archived (tech_debt, owner decision 2026-11-01). No v3 step remains open.
-- Next: none for v3. Owner decisions outstanding: push the local tag v3 (on 85e3e0d) and approve any re-home follow-up for the ten waived files.
+- Last update: 2026-11-03, Phase 11 close (plan 11-11) on bot-00-chief/v4-p11-close.
+- Resume: read .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md. Next: Phase 12.
+- Owner decisions outstanding: approved_by on the 11-11 receipt at the ship checkpoint; the INT-10 fix before the live-data phase.
 
 ## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
 
