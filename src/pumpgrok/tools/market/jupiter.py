@@ -78,7 +78,7 @@ async def get_quote(
         if price_impact is not None:
             try:
                 ratio = float(price_impact) / 100
-            except (TypeError, ValueError):
+            except (ArithmeticError, TypeError, ValueError):
                 ratio = None
         return {
             "ok": True,

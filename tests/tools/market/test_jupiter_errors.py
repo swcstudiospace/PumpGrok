@@ -87,3 +87,17 @@ async def test_unexpected_error_propagates_instead_of_being_swallowed() -> None:
 
     with pytest.raises(RuntimeError, match="programming bug"):
         await get_quote("A", "B", 1, 50, _client(handler))
+
+
+async def test_overflowing_price_impact_is_malformed_not_raised() -> None:
+    # A 400-digit JSON integer overflows float() with OverflowError, an
+    # ArithmeticError. It is malformed data: the quote stays ok, ratio is None.
+    body = b'{"priceImpact": ' + b"9" * 400 + b"}"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    result = await get_quote("A", "B", 1, 50, _client(handler))
+
+    assert result["ok"] is True
+    assert result["priceImpactRatio"] is None

@@ -1,0 +1,62 @@
+{
+  "task_id": "jupiter-overflow",
+  "bot": "bot-01-scout",
+  "branch": "bot-01-scout/jupiter-overflow",
+  "base": "origin/main c7ef904",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Regression fix for ef7922c (QLT-06): an integer priceImpact of more than 308 digits makes float() raise OverflowError, which escaped get_quote. The inner guard now treats ArithmeticError as malformed, so ratio is None.",
+  "purpose": "Seat receipt for the fail-closed regression in src/pumpgrok/tools/market/jupiter.py. Records the red run against origin/main source, the one-line fix, and the green and gate runs at the branch head.",
+  "status": "awaiting agent review and human approval. approved_by is intentionally absent; the executor never writes it.",
+  "files": [
+    "src/pumpgrok/tools/market/jupiter.py",
+    "tests/tools/market/test_jupiter_errors.py",
+    ".receipts/bot-01-scout/jupiter-overflow.json"
+  ],
+  "commands": [
+    {
+      "cmd": "git fetch origin main && git worktree add <worktree> -b tmp-probe origin/main (branch renamed to bot-01-scout/jupiter-overflow)",
+      "exit_code": 0,
+      "output_tail": "origin/main at c7ef904; worktree created"
+    },
+    {
+      "cmd": "git diff --quiet origin/main -- src (before red run, after adding test only)",
+      "exit_code": 0,
+      "output_tail": "src identical to origin/main; diff stat is tests/tools/market/test_jupiter_errors.py only"
+    },
+    {
+      "cmd": "make sync",
+      "exit_code": 0,
+      "output_tail": "dependencies installed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py -k overflowing -p no:cacheprovider",
+      "exit_code": 1,
+      "output_tail": "RED on origin/main src: OverflowError: int too large to convert to float at src/pumpgrok/tools/market/jupiter.py:80 (ratio = float(price_impact) / 100); test fails at tests/tools/market/test_jupiter_errors.py:100 (result = await get_quote(...))"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "9 passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py::test_overflowing_price_impact_is_malformed_not_raised -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "1 passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market tests/characterization/test_jupiter_quote.py -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "26 passed"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "ruff check passed; ruff format --check: 859 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "mypy src/ run; services/desk-signer/src absent, service typecheck skipped"
+    }
+  ]
+}
