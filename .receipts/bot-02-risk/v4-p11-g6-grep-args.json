@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved step 1 of the two-step G-6 plan (approve_step1).",
   "task_id": "v4-p11-g6-grep-args",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-g6-grep-args",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "G-6 false positive: a read-only grep whose quoted argument contains a trade or deployment pattern was flagged as a send. Step 1 of 2 (this PR): the gate fix in ci/gates/check_rollback.py only. Step 2 (bot-02-risk/v4-p11-g6-grep-selftests, after this PR merges) re-adds the red-green self-tests.",
   "purpose": "Receipt for step 1 of a two-step G-6 fix. find_matches now matches patterns against the command with the operands of a simple read-only search command (grep, egrep, fgrep, zgrep, zegrep, zfgrep) blanked out. The mask is applied only when the command has no expansion, newline, comment or unterminated quote, so a command that runs cannot hide behind a grep. The trade pattern for on-chain sends also accepts the camelCase form, which it previously missed. This PR adds no test: the trusted gate-self-test runs this PR's tests against main's gate scripts, so a test that depends on the fix must wait for step 2. The self-test cases written for this fix are in commit 1c97253 and are not in this PR.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR. Step 1 is not merged.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded), step 1 only. Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single gate commit on this branch with git revert (no force). The change touches ci/gates/check_rollback.py and this receipt only. Reverting restores the earlier false positives on grep arguments and the missed camelCase sendTransaction; no ledger, live state or runtime behaviour changes. Expected recovery time: about 5 minutes.",
   "commands": [
     {
