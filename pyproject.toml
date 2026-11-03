@@ -52,7 +52,7 @@ src = ["src", "tests", "ci"]
 extend-exclude = ["vendor", "prompts-assembled", "var"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "C4", "SIM", "RUF", "S", "T20", "PL"]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "C4", "SIM", "RUF", "S", "T20", "PL", "C901", "PLR0912", "PLR0915"]
 ignore = [
     "PLR0913",  # many-argument constructors on pydantic settings models
     "PLR2004",  # magic values are named constants in risk/ already; tests compare literals
@@ -64,9 +64,41 @@ ignore = [
 "ci/**" = ["T20", "S603", "S607"]
 "scripts/**" = ["T20"]
 "src/pumpgrok/replay/rng.py" = ["S311"]  # FOUND-012/R27: seeded deterministic replay RNG, never crypto
+# Legacy C901 baseline (D-14, QLT-03): files measured after the hotspot splits. The baseline only
+# shrinks; ci/tests/test_complexity_ratchet.py fails on any entry added here. Remove an entry when
+# its file passes C901 (mccabe max-complexity 10).
+"ci/gates/check_desk_integrity.py" = ["C901"]
+"ci/gates/check_receipt.py" = ["C901"]
+"ci/gates/check_secrets.py" = ["C901"]
+"ci/tests/test_gates.py" = ["C901"]
+"scripts/generate-event-schemas.py" = ["C901"]
+"scripts/generate-templates.py" = ["C901"]
+"services/desk-gateway/src/desk_gateway/server.py" = ["C901"]
+"src/pumpgrok/engine/agents/base.py" = ["C901"]
+"src/pumpgrok/engine/monitor.py" = ["C901"]
+"src/pumpgrok/replay/runner.py" = ["C901"]
+"src/pumpgrok/risk/breakers.py" = ["C901"]
+"src/pumpgrok/supervisor/metrics.py" = ["C901"]
+"src/pumpgrok/tools/onchain/large_transfers.py" = ["C901"]
+"src/pumpgrok/tools/risk/halt_status.py" = ["C901"]
+"tests/docs/test_runbook_commands.py" = ["C901"]
+"tests/harness/faults.py" = ["C901"]
+"tests/risk/test_check_order_caps.py" = ["C901"]
+"tests/safety/test_import_graph_no_live.py" = ["C901"]
+"tests/safety/test_money_types.py" = ["C901"]
+"tests/safety/test_no_eval_or_shell.py" = ["C901"]
+"tests/safety/test_static_guards.py" = ["C901"]
+"tests/tools/onchain/test_onchain_reads.py" = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pumpgrok"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-branches = 12
+max-statements = 50
 
 [tool.ruff.format]
 quote-style = "double"
