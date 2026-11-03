@@ -32,7 +32,10 @@
     {"cmd": "make lint   # round 3", "exit_code": 0, "output_tail": "ruff check . : All checks passed! ; ruff format --check . : 868 files already formatted ; services lint skipped (services/desk-signer/src absent)"},
     {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/scripts/test_probe_curve_layout.py tests/docs/test_verify_doc_commands_offline.py   # round 3", "exit_code": 0, "output_tail": "3 files already formatted"},
     {"cmd": "git diff --stat -- scripts/probe_curve_layout.py docs/CURVE_LAYOUT_PROBE.md tests/docs/test_verify_doc_commands_offline.py   # round 3", "exit_code": 0, "output_tail": "docs/CURVE_LAYOUT_PROBE.md 2 +- ; scripts/probe_curve_layout.py 7 ++++--- ; tests/docs/test_verify_doc_commands_offline.py 8 ++++---- ; 3 files changed, 9 insertions(+), 8 deletions(-)"},
-    {"cmd": "grep -n VERIFIED docs/CURVE_LAYOUT_PROBE.md   # round 3: committed doc must hold no uppercase VERIFIED token", "exit_code": 1, "output_tail": "no output: no match"}
+    {"cmd": "grep -n VERIFIED docs/CURVE_LAYOUT_PROBE.md   # round 3: committed doc must hold no uppercase VERIFIED token", "exit_code": 1, "output_tail": "no output: no match"},
+    {"cmd": "uv run pytest -q tests/scripts/test_probe_curve_layout.py tests/docs/test_verify_doc_commands_offline.py -o addopts= -p no:cacheprovider --junitxml=/tmp/int10-final.xml   # FINAL on head 80410ed", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"18\" (JUnit /tmp/int10-final.xml)"},
+    {"cmd": "make lint   # FINAL on head 80410ed", "exit_code": 0, "output_tail": "ruff check . : All checks passed! ; ruff format --check . : 868 files already formatted ; services lint skipped (services/desk-signer/src absent)"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-int10-probe-status.json --bot bot-00-chief --strict   # FINAL on head 80410ed, run before these three entries were added", "exit_code": 0, "output_tail": "G-2 PASS: 23 command(s), 17 substantiated claim(s), 4 unverified item(s)"}
   ],
   "claims": [
     {"claim": "On origin/main, before the fix, the decoded-path test fails because the successful decode record writes layout_status VERIFIED.", "evidence_command_index": 3, "expects_failure": true},
@@ -51,7 +54,10 @@
     {"claim": "make lint passes: ruff check and ruff format --check report no findings.", "evidence_command_index": 19},
     {"claim": "The three touched Python files pass ruff format --check.", "evidence_command_index": 20},
     {"claim": "The committed docs/CURVE_LAYOUT_PROBE.md contains no uppercase VERIFIED token.", "evidence_command_index": 22, "expects_failure": true},
-    {"claim": "The round-three diff changes only the review-paragraph wording in one constant and the committed doc, and one stale expected-account test that now asserts DECODED_PENDING_REVIEW. Probe behaviour is unchanged.", "evidence_command_index": 21}
+    {"claim": "The round-three diff changes only the review-paragraph wording in one constant and the committed doc, and one stale expected-account test that now asserts DECODED_PENDING_REVIEW. Probe behaviour is unchanged.", "evidence_command_index": 21},
+    {"claim": "On head 80410ed, both probe test modules pass: the JUnit report shows 18 tests with 0 failures and 0 errors.", "evidence_command_index": 23},
+    {"claim": "make lint passes on head 80410ed: ruff check and ruff format --check report no findings.", "evidence_command_index": 24},
+    {"claim": "The receipt passes the G-2 strict check on head 80410ed; approved_by is the owner's and is unchanged.", "evidence_command_index": 25}
   ],
   "unverified": [
     "No live mainnet getAccountInfo call was made. The RPC call is stubbed in the decoded-path test, so the ASSUMED layout has not been decoded against a real bonding-curve account.",
