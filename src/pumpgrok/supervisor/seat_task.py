@@ -15,124 +15,61 @@ import asyncio
 import logging
 import sqlite3
 import sys
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import Clock
-from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
+from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import halt_key
+from pumpgrok.supervisor.seat_relay import (
+    CLOCK_SKEW_S,
+    KIND_HEARTBEAT_STALE,
+    KIND_LEDGER_READ_FAILED,
+    KIND_RESTART_EXHAUSTED,
+    ClockSkew,
+    append_escalation,
+    escalation_severity,
+    relay_tail,
+)
+from pumpgrok.supervisor.seat_restart import (
+    BACKOFF_CAP_S,
+    RESTART_CAPACITY,
+    RESTART_WINDOW_S,
+    ObserveOnly,
+    RestartPolicy,
+    resume_after,
+)
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
     from pumpgrok.tools.notify.notifier import Notifier
 
+__all__ = [
+    "BACKOFF_CAP_S",
+    "CLOCK_SKEW_S",
+    "KIND_HEARTBEAT_STALE",
+    "KIND_LEDGER_READ_FAILED",
+    "KIND_RESTART_EXHAUSTED",
+    "RESTART_CAPACITY",
+    "RESTART_WINDOW_S",
+    "STALE_CADENCES",
+    "ClockSkew",
+    "CycleFn",
+    "ObserveOnly",
+    "RestartPolicy",
+    "SeatContext",
+    "SeatTask",
+    "append_escalation",
+    "escalation_severity",
+    "relay_tail",
+]
+
 log = logging.getLogger(__name__)
 
-#: Restart budget: 5 restarts per rolling hour (paper-engine.md 6.4).
-RESTART_CAPACITY = 5
-#: Rolling window for the restart budget (seconds).
-RESTART_WINDOW_S = 3600.0
-#: Backoff cap (seconds); attempt n waits min(16, 2**n) plus rng jitter.
-BACKOFF_CAP_S = 16.0
 #: A seat is stale after 3 missed cadences (paper-engine.md 6.3).
 STALE_CADENCES = 3
-#: Escalation kinds this module appends.
-KIND_RESTART_EXHAUSTED = "bot_restart_exhausted"
-KIND_HEARTBEAT_STALE = "heartbeat_stale"
-#: Latch reason when the ledger cannot be read at construction (fail closed).
-KIND_LEDGER_READ_FAILED = "ledger_read_failed"
-#: Resume note prefix written by ``state resume`` (cli.py).
-RESUME_PREFIX = "resume "
-#: Clock skew budget: refuse appends when the clock trails the head by more.
-CLOCK_SKEW_S = 5.0
-
-
-class ClockSkew(Exception):
-    """Refused append: the clock trails the ledger head beyond the budget."""
-
-
-#: Relay severity per escalation kind (critical wakes the operator).
-_ESCALATION_SEVERITY = {
-    KIND_RESTART_EXHAUSTED: "critical",
-    KIND_HEARTBEAT_STALE: "warning",
-    "persistence_down": "critical",
-    "clock_skew": "critical",
-    "ledger_inconsistent": "critical",
-}
-
-#: Ledger tail event types relayed to notify.alert (paper-engine.md 6.4).
-RELAY_TYPES = frozenset(
-    {"Escalation", "HaltSet", "KillSwitchSet", "BreakerTripped", "LiveWriteAttempted"}
-)
-
-#: notify.alert kind per relayed ledger type.
-_RELAY_KIND = {
-    "Escalation": "escalation",
-    "HaltSet": "halt",
-    "KillSwitchSet": "killswitch",
-    "BreakerTripped": "breaker",
-    "LiveWriteAttempted": "escalation",
-}
-
-
-def escalation_severity(kind: str) -> str:
-    """Alert severity for an escalation kind; unknown kinds warn."""
-    return _ESCALATION_SEVERITY.get(kind, "warning")
-
-
-def append_escalation(
-    store: LedgerStore,
-    clock: Clock,
-    *,
-    kind: str,
-    seat: str,
-    detail: str,
-    source: str,
-    correlation_id: str,
-) -> dict[str, Any]:
-    """Append one ``Escalation`` row; the idempotency key dedupes replays.
-
-    Refuses when the clock trails the ledger head beyond the 5 s skew
-    budget (paper-engine.md 6.7): the skew row itself is appended inline
-    and ``ClockSkew`` is raised so no observation lands out of order.
-    """
-    try:
-        head = store.read(limit=None)
-        if head:
-            head_ts = parse_ts_utc(str(head[-1].get("ts_utc", "")))
-            if clock.now() < head_ts - CLOCK_SKEW_S:
-                skew_ts = format_ts_utc(clock.now())
-                store.append(
-                    ts_utc=skew_ts,
-                    source=source,
-                    correlation_id=correlation_id,
-                    idempotency_key=f"escalation|clock_skew|{seat}|{skew_ts}",
-                    type="Escalation",
-                    payload={
-                        "source": source,
-                        "kind": "clock_skew",
-                        "seat": seat,
-                        "detail": "clock trails ledger head; appends refused",
-                    },
-                )
-                raise ClockSkew("clock trails ledger head beyond 5s; append refused")
-    except ClockSkew:
-        raise
-    except Exception as exc:
-        log.debug("skew precheck skipped: %s", exc)
-    ts_utc = clock.utc_iso() if hasattr(clock, "utc_iso") else ""
-    if not ts_utc:
-        ts_utc = format_ts_utc(clock.now())
-    return store.append(
-        ts_utc=ts_utc,
-        source=source,
-        correlation_id=correlation_id,
-        idempotency_key=f"escalation|{kind}|{seat}|{ts_utc}",
-        type="Escalation",
-        payload={"source": source, "kind": kind, "seat": seat, "detail": detail},
-    )
 
 
 @dataclass
@@ -151,126 +88,6 @@ class SeatContext:
 
 
 CycleFn = Callable[[SeatContext], Awaitable[Mapping[str, Any] | None]]
-
-
-@dataclass
-class RestartPolicy:
-    """Token bucket: 5 restarts per rolling hour with jittered backoff.
-
-    ``record_crash`` prunes crashes older than the window and reports
-    whether the seat may restart. ``backoff_s`` is ``min(16, 2**n)`` plus
-    ``rng.uniform(0, 1)`` jitter from the seeded rng, where ``n`` is the
-    number of crashes already in the window. A clean hour resets the count.
-    The seat gates ``not_before`` on the backoff instead of sleeping, so a
-    virtual clock never stalls the supervisor loop.
-    """
-
-    capacity: int = RESTART_CAPACITY
-    window_s: float = RESTART_WINDOW_S
-    crashes: list[float] = field(default_factory=list)
-
-    def _prune(self, now: float) -> None:
-        cutoff = now - self.window_s
-        self.crashes = [ts for ts in self.crashes if ts > cutoff]
-
-    def record_crash(self, now: float) -> bool:
-        """Record a crash; True means restart, False means budget exhausted."""
-        self._prune(now)
-        if len(self.crashes) >= self.capacity:
-            return False
-        self.crashes.append(now)
-        return True
-
-    def attempt(self, now: float) -> int:
-        """Crashes in the window (0-based attempt for the next backoff)."""
-        self._prune(now)
-        return len(self.crashes)
-
-    def backoff_s(self, rng: Any, now: float) -> float:
-        """Jittered backoff for the current attempt count."""
-        n = max(0, self.attempt(now) - 1)
-        return float(min(BACKOFF_CAP_S, 2.0**n) + rng.uniform(0.0, 1.0))
-
-
-def _resume_after(notes: Sequence[Mapping[str, Any]], seat: str, floor: int) -> bool:
-    """True when a human resume note for ``seat`` was appended after ledger sequence ``floor``."""
-    for event in notes:
-        if int(event.get("seq", 0)) <= floor:
-            continue
-        payload = event.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        if payload.get("note_kind") != "note":
-            continue
-        if str(payload.get("seat", "")) != seat:
-            continue
-        if str(payload.get("text", "")).startswith(f"{RESUME_PREFIX}{seat} by human:"):
-            return True
-    return False
-
-
-class ObserveOnly:
-    """Desk-wide observe-only latch set (paper-engine.md 6.4, RISK-006).
-
-    A latched seat keeps running its cycle but cannot resolve paper-write
-    tools: the sniper latch stops buys desk-wide (nobody else can buy),
-    the risk latch rejects buys while exits continue, and the exit latch
-    appends ``HaltSet(reason=manual)`` because open positions would be
-    unmanaged. Cleared by ``state resume --seat --by human:<name>``, which
-    the scheduler folds from the ledger every tick.
-    """
-
-    def __init__(self) -> None:
-        self._latched: dict[str, str] = {}
-        self._latched_after: dict[str, int] = {}
-
-    def latch(self, seat: str, reason: str, *, after_seq: int = 0) -> None:
-        """Latch a seat observe-only; re-latching keeps the first reason and sequence.
-
-        ``after_seq`` is the ledger head when the latch was set. Only a resume
-        note appended after it clears the latch; older notes are history.
-        """
-        if seat in self._latched:
-            return
-        self._latched[seat] = reason
-        self._latched_after[seat] = after_seq
-
-    def is_latched(self, seat: str) -> bool:
-        """Whether the seat is currently observe-only."""
-        return seat in self._latched
-
-    def reason(self, seat: str) -> str | None:
-        """Latch reason, or None when the seat is live."""
-        return self._latched.get(seat)
-
-    def seats(self) -> frozenset[str]:
-        """Currently latched seats."""
-        return frozenset(self._latched)
-
-    def paper_write_allowed(self, seat: str, side: str) -> bool:
-        """RISK-006 matrix: who may still resolve paper-write tools."""
-        if seat in self._latched:
-            return False
-        buys_off = "bot-04-sniper" in self._latched or "bot-02-risk" in self._latched
-        return not (side == "buy" and buys_off)
-
-    def fold_resume(self, store: LedgerStore) -> list[str]:
-        """Clear latches with a human resume note appended after the latch.
-
-        Returns the resumed seats. Older resume notes are history, never a clear.
-        """
-        resumed: list[str] = []
-        try:
-            notes = store.read(types=["JournalNote"], limit=None)
-        except Exception as exc:
-            log.debug("resume fold skipped: %s", exc)
-            return resumed
-        for seat in list(self._latched):
-            if _resume_after(notes, seat, self._latched_after[seat]):
-                del self._latched[seat]
-                del self._latched_after[seat]
-                resumed.append(seat)
-        return resumed
 
 
 class SeatTask:
@@ -319,6 +136,10 @@ class SeatTask:
         self._stale_raised: bool = False
 
         self._rebuild_exhaustion_latch()
+        self._restore_latched_exit_halt()
+
+    def _restore_latched_exit_halt(self) -> None:
+        """Restore EXIT's protective halt when a rebuilt latch demands it (fail closed)."""
         if self.seat_id == "bot-06-exit" and self._observe_only.is_latched(self.seat_id):
             # A latch rebuilt from the ledger must not leave buys open because the original
             # halt write never landed: restore the protective halt before any seat runs.
@@ -373,7 +194,7 @@ class SeatTask:
         if newest is None:
             return
         floor = int(newest.get("seq", 0))
-        if _resume_after(notes, self.seat_id, floor):
+        if resume_after(notes, self.seat_id, floor):
             return
         self._observe_only.latch(self.seat_id, KIND_RESTART_EXHAUSTED, after_seq=floor)
 
@@ -566,43 +387,3 @@ class SeatTask:
             )
         except Exception as exc:
             log.warning("escalation relay failed for %s: %s", self.seat_id, exc)
-
-
-async def relay_tail(
-    store: LedgerStore,
-    notifier: Notifier | None,
-    clock: Clock,
-    cursor_seq: int,
-) -> int:
-    """Relay new Escalation/HaltSet/KillSwitchSet/BreakerTripped rows.
-
-    Returns the new high-water seq. A None notifier only advances the
-    cursor; relay failures never raise.
-    """
-    try:
-        events = store.read(since_seq=cursor_seq + 1, limit=None)
-    except Exception as exc:
-        log.debug("tail relay skipped: %s", exc)
-        return cursor_seq
-    high = cursor_seq
-    for event in events:
-        high = max(high, int(event.get("seq", high)))
-        event_type = str(event.get("type", ""))
-        if event_type not in RELAY_TYPES or notifier is None:
-            continue
-        payload = event.get("payload")
-        detail = payload.get("detail", "") if isinstance(payload, dict) else ""
-        kind = _RELAY_KIND.get(event_type, "escalation")
-        if event_type == "Escalation" and isinstance(payload, dict):
-            kind = str(payload.get("kind", "escalation"))
-        try:
-            await notifier.send(
-                severity="critical" if event_type != "Escalation" else escalation_severity(kind),
-                kind=kind,
-                text=f"{event_type}: {detail}",
-                fields={"seq": event.get("seq")},
-                idempotency_key=f"relay|{event_type}|{event.get('seq')}",
-            )
-        except Exception as exc:
-            log.warning("tail relay failed at seq %s: %s", event.get("seq"), exc)
-    return high
