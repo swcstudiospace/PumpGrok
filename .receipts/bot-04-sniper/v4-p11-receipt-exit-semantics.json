@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
   "task_id": "v4-p11-receipt-exit-semantics",
   "bot": "bot-04-sniper",
   "branch": "bot-04-sniper/v4-p11-receipt-exit-semantics",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "Follow-up to PR 38 (plan 11-06): correct the recorded exit of the live-refusal command in .receipts/bot-04-sniper/v4-p11-paper-adapter-split.json.",
   "purpose": "The PR 38 receipt recorded the command `uv run pumpgrok run --mode live --once; test $? -eq 3` with exit_code 3. That chain exits 0 because test succeeds, so the recorded exit contradicted the command. This receipt records the bare command and its observed exit. Only the cmd and exit_code of that one entry changed in the PR 38 receipt; indexes, claims and approved_by are unchanged.",
-  "status": "draft follow-up for review. approved_by is intentionally absent; the executor never writes it.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "commits": [],
   "commands": [
     {"cmd": "git rev-parse --show-toplevel", "exit_code": 0, "output_tail": "/root/src/repos/pumpgrok-wt/v4-11-06"},
