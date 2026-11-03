@@ -1,0 +1,75 @@
+{
+  "task_id": "v4-p11-g6-grep-selftests",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/v4-p11-g6-grep-selftests",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "G-6 follow-up, step 2 of 2: re-add the red-green self-tests for the grep-operand masking and the camelCase sendTransaction trade pattern. The gate fix itself merged in PR 47 (61b39af).",
+  "purpose": "Receipt for a test-only change. Adds 14 self-test cases to TestG5G6RollbackAndDestructive in ci/tests/test_gates.py: read-only grep arguments containing trade or deployment patterns are not flagged; real sends and deletes next to a grep are still flagged; a sendTransaction command without approval fails the gate. The cases are the same ones written in commit 1c97253 and applied here unchanged. No gate script is touched.",
+  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR. Not merged.",
+  "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches ci/tests/test_gates.py and this receipt only; no gate, runtime or CI behaviour changes. Expected recovery time: under 5 minutes.",
+  "commands": [
+    {
+      "cmd": "git fetch origin main && git worktree add -b bot-02-risk/v4-p11-g6-grep-selftests /root/src/repos/pumpgrok-wt/v4-g6-selftests origin/main",
+      "exit_code": 0,
+      "output_tail": "origin/main at 61b39af (PR 47 merged)"
+    },
+    {
+      "cmd": "git show 1c97253 -- ci/tests/test_gates.py | git apply",
+      "exit_code": 0,
+      "output_tail": "ci/tests/test_gates.py: 48 insertions; the gate file is not touched"
+    },
+    {
+      "cmd": "red on a throwaway checkout of the pre-fix commit: git worktree add --detach <tmp> 1c97253^ (c7ef904), copy the step 2 test_gates.py there, uv run pytest -q ci/tests/test_gates.py -k G5G6 -o addopts=",
+      "exit_code": 1,
+      "output_tail": "10 failed, 28 passed, 125 deselected in 8.50s"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_gates.py -k G5G6 -o addopts= (step 2 tree, on origin/main with the fix)",
+      "exit_code": 0,
+      "output_tail": "38 passed, 125 deselected in 8.03s"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests -o addopts= (step 2 tree)",
+      "exit_code": 0,
+      "output_tail": "441 passed in 57.28s"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "service lint skipped (desk-signer absent)"
+    },
+    {
+      "cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-02-risk/v4-p11-g6-grep-selftests.json --bot bot-02-risk",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL: 'approved_by' is missing — work must be reviewed by someone else (the only reason)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The 14 added self-tests fail on the pre-fix gate: 10 of them fail on the commit before the fix",
+      "expects_failure": true,
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The G-5/G-6 self-tests pass on origin/main with the fix: 38 passed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The full ci/tests suite passes on this branch with 441 tests",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "make lint passes on this branch",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "Approval is pending. The owner has not approved this PR; approved_by is absent by design. check_receipt reports only that reason.",
+    "The red run used a throwaway checkout of the pre-fix commit with this branch's test file. It was removed after the run.",
+    "make test and make typecheck were not run here; CI runs them on this branch.",
+    "The gate fix itself was reviewed and merged under PR 47, not in this PR."
+  ],
+  "carry_over": {
+    "step_1": "PR 47, merged at 61b39af: gate fix in ci/gates/check_rollback.py with no tests."
+  }
+}
