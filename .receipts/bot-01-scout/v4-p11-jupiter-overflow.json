@@ -1,0 +1,91 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
+  "task_id": "v4-p11-jupiter-overflow",
+  "bot": "bot-01-scout",
+  "branch": "bot-01-scout/jupiter-overflow",
+  "base": "origin/main c7ef904",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Regression fix for ef7922c (QLT-06): an integer priceImpact of more than 308 digits makes float() raise OverflowError, which escaped get_quote. The inner guard now treats ArithmeticError as malformed, so ratio is None.",
+  "purpose": "Seat receipt for the fail-closed regression in src/pumpgrok/tools/market/jupiter.py. Records the red run against origin/main source, the one-line fix, and the green and gate runs at the branch head.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
+  "files": [
+    "src/pumpgrok/tools/market/jupiter.py",
+    "tests/tools/market/test_jupiter_errors.py",
+    ".receipts/bot-01-scout/v4-p11-jupiter-overflow.json"
+  ],
+  "commands": [
+    {
+      "cmd": "git fetch origin main && git worktree add <worktree> -b tmp-probe origin/main (branch renamed to bot-01-scout/jupiter-overflow)",
+      "exit_code": 0,
+      "output_tail": "origin/main at c7ef904; worktree created"
+    },
+    {
+      "cmd": "git diff --quiet origin/main -- src (before red run, after adding test only)",
+      "exit_code": 0,
+      "output_tail": "src identical to origin/main; diff stat is tests/tools/market/test_jupiter_errors.py only"
+    },
+    {
+      "cmd": "make sync",
+      "exit_code": 0,
+      "output_tail": "dependencies installed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py -k overflowing -p no:cacheprovider",
+      "exit_code": 1,
+      "output_tail": "RED on origin/main src: OverflowError: int too large to convert to float at src/pumpgrok/tools/market/jupiter.py:80 (ratio = float(price_impact) / 100); test fails at tests/tools/market/test_jupiter_errors.py:100 (result = await get_quote(...))"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "9 passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market/test_jupiter_errors.py::test_overflowing_price_impact_is_malformed_not_raised -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "1 passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/tools/market tests/characterization/test_jupiter_quote.py -p no:cacheprovider",
+      "exit_code": 0,
+      "output_tail": "26 passed"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "ruff check passed; ruff format --check: 859 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "mypy src/ run; services/desk-signer/src absent, service typecheck skipped"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The new test test_overflowing_price_impact_is_malformed_not_raised fails on origin/main source with OverflowError at src/pumpgrok/tools/market/jupiter.py:80",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "The Jupiter error test module passes with the ArithmeticError guard in place",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The new overflow test passes with the ArithmeticError guard in place",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "make lint exits 0 on the fixed branch",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "make typecheck exits 0 on the fixed branch",
+      "evidence_command_index": 8
+    }
+  ],
+  "unverified": [
+    "The full make test suite was not run locally; the CI check job is the run of record for the full suite",
+    "Owner approval is pending: approved_by is intentionally absent and the human G-2 approval has not been recorded"
+  ]
+}
