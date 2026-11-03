@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the second batch (approve_batch2: this PR selected).",
   "task_id": "v4-p11-seat-task-cutover-tests",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-seat-task-cutover-tests",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "Staged seat_task cutover, step 1 of 2: test importers take names from the module that defines them after the 11-09 split. Step 2 (chief seat) removes the re-exports from seat_task.py.",
   "purpose": "Receipt for an import-only change in test files. Names that seat_task.py re-exports from seat_relay.py (CLOCK_SKEW_S, ClockSkew, KIND_*, append_escalation, escalation_severity, relay_tail) and from seat_restart.py (BACKOFF_CAP_S, ObserveOnly, RESTART_*, RestartPolicy) are now imported from those modules. Names defined in seat_task.py itself (SeatContext, SeatTask, STALE_CADENCES) are unchanged. No assertion, fixture, patch target or test logic changed. No file under src/pumpgrok/supervisor is touched.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change is import lines in 12 test files plus this receipt; no runtime or src behaviour changes. Expected recovery time: under 5 minutes. Step 2 must not merge before this PR is on main.",
   "commands": [
     {
