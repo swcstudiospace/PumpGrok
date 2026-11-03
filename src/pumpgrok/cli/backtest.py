@@ -8,7 +8,7 @@ import logging
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -16,29 +16,30 @@ from pydantic import ValidationError
 
 from pumpgrok.backtest.candidate import param_set_mapping
 from pumpgrok.backtest.evaluate import CandidateParams, evaluated_settings_hash
-from pumpgrok.backtest.harness import run_search
-from pumpgrok.backtest.manifest import build_manifest, param_set_hash
+from pumpgrok.backtest.harness import HarnessResult, run_search
+from pumpgrok.backtest.manifest import RunManifest, build_manifest, param_set_hash
 from pumpgrok.backtest.report import build_report
 from pumpgrok.backtest.report import render as render_backtest
-from pumpgrok.backtest.split import holdout_split
+from pumpgrok.backtest.split import HoldoutSplit, holdout_split
 from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.cli.backtest_holdout import (
     _Dataset,
     _evaluate_holdout,
     _fills_from_rows,
+    _HoldoutOutcome,
     _read_window_ledger,
     _rejection_fees,
     _row_stamp,
     _window_curve,
 )
-from pumpgrok.cli.backtest_paper_gate import _paper_gate, _paper_window
+from pumpgrok.cli.backtest_paper_gate import _paper_gate, _paper_window, _PaperOutcome
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel
-from pumpgrok.replay.fixtures import event_epoch, load_dataset
+from pumpgrok.replay.fixtures import FixtureDataset, event_epoch, load_dataset
 from pumpgrok.risk.limits import EngineLimits
 
 # Names that promotion.py and the backtest test suites import from this module. Their
@@ -123,6 +124,196 @@ def _run_lock(run_dir: Path) -> Iterator[None]:
         yield
 
 
+@dataclass(frozen=True)
+class _Plan:
+    """Inputs, run identity and holdout window that the verb derives before the run lock."""
+
+    dataset: _Dataset
+    params: CandidateParams
+    params_mapping: dict[str, Any]
+    seed: int
+    risk_budget: RiskBudget
+    limits: EngineLimits
+    manifest: RunManifest
+    events: FixtureDataset
+    stamps: tuple[float, ...]
+    split: HoldoutSplit
+    tuning_events: int
+    holdout_events: int
+    run_dir: Path
+
+    @property
+    def holdout_ledger(self) -> Path:
+        return self.run_dir / "holdout.sqlite"
+
+
+@dataclass(frozen=True)
+class _Settled:
+    """Holdout outcome, promotion eligibility, promotion reasons and paper gate of one run."""
+
+    outcome: _HoldoutOutcome
+    eligible: bool
+    reasons: list[str]
+    gate: _PaperOutcome
+
+
+def _candidate_params(params_mapping: dict[str, Any]) -> CandidateParams:
+    try:
+        return CandidateParams(**params_mapping)
+    except ValidationError as exc:
+        raise UsageError(
+            "bad --params file: want filter/exits overrides validated against desk settings"
+        ) from exc
+
+
+def _backtest_plan(args: argparse.Namespace, settings: Settings) -> _Plan:
+    """Resolve the dataset, parameter set, run identity and holdout split (BT-06)."""
+    dataset = _backtest_dataset(str(args.fixture))
+    params_data, params_mapping = _backtest_params(args.params)
+    params = _candidate_params(params_mapping)
+    seed = settings.replay.seed
+    # The replay evaluates desk defaults for the risk budget and engine limits, with the
+    # candidate filter and exits overrides. The report identity covers exactly that set,
+    # so operator overlays that the replay never reads stay out of it.
+    risk_budget = RiskBudget()
+    limits = EngineLimits()
+    manifest = build_manifest(
+        dataset.ref,
+        seed,
+        evaluated_settings_hash(params, risk_budget=risk_budget, limits=limits),
+        param_set_hash(params_data),
+    )
+    events = load_dataset(dataset.directory)
+    stamps = tuple(event_epoch(event) for event in events.events)
+    split = holdout_split(stamps, dataset.name)
+    tuning_events = sum(1 for stamp in stamps if stamp < split.holdout_start_ts)
+    return _Plan(
+        dataset=dataset,
+        params=params,
+        params_mapping=params_mapping,
+        seed=seed,
+        risk_budget=risk_budget,
+        limits=limits,
+        manifest=manifest,
+        events=events,
+        stamps=stamps,
+        split=split,
+        tuning_events=tuning_events,
+        holdout_events=len(stamps) - tuning_events,
+        run_dir=Path("var/backtest") / manifest.run_id,
+    )
+
+
+def _run_trials(plan: _Plan) -> HarnessResult:
+    """Record the single trial, check it won, and write the run manifest (BT-06)."""
+    trials_path = plan.run_dir / "trials.jsonl"
+    if trials_path.exists():
+        trials_path.unlink()
+    harness_result = run_search(
+        plan.dataset.ref,
+        [plan.params_mapping],
+        1,
+        plan.seed,
+        run_id=plan.manifest.run_id,
+        risk_budget=plan.risk_budget,
+        limits=plan.limits,
+        holdout_ledger_path=plan.holdout_ledger,
+    )
+    if harness_result.best_params_hash != plan.params.content_hash:
+        raise ConfigError(["backtest winner differs from the evaluated parameter set"])
+    manifest_path = plan.run_dir / "manifest.json"
+    manifest_path.write_text(
+        canonical_json(plan.manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
+    )
+    return harness_result
+
+
+def _settle(
+    args: argparse.Namespace,
+    settings: Settings,
+    plan: _Plan,
+    harness_result: HarnessResult,
+) -> _Settled:
+    """Holdout outcome, promotion eligibility and the same-window paper gate (PAP-02, G-08)."""
+    outcome = _evaluate_holdout(
+        spec=plan.dataset,
+        dataset=plan.events,
+        stamps=plan.stamps,
+        split=plan.split,
+        run_id=plan.manifest.run_id,
+        holdout_ledger=plan.holdout_ledger,
+        initial_fallback=settings.risk.paper_equity_lamports,
+    )
+    eligible = harness_result.eligible_for_promotion
+    reasons: list[str] = []
+    if not eligible:
+        reasons.append(
+            f"trial count {harness_result.trial_count} is past the promotion limit of "
+            f"{MAX_ELIGIBLE_TRIALS}"
+        )
+    gate = _paper_gate(
+        paper_ledger=args.paper_ledger,
+        dataset_name=plan.dataset.name,
+        run_id=plan.manifest.run_id,
+        cutoff=plan.split.holdout_start_ts,
+        window_end=outcome.window_end_ts,
+        elapsed_days=outcome.elapsed_days,
+        initial_fallback=settings.risk.paper_equity_lamports,
+        backtest_result=outcome.backtest_result,
+        window_metrics=outcome.window_metrics,
+        eligible=eligible,
+    )
+    reasons.extend(gate.reasons)
+    return _Settled(outcome=outcome, eligible=eligible, reasons=reasons, gate=gate)
+
+
+def _emit_report(plan: _Plan, harness_result: HarnessResult, settled: _Settled) -> None:
+    """Build the deterministic backtest report from the run and print it (CONTEXT G-01)."""
+    outcome = settled.outcome
+    gate = settled.gate
+    fees = FeeModel()
+    report = build_report(
+        run_id=plan.manifest.run_id,
+        dataset=plan.dataset.name,
+        dataset_digest=plan.manifest.dataset_digest,
+        seed=plan.seed,
+        filter_settings_hash=plan.manifest.filter_settings_hash,
+        param_set_hash=plan.manifest.param_set_hash,
+        code_version=plan.manifest.code_version,
+        data_start_utc=outcome.data_start_utc,
+        data_end_utc=outcome.data_end_utc,
+        window_start_utc=outcome.window_start_utc,
+        window_end_utc=outcome.window_end_utc,
+        holdout_id=plan.split.holdout_id,
+        split_ids=(*plan.split.train_ids, plan.split.holdout_id),
+        holdout_events=plan.holdout_events,
+        tuning_events=plan.tuning_events,
+        trial_count=harness_result.trial_count,
+        max_eligible_trials=MAX_ELIGIBLE_TRIALS,
+        max_allowed_trials=MAX_ALLOWED_TRIALS,
+        eligible_for_promotion=settled.eligible,
+        promotion_eligible=gate.promotion_eligible,
+        promotion_reason="; ".join(settled.reasons),
+        venue_fee_bps=VENUE_FEE_BPS,
+        base_fee_lamports=BASE_FEE_LAMPORTS,
+        network_cost_lamports=fees.network_cost(),
+        fills=outcome.fills,
+        metrics=outcome.window_metrics,
+        elapsed_days=outcome.elapsed_days,
+        paper_metrics=gate.paper_metrics,
+        divergence_reasons=gate.divergence_reasons,
+    )
+    # Refused attempts paid fees that the cash curve already deducts, so the
+    # realized fee total adds them to the fills' venue and network costs.
+    report = replace(
+        report,
+        realized_fees_lamports_total=(
+            report.realized_fees_lamports_total + outcome.rejected_fees_lamports
+        ),
+    )
+    _say(sys.stdout, render_backtest(report))
+
+
 def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     """Run one parameter set over the recorded dataset with the holdout (BT-06).
 
@@ -143,125 +334,12 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     it promotion stays ineligible with reason divergence not compared. This
     verb places no paper orders itself.
     """
-    dataset = _backtest_dataset(str(args.fixture))
-    params_data, params_mapping = _backtest_params(args.params)
-    try:
-        params = CandidateParams(**params_mapping)
-    except ValidationError as exc:
-        raise UsageError(
-            "bad --params file: want filter/exits overrides validated against desk settings"
-        ) from exc
-    seed = settings.replay.seed
-    # The replay evaluates desk defaults for the risk budget and engine limits, with the
-    # candidate filter and exits overrides. The report identity covers exactly that set,
-    # so operator overlays that the replay never reads stay out of it.
-    risk_budget = RiskBudget()
-    limits = EngineLimits()
-    manifest = build_manifest(
-        dataset.ref,
-        seed,
-        evaluated_settings_hash(params, risk_budget=risk_budget, limits=limits),
-        param_set_hash(params_data),
-    )
-    events = load_dataset(dataset.directory)
-    stamps = tuple(event_epoch(event) for event in events.events)
-    split = holdout_split(stamps, dataset.name)
-    cutoff = split.holdout_start_ts
-    tuning_events = sum(1 for stamp in stamps if stamp < cutoff)
-    holdout_events = len(stamps) - tuning_events
-    run_dir = Path("var/backtest") / manifest.run_id
-    holdout_ledger = run_dir / "holdout.sqlite"
-    with _run_lock(run_dir):
-        trials_path = run_dir / "trials.jsonl"
-        if trials_path.exists():
-            trials_path.unlink()
-        harness_result = run_search(
-            dataset.ref,
-            [params_mapping],
-            1,
-            seed,
-            run_id=manifest.run_id,
-            risk_budget=risk_budget,
-            limits=limits,
-            holdout_ledger_path=holdout_ledger,
-        )
-        if harness_result.best_params_hash != params.content_hash:
-            raise ConfigError(["backtest winner differs from the evaluated parameter set"])
-        manifest_path = run_dir / "manifest.json"
-        manifest_path.write_text(
-            canonical_json(manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
-        )
-        outcome = _evaluate_holdout(
-            spec=dataset,
-            dataset=events,
-            stamps=stamps,
-            split=split,
-            run_id=manifest.run_id,
-            holdout_ledger=holdout_ledger,
-            initial_fallback=settings.risk.paper_equity_lamports,
-        )
-        eligible = harness_result.eligible_for_promotion
-        reasons: list[str] = []
-        if not eligible:
-            reasons.append(
-                f"trial count {harness_result.trial_count} is past the promotion limit of "
-                f"{MAX_ELIGIBLE_TRIALS}"
-            )
-        gate = _paper_gate(
-            paper_ledger=args.paper_ledger,
-            dataset_name=dataset.name,
-            run_id=manifest.run_id,
-            cutoff=cutoff,
-            window_end=outcome.window_end_ts,
-            elapsed_days=outcome.elapsed_days,
-            initial_fallback=settings.risk.paper_equity_lamports,
-            backtest_result=outcome.backtest_result,
-            window_metrics=outcome.window_metrics,
-            eligible=eligible,
-        )
-        reasons.extend(gate.reasons)
-        fees = FeeModel()
-        report = build_report(
-            run_id=manifest.run_id,
-            dataset=dataset.name,
-            dataset_digest=manifest.dataset_digest,
-            seed=seed,
-            filter_settings_hash=manifest.filter_settings_hash,
-            param_set_hash=manifest.param_set_hash,
-            code_version=manifest.code_version,
-            data_start_utc=outcome.data_start_utc,
-            data_end_utc=outcome.data_end_utc,
-            window_start_utc=outcome.window_start_utc,
-            window_end_utc=outcome.window_end_utc,
-            holdout_id=split.holdout_id,
-            split_ids=(*split.train_ids, split.holdout_id),
-            holdout_events=holdout_events,
-            tuning_events=tuning_events,
-            trial_count=harness_result.trial_count,
-            max_eligible_trials=MAX_ELIGIBLE_TRIALS,
-            max_allowed_trials=MAX_ALLOWED_TRIALS,
-            eligible_for_promotion=eligible,
-            promotion_eligible=gate.promotion_eligible,
-            promotion_reason="; ".join(reasons),
-            venue_fee_bps=VENUE_FEE_BPS,
-            base_fee_lamports=BASE_FEE_LAMPORTS,
-            network_cost_lamports=fees.network_cost(),
-            fills=outcome.fills,
-            metrics=outcome.window_metrics,
-            elapsed_days=outcome.elapsed_days,
-            paper_metrics=gate.paper_metrics,
-            divergence_reasons=gate.divergence_reasons,
-        )
-        # Refused attempts paid fees that the cash curve already deducts, so the
-        # realized fee total adds them to the fills' venue and network costs.
-        report = replace(
-            report,
-            realized_fees_lamports_total=(
-                report.realized_fees_lamports_total + outcome.rejected_fees_lamports
-            ),
-        )
-        _say(sys.stdout, render_backtest(report))
-    return gate.exit_code
+    plan = _backtest_plan(args, settings)
+    with _run_lock(plan.run_dir):
+        harness_result = _run_trials(plan)
+        settled = _settle(args, settings, plan, harness_result)
+        _emit_report(plan, harness_result, settled)
+    return settled.gate.exit_code
 
 
 def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
