@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
   "task_id": "v4-p11-uv-pin-follow-up",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-uv-pin-follow-up",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "Follow-up to merged PR 35: pin UV in the services gating dry-run test (Greptile P2, discussion_r4449362180)",
   "purpose": "Receipt for one test-only change. _make_dry_run in ci/tests/test_ci_covers_services.py now passes UV=uv on the make command line and builds its subprocess environment without UV, MAKEFLAGS and MFLAGS, so an exported UV or inherited make flags cannot break the literal uv run assertions. No Makefile, CI or src/ change.",
-  "status": "draft pull request; not approved. approved_by is intentionally absent; the owner has not approved this PR.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches only ci/tests/test_ci_covers_services.py and this receipt; no runtime, CI or data behaviour changes. Expected recovery time: under 5 minutes.",
   "commands": [
     {
