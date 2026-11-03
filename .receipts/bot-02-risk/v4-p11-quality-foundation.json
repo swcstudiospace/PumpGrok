@@ -481,6 +481,41 @@
       "cmd": "python3 -P ci/gates/run_all.py --bot bot-02-risk --base origin/main --receipt .receipts/bot-02-risk/v4-p11-quality-foundation.json",
       "exit_code": 0,
       "output_tail": "  [PASS]  G-7  Desk integrity |  | All gates passed."
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "ruff check and ruff format --check clean; services lint skipped (absent)"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "mypy --strict: Success: no issues found in 222 source files"
+    },
+    {
+      "cmd": "uv run pytest -q tests/cli tests/backtest tests/upgrade/test_scheduled_promotion.py",
+      "exit_code": 0,
+      "output_tail": "all pass; characterization verb test (tests/cli/test_backtest_verb_characterization.py) included"
+    },
+    {
+      "cmd": "uv run pytest -q tests/safety/test_cli_import_no_live_adapter.py",
+      "exit_code": 0,
+      "output_tail": "1 passed"
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality/test_function_size.py",
+      "exit_code": 1,
+      "output_tail": "red only on the five buy.py and marks.py functions that PR 48 splits"
+    },
+    {
+      "cmd": "git worktree add --detach /tmp/v4/combo d289332 && git -C /tmp/v4/combo merge --no-edit -q origin/bot-04-sniper/v4-p11-buy-marks-split && python3 -P -c \"guard functions\"",
+      "exit_code": 0,
+      "output_tail": "guard green on d289332 with PR 48 head merged in a throwaway worktree; 29 successor files"
+    },
+    {
+      "cmd": "python3 -P -c \"ast lengths of the four cli backtest functions\"",
+      "exit_code": 0,
+      "output_tail": "_backtest_verb 26, _evaluate_holdout 56, _fills_from_rows 24, _paper_gate 41"
     }
   ],
   "claims": [
@@ -666,6 +701,35 @@
     {
       "claim": "The G-1 to G-7 gate runner exits 0 against origin/main 3182763 with the receipt in place.",
       "evidence_command_index": 93
+    },
+    {
+      "claim": "make lint and make typecheck pass on d289332 after the cli split.",
+      "evidence_command_index": 94
+    },
+    {
+      "claim": "make typecheck passes on d289332 after the cli split.",
+      "evidence_command_index": 95
+    },
+    {
+      "claim": "The cli backtest characterization and report suites pass on d289332: tests/cli, tests/backtest and test_scheduled_promotion exit 0, with no assertion edited.",
+      "evidence_command_index": 96
+    },
+    {
+      "claim": "The cli import-safety test passes on d289332.",
+      "evidence_command_index": 97
+    },
+    {
+      "claim": "On the branch alone the function-size guard is red only on the five buy.py and marks.py functions that PR 48 splits; no cli/backtest successor is over 60 lines.",
+      "evidence_command_index": 98,
+      "expects_failure": true
+    },
+    {
+      "claim": "With PR 48 head merged in a throwaway worktree, the function-size guard is green on all 29 successor files.",
+      "evidence_command_index": 99
+    },
+    {
+      "claim": "After the split the four cli backtest functions are 26, 56, 24 and 41 lines; before they were 139, 71, 63 and 68.",
+      "evidence_command_index": 100
     }
   ],
   "unverified": [
@@ -690,7 +754,11 @@
     "Not run: full make test, make test-soak, make cov, make check, and CI's check job. The assignment excluded them. Only the targeted commands above were executed.",
     "The property modules passed on first run against existing helpers, so no red step was observed for them. They characterize current behaviour and needed no source helper.",
     "mutants/ is created at the repository root by mutmut and is untracked. .gitignore was not changed because it is not in this plan's file list. The directory was removed before the final commits.",
-    "The branch name differs from the plan's bot-02-risk/v4-p11-quality-foundation. That local branch is the merged PR #35 branch (an ancestor of origin/main), so this run uses bot-02-risk/v4-p11-quality-foundation-ratchet. The top-level branch field keeps the merged PR-35 value; this run's branch is in plan_11_05.branch."
+    "The branch name differs from the plan's bot-02-risk/v4-p11-quality-foundation. That local branch is the merged PR #35 branch (an ancestor of origin/main), so this run uses bot-02-risk/v4-p11-quality-foundation-ratchet. The top-level branch field keeps the merged PR-35 value; this run's branch is in plan_11_05.branch.",
+    "Commit d289332 is behaviour-preserving by reading and by the existing characterization and report pins. No new pin was added; the verb's report pin on smoke-10m is in tests/cli/test_backtest_verb_characterization.py and passed.",
+    "The tests/cli, tests/backtest and promotion run took about eleven minutes, so the bash wrapper's 280 second cap cut one run at exit 124 with no failure reported. The run was repeated without a deadline and exited 0.",
+    "The combined guard check merged PR 48's head into a detached throwaway worktree that was then removed. Nothing was pushed and the branch was not changed by it.",
+    "The cli/backtest.py __all__ re-export list is unchanged; it still names the holdout and paper gate helpers that promotion.py and the test suites import."
   ],
   "carry_over": {
     "wildcard_choice": "Replace services/desk-signer with the generic wildcard once services/desk-gateway/src/desk_gateway/server.py:385 is fixed by its owner.",
@@ -723,7 +791,7 @@
     "plan": "11-05: complexity ratchet, property tests, mutation smoke, function-size and plain-swallow guards (PR-06, third of three plans on this branch)",
     "branch": "bot-02-risk/v4-p11-quality-foundation-ratchet",
     "base": "origin/main 3182763",
-    "status": "blocked: function-size guard red on nine functions; branch local only; PR not opened; PR #48 unmerged",
+    "status": "branch local, not pushed; function-size guard green only after PR 48 merges to origin/main (red on the five buy and marks functions until then); no PR opened",
     "commits": [
       {
         "sha": "6323637",
@@ -740,17 +808,23 @@
       {
         "sha": "4160256",
         "task": "build(make): opt-in mutation-smoke over risk and execution math (QLT-08)"
+      },
+      {
+        "sha": "d289332",
+        "task": "refactor(cli): split backtest verb, holdout fills, window span and paper gate under 60 lines (QLT-04)"
       }
     ],
     "function_length_measurement": {
       "before_origin_main_3182763": "over 60 lines in successors: 9 (cli/backtest 4, paper_adapter buy 3, marks 2)",
-      "after_pr48_head_d0fbac7_paper_adapter_only": "paper_adapter 0; cli/backtest successors still 4 (_backtest_verb 139, _evaluate_holdout 71, _fills_from_rows 63, _paper_gate 68)"
+      "after_cli_split_d289332": "cli/backtest successors: _backtest_verb 26, _evaluate_holdout 56, _fills_from_rows 24, _paper_gate 41; paper_adapter buy and marks still 5 over 60 until PR 48",
+      "after_pr48_head_merged_with_d289332": "all 29 successor files pass the guard; largest successor function 60 (quote.py simulate)"
     },
     "deviations": [
       "Branch name is distinct from the plan's name, because the plan name is the merged PR #35 branch.",
       "Per-file C901 baseline lives in pyproject ruff per-file-ignores (22 files) rather than per-function noqa; the ratchet test pins that set.",
       "Plain-swallow scope is src/pumpgrok only; a plain swallow is a broad handler that neither re-raises nor calls anything. Nine pre-existing ones are a shrink-only baseline.",
-      "Mutation-smoke selection is three direct unit-test files; broad tests/risk and tests/execution selections failed the mutmut baseline and ran too slowly per mutant."
+      "Mutation-smoke selection is three direct unit-test files; broad tests/risk and tests/execution selections failed the mutmut baseline and ran too slowly per mutant.",
+      "The four cli/backtest functions were split under this plan on Main's instruction (not an amended QLT-04). Names, signatures and call order are unchanged."
     ],
     "rollback_plan": "Local branch only; no remote state changed. To discard, remove the worktree /root/src/repos/pumpgrok-wt/v4-11-05 and delete branch bot-02-risk/v4-p11-quality-foundation-ratchet. Nothing merges or deploys from this run."
   }
