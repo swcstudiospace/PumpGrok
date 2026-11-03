@@ -1,0 +1,38 @@
+{
+  "task_id": "v4-p11-int10-probe-fix",
+  "ticket": "INT-10",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-int10-probe-fix",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "INT-10 stage 2 of 3: scripts/probe_curve_layout.py only, on a branch from origin/main. The probe never writes VERIFIED. It writes DECODED_PENDING_REVIEW after a successful decode, and the shared review paragraph carries no uppercase VERIFIED token in either the decoded or the ASSUMED doc. Stage 1 (bot-02-risk) removes the VERIFIED-pinning test in tests/docs and must merge first. Stage 3 is the tests and doc. Draft pull request, not merged.",
+  "purpose": "Carries the probe fix from PR 56 head 7f03ef2 onto a branch from origin/main, so PR 56 can be superseded under G-1. Takes scripts/probe_curve_layout.py verbatim from that head. Adds no test or doc file: tests belong to bot-02-risk stage 1, and the doc to stage 3. This receipt is new and does not overwrite the PR 56 receipt.",
+  "status": "Prepared locally. Not pushed. No pull request opened. Waits for stage 1 to merge, then push and open a draft PR. approved_by is not recorded here; it is for a human reviewer.",
+  "commands": [
+    {"cmd": "git -C /root/src/repos/pumpgrok fetch origin main bot-00-chief/v4-int10-probe-status", "exit_code": 0, "output_tail": "origin main 5f85000a6914c085bb8b389852551aa40b2cf9b3; PR 56 head 7f03ef2e78bd022f049b361bab4e6e95018bb644"},
+    {"cmd": "git -C /root/src/repos/pumpgrok worktree add /root/src/repos/pumpgrok-wt/v4-int10-stage2 -b bot-00-chief/v4-int10-probe-fix origin/main", "exit_code": 0, "output_tail": "ok"},
+    {"cmd": "git checkout origin/bot-00-chief/v4-int10-probe-status -- scripts/probe_curve_layout.py", "exit_code": 0, "output_tail": "staged: scripts/probe_curve_layout.py 20 insertions(+), 6 deletions(-)"},
+    {"cmd": "uv run pytest -q tests/desk/test_probe_pump_accounts.py -o addopts= -p no:cacheprovider --junitxml=/tmp/int10-s2-pump.xml", "exit_code": 0, "output_tail": "16 passed in 0.17s; testsuite tests=\"16\" failures=\"0\""},
+    {"cmd": "uv run pytest -q tests/scripts/test_probe_curve_layout.py -o addopts= -p no:cacheprovider --junitxml=/tmp/int10-s2-curve.xml   # test file copied from PR 56 head, uncommitted, removed after the run", "exit_code": 0, "output_tail": "2 passed in 0.14s; testsuite tests=\"2\" failures=\"0\""},
+    {"cmd": "uv run pytest -q tests/docs/test_verify_doc_commands_offline.py -o addopts= -p no:cacheprovider --junitxml=/tmp/int10-s2-docs.xml", "exit_code": 1, "output_tail": "pytest: 1 failed, 15 passed; FAILED test_probe_records_verified_for_expected_account (stale, pinned to VERIFIED; removed by stage 1)"},
+    {"cmd": "grep -n VERIFIED scripts/probe_curve_layout.py", "exit_code": 0, "output_tail": "line 14: module docstring; line 59: code comment. No write template contains the token."},
+    {"cmd": "git diff --cached --stat", "exit_code": 0, "output_tail": "1 file changed, 20 insertions(+), 6 deletions(-): scripts/probe_curve_layout.py"}
+  ],
+  "claims": [
+    {"claim": "The pump-accounts probe test module passes on the stage-2 branch: the JUnit report shows 16 tests with 0 failures.", "evidence_command_index": 3},
+    {"claim": "With the PR 56 curve probe test copied in locally and uncommitted, both curve probe tests pass: the JUnit report shows 2 tests with 0 failures.", "evidence_command_index": 4},
+    {"claim": "Before stage 1 merges, the docs test module has one failing test, the stale expected-account test that pins VERIFIED. Both ASSUMED-path cases pass.", "evidence_command_index": 5, "expects_failure": true},
+    {"claim": "The probe writes no VERIFIED token in any template. The two remaining occurrences are in the module docstring and a code comment, and neither is written to a file.", "evidence_command_index": 6},
+    {"claim": "The only staged change is scripts/probe_curve_layout.py.", "evidence_command_index": 7}
+  ],
+  "unverified": [
+    "The curve probe test file is not committed on this branch. It is on PR 56 and belongs to the stage 3 tests. Its local run used a temporary copy, which was removed before the commit.",
+    "The docs test test_probe_records_verified_for_expected_account fails on this branch until stage 1 (bot-02-risk) merges. The failure is expected and is not a regression.",
+    "make lint and ruff format were not run on this branch. They run at the gate after the stage 1 merge, with the full stage set.",
+    "CI on this branch has not been observed. No pull request exists yet, and nothing has been pushed.",
+    "Stage 3 (tests and CURVE_LAYOUT_PROBE.md) has not been prepared here. The live mainnet probe is not run."
+  ],
+  "deviations": [
+    "The first copy of the curve test failed because tests/scripts does not exist on origin/main. The directory was created for the temporary copy, and the copy and the directory were removed afterward, including the pytest __pycache__. No untracked file is left in the worktree.",
+    "The probe file was taken verbatim from PR 56 head 7f03ef2 rather than rewritten, so its behaviour is the one already reviewed on PR 56."
+  ]
+}
