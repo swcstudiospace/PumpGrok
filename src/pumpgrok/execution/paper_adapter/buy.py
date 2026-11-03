@@ -428,48 +428,74 @@ class _BuyMixin:
             creator=creator,
             owner=owner,
         )
-        filled = quote.filled
-        fraction = quote.fraction
-        venue_fee = quote.venue_fee
-        x_net = quote.x_net
-        out0 = quote.out0
-        threshold = quote.threshold
-        if cap_now is not None and cap_now < filled:
-            # CONFIRMING recomputed a smaller trade cap during the wait: fill only
-            # up to it, priced at the decision reserves with a threshold to match.
-            filled = cap_now
-            fraction = Decimal(filled) / Decimal(quote.size)
-            venue_fee = self._fees.venue_fee(filled)
-            x_net = filled - venue_fee
-            out0 = buy_out(curve0.s_lamports, curve0.t_units, x_net)
-            threshold = out0 * (10_000 - quote.slippage_bps) // 10_000
-        out1 = buy_out(curve1.s_lamports, curve1.t_units, x_net)
-        if out1 < threshold:
-            self._inflight.discard(order_id)
-            raise await self._reject(
-                request,
-                request.decision_id,
-                "slippage_exceeded",
-                f"confirm {out1} < threshold {threshold}",
-                stage="CONFIRMING",
-                order_id=order_id,
-                quote_out=out0,
-                threshold=threshold,
-                confirm_out=out1,
-                fees=self._fees.network_cost(),
-                source=ledger_source,
-                correlation_id=correlation_id,
-            )
+        priced = self._buy_recap(quote, curve0, cap_now)
+        out1 = buy_out(curve1.s_lamports, curve1.t_units, priced.x_net)
+        await self._buy_guard_slippage(
+            request,
+            order_id=order_id,
+            priced=priced,
+            out1=out1,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
         return _BuyConfirmed(
             curve1=curve1,
             latency_s=latency_s,
+            filled=priced.filled,
+            fraction=priced.fraction,
+            venue_fee=priced.venue_fee,
+            x_net=priced.x_net,
+            out0=priced.out0,
+            threshold=priced.threshold,
+            out1=out1,
+        )
+
+    def _buy_recap(self, quote: _BuyQuote, curve0: CurveSnapshot, cap_now: int | None) -> _BuyQuote:
+        """Recompute the fill when CONFIRMING shrank the trade cap during the wait."""
+        if cap_now is None or cap_now >= quote.filled:
+            return quote
+        # Fill only up to the smaller cap, priced at the decision reserves with a
+        # threshold to match.
+        filled = cap_now
+        venue_fee = self._fees.venue_fee(filled)
+        x_net = filled - venue_fee
+        out0 = buy_out(curve0.s_lamports, curve0.t_units, x_net)
+        return quote._replace(
             filled=filled,
-            fraction=fraction,
+            fraction=Decimal(filled) / Decimal(quote.size),
             venue_fee=venue_fee,
             x_net=x_net,
             out0=out0,
-            threshold=threshold,
-            out1=out1,
+            threshold=out0 * (10_000 - quote.slippage_bps) // 10_000,
+        )
+
+    async def _buy_guard_slippage(
+        self,
+        request: OrderRequest,
+        *,
+        order_id: str,
+        priced: _BuyQuote,
+        out1: int,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> None:
+        """Refuse when the CONFIRMING price falls below the decision threshold."""
+        if out1 >= priced.threshold:
+            return
+        self._inflight.discard(order_id)
+        raise await self._reject(
+            request,
+            request.decision_id,
+            "slippage_exceeded",
+            f"confirm {out1} < threshold {priced.threshold}",
+            stage="CONFIRMING",
+            order_id=order_id,
+            quote_out=priced.out0,
+            threshold=priced.threshold,
+            confirm_out=out1,
+            fees=self._fees.network_cost(),
+            source=ledger_source,
+            correlation_id=correlation_id,
         )
 
     def _buy_fill_rows(
@@ -490,62 +516,113 @@ class _BuyMixin:
         had_position: bool,
     ) -> list[dict[str, Any]]:
         """FillRecorded plus PositionOpened rows for a confirmed BUY."""
-        curve1 = confirmed.curve1
-        latency_s = confirmed.latency_s
-        rows: list[dict[str, Any]] = [
-            {
-                "ts_utc": self._now_ts(),
-                "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"fill|{order_id}",
-                "type": "FillRecorded",
-                "payload": {
-                    "source": ledger_source,
-                    "order_id": order_id,
-                    "decision_id": request.decision_id,
-                    "side": "buy",
-                    "mint": request.mint,
-                    "filled_lamports": confirmed.filled,
-                    "filled_units": confirmed.out1,
-                    "filled_fraction": str(confirmed.fraction),
-                    "price_avg": str(price_avg),
-                    "venue_fee_lamports": confirmed.venue_fee,
-                    "network_cost_lamports": network_cost,
-                    "cash_delta_lamports": -cash_debit,
-                    "latency_s": str(Decimal(str(latency_s))),
-                    "venue_tx_ref": venue_tx_ref,
-                    "curve_before_s": curve0.s_lamports,
-                    "curve_before_t": curve0.t_units,
-                    "curve_after_s": curve1.s_lamports,
-                    "curve_after_t": curve1.t_units,
-                    "route": "curve",
-                    "realised_slippage_bps": slipped,
-                },
-            }
+        rows = [
+            self._buy_fill_row(
+                request,
+                order_id=order_id,
+                venue_tx_ref=venue_tx_ref,
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
+                curve0=curve0,
+                confirmed=confirmed,
+                price_avg=price_avg,
+                network_cost=network_cost,
+                cash_debit=cash_debit,
+                slipped=slipped,
+            )
         ]
         if not had_position:
             rows.append(
-                {
-                    "ts_utc": self._now_ts(),
-                    "source": ledger_source,
-                    "correlation_id": correlation_id,
-                    "idempotency_key": f"position|{order_id}",
-                    "type": "PositionOpened",
-                    "payload": {
-                        "source": ledger_source,
-                        "mint": request.mint,
-                        "price_entry": str(price_avg),
-                        "token_units": confirmed.out1,
-                        "cost_basis_lamports": cash_debit,
-                        "opened_ts_utc": self._now_ts(),
-                        "symbol": "",
-                        "creator": creator or "",
-                        "ticket_id": request.ticket_id,
-                        "score": "0",
-                    },
-                }
+                self._buy_position_row(
+                    request,
+                    order_id=order_id,
+                    ledger_source=ledger_source,
+                    correlation_id=correlation_id,
+                    creator=creator,
+                    confirmed=confirmed,
+                    price_avg=price_avg,
+                    cash_debit=cash_debit,
+                )
             )
         return rows
+
+    def _buy_fill_row(
+        self,
+        request: OrderRequest,
+        *,
+        order_id: str,
+        venue_tx_ref: str,
+        ledger_source: str,
+        correlation_id: str,
+        curve0: CurveSnapshot,
+        confirmed: _BuyConfirmed,
+        price_avg: Decimal,
+        network_cost: int,
+        cash_debit: int,
+        slipped: int,
+    ) -> dict[str, Any]:
+        curve1 = confirmed.curve1
+        return {
+            "ts_utc": self._now_ts(),
+            "source": ledger_source,
+            "correlation_id": correlation_id,
+            "idempotency_key": f"fill|{order_id}",
+            "type": "FillRecorded",
+            "payload": {
+                "source": ledger_source,
+                "order_id": order_id,
+                "decision_id": request.decision_id,
+                "side": "buy",
+                "mint": request.mint,
+                "filled_lamports": confirmed.filled,
+                "filled_units": confirmed.out1,
+                "filled_fraction": str(confirmed.fraction),
+                "price_avg": str(price_avg),
+                "venue_fee_lamports": confirmed.venue_fee,
+                "network_cost_lamports": network_cost,
+                "cash_delta_lamports": -cash_debit,
+                "latency_s": str(Decimal(str(confirmed.latency_s))),
+                "venue_tx_ref": venue_tx_ref,
+                "curve_before_s": curve0.s_lamports,
+                "curve_before_t": curve0.t_units,
+                "curve_after_s": curve1.s_lamports,
+                "curve_after_t": curve1.t_units,
+                "route": "curve",
+                "realised_slippage_bps": slipped,
+            },
+        }
+
+    def _buy_position_row(
+        self,
+        request: OrderRequest,
+        *,
+        order_id: str,
+        ledger_source: str,
+        correlation_id: str,
+        creator: str | None,
+        confirmed: _BuyConfirmed,
+        price_avg: Decimal,
+        cash_debit: int,
+    ) -> dict[str, Any]:
+        return {
+            "ts_utc": self._now_ts(),
+            "source": ledger_source,
+            "correlation_id": correlation_id,
+            "idempotency_key": f"position|{order_id}",
+            "type": "PositionOpened",
+            "payload": {
+                "source": ledger_source,
+                "mint": request.mint,
+                "price_entry": str(price_avg),
+                "token_units": confirmed.out1,
+                "cost_basis_lamports": cash_debit,
+                "opened_ts_utc": self._now_ts(),
+                "symbol": "",
+                "creator": creator or "",
+                "ticket_id": request.ticket_id,
+                "score": "0",
+            },
+        }
 
     async def _buy_settle(
         self,
@@ -563,17 +640,9 @@ class _BuyMixin:
         network_cost = self._fees.network_cost()
         cash_debit = confirmed.filled + network_cost
         price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
-        slipped = (
-            (confirmed.out0 - confirmed.out1) * 10_000 // confirmed.out0
-            if confirmed.out1 < confirmed.out0 and confirmed.out0
-            else 0
-        )
+        slipped = self._buy_slippage_bps(confirmed)
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
-        state = self._fold_state()
-        had_position = (
-            state.positions.get(request.mint) is not None
-            and state.positions[request.mint].token_units > 0
-        )
+        had_position = self._has_open_position(request.mint)
         rows = self._buy_fill_rows(
             request,
             order_id=order_id,
@@ -611,6 +680,18 @@ class _BuyMixin:
             route="curve",
             ledger_seq=int(stored[0]["seq"]),
         )
+
+    @staticmethod
+    def _buy_slippage_bps(confirmed: _BuyConfirmed) -> int:
+        """Realised slippage in bps against the decision quote; zero when no worse."""
+        if confirmed.out1 < confirmed.out0 and confirmed.out0:
+            return (confirmed.out0 - confirmed.out1) * 10_000 // confirmed.out0
+        return 0
+
+    def _has_open_position(self, mint: str) -> bool:
+        """True when the ledger fold holds a non-empty position in ``mint``."""
+        state = self._fold_state()
+        return bool(state.positions.get(mint) is not None and state.positions[mint].token_units > 0)
 
     async def _place_buy(
         self,
