@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #56, the INT-10 fix (approve_56).",
   "task_id": "v4-p11-int10-probe-status",
   "ticket": "INT-10",
   "bot": "bot-00-chief",
@@ -6,7 +8,7 @@
   "phase": "11-engineering-foundation-and-quality",
   "plan": "INT-10: scripts/probe_curve_layout.py must never write VERIFIED. It writes DECODED_PENDING_REVIEW in the JSON record and in docs/CURVE_LAYOUT_PROBE.md after a successful getAccountInfo decode, following scripts/probe_pump_accounts.py. A human sets VERIFIED by a reviewed doc change. Draft pull request against main; do not merge.",
   "purpose": "Removes the automatic VERIFIED write on a successful decode. Keeps the ASSUMED path and every other output field unchanged. Round 1 adds a red-then-green test for the decode record path. Round 2 adds the same review paragraph to the ASSUMED doc template through one constant, _REVIEW_NOTE, that both writers use, with a red-then-green test for the ASSUMED path. Ownership: scripts/** is owned by bot-00-chief in ownership.yaml, and no more specific entry names probe_curve_layout.py. The first ownership read was a read-only check from the owner checkout; the recorded checks run in the worktree.",
-  "status": "Draft pull request open against main. Not merged. approved_by is not recorded; the G-2 gate reports it missing until a human reviewer records approval.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "commands": [
     {"cmd": "git -C /root/src/repos/pumpgrok fetch origin main", "exit_code": 0, "output_tail": "ok fetched (1 new refs)"},
     {"cmd": "git -C /root/src/repos/pumpgrok worktree add /root/src/repos/pumpgrok-wt/v4-int10 -b bot-00-chief/v4-int10-probe-status origin/main", "exit_code": 0, "output_tail": "ok"},
