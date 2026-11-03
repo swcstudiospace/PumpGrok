@@ -23,16 +23,14 @@ the process environment instead).
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import re
 import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal, get_args
-from urllib.parse import urlsplit
+from typing import Any, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -40,255 +38,54 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from pumpgrok.config.sections.core import (
+    DataSettings,
+    ExecutionSettings,
+    GrokSettings,
+    JupiterSettings,
+    LiveSettings,
+    Mode,
+    PlatformSettings,
+    ReplaySettings,
+    RpcSettings,
+    WalletSettings,
+)
+from pumpgrok.config.sections.engine import (
+    ExitsSettings,
+    FilterSettings,
+    SafetySettings,
+    SafetyThresholds,
+    ScoringSettings,
+    ScoringWeights,
+)
+from pumpgrok.config.sections.ops import HealthSettings, NotifySettings, OpsSettings
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.risk.limits import EngineLimits
 
+# The section classes live in config/sections. They stay importable from this module because the
+# engine, backtest, replay and test modules import them from pumpgrok.config.settings by name.
+__all__ = [
+    "DataSettings",
+    "ExecutionSettings",
+    "ExitsSettings",
+    "FilterSettings",
+    "GrokSettings",
+    "HealthSettings",
+    "JupiterSettings",
+    "LiveSettings",
+    "Mode",
+    "NotifySettings",
+    "OpsSettings",
+    "PlatformSettings",
+    "ReplaySettings",
+    "RpcSettings",
+    "SafetySettings",
+    "SafetyThresholds",
+    "ScoringSettings",
+    "ScoringWeights",
+    "WalletSettings",
+]
 
-def _require_scheme(url: str, schemes: tuple[str, ...]) -> str:
-    """Refuse a URL whose scheme is not one of ``schemes`` (TLS only; value never echoed)."""
-    if urlsplit(url).scheme.lower() not in schemes:
-        raise ValueError(f"URL must use {' or '.join(s + '://' for s in schemes)}")
-    return url
-
-
-class DataSettings(BaseModel):
-    """Pump.fun REST plus PumpPortal websocket ingress (D8)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    rest_url: str = "https://frontend-api.pump.fun"
-    ws_url: str = "wss://pumpportal.fun/api/data"
-    ws_max_queue: int = Field(default=16, ge=1)
-    request_timeout: float = 10.0
-
-    @field_validator("rest_url")
-    @classmethod
-    def _tls_rest_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https",))
-
-    @field_validator("ws_url")
-    @classmethod
-    def _tls_ws_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https", "wss"))
-
-
-class RpcSettings(BaseModel):
-    """Solana JSON-RPC failover list. Endpoints are keyless URLs only.
-
-    Paid-provider keys travel in ``api_key`` and are sent as a header;
-    key-bearing endpoint values are refused at startup (T-02-01).
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    endpoints: list[str] = Field(default_factory=lambda: ["https://api.mainnet-beta.solana.com"])
-    api_key: SecretStr = SecretStr("")
-
-    @field_validator("endpoints")
-    @classmethod
-    def _tls_endpoints(cls, v: list[str]) -> list[str]:
-        for endpoint in v:
-            _require_scheme(endpoint, ("https", "wss"))
-        return v
-
-
-class GrokSettings(BaseModel):
-    """x.ai chat completions (R48). Secrets arrive via env only."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    base_url: str = "https://api.x.ai/v1"
-    strong_model: str = "grok-4.3"
-    strong_effort: str = "low"
-    fast_model: str = "grok-4.20-0309-non-reasoning"
-    api_key: SecretStr = SecretStr("")
-
-    @field_validator("base_url")
-    @classmethod
-    def _tls_base_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https",))
-
-
-class JupiterSettings(BaseModel):
-    """Jupiter Swap V2 quote endpoint, informational only (R44, R38)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    quote_url: str = "https://api.jup.ag/swap/v2/order"
-
-    @field_validator("quote_url")
-    @classmethod
-    def _tls_quote_url(cls, v: str) -> str:
-        return _require_scheme(v, ("https", "wss"))
-
-
-class FilterSettings(BaseModel):
-    """Launch-monitor admission gates (vendor FilterConfig, ASCII codes)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    min_unique_buyers: int = Field(default=5, ge=0)
-    max_curve_progress: float = Field(default=0.40, ge=0)
-    require_metadata: bool = True
-    min_age_seconds: float = Field(default=120.0, ge=0)
-    max_risk_score: float = Field(default=7.0, ge=0)
-    min_total_score: float = Field(default=0.65, ge=0)
-    block_creator_after_rugs: int = Field(default=1, ge=0)
-    rug_loss_pct: float = Field(default=60.0, ge=0)
-    one_position_per_creator: bool = True
-    forget_creators_after_days: float = Field(default=30.0, ge=0)
-
-
-class ScoringWeights(BaseModel):
-    """Component weights; must sum to 1 downstream (vendor ScoringWeights)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    audit: float = 0.30
-    narrative: float = 0.25
-    timing: float = 0.15
-    metrics: float = 0.30
-
-
-class ScoringSettings(BaseModel):
-    """Engine scoring knobs (vendor ScoringConfig)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    weights: ScoringWeights = Field(default_factory=ScoringWeights)
-    timing_cache_seconds: float = Field(default=900.0, ge=0)
-
-
-class ExitsSettings(BaseModel):
-    """Exit-rule thresholds. Separate from ``risk`` (Pitfall 15, R20)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    stop_loss_pct: float = Field(default=30.0, ge=0)
-    take_profit_pct: float = Field(default=120.0, ge=0)
-    trailing_stop_pct: float = Field(default=35.0, ge=0)
-    max_hold_seconds: float = Field(default=3600.0, ge=0)
-    stop_loss_poll_seconds: float = Field(default=15.0, ge=0)
-
-
-class SafetyThresholds(BaseModel):
-    """Score-report check thresholds (TOOL-003; REVIEW defaults from agents/risk.md)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    transfer_tax_hard_fail_pct: float = Field(default=10.0, ge=0)
-    transfer_tax_warn_pct: float = Field(default=5.0, ge=0)
-    top10_concentration_warn_pct: float = Field(default=20.0, ge=0)
-    top10_concentration_fail_pct: float = Field(default=25.0, ge=0)
-    liquidity_multiple_min: float = Field(default=10.0, ge=0)
-    liquidity_multiple_recommended: float = Field(default=20.0, ge=0)
-    lp_lock_min_days: float = Field(default=180.0, ge=0)
-    creator_share_veto: float = Field(default=0.25, ge=0)
-    top5_share_veto: float = Field(default=0.80, ge=0)
-    kill_below_score: float = Field(default=40.0, ge=0)
-    conditional_below_score: float = Field(default=70.0, ge=0)
-
-
-class SafetySettings(BaseModel):
-    """Safety scoring knobs (TOOL-003). Secrets never live here (STRUCT-008)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    thresholds: SafetyThresholds = Field(default_factory=SafetyThresholds)
-
-
-class OpsSettings(BaseModel):
-    """Process-lifetime state paths (vendor OpsConfig subset, Phase 2)."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    reputation_path: str = "var/reputation.json"
-
-
-class NotifySettings(BaseModel):
-    """Human alert destinations (TOOL-006, R39).
-
-    ``allowlist`` holds Telegram chat ids and webhook URLs; empty means
-    stdout and file only. The Telegram token travels via env
-    ``PUMPGROK_TELEGRAM_TOKEN`` only, never TOML and never this model.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    allowlist: list[str] = Field(default_factory=list)
-
-
-_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-_BASE58_INDEX = {char: index for index, char in enumerate(_BASE58_ALPHABET)}
-_PUBLIC_KEY_BYTES = 32
-# A 32-byte value encodes to at most 44 base58 characters, so longer input is
-# refused before any big-integer arithmetic.
-_PUBLIC_KEY_MAX_CHARS = 44
-
-
-def _base58_decode(text: str) -> bytes:
-    """Decode base58 with the stdlib; ValueError on any character outside the alphabet.
-
-    Each leading '1' stands for one zero byte.
-    """
-    number = 0
-    for char in text:
-        digit = _BASE58_INDEX.get(char)
-        if digit is None:
-            raise ValueError("character outside the base58 alphabet")
-        number = number * 58 + digit
-    leading_zeros = len(text) - len(text.lstrip("1"))
-    body = number.to_bytes((number.bit_length() + 7) // 8, "big")
-    return b"\x00" * leading_zeros + body
-
-
-def _is_public_key_text(text: str) -> bool:
-    """True when text is base58 and decodes to exactly 32 bytes; never raises."""
-    if len(text) > _PUBLIC_KEY_MAX_CHARS:
-        return False
-    try:
-        return len(_base58_decode(text)) == _PUBLIC_KEY_BYTES
-    except ValueError:
-        return False
-
-
-class PlatformSettings(BaseModel):
-    """Declares what the desk trades on. It selects no endpoint and changes no mode.
-
-    Live stays refused by the live gate.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    chain: Literal["solana"] = "solana"
-    venue: Literal["pumpfun-bonding-curve"] = "pumpfun-bonding-curve"
-    execution: Literal["paper"] = "paper"
-    quote_only: tuple[Literal["jupiter-swap-v2"], ...] = ("jupiter-swap-v2",)
-
-
-class WalletSettings(BaseModel):
-    """Wallet allowlist of PUBLIC KEYS only (base58, exactly 32 bytes each).
-
-    Seeds, private keys and keypairs are never valid here. A failing entry is
-    reported by its index alone; its value is never echoed.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    allowlist: tuple[str, ...] = ()
-
-    @field_validator("allowlist")
-    @classmethod
-    def _validate_allowlist(cls, v: tuple[str, ...]) -> tuple[str, ...]:
-        """Every entry must be a base58 string that decodes to exactly 32 bytes."""
-        for index, entry in enumerate(v):
-            if not _is_public_key_text(entry):
-                raise ValueError(f"allowlist entry {index} is not a 32-byte base58 public key")
-        return v
-
-
-Mode = Literal["paper", "live"]
 
 OVERLAY_PROFILES: tuple[str, str, str] = ("dev", "paper", "live")
 DEFAULT_PROFILE = "paper"
@@ -338,86 +135,6 @@ def mask(secret: str) -> str:
     if not secret:
         return "<empty>"
     return f"*** ({len(secret)} chars)"
-
-
-class ExecutionSettings(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    mode: Mode = "paper"
-
-
-class ReplaySettings(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    # INT-05: the composition-root default seed. Deliberately a literal, not an
-    # import of the replay-module seed constant, which must stay inside replay code.
-    seed: int = 20260101
-
-
-class LiveSettings(BaseModel):
-    """The live gate reads these caps; enabling live still requires every precondition.
-
-    Money is integer lamports; 1 SOL is 1_000_000_000.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    enabled: bool = False
-    notional_cap_lamports: int | None = LAMPORTS_PER_SOL
-
-    @field_validator("notional_cap_lamports")
-    @classmethod
-    def _validate_notional_cap(cls, v: int | None) -> int | None:
-        """A set cap must be positive and no more than the 1 SOL ceiling."""
-        if v is not None and not 0 < v <= LAMPORTS_PER_SOL:
-            raise ValueError("notional_cap_lamports must be in (0, 1 SOL]")
-        return v
-
-
-_HEALTH_HOST_LABEL_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
-_HEALTH_HOST_NUMERIC_RE = re.compile(r"[0-9.]+")
-
-
-class HealthSettings(BaseModel):
-    """Health server bind host and port (INV-C-11).
-
-    Port default 0 (disabled: never bind a socket under test or --once/--replay).
-    The container sets PUMPGROK_HEALTH__PORT=8080 and PUMPGROK_HEALTH__HOST=0.0.0.0
-    via compose (plan 07); --once/--replay forces 0 through health_port()
-    regardless of this value. Host defaults to loopback: direct host runs never
-    expose /healthz and /metrics to the LAN unless the operator opts into
-    0.0.0.0 explicitly.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    host: str = Field(default="127.0.0.1", min_length=1)
-    port: int = Field(default=0, ge=0, le=65535)
-
-    @field_validator("host")
-    @classmethod
-    def _validate_host(cls, v: str) -> str:
-        """Accept an IP literal or an RFC 1123 hostname; fail fast otherwise.
-
-        Without this, a typo such as ``256.300.1.1`` survives load_settings()
-        and only fails later as an unhandled socket.gaierror from
-        asyncio.start_server. Dotted-numeric values must parse as IPv4 so a
-        mistyped address is not mistaken for a hostname.
-        """
-        try:
-            ipaddress.ip_address(v)
-        except ValueError:
-            pass
-        else:
-            return v
-        if ":" in v or _HEALTH_HOST_NUMERIC_RE.fullmatch(v):
-            raise ValueError(f"invalid health host: {v!r}")
-        name = v[:-1] if v.endswith(".") else v
-        if not name or len(name) > 253:
-            raise ValueError(f"invalid health host: {v!r}")
-        if not all(_HEALTH_HOST_LABEL_RE.match(label) for label in name.split(".")):
-            raise ValueError(f"invalid health host: {v!r}")
-        return v
 
 
 class Settings(BaseSettings):

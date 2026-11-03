@@ -29,6 +29,13 @@ services:
     build: .
     image: pumpgrok:local
     container_name: pumpgrok
+    read_only: true                  # root filesystem read-only; only ./var and tmpfs /tmp are writable
+    tmpfs:
+      - /tmp:size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: ["run", "--mode", "paper", "--serve", "--replay", "tests/fixtures/replay/smoke"]
     env_file:
       - path: .env
@@ -67,6 +74,13 @@ services:
     build: .
     image: pumpgrok:local
     container_name: desk-gateway
+    read_only: true                  # root filesystem read-only; only ./var and tmpfs /tmp are writable
+    tmpfs:
+      - /tmp:size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     entrypoint: ["python", "-m", "desk_gateway"]
     env_file:
       - path: .env

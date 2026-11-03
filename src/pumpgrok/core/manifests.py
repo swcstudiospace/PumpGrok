@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
 from pumpgrok.core.bot import BotManifest, ToolGrant
 
@@ -64,7 +65,7 @@ def _grants(entries: list[dict[str, Any]], path: Path) -> list[ToolGrant]:
     for entry in entries:
         try:
             grants.append(ToolGrant(name=entry["name"], side_effect=entry["side_effect"]))
-        except Exception as exc:
+        except (KeyError, ValidationError) as exc:
             raise ValueError(
                 f"{path.name}: tool {entry.get('name')!r} needs a valid side_effect: {exc}"
             ) from exc
@@ -92,7 +93,7 @@ def load_bot_manifests(contracts_dir: Path) -> dict[str, BotManifest]:
         grants = _grants(own_entries, path) + _grants(core_entries, path)
         try:
             manifests[seat] = BotManifest.model_validate({**block, "allowed_tools": grants})
-        except Exception as exc:
+        except ValidationError as exc:
             raise ValueError(f"{path.name}: manifest does not validate: {exc}") from exc
 
     missing = [sid for sid in EXPECTED_SEAT_IDS if sid not in manifests]
