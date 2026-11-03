@@ -63,3 +63,23 @@ def test_successful_decode_is_pending_review_not_verified(tmp_path, monkeypatch)
     assert "reviewed_by" not in record
     assert "Status: VERIFIED" not in doc_text
     assert "Status: DECODED_PENDING_REVIEW" in doc_text
+
+
+def test_assumed_path_doc_carries_review_paragraph(tmp_path, monkeypatch):
+    monkeypatch.delenv("BONDING_CURVE_ACCOUNT", raising=False)
+
+    def no_rpc(*_args):
+        raise AssertionError("ASSUMED path must make no RPC call")
+
+    monkeypatch.setattr(probe_mod, "_rpc_get_account", no_rpc)
+    out = tmp_path / "probe.json"
+    doc = tmp_path / "CURVE_LAYOUT_PROBE.md"
+
+    rc = probe_mod.main(
+        ["--endpoint", ENDPOINT, "--account", "", "--out", str(out), "--doc", str(doc)]
+    )
+
+    assert rc == 0
+    doc_text = doc.read_text(encoding="utf-8")
+    assert "Status: ASSUMED" in doc_text
+    assert probe_mod._REVIEW_NOTE in doc_text

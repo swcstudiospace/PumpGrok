@@ -222,7 +222,9 @@ def _write_assumed(
         f"Endpoint: {safe_endpoint}\n"
         f"Method: getAccountInfo (read-only, no keys)\n"
         "Layout: ASSUMED until a live probe decodes under it; "
-        "RPC-derived entries fail closed with data_unavailable.\n",
+        "RPC-derived entries fail closed with data_unavailable.\n"
+        "\n"
+        f"{_REVIEW_NOTE}\n",
         encoding="utf-8",
     )
 

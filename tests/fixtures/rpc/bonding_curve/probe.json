@@ -4,7 +4,7 @@
   "endpoint": "https://api.mainnet-beta.solana.com",
   "account": null,
   "commitment": "confirmed",
-  "probed_at": "2026-10-25T11:07:04Z",
+  "probed_at": "2026-11-03T12:59:21Z",
   "decoded": null,
   "probe_error": "no bonding-curve account configured; set BONDING_CURVE_ACCOUNT or pass --account <pubkey>; no RPC call made; layout stays ASSUMED"
 }

@@ -5,7 +5,7 @@
   "branch": "bot-00-chief/v4-int10-probe-status",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "INT-10: scripts/probe_curve_layout.py must never write VERIFIED. It writes DECODED_PENDING_REVIEW in the JSON record and in docs/CURVE_LAYOUT_PROBE.md after a successful getAccountInfo decode, following scripts/probe_pump_accounts.py. A human sets VERIFIED by a reviewed doc change. Draft pull request against main; do not merge.",
-  "purpose": "Removes the automatic VERIFIED write on a successful decode. Keeps the ASSUMED path and every other output field unchanged. Adds one red-then-green test for the decode record path. Ownership: scripts/** is owned by bot-00-chief in ownership.yaml, and no more specific entry names probe_curve_layout.py. The first ownership read was a read-only check from the owner checkout; the recorded checks run in the worktree.",
+  "purpose": "Removes the automatic VERIFIED write on a successful decode. Keeps the ASSUMED path and every other output field unchanged. Round 1 adds a red-then-green test for the decode record path. Round 2 adds the same review paragraph to the ASSUMED doc template through one constant, _REVIEW_NOTE, that both writers use, with a red-then-green test for the ASSUMED path. Ownership: scripts/** is owned by bot-00-chief in ownership.yaml, and no more specific entry names probe_curve_layout.py. The first ownership read was a read-only check from the owner checkout; the recorded checks run in the worktree.",
   "status": "Draft pull request open against main. Not merged. approved_by is not recorded; the G-2 gate reports it missing until a human reviewer records approval.",
   "commands": [
     {"cmd": "git -C /root/src/repos/pumpgrok fetch origin main", "exit_code": 0, "output_tail": "ok fetched (1 new refs)"},
@@ -16,26 +16,36 @@
     {"cmd": "uv run pytest tests/desk/test_probe_pump_accounts.py -p no:cacheprovider --junitxml=/tmp/int10-pump.xml", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"16\""},
     {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check . : All checks passed! ; ruff format --check . : 868 files already formatted ; services lint skipped (services/desk-signer/src absent)"},
     {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/scripts/test_probe_curve_layout.py", "exit_code": 0, "output_tail": "2 files already formatted"},
-    {"cmd": "git diff -- scripts/probe_curve_layout.py docs/CURVE_LAYOUT_PROBE.md", "exit_code": 0, "output_tail": "scripts/probe_curve_layout.py +16 -5 (docstring, _REVIEW_NOTE constant, layout_status, decoded doc status and note); docs/CURVE_LAYOUT_PROBE.md +2 -0 (review paragraph); _write_assumed unchanged"}
+    {"cmd": "git diff -- scripts/probe_curve_layout.py docs/CURVE_LAYOUT_PROBE.md", "exit_code": 0, "output_tail": "scripts/probe_curve_layout.py +16 -5 (docstring, _REVIEW_NOTE constant, layout_status, decoded doc status and note); docs/CURVE_LAYOUT_PROBE.md +2 -0 (review paragraph); _write_assumed unchanged (round 1)"},
+    {"cmd": "uv run pytest tests/scripts/test_probe_curve_layout.py -p no:cacheprovider --junitxml=/tmp/int10-red2.xml   # RED2: ASSUMED-path test, run before the ASSUMED template fix", "exit_code": 1, "output_tail": "tests/scripts/test_probe_curve_layout.py:85: in test_assumed_path_doc_carries_review_paragraph: AssertionError: assert probe_mod._REVIEW_NOTE in doc_text"},
+    {"cmd": "uv run pytest tests/scripts/test_probe_curve_layout.py -p no:cacheprovider --junitxml=/tmp/int10-green2.xml   # GREEN2: both probe tests", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"2\"; testcase test_successful_decode_is_pending_review_not_verified; testcase test_assumed_path_doc_carries_review_paragraph"},
+    {"cmd": "uv run pytest tests/desk/test_probe_pump_accounts.py -p no:cacheprovider --junitxml=/tmp/int10-pump2.xml", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"16\""},
+    {"cmd": "make lint   # round 2", "exit_code": 0, "output_tail": "ruff check . : All checks passed! ; ruff format --check . : 868 files already formatted ; services lint skipped"},
+    {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/scripts/test_probe_curve_layout.py   # round 2", "exit_code": 0, "output_tail": "2 files already formatted"},
+    {"cmd": "env -u BONDING_CURVE_ACCOUNT uv run python scripts/probe_curve_layout.py   # ASSUMED path, no account, no RPC", "exit_code": 0, "output_tail": "tests/fixtures/rpc/bonding_curve/probe.json: layout_status ASSUMED, account null, probe_error 'no bonding-curve account configured ... no RPC call made; layout stays ASSUMED'; docs/CURVE_LAYOUT_PROBE.md: Status: ASSUMED plus the review paragraph; git diff of probe.json changes only probed_at"},
+    {"cmd": "git diff --stat -- scripts/probe_curve_layout.py docs/CURVE_LAYOUT_PROBE.md tests/fixtures/rpc/bonding_curve/probe.json tests/scripts/test_probe_curve_layout.py", "exit_code": 0, "output_tail": "scripts/probe_curve_layout.py 4 +++- ; tests/fixtures/rpc/bonding_curve/probe.json 2 +- ; tests/scripts/test_probe_curve_layout.py 20 ++++ ; 3 files changed, 24 insertions(+), 2 deletions(-) (round 2 diff)"}
   ],
   "claims": [
-    {"claim": "On origin/main, before the fix, the new test fails because the successful decode record writes layout_status VERIFIED.", "evidence_command_index": 3, "expects_failure": true},
-    {"claim": "After the fix, the new test passes: the JUnit report shows one test with no failures or errors.", "evidence_command_index": 4},
+    {"claim": "On origin/main, before the fix, the decoded-path test fails because the successful decode record writes layout_status VERIFIED.", "evidence_command_index": 3, "expects_failure": true},
+    {"claim": "After the fix, the decoded-path test passes: the JUnit report shows one test with no failures or errors.", "evidence_command_index": 4},
     {"claim": "The pump-accounts probe test module still passes: JUnit report shows 16 tests with no failures or errors.", "evidence_command_index": 5},
     {"claim": "make lint passes: ruff check and ruff format --check report no findings.", "evidence_command_index": 6},
     {"claim": "The two touched Python files pass ruff format --check.", "evidence_command_index": 7},
     {"claim": "The G-1 ownership manifest validates in the worktree.", "evidence_command_index": 2},
-    {"claim": "The diff changes only the decoded path's status and note, the module docstring, and one review-note constant. The ASSUMED writer is unchanged, and the committed doc gains one review paragraph.", "evidence_command_index": 8}
+    {"claim": "Before the fix, the ASSUMED-path test fails because the ASSUMED doc template lacks the review paragraph.", "evidence_command_index": 9, "expects_failure": true},
+    {"claim": "After the fix, both probe tests pass: the JUnit report shows two tests with no failures or errors, and the ASSUMED doc carries the review paragraph from the same constant the decoded writer uses.", "evidence_command_index": 10},
+    {"claim": "The ASSUMED run exits 0 with no account configured, makes no RPC call, and writes Status: ASSUMED with the review paragraph; its only change to the committed probe.json is probed_at.", "evidence_command_index": 14},
+    {"claim": "Across both rounds the diff changes only the status and note lines of the two writers, the module docstring, the one review-note constant, the new tests, and the regenerated fixture and doc. Every other record and doc field is unchanged.", "evidence_command_index": 15}
   ],
   "unverified": [
-    "No live mainnet getAccountInfo call was made. The RPC call is stubbed in the test, so the ASSUMED layout has not been decoded against a real bonding-curve account.",
-    "The ASSUMED path (no account configured) was not run after the edit. Its writer is unchanged in the diff. The committed doc gained the review paragraph by hand, so a later ASSUMED run rewrites the doc without that paragraph.",
+    "No live mainnet getAccountInfo call was made. The RPC call is stubbed in the decoded-path test, so the ASSUMED layout has not been decoded against a real bonding-curve account.",
     "The full repository test suite and the soak test were not run. Only the two probe test modules and make lint were run.",
     "The layout is not promoted to VERIFIED here. No human has reviewed decoded values, and approved_by is absent by design, so the G-2 gate reports it missing.",
     "CLAUDE.md line 105 and .planning/REQUIREMENTS.md MKT-03 still describe a live probe as confirming the layout. They are not updated in this draft PR."
   ],
   "deviations": [
     "The first edit attempts used repo-relative paths. The edit tool resolved them to the owner checkout /root/src/repos/pumpgrok, and the edits were rejected on hash mismatch, so nothing was written there. Later edits used absolute worktree paths. The owner checkout's scripts/probe_curve_layout.py was not modified.",
-    "One pytest run with -q printed 'No tests collected' and exit 0, while the -v run and the JUnit XML report one passing test. The JUnit XML is cited as the green evidence. The cause of the -q message was not determined."
+    "One pytest run with -q printed 'No tests collected' and exit 0, while the -v run and the JUnit XML report one passing test. The JUnit XML is cited as the green evidence. The cause of the -q message was not determined. Round 2 runs also printed this message, and the JUnit XML again reports the test counts used as evidence.",
+    "Round 2: the ASSUMED run regenerated tests/fixtures/rpc/bonding_curve/probe.json. Its only change is probed_at, and it is committed as the output of that run."
   ]
 }
