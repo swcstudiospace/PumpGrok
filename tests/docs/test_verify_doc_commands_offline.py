@@ -161,10 +161,10 @@ def test_probe_keeps_assumed_for_unexpected_account(
     assert "VERIFIED" not in doc.read_text(encoding="utf-8")
 
 
-def test_probe_records_verified_for_expected_account(
+def test_probe_records_pending_review_for_expected_account(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The matching owner and discriminator still reach VERIFIED."""
+    """The matching owner and discriminator decode to pending review, never to VERIFIED (INT-10)."""
     probe = _load_probe()
     payload = _account_payload("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", "17b7f83760d8ac60")
     monkeypatch.setattr(probe, "_rpc_get_account", lambda *args, **kwargs: payload)
@@ -173,5 +173,5 @@ def test_probe_records_verified_for_expected_account(
 
     assert probe.main(["--account", "Acct111", "--out", str(out), "--doc", str(doc)]) == 0
 
-    assert '"layout_status": "VERIFIED"' in out.read_text(encoding="utf-8")
-    assert "Status: VERIFIED" in doc.read_text(encoding="utf-8")
+    assert '"layout_status": "DECODED_PENDING_REVIEW"' in out.read_text(encoding="utf-8")
+    assert "Status: DECODED_PENDING_REVIEW" in doc.read_text(encoding="utf-8")

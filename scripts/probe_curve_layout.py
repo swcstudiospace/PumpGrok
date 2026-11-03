@@ -58,9 +58,10 @@ EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
 
 # Shown in the decoded doc. VERIFIED is a human review step, never this script's output.
 _REVIEW_NOTE = (
-    "This probe never writes VERIFIED. DECODED_PENDING_REVIEW means the account decoded "
-    "under the ASSUMED layout and awaits human review. A human sets VERIFIED only through "
-    "a reviewed change to this doc, made outside the probe after checking the decoded values."
+    "This probe never writes the verified status. DECODED_PENDING_REVIEW means the account "
+    "decoded under the ASSUMED layout and awaits human review. A reviewed change to this doc "
+    "sets the status line to the verified value, made outside the probe after checking the "
+    "decoded values."
 )
 
 # Query-parameter names that carry credentials, matched case-insensitively.
