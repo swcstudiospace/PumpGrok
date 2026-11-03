@@ -101,7 +101,8 @@ Full v3 record: `.planning/milestones/v3-REQUIREMENTS.md` (34 of 34 complete) an
 - Paid RPC procurement or spend by an agent - a human may choose and record a provider (OD-05); no v4 code assumes one
 - PumpPortal trade-stream key - default no (R45); user decision
 - Multi-tenant, billing, SaaS packaging - spec non-goal; single-operator internal tool
-- New alpha and new signal families beyond the four baseline strategies (legacy_screening, momentum_breakout, new_launch_sniper, mean_reversion), which are in scope under clause 8 as amended on 2026-10-25; paper parameter evaluation and bounded promotion stay in scope
+- New alpha and new signal families. Paper parameter evaluation and bounded promotion are in scope under clause 8 as amended on 2026-10-25.
+  - Beyond the four baseline strategies (legacy_screening, momentum_breakout, new_launch_sniper, mean_reversion), which are in scope.
 - Engagement level `micro-live` - retired by R16; levels are `research | paper` only, `live` exists solely behind the disabled gate
 - Changing `~/src/repos/programming-desk/` itself - spec non-goal; it is mirrored in shape and names only, never imported or edited
 - Social posting, coordinated buying, volume tooling, wallet UI automation - forbidden by D7/R39; detection only, enforced by a static test
