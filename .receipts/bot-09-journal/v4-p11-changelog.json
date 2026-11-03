@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #54 (approve_54).",
   "task_id": "v4-p11-changelog",
   "bot": "bot-09-journal",
   "branch": "bot-09-journal/v4-p11-changelog",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "11-10: CHANGELOG entry for Phase 11 with both hash pairs (PRC-03, PRC-06). Wave 5, PR-07, depends on 11-01 through 11-09.",
   "purpose": "Seat receipt for PR-07 plan 11-10. Records the CHANGELOG task commit on the branch above base origin/main 549ebb9 and the verification commands run at the branch head before this receipt commit. The receipt is a new file; no existing receipt was modified. approved_by is intentionally absent; the executor never writes it.",
-  "status": "awaiting agent review (bot-02-risk reviews the PR-07 diff) and the human batch approval at the Phase 11 ship checkpoint. approved_by is intentionally absent; the executor never writes it.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "commits": [
     {
       "sha": "ea39d3c",
