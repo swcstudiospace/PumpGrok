@@ -2,6 +2,26 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 11: engineering foundation and quality
+
+### Changed
+
+- The two replay hash pins are in tests: smoke-10m in `tests/replay/test_replay_hash_pin.py` and the trading `smoke` hash with its full row dump in `tests/replay/test_trading_smoke_pin.py`, both backed by `tests/fixtures/replay/pins/trading_smoke.json` and `trading_smoke_rows.json`.
+- The seat receipt glob tracks every v4 receipt at `.receipts/bot-0*/v4-p*.json`, and no PR-number waiver remains in the gates.
+- The dev tooling is locked, the soak test is marked slow and kept out of the default path, and a branch coverage floor is enforced through `pyproject.toml` `fail_under`. The CI check job runs the coverage floor. A CycloneDX SBOM is built as a CI artifact, and the compose services run with read-only roots, a tmpfs `/tmp`, all capabilities dropped and no-new-privileges.
+- The C901, PLR0912 and PLR0915 complexity ratchet is selected against a recorded baseline. Property tests cover integer money, reducer ordering and replay determinism. An opt-in mutation-smoke make target covers risk and execution math. A guard fails on oversized successor functions and on new plain swallows.
+- Hotspots are split behind characterization tests that pass on the old and the split code: `RiskEngine._evaluate` into rule stages, the `cli/backtest` verb and `Settings` into modules, `supervisor/seat_task.py` into `seat_restart` and `seat_relay`, and the paper adapter sell, batch, confirm, buy and marks functions. Every replay hash is unchanged.
+- The jupiter quote `except` and the rug `except` clauses narrow to typed errors, so an unexpected exception now propagates. The desk-gateway seat id is narrowed before `_authenticate`, so mypy passes with no behaviour change.
+- The v4 milestone planning files are adopted.
+
+### Verified
+
+- Phase 11: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 11: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 11: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 11: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- The trading smoke hash moves only in plan 15-01, so Phase 11 holds it at the v4-base value.
+
 ## [Unreleased] - v3 Phase 21: DOC-03 documentation accuracy
 
 ### Fixed
