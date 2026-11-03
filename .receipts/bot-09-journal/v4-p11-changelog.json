@@ -1,0 +1,141 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #54 (approve_54).",
+  "task_id": "v4-p11-changelog",
+  "bot": "bot-09-journal",
+  "branch": "bot-09-journal/v4-p11-changelog",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-10: CHANGELOG entry for Phase 11 with both hash pairs (PRC-03, PRC-06). Wave 5, PR-07, depends on 11-01 through 11-09.",
+  "purpose": "Seat receipt for PR-07 plan 11-10. Records the CHANGELOG task commit on the branch above base origin/main 549ebb9 and the verification commands run at the branch head before this receipt commit. The receipt is a new file; no existing receipt was modified. approved_by is intentionally absent; the executor never writes it.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
+  "commits": [
+    {
+      "sha": "ea39d3c",
+      "task": "Phase 11 CHANGELOG entry: smoke-10m and trading-smoke before and after hash pairs (tasks 1 and 2 of plan 11-10, one file)",
+      "files": [
+        "CHANGELOG.md"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "cmd": "git rev-parse --show-toplevel",
+      "exit_code": 0,
+      "output_tail": "/root/src/repos/pumpgrok-wt/v4-11-10"
+    },
+    {
+      "cmd": "uv run python -m tests.replay.pin_support --regen",
+      "exit_code": 0,
+      "output_tail": "smoke-10m events_hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d seq 2 events_read 41; trading_smoke events_hash bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 seq 11 events_read 5. Measured in a temporary directory; nothing written."
+    },
+    {
+      "cmd": "grep -qF 'Phase 11: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+      "exit_code": 0,
+      "output_tail": "(no output; exit 0 means the line is present)"
+    },
+    {
+      "cmd": "grep -qF 'Phase 11: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md",
+      "exit_code": 0,
+      "output_tail": "(no output; exit 0 means the line is present)"
+    },
+    {
+      "cmd": "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && grep -qF \"Phase 11: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 11: trading-smoke events.hash after: $p\" CHANGELOG.md",
+      "exit_code": 0,
+      "output_tail": "(no output; both pairs read bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 from the pins JSON)"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+      "exit_code": 0,
+      "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (verify run in the worktree root, var/ created there and gitignored)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 1024 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-09-journal --files CHANGELOG.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS - bot-09-journal: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "LC_ALL=C grep -cP '[^\\x00-\\x7F]' CHANGELOG.md",
+      "exit_code": 1,
+      "output_tail": "0 (no non-ASCII bytes; exit 1 means no match)"
+    },
+    {
+      "cmd": "grep -ci 'todo' CHANGELOG.md",
+      "exit_code": 1,
+      "output_tail": "0 (no TODO text; exit 1 means no match)"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "ruff check: All checks passed!; ruff format --check: 866 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "mypy src/: Success: no issues found in 222 source files"
+    },
+    {
+      "cmd": "./scripts/check.sh",
+      "exit_code": 0,
+      "output_tail": "ok: 35 skills, 10 agents, 324 markdown files checked; PumpGrok repository structure looks healthy."
+    },
+    {
+      "cmd": "uv run python -m pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py -p no:cacheprovider --junitxml=<tmp>",
+      "exit_code": 0,
+      "output_tail": "junit: tests=8 failures=0 errors=0 skipped=0 (the rtk wrapper summary printed 'No tests collected' and is not trusted alone; the junit count is the evidence)"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-09-journal --base origin/main --receipt .receipts/bot-09-journal/v4-p11-changelog.json",
+      "exit_code": 1,
+      "output_tail": "G-1 PASS, G-3 PASS, G-4 PASS, G-5/G-6 PASS, G-7 PASS. G-2 FAIL on one item only: 'approved_by' is missing. The executor never writes approved_by (plan 11-10 and the CONTEXT rule), so G-2 passes only after the owner's batch approval at the Phase 11 ship checkpoint. No other G-2 finding."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The smoke-10m events.hash measured at the branch head is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, the same value before and after the entry.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The CHANGELOG carries the smoke-10m before line and the after line with that value.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The CHANGELOG carries the trading-smoke before and after lines with the events_hash read from tests/fixtures/replay/pins/trading_smoke.json, bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The pin tests for smoke-10m and the trading smoke pass at the branch head with 8 tests and no failures.",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "The CHANGELOG entry contains no non-ASCII byte: the search for one exits 1 (no match).",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "The CHANGELOG entry contains no TODO text: the search for it exits 1 (no match).",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "CHANGELOG.md is owned by bot-09-journal, and the diff touches no foreign path.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "make lint, make typecheck and ./scripts/check.sh pass at the branch head.",
+      "evidence_command_index": 10
+    }
+  ],
+  "unverified": [
+    "run_all.py exits 1 only because G-2 finds approved_by absent. The executor never writes approved_by; G-2 passes after the owner's batch approval at the Phase 11 ship checkpoint.",
+    "Full make test is not run here; it takes over an hour on this host, and CI's check job is the run of record for it.",
+    "The plan names no targeted test beyond the hash greps and pins; no other test file was run.",
+    "Overlap with in-flight PR #52 (bot-02-risk G-6 self-tests) and PR #53 (bot-00-chief seat_task cutover) was not checked against the merged CHANGELOG; this diff touches only CHANGELOG.md, which neither PR is expected to edit.",
+    "Phase 11 plan dependencies 11-01 through 11-09 are judged merged from main history and receipts; plan 11-04 has no receipt of its own on main and was not re-verified here."
+  ],
+  "rollback_plan": "Revert the CHANGELOG commit ea39d3c and remove .receipts/bot-09-journal/v4-p11-changelog.json. The change is documentation only: no ledger, var, live or pin state changes, and the smoke-10m and trading smoke hashes are unchanged by this PR."
+}
