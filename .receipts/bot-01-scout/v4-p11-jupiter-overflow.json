@@ -1,5 +1,5 @@
 {
-  "task_id": "jupiter-overflow",
+  "task_id": "v4-p11-jupiter-overflow",
   "bot": "bot-01-scout",
   "branch": "bot-01-scout/jupiter-overflow",
   "base": "origin/main c7ef904",
@@ -10,7 +10,7 @@
   "files": [
     "src/pumpgrok/tools/market/jupiter.py",
     "tests/tools/market/test_jupiter_errors.py",
-    ".receipts/bot-01-scout/jupiter-overflow.json"
+    ".receipts/bot-01-scout/v4-p11-jupiter-overflow.json"
   ],
   "commands": [
     {
