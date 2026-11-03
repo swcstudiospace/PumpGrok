@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #51 (approve_51).",
   "task_id": "v4-p11-quality-foundation-ratchet",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-quality-foundation-ratchet",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "11-05: complexity ratchet, property tests, mutation smoke, function-size and plain-swallow guards (PR-06, third of three plans on this branch)",
   "purpose": "Receipt for plan 11-05 on bot-02-risk/v4-p11-quality-foundation-ratchet: complexity ratchet, property tests, mutation smoke, function-size and plain-swallow guards, and the cli backtest split. Written by the executor; no approval is recorded here.",
-  "status": "rebased onto origin/main c6317b8 (PR 48 merged); all battery commands exit 0 on the rebased head; pushed as a draft PR",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "rollback_plan": "Command: git revert the five plan commits on this branch in reverse order without force, or close PR 51 unmerged. Expected recovery time: about 10 minutes. Data implications: none; these commits touch no ledger, var or live state.",
   "commands": [
     {
