@@ -9,6 +9,7 @@ existence. Adding services/desk-signer/src later does not fail them. Only `make 
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -22,13 +23,19 @@ SERVICE_SRC = f"{SERVICE_DIR}/src"
 
 
 def _make_dry_run(target: str, *overrides: str) -> str:
+    # UV is pinned on the make command line, so an exported UV or make flags cannot change the
+    # `uv run` literals. Command-line variables reach nested makes via MAKEFLAGS.
+    env = {
+        key: value for key, value in os.environ.items() if key not in ("UV", "MAKEFLAGS", "MFLAGS")
+    }
     result = subprocess.run(
-        ["make", "-n", target, *overrides],
+        ["make", "-n", target, "UV=uv", *overrides],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=True,
         timeout=60,
+        env=env,
     )
     return result.stdout
 
