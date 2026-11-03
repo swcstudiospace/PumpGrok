@@ -1,5 +1,5 @@
 {
-  "task_id": "v4-desk-gateway-mypy",
+  "task_id": "v4-p11-desk-gateway-mypy",
   "bot": "bot-00-chief",
   "branch": "bot-00-chief/v4-desk-gateway-mypy",
   "phase": "11-engineering-foundation-and-quality",
@@ -12,7 +12,7 @@
     {"cmd": "uv run ruff check services/desk-gateway/src/desk_gateway/server.py", "exit_code": 0, "output_tail": "All checks passed!"},
     {"cmd": "uv run ruff format --check services/desk-gateway/src/desk_gateway/server.py", "exit_code": 0, "output_tail": "1 file already formatted"},
     {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK — 10 bots, 192 rules; 1007 tracked path(s), each with one declared owner"},
-    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-desk-gateway-mypy.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: the reason line is 'approved_by' is missing; this receipt carries no approved_by by design (see status)"}
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-desk-gateway-mypy.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: the reason line is 'approved_by' is missing; this receipt carries no approved_by by design (see status)"}
   ],
   "claims": [
     {"claim": "mypy on services/desk-gateway/src exits 0 after the narrowing", "evidence": ["uv run mypy services/desk-gateway/src: Success, 4 source files"], "evidence_command_index": 0},
