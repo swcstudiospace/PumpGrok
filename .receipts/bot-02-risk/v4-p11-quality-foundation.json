@@ -271,22 +271,22 @@
       "output_tail": "FAILED test_runs_the_canonical_make_targets, test_ci_check_job_runs_the_service_aware_make_targets, test_make_check_enforces_the_coverage_floor_not_only_the_fast_suite"
     },
     {
-      "cmd": "uv run pytest -q ci/tests/test_security_workflows.py ci/tests/test_ci_covers_services.py (green after ci.yml and Makefile check change)",
+      "cmd": "uv run pytest -q ci/tests/test_security_workflows.py ci/tests/test_ci_covers_services.py (green after ci.yml and Makefile check change) [WITHDRAWN: described the cov check target reverted by 27c2f5a, c700325 and 2f05abe]",
       "exit_code": 0,
       "output_tail": "63 tests, 100% passed"
     },
     {
-      "cmd": "make -n lint typecheck cov audit",
+      "cmd": "make -n lint typecheck cov audit [WITHDRAWN: cov target reverted by 2f05abe]",
       "exit_code": 0,
       "output_tail": "lint, typecheck, then uv run pytest -q -m 'not slow' --cov=pumpgrok --cov-report=term-missing --cov-report=xml:coverage.xml, audit"
     },
     {
-      "cmd": "make -n check | grep -c -- --cov=pumpgrok",
+      "cmd": "make -n check | grep -c -- --cov=pumpgrok [WITHDRAWN: described check running cov; reverted by 2f05abe]",
       "exit_code": 0,
       "output_tail": "1 (check now runs cov, not the bare fast suite)"
     },
     {
-      "cmd": "make -n test cov",
+      "cmd": "make -n test cov [WITHDRAWN: output predates 2f05abe, which added --cov=pumpgrok to the test target]",
       "exit_code": 0,
       "output_tail": "uv run pytest -q -m 'not slow' (test); uv run pytest -q -m 'not slow' --cov=pumpgrok ... (cov)"
     },
@@ -326,29 +326,59 @@
       "output_tail": "1 file already formatted"
     },
     {
-      "cmd": "probe (temporary tests/config/test_zz_probe_tmp.py, deleted after): inject a v4 field into Settings.model_fields, run old equality test and new subsequence test",
+      "cmd": "probe (temporary tests/config/test_zz_probe_tmp.py, deleted after): inject a v4 field into Settings.model_fields, run old equality test and new subsequence test [WITHDRAWN: subsequence test reverted by c700325]",
       "exit_code": 1,
       "output_tail": "old exact-equality test FAILED as expected; new subsequence test passed"
     },
     {
-      "cmd": "uv run pytest -q tests/config",
+      "cmd": "uv run pytest -q tests/config [WITHDRAWN: ran with the subsequence test reverted by c700325]",
       "exit_code": 0,
       "output_tail": "94 passed, 100%"
     },
     {
-      "cmd": "uv run ruff check tests/config/test_settings_surface_characterization.py",
+      "cmd": "uv run ruff check tests/config/test_settings_surface_characterization.py [WITHDRAWN: file change reverted by c700325]",
       "exit_code": 0,
       "output_tail": "All checks passed!"
     },
     {
-      "cmd": "uv run ruff format --check tests/config/test_settings_surface_characterization.py",
+      "cmd": "uv run ruff format --check tests/config/test_settings_surface_characterization.py [WITHDRAWN: file change reverted by c700325]",
       "exit_code": 0,
       "output_tail": "1 file already formatted"
     },
     {
-      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py tests/config",
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py tests/config [WITHDRAWN: tests/config part ran with the subsequence test reverted by c700325]",
       "exit_code": 0,
       "output_tail": "106 passed, 100%"
+    },
+    {
+      "cmd": "make -n test",
+      "exit_code": 0,
+      "output_tail": "uv sync --frozen --group dev; uv run pytest -q -m 'not slow' --cov=pumpgrok"
+    },
+    {
+      "cmd": "make -n check",
+      "exit_code": 0,
+      "output_tail": "lint, typecheck, then the test target (uv run pytest -q -m 'not slow' --cov=pumpgrok), then audit and the drift checks; no cov target line"
+    },
+    {
+      "cmd": "grep -n \"make lint typecheck test audit\" .github/workflows/ci.yml",
+      "exit_code": 0,
+      "output_tail": "45:        run: make lint typecheck test audit"
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py tests/config -o addopts=",
+      "exit_code": 0,
+      "output_tail": "106 passed in 54.69s"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "844 files already formatted; service lint skipped (desk-signer absent)"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 216 source files; service typecheck skipped (desk-signer absent)"
     }
   ],
   "claims": [
@@ -438,21 +468,44 @@
       "evidence_command_index": 50
     },
     {
-      "claim": "CI check job and make check now run the coverage floor (make cov) instead of the bare fast suite; the floor is enforced by pytest-cov from pyproject fail_under",
-      "evidence_command_index": 52
+      "claim": "WITHDRAWN (27c2f5a, c700325, 2f05abe): the check job and make check no longer run the cov target as described here. ci.yml runs make lint typecheck test audit (command 70).",
+      "evidence_command_index": 70
     },
     {
-      "claim": "The check job step and make check both include --cov=pumpgrok; make -n shows the floor path",
-      "evidence_command_index": 54
+      "claim": "WITHDRAWN (2f05abe): make check no longer runs cov directly; it runs the test target, whose recipe carries --cov=pumpgrok (command 69).",
+      "evidence_command_index": 69
     },
     {
       "claim": "Services CI tests now pin gating behaviour (SERVICE_SRC on and off, default follows directory existence), not the absence of services/desk-signer; they pass with the directory absent and present",
       "evidence_command_index": 59
     },
     {
-      "claim": "Reproduction: with a v4 field injected, the old exact-equality assertion fails (command 63 exits 1 by design); the new ordered-subsequence test passes in the same run. The settings test asserts PRE_V4_FIELDS as an ordered subsequence; digests unchanged",
-      "expects_failure": true,
-      "evidence_command_index": 63
+      "claim": "WITHDRAWN (c700325): the ordered-subsequence settings test was reverted, so the reproduction claim no longer describes the tree. tests/config runs the original exact-equality test (command 71).",
+      "evidence_command_index": 71
+    },
+    {
+      "claim": "make test passes --cov=pumpgrok on head 2f05abe (command 68); pyproject fail_under is the floor that pytest-cov reads. No local floor result is claimed.",
+      "evidence_command_index": 68
+    },
+    {
+      "claim": "make check runs the test target, so its recipe carries --cov=pumpgrok on head 2f05abe (command 69).",
+      "evidence_command_index": 69
+    },
+    {
+      "claim": "The ci.yml check job runs make lint typecheck test audit on head 2f05abe (command 70).",
+      "evidence_command_index": 70
+    },
+    {
+      "claim": "The targeted ci/tests/test_ci_covers_services.py and tests/config suites pass on head 2f05abe: 106 passed (command 71).",
+      "evidence_command_index": 71
+    },
+    {
+      "claim": "make lint exits 0 on head 2f05abe (command 72).",
+      "evidence_command_index": 72
+    },
+    {
+      "claim": "make typecheck exits 0 on head 2f05abe; mypy strict reports no issues in 216 source files (command 73).",
+      "evidence_command_index": 73
     }
   ],
   "unverified": [
@@ -469,7 +522,9 @@
     "'one import and one field line per section' is implemented as one import statement per section module (core, engine, ops), not one import line per section, because files_modified allows only those three section modules.",
     "settings.py and cli/backtest.py re-export section and helper names through explicit __all__ lists so that promotion.py, scoring.py, analyzer.py and the test modules keep their imports unchanged; those importer files are outside files_modified and were not migrated.",
     "An owner-checkout incident: two edit calls with a relative path landed in /root/src/repos/pumpgrok (core.py, branch bot-00-chief/phase-6-integrity). Main restored that file to HEAD; the owner checkout was not re-verified by this executor after the restore.",
-    "The doctor probe still reports typed network failures as warn lines (never fatal). Only unexpected exceptions now propagate; no live endpoint was started for the new error tests, which use stubbed urlopen."
+    "The doctor probe still reports typed network failures as warn lines (never fatal). Only unexpected exceptions now propagate; no live endpoint was started for the new error tests, which use stubbed urlopen.",
+    "A full local make test with coverage did not finish within the sandbox's one-hour limit on this host, so the CI check job on head 2f05abe is the run of record for the coverage floor. No local floor result is claimed.",
+    "make lint and make typecheck were run on head 2f05abe (commands 72 and 73) and exit 0; the earlier entry above that says they were not executed predates that run."
   ],
   "carry_over": {
     "wildcard_choice": "Replace services/desk-signer with the generic wildcard once services/desk-gateway/src/desk_gateway/server.py:385 is fixed by its owner.",
