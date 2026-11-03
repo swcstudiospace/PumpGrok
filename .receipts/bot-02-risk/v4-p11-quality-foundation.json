@@ -381,6 +381,106 @@
       "cmd": "make typecheck",
       "exit_code": 0,
       "output_tail": "Success: no issues found in 216 source files; service typecheck skipped (desk-signer absent)"
+    },
+    {
+      "cmd": "uv run ruff check .",
+      "exit_code": 0,
+      "output_tail": "      Built pumpgrok @ file:///root/src/repos/pumpgrok-wt/v4-11-05 | Uninstalled 1 package in 1ms | Installed 1 package in 4ms"
+    },
+    {
+      "cmd": "uv run ruff format --check .",
+      "exit_code": 0,
+      "output_tail": "866 files already formatted"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "echo \"services: services/desk-signer/src absent; service lint skipped\" | services: services/desk-signer/src absent; service lint skipped | Checked 65 packages in 6ms"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "echo \"services: services/desk-signer/src absent; service typecheck skipped\" | services: services/desk-signer/src absent; service typecheck skipped | Checked 65 packages in 68ms"
+    },
+    {
+      "cmd": "uv run python -c \"import tomllib;s=tomllib.load(open('pyproject.toml','rb'))['tool']['ruff']['lint']['select'];assert {'C901','PLR0912','PLR0915'}<=set(s)\"",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_complexity_ratchet.py",
+      "exit_code": 0,
+      "output_tail": ".......                                                                  [100%]"
+    },
+    {
+      "cmd": "uv run pytest -q tests/property",
+      "exit_code": 0,
+      "output_tail": "...............                                                          [100%]"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d",
+      "exit_code": 0,
+      "output_tail": "{\"correlation_id\":\"01KDVDNA009GZ05Q914M5Q55G1\",\"data\":{\"engine_decision\":\"skip\",\"engine_reason\":\"no_metadata\",\"events_read\":41,\"ledger_seq\":1},\"event\":\"cycle_end\",\"level\":\"INFO\",\"logger\":\"pumpgrok.replay.runner\",\"mint\":null,\"mode\":\"paper\",\"msg\":\"replay engine cycle complete\",\"profile\":\"paper\",\"seat\":\"desk\",\"ticket_id\":null,\"ts\":\"2026-11-03T05:51:02.345Z\"}"
+    },
+    {
+      "cmd": "make mutation-smoke",
+      "exit_code": 0,
+      "output_tail": "\u2838 102/102  \ud83c\udf89 74 \ud83e\udee5 0  \u23f0 0  \ud83e\udd14 0  \ud83d\ude41 28  \ud83d\udd07 0  \ud83e\uddd9 0 | 8.30 mutations/second | Checked 65 packages in 1ms"
+    },
+    {
+      "cmd": "test -f docs/mutation-testing.md",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "grep -q 'risk' docs/mutation-testing.md",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "! make -n check | grep -q mutation",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality/test_no_plain_swallow.py",
+      "exit_code": 0,
+      "output_tail": "..                                                                       [100%]"
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality/test_function_size.py",
+      "exit_code": 1,
+      "output_tail": "  execution/paper_adapter/marks.py:158 mark_open_positions is 67 lines |   execution/paper_adapter/marks.py:323 _force_close is 89 lines | assert not ['cli/backtest.py:126 _backtest_verb is 139 lines', 'cli/backtest_holdout.py:65 _fills_from_rows is 63 lines', 'cli/ba...per_adapter/buy.py:405 _buy_confirm is 69 lines', 'execution/paper_adapter/buy.py:475 _buy_fill_rows is 74 lines', ...]"
+    },
+    {
+      "cmd": "uv run pytest -q tests/quality ci/tests/test_complexity_ratchet.py",
+      "exit_code": 1,
+      "output_tail": "  execution/paper_adapter/marks.py:158 mark_open_positions is 67 lines |   execution/paper_adapter/marks.py:323 _force_close is 89 lines | assert not ['cli/backtest.py:126 _backtest_verb is 139 lines', 'cli/backtest_holdout.py:65 _fills_from_rows is 63 lines', 'cli/ba...per_adapter/buy.py:405 _buy_confirm is 69 lines', 'execution/paper_adapter/buy.py:475 _buy_fill_rows is 74 lines', ...]"
+    },
+    {
+      "cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+      "exit_code": 0,
+      "output_tail": ".....                                                                    [100%]"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3",
+      "exit_code": 0,
+      "output_tail": "  [ ] 8 adapter_registered no live adapter implementation ships in this release |   [ ] 9 no_active_stop halt, kill switch and breaker state are not readable in this release | Fix every unmet line or run in mode=paper. No transaction was attempted."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 10 bots, 192 rules; 1015 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "./scripts/check.sh",
+      "exit_code": 0,
+      "output_tail": "ok: 35 skills, 10 agents, 326 markdown files checked | PumpGrok repository structure looks healthy."
+    },
+    {
+      "cmd": "python3 -P ci/gates/run_all.py --bot bot-02-risk --base origin/main --receipt .receipts/bot-02-risk/v4-p11-quality-foundation.json",
+      "exit_code": 0,
+      "output_tail": "  [PASS]  G-7  Desk integrity |  | All gates passed."
     }
   ],
   "claims": [
@@ -508,6 +608,64 @@
     {
       "claim": "make typecheck exits 0 on head 2f05abe; mypy strict reports no issues in 216 source files (command 73).",
       "evidence_command_index": 73
+    },
+    {
+      "claim": "Ruff selects C901, PLR0912 and PLR0915 with mccabe max-complexity 10 and pylint max-branches 12 and max-statements 50; the tomllib assertion holds, and ruff check and ruff format --check are clean.",
+      "evidence_command_index": 78
+    },
+    {
+      "claim": "The complexity ratchet test passes 7 of 7: rule selection, mccabe threshold, only C901 has a legacy baseline, the 22-file baseline only shrinks, its entries exist on disk, and no hotspot successor is in it.",
+      "evidence_command_index": 79
+    },
+    {
+      "claim": "Three hypothesis property modules (money integer math and float rejection, reducer ordering and purity, replay determinism under FixtureClock) pass 15 of 15 against the current code; no src file changed.",
+      "evidence_command_index": 80
+    },
+    {
+      "claim": "The smoke-10m events.hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is reproduced by pumpgrok verify.",
+      "evidence_command_index": 81
+    },
+    {
+      "claim": "make mutation-smoke exits 0 and ran 102 mutants over the four G-02 modules (74 killed, 28 survived). It is outside make check: make -n check does not mention mutation.",
+      "evidence_command_index": 82
+    },
+    {
+      "claim": "docs/mutation-testing.md exists and names risk.",
+      "evidence_command_index": 84
+    },
+    {
+      "claim": "The plain-swallow guard passes: nine broad non-re-raising non-logging excepts in src/pumpgrok, all in the recorded baseline; no new one.",
+      "evidence_command_index": 86
+    },
+    {
+      "claim": "The function-size guard is RED. Nine functions in hotspot successors exceed 60 lines: cli/backtest.py _backtest_verb 139; cli/backtest_holdout.py _evaluate_holdout 71 and _fills_from_rows 63; cli/backtest_paper_gate.py _paper_gate 68; paper_adapter buy.py _buy_confirm 69, _buy_fill_rows 74, _buy_settle 64; paper_adapter marks.py mark_open_positions 67 and _force_close 89. The branch is not pushed.",
+      "evidence_command_index": 87,
+      "expects_failure": true
+    },
+    {
+      "claim": "The combined quality and ratchet run is RED for the same function-size reason: 2 failures, both in test_function_size; the plain-swallow and ratchet tests inside it pass.",
+      "evidence_command_index": 88,
+      "expects_failure": true
+    },
+    {
+      "claim": "The trading smoke pin (events hash, chain length and full row dump) passes.",
+      "evidence_command_index": 89
+    },
+    {
+      "claim": "Live mode still exits 3 (live refusal).",
+      "evidence_command_index": 90
+    },
+    {
+      "claim": "G-1 ownership manifest validates (1008 tracked paths, one owner each) and every path this run changed resolves to bot-02-risk.",
+      "evidence_command_index": 91
+    },
+    {
+      "claim": "scripts/check.sh passes.",
+      "evidence_command_index": 92
+    },
+    {
+      "claim": "The G-1 to G-7 gate runner exits 0 against origin/main 3182763 with the receipt in place.",
+      "evidence_command_index": 93
     }
   ],
   "unverified": [
@@ -526,7 +684,13 @@
     "An owner-checkout incident: two edit calls with a relative path landed in /root/src/repos/pumpgrok (core.py, branch bot-00-chief/phase-6-integrity). Main restored that file to HEAD; the owner checkout was not re-verified by this executor after the restore.",
     "The doctor probe still reports typed network failures as warn lines (never fatal). Only unexpected exceptions now propagate; no live endpoint was started for the new error tests, which use stubbed urlopen.",
     "A full local make test with coverage did not finish within the sandbox's one-hour limit on this host, so the CI check job on head 2f05abe is the run of record for the coverage floor. No local floor result is claimed.",
-    "make lint and make typecheck were run on head 2f05abe (commands 72 and 73) and exit 0; the earlier entry above that says they were not executed predates that run."
+    "make lint and make typecheck were run on head 2f05abe (commands 72 and 73) and exit 0; the earlier entry above that says they were not executed predates that run.",
+    "Function-size guard is red (see claims). Per the assignment, the nine functions were not split or exempted: four are cli/backtest successors that PR #48 does not touch, and five are buy.py and marks.py functions that PR #48 splits. PR #48 is OPEN and unmerged, so nothing was pushed.",
+    "PR #48 head (origin/bot-04-sniper/v4-p11-buy-marks-split, d0fbac7): an out-of-tree ast measurement found no paper_adapter function over 60 lines. That run is not a command in this receipt. The four cli/backtest functions remain after PR #48.",
+    "Not run: full make test, make test-soak, make cov, make check, and CI's check job. The assignment excluded them. Only the targeted commands above were executed.",
+    "The property modules passed on first run against existing helpers, so no red step was observed for them. They characterize current behaviour and needed no source helper.",
+    "mutants/ is created at the repository root by mutmut and is untracked. .gitignore was not changed because it is not in this plan's file list. The directory was removed before the final commits.",
+    "The branch name differs from the plan's bot-02-risk/v4-p11-quality-foundation. That local branch is the merged PR #35 branch (an ancestor of origin/main), so this run uses bot-02-risk/v4-p11-quality-foundation-ratchet. The top-level branch field keeps the merged PR-35 value; this run's branch is in plan_11_05.branch."
   ],
   "carry_over": {
     "wildcard_choice": "Replace services/desk-signer with the generic wildcard once services/desk-gateway/src/desk_gateway/server.py:385 is fixed by its owner.",
@@ -554,5 +718,40 @@
       "Re-exports through __all__ in cli/backtest.py and config/settings.py, to keep importer files unchanged (see unverified).",
       "Section grouping: one module each for core, engine and ops (the files_modified paths), not one module per section."
     ]
+  },
+  "plan_11_05": {
+    "plan": "11-05: complexity ratchet, property tests, mutation smoke, function-size and plain-swallow guards (PR-06, third of three plans on this branch)",
+    "branch": "bot-02-risk/v4-p11-quality-foundation-ratchet",
+    "base": "origin/main 3182763",
+    "status": "blocked: function-size guard red on nine functions; branch local only; PR not opened; PR #48 unmerged",
+    "commits": [
+      {
+        "sha": "6323637",
+        "task": "test(quality): guard successor function size and new plain swallows (QLT-04, QLT-06)"
+      },
+      {
+        "sha": "b94d5cf",
+        "task": "test(ci): ratchet the C901 baseline and select C901, PLR0912, PLR0915 (QLT-03)"
+      },
+      {
+        "sha": "fdfa806",
+        "task": "test(property): integer money, reducer ordering and replay determinism (QLT-07)"
+      },
+      {
+        "sha": "4160256",
+        "task": "build(make): opt-in mutation-smoke over risk and execution math (QLT-08)"
+      }
+    ],
+    "function_length_measurement": {
+      "before_origin_main_3182763": "over 60 lines in successors: 9 (cli/backtest 4, paper_adapter buy 3, marks 2)",
+      "after_pr48_head_d0fbac7_paper_adapter_only": "paper_adapter 0; cli/backtest successors still 4 (_backtest_verb 139, _evaluate_holdout 71, _fills_from_rows 63, _paper_gate 68)"
+    },
+    "deviations": [
+      "Branch name is distinct from the plan's name, because the plan name is the merged PR #35 branch.",
+      "Per-file C901 baseline lives in pyproject ruff per-file-ignores (22 files) rather than per-function noqa; the ratchet test pins that set.",
+      "Plain-swallow scope is src/pumpgrok only; a plain swallow is a broad handler that neither re-raises nor calls anything. Nine pre-existing ones are a shrink-only baseline.",
+      "Mutation-smoke selection is three direct unit-test files; broad tests/risk and tests/execution selections failed the mutmut baseline and ran too slowly per mutant."
+    ],
+    "rollback_plan": "Local branch only; no remote state changed. To discard, remove the worktree /root/src/repos/pumpgrok-wt/v4-11-05 and delete branch bot-02-risk/v4-p11-quality-foundation-ratchet. Nothing merges or deploys from this run."
   }
 }
