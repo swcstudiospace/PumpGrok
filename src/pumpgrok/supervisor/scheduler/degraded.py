@@ -12,7 +12,7 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.risk.killswitch import env_engaged
-from pumpgrok.supervisor.seat_task import CLOCK_SKEW_S, ClockSkew
+from pumpgrok.supervisor.seat_relay import CLOCK_SKEW_S, ClockSkew
 
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
 

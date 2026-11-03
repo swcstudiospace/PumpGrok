@@ -33,15 +33,19 @@ from pumpgrok.supervisor.scheduler import (
     run_once_replay,
     serve_replay,
 )
-from pumpgrok.supervisor.seat_task import (
+from pumpgrok.supervisor.seat_relay import (
     CLOCK_SKEW_S,
     ClockSkew,
-    ObserveOnly,
-    RestartPolicy,
-    SeatContext,
-    SeatTask,
     append_escalation,
     relay_tail,
+)
+from pumpgrok.supervisor.seat_restart import (
+    ObserveOnly,
+    RestartPolicy,
+)
+from pumpgrok.supervisor.seat_task import (
+    SeatContext,
+    SeatTask,
 )
 
 __all__ = [
