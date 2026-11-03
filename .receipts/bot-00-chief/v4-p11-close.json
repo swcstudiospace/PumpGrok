@@ -1,0 +1,55 @@
+{
+  "task_id": "v4-p11-close",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-p11-close",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-11: Phase 11 close. STATE.md closes Phase 11 with its hash evidence, 11-VERIFICATION.md is the chief-owned close record, and this receipt records the acceptance commands. PR-08 (agent review by bot-02-risk), base origin/main 8e8c4c3.",
+  "purpose": "Closes Phase 11 (PRC-06) so Phase 12 can stack on the quality scaffolding. Touches only .planning/STATE.md, .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md and this receipt. No source, test, config or pin file changes.",
+  "status": "Draft pull request against main, not merged. approved_by is absent by design: the executor never writes it, and the owner adds it in a batch at the Phase 11 ship checkpoint. G-2 fails only on that field.",
+  "commits": [
+    {"sha": "ef3788b", "task": "Close Phase 11 in STATE.md with hash evidence (PRC-06)", "files": [".planning/STATE.md"]},
+    {"sha": "d8cbcd4", "task": "Add the Phase 11 verification record (PRC-06)", "files": [".planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md"]}
+  ],
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check: All checks passed! ruff format --check: 866 files already formatted; service lint skipped (services/desk-signer/src absent)"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy src/: Success: no issues found in 222 source files; service typecheck skipped"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "ok: 35 skills, 10 agents, 324 markdown files checked; PumpGrok repository structure looks healthy."},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 1027 tracked path(s), each with one declared owner (run before the close commits)"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "trades filled=2 not_filled=1; cycle_end engine_decision=buy; exit 0"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "uv run pytest -q -m 'not slow' --cov=pumpgrok: progress reached 100% with two skipped tests (ss); pytest-cov floor passed; wall time 3061.6 s. Run after var/ existed (see unverified). The summary line was truncated in the captured output, so no pass count is recorded."},
+    {"cmd": "a=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(uv run pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test -n \"$a\" && test \"$a\" = \"$b\" && test \"$a\" = \"b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\"", "exit_code": 0, "output_tail": "a=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d b=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; the verify stdout reads events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and verify=CONSISTENT seq=2 events=41"},
+    {"cmd": "(! grep -nE 'pull_request\\.number' .github/workflows/gates.yml) && grep -qF '!.receipts/bot-0*/v4-p*.json' .gitignore", "exit_code": 0, "output_tail": "no pull_request.number in gates.yml; receipt glob present in .gitignore"},
+    {"cmd": "test -f .planning/milestones/v3-ROADMAP.md && test -f .planning/milestones/v3-REQUIREMENTS.md && grep -qE 'Phase 11: Engineering foundation' .planning/ROADMAP.md && grep -qE 'Coverage: v4 requirements' .planning/REQUIREMENTS.md && test -f .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md && grep -q 'Phase 11' .planning/STATE.md", "exit_code": 0, "output_tail": "criterion 17 file and text checks pass"},
+    {"cmd": "grep -qF 'Phase 11: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md && grep -qF 'Phase 11: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54' CHANGELOG.md && python3 -c \"import json;d=json.load(open('tests/fixtures/replay/pins/trading_smoke.json'));assert d['fixture']=='smoke' and len(d['events_hash'])==64 and d['seq']>1; print(d['events_hash'])\"", "exit_code": 0, "output_tail": "the three checks were run as separate invocations, each exit 0; trading events_hash bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54"},
+    {"cmd": "python3 -P ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 1028 tracked path(s), each with one declared owner (after the close commits and the receipt)"},
+    {"cmd": "python3 -P ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/v4-p11-close.json", "exit_code": 1, "output_tail": "G-1 PASS; G-2 FAIL: 'approved_by' is missing (expected, owner adds it at the ship checkpoint); G-3 PASS; G-4 PASS; G-5/G-6 PASS; G-7 PASS. 1 gate(s) failed: G-2 only."},
+    {"cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3", "exit_code": 0, "output_tail": "live run refused with exit 3; no transaction attempted"}
+  ],
+  "claims": [
+    {"claim": "make lint passes on the close-plan tree", "evidence": ["make lint exit 0"], "evidence_command_index": 0},
+    {"claim": "make typecheck passes on the close-plan tree", "evidence": ["make typecheck exit 0"], "evidence_command_index": 1},
+    {"claim": "./scripts/check.sh passes", "evidence": ["check.sh exit 0"], "evidence_command_index": 2},
+    {"claim": "the paper smoke replay exits 0", "evidence": ["replay exit 0"], "evidence_command_index": 4},
+    {"claim": "the fast make test path exits 0 with the soak excluded", "evidence": ["make test exit 0"], "evidence_command_index": 5},
+    {"claim": "smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on two runs", "evidence": ["two verify runs, equal and matching"], "evidence_command_index": 6},
+    {"claim": "the waiver is gone (no pull_request.number in gates.yml) and the receipt glob is in .gitignore", "evidence": ["grep exit 0"], "evidence_command_index": 7},
+    {"claim": "criterion 17 files and text are present: v3 archived, v4 roadmap and requirements installed, verification record exists, STATE names Phase 11", "evidence": ["criterion 17 check exit 0"], "evidence_command_index": 8},
+    {"claim": "the trading smoke pin file holds events_hash bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 and the CHANGELOG after-pairs match", "evidence": ["pin JSON assertion and CHANGELOG greps exit 0"], "evidence_command_index": 9},
+    {"claim": "the ownership manifest validates with the close files tracked, each with one declared owner", "evidence": ["validate-manifest final exit 0"], "evidence_command_index": 10},
+    {"claim": "run_all exits 1 only because G-2 finds approved_by absent, which is expected and must be added by the owner; G-1 and G-3 to G-7 pass", "evidence": ["run_all output"], "evidence_command_index": 11, "expects_failure": true},
+    {"claim": "live stays refused: run --mode live --once exits 3", "evidence": ["live refusal exit 3"], "evidence_command_index": 12}
+  ],
+  "unverified": [
+    "make test ran after the paper smoke run had created var/ (the planned order and the fresh-worktree requirement were not both met). The pin tests use tmp_path (D-09). CI's check job remains the run of record for make test.",
+    "The captured make test output was truncated: no pass count is recorded, and the two skipped tests (ss) were not identified.",
+    "Commands 0 to 5 ran before the close commits. The close commits change only .planning/ files and this receipt, not any Python or test file.",
+    "The Phase 11 soak test (make test-soak, about 49 minutes) was not run. It is outside the default path and runs in nightly CI.",
+    "INT-10 is open: scripts/probe_curve_layout.py still writes Status: VERIFIED on its own (lines 278 and 295). Not fixed here; it must be fixed before the live-data phase.",
+    "The stale-branch deletion is listed as open. The owner approved it; this receipt does not verify that it was carried out.",
+    "Makefile lines 9 and 10 still describe a services/desk-gateway mypy finding that PR #49 fixed. The comment is stale. The Makefile is outside this plan's files, so it was not edited, and no mypy run on services/desk-gateway was made.",
+    "The hosting target is deferred to Phase 19 by the owner's answer. No hosting target is decided in this receipt.",
+    "The events.hash 'before' values are taken from the CHANGELOG entry that plan 11-10 wrote, not re-derived at v4-base.",
+    "Criteria 4 to 16 and 20 were not rerun here. Each is evidenced by its plan's receipt on main, as listed in 11-VERIFICATION.md."
+  ],
+  "rollback_plan": "Revert the three commits on bot-00-chief/v4-p11-close (the STATE close, the verification record, and this receipt), or close the draft pull request unmerged. The change is documentation and receipt only: no source, test, config, ledger, var or pin file changes, so no runtime behaviour and no hash (smoke-10m or trading smoke) is affected."
+}
