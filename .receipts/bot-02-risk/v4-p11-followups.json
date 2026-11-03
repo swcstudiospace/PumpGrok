@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
   "task_id": "v4-p11-followups",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-p11-followups",
   "phase": "11-engineering-foundation-and-quality",
   "plan": "Follow-up on merged main: ignore the coverage artifacts that make test and make cov write, and correct the PR 41 receipt status and unverified[0] to cite the post-merge Gitleaks run",
   "purpose": "Receipt for two small changes. .gitignore gains exact .coverage and coverage.xml lines, so the artifacts written by make test and make cov stay out of git status. The PR 41 receipt (.receipts/bot-02-risk/v4-p11-gitleaks-allowlist.json) now states that this PR's own Gitleaks job used the base configuration and could not test the new exceptions, and that the post-merge Gitleaks job on main at 26e4875 passed (Security PR Gate run 41535016738). Its gate-self-test fix is attributed to the exact .gitignore line (f799c9d). approved_by in that receipt is unchanged.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent from this receipt; the owner has not approved this PR.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches only .gitignore and two receipts; no runtime, CI or data behaviour changes. Expected recovery time: under 5 minutes.",
   "commands": [
     {
