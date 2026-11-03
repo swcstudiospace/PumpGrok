@@ -1,0 +1,88 @@
+{
+  "task_id": "v4-p11-uv-pin-follow-up",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/v4-p11-uv-pin-follow-up",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Follow-up to merged PR 35: pin UV in the services gating dry-run test (Greptile P2, discussion_r4449362180)",
+  "purpose": "Receipt for one test-only change. _make_dry_run in ci/tests/test_ci_covers_services.py now passes UV=uv on the make command line and builds its subprocess environment without UV, MAKEFLAGS and MFLAGS, so an exported UV or inherited make flags cannot break the literal uv run assertions. No Makefile, CI or src/ change.",
+  "status": "draft pull request; not approved. approved_by is intentionally absent; the owner has not approved this PR.",
+  "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change touches only ci/tests/test_ci_covers_services.py and this receipt; no runtime, CI or data behaviour changes. Expected recovery time: under 5 minutes.",
+  "commands": [
+    {
+      "cmd": "UV=ghost uv run pytest -q ci/tests/test_ci_covers_services.py -o addopts= (before the fix; literal form)",
+      "exit_code": 0,
+      "output_tail": "12 passed in 3.01s",
+      "note": "Does not reproduce the failure: uv run overwrites UV in the child environment with its own path, so the make dry runs use uv. Recorded for honesty; the red run is the next command."
+    },
+    {
+      "cmd": "UV=ghost .venv/bin/python -m pytest -q ci/tests/test_ci_covers_services.py -o addopts= (before the fix; red)",
+      "exit_code": 1,
+      "output_tail": "3 failed, 9 passed: test_service_step_runs_when_the_src_tree_is_set[lint], test_service_step_runs_when_the_src_tree_is_set[typecheck], test_typecheck_keeps_the_root_src_check_in_every_case; make -n emitted 'ghost run ruff check' and 'ghost run mypy'",
+      "note": "Red reproduction with UV exported to the pytest process. Failing tests as listed."
+    },
+    {
+      "cmd": "UV=ghost .venv/bin/python -m pytest -q ci/tests/test_ci_covers_services.py -o addopts= (after the fix; green)",
+      "exit_code": 0,
+      "output_tail": "12 passed in 1.72s"
+    },
+    {
+      "cmd": "UV=ghost uv run pytest -q ci/tests/test_ci_covers_services.py -o addopts= (after the fix)",
+      "exit_code": 0,
+      "output_tail": "12 passed in 1.31s",
+      "note": "Run from the worktree branch bot-02-risk/v4-p11-uv-pin-follow-up after the fix."
+    },
+    {
+      "cmd": "uv run pytest -q ci/tests/test_ci_covers_services.py -o addopts= (after the fix)",
+      "exit_code": 0,
+      "output_tail": "12 passed in 2.22s"
+    },
+    {
+      "cmd": "uv run ruff check ci/tests/test_ci_covers_services.py",
+      "exit_code": 0,
+      "output_tail": "All checks passed!"
+    },
+    {
+      "cmd": "uv run ruff format --check ci/tests/test_ci_covers_services.py",
+      "exit_code": 0,
+      "output_tail": "1 file already formatted"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "services: services/desk-signer/src absent; service lint skipped"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "With UV exported to the pytest process, the services gating test file fails before the fix: three tests fail because make dry runs emit ghost instead of uv",
+      "expects_failure": true,
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "After the fix, the services gating test file passes with UV exported to the pytest process",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "After the fix, the services gating test file passes under the plain uv run invocation",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The touched file passes ruff check and ruff format --check",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "make lint exits 0 on this branch",
+      "evidence_command_index": 7
+    }
+  ],
+  "unverified": [
+    "The full make test was not run here; CI runs it on this branch.",
+    "The literal command UV=ghost uv run pytest does not reproduce the failure, because uv run overwrites UV. The red state was reproduced with UV exported to .venv/bin/python instead.",
+    "A caller override such as make test UV=ghost (through MAKEFLAGS) was not exercised separately; only an exported UV was tested.",
+    "The change is not approved; approved_by is absent by design and the owner has not approved this draft PR.",
+    "Greptile has not re-reviewed this branch at the time of writing."
+  ],
+  "carry_over": {
+    "origin": "Greptile P2 on merged PR 35, discussion_r4449362180: 'Custom UV breaks tests'."
+  }
+}
