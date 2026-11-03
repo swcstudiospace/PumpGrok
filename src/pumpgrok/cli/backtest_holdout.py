@@ -62,6 +62,51 @@ def _read_window_ledger(
     return (rows, meta)
 
 
+def _fill_from_payload(row: Mapping[str, Any], payload: dict[str, Any]) -> tuple[Fill, Decimal]:
+    """One fill and its confirmation latency from a FillRecorded payload, failing closed."""
+    money_fields = (
+        "filled_lamports",
+        "filled_units",
+        "realised_slippage_bps",
+        "venue_fee_lamports",
+        "network_cost_lamports",
+        "cash_delta_lamports",
+    )
+    try:
+        money: dict[str, int] = {}
+        for name in money_fields:
+            raw_amount = payload.get(name, 0)
+            if not isinstance(raw_amount, int) or isinstance(raw_amount, bool):
+                raise ValueError(f"fill row carries non-integer {name}")
+            money[name] = raw_amount
+        fraction = Decimal(str(payload["filled_fraction"]))
+        status = FillStatus.FILLED if fraction >= 1 else FillStatus.PARTIAL
+        order_id = str(payload["order_id"])
+        decision_id = str(payload["decision_id"])
+        fill = Fill(
+            order_id=order_id,
+            # Fill validates decision_id as a ULID, so a forced close passes the
+            # order id through the constructor and then takes the recorded empty value.
+            decision_id=decision_id or order_id,
+            status=status,
+            venue_tx_ref=str(payload["venue_tx_ref"]),
+            filled_lamports=money["filled_lamports"],
+            filled_units=money["filled_units"],
+            filled_fraction=fraction,
+            price_avg=Decimal(str(payload["price_avg"])),
+            realised_slippage_bps=money["realised_slippage_bps"],
+            venue_fee_lamports=money["venue_fee_lamports"],
+            network_cost_lamports=money["network_cost_lamports"],
+            route=str(payload.get("route", "curve")),
+            ledger_seq=int(row["seq"]),
+        )
+        if not decision_id:
+            fill = fill.model_copy(update={"decision_id": ""})
+        return fill, Decimal(str(payload.get("latency_s", "0")))
+    except (KeyError, ValueError, TypeError, InvalidOperation) as exc:
+        raise ConfigError(["backtest ledger holds an unusable fill row"]) from exc
+
+
 def _fills_from_rows(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[Fill], list[Decimal]]:
@@ -76,54 +121,15 @@ def _fills_from_rows(
     """
     fills: list[Fill] = []
     latencies: list[Decimal] = []
-    money_fields = (
-        "filled_lamports",
-        "filled_units",
-        "realised_slippage_bps",
-        "venue_fee_lamports",
-        "network_cost_lamports",
-        "cash_delta_lamports",
-    )
     for row in rows:
         if row.get("type") != "FillRecorded":
             continue
         payload = row.get("payload")
         if not isinstance(payload, dict):
             raise ConfigError(["backtest ledger holds a fill row without a payload mapping"])
-        try:
-            money: dict[str, int] = {}
-            for name in money_fields:
-                raw_amount = payload.get(name, 0)
-                if not isinstance(raw_amount, int) or isinstance(raw_amount, bool):
-                    raise ValueError(f"fill row carries non-integer {name}")
-                money[name] = raw_amount
-            fraction = Decimal(str(payload["filled_fraction"]))
-            status = FillStatus.FILLED if fraction >= 1 else FillStatus.PARTIAL
-            order_id = str(payload["order_id"])
-            decision_id = str(payload["decision_id"])
-            fill = Fill(
-                order_id=order_id,
-                # Fill validates decision_id as a ULID, so a forced close passes the
-                # order id through the constructor and then takes the recorded empty value.
-                decision_id=decision_id or order_id,
-                status=status,
-                venue_tx_ref=str(payload["venue_tx_ref"]),
-                filled_lamports=money["filled_lamports"],
-                filled_units=money["filled_units"],
-                filled_fraction=fraction,
-                price_avg=Decimal(str(payload["price_avg"])),
-                realised_slippage_bps=money["realised_slippage_bps"],
-                venue_fee_lamports=money["venue_fee_lamports"],
-                network_cost_lamports=money["network_cost_lamports"],
-                route=str(payload.get("route", "curve")),
-                ledger_seq=int(row["seq"]),
-            )
-            if not decision_id:
-                fill = fill.model_copy(update={"decision_id": ""})
-            fills.append(fill)
-            latencies.append(Decimal(str(payload.get("latency_s", "0"))))
-        except (KeyError, ValueError, TypeError, InvalidOperation) as exc:
-            raise ConfigError(["backtest ledger holds an unusable fill row"]) from exc
+        fill, latency = _fill_from_payload(row, payload)
+        fills.append(fill)
+        latencies.append(latency)
     return (fills, latencies)
 
 
@@ -283,6 +289,25 @@ class _HoldoutOutcome:
     rejected_fees_lamports: int
 
 
+def _window_span(events: Sequence[dict[str, Any]], cutoff: float) -> tuple[str, float, float]:
+    """Window start timestamp and the first and last epoch stamps at or after the cutoff."""
+    window_points = [
+        (event_epoch(event), str(event["ts_utc"]))
+        for event in events
+        if event_epoch(event) >= cutoff
+    ]
+    if window_points:
+        return (window_points[0][1], window_points[0][0], window_points[-1][0])
+    return (format_ts_utc(cutoff), cutoff, cutoff)
+
+
+def _elapsed_days(first_stamp: float, last_stamp: float) -> Decimal:
+    """Days between the first and last window stamps; zero when the span is empty or inverted."""
+    if last_stamp > first_stamp:
+        return (Decimal(str(last_stamp)) - Decimal(str(first_stamp))) / Decimal(86400)
+    return Decimal(0)
+
+
 def _evaluate_holdout(
     *,
     spec: _Dataset,
@@ -315,23 +340,8 @@ def _evaluate_holdout(
     initial = int(meta) if meta is not None else initial_fallback
     genesis = initial_state(source="backtest", initial_equity_lamports=initial, day_utc="")
     events = dataset.events
-    window_points = [
-        (event_epoch(event), str(event["ts_utc"]))
-        for event in events
-        if event_epoch(event) >= cutoff
-    ]
-    if window_points:
-        window_start_utc = window_points[0][1]
-        first_stamp = window_points[0][0]
-        last_stamp = window_points[-1][0]
-    else:
-        window_start_utc = format_ts_utc(cutoff)
-        first_stamp = cutoff
-        last_stamp = cutoff
-    if last_stamp > first_stamp:
-        elapsed_days = (Decimal(str(last_stamp)) - Decimal(str(first_stamp))) / Decimal(86400)
-    else:
-        elapsed_days = Decimal(0)
+    window_start_utc, first_stamp, last_stamp = _window_span(events, cutoff)
+    elapsed_days = _elapsed_days(first_stamp, last_stamp)
     window_metrics = _window_metrics(fills, genesis=genesis, rows=rows, elapsed_days=elapsed_days)
     backtest_result = SharedResult.from_fills(
         run_id=run_id,

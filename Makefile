@@ -1,4 +1,4 @@
-.PHONY: help sync lint fmt typecheck test test-soak test-all cov audit run-paper gateway replay report gates prompts check doctor clean
+.PHONY: help sync lint fmt typecheck test test-soak test-all cov mutation-smoke audit run-paper gateway replay report gates prompts check doctor clean
 
 UV ?= uv
 BOT ?= bot-00-chief
@@ -40,6 +40,9 @@ test-all: sync   ## every test, soak included
 
 cov: sync        ## fast suite with branch coverage; writes coverage.xml; floor in pyproject
 	$(UV) run pytest -q -m 'not slow' --cov=pumpgrok --cov-report=term-missing --cov-report=xml:coverage.xml
+
+mutation-smoke: sync  ## G-02 mutmut smoke on risk/limits, risk/sizing, execution/curve_math, execution/fees; opt-in, not in check
+	$(UV) run mutmut run
 
 audit: sync      ## pip-audit against the lockfile
 	$(UV) export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o /tmp/pumpgrok-req.txt

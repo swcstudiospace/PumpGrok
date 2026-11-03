@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.backtest.divergence import breach_line, check, enforce
+from pumpgrok.backtest.divergence import DivergenceVerdict, breach_line, check, enforce
 from pumpgrok.backtest.metrics import MetricsReport
 from pumpgrok.backtest.results import SharedResult
 from pumpgrok.cli.backtest_holdout import (
@@ -64,6 +64,63 @@ def _paper_window(
     return (opening, window_rows)
 
 
+def _paper_evidence(
+    paper_file: Path,
+    *,
+    dataset_name: str,
+    run_id: str,
+    cutoff: float,
+    window_end: float,
+    elapsed_days: Decimal,
+    initial_fallback: int,
+) -> tuple[MetricsReport, SharedResult]:
+    """Verify the paper ledger hash chain, then summarize its rows over the holdout window."""
+    paper_rows, paper_meta = _read_window_ledger(paper_file, verify=True)
+    paper_initial = int(paper_meta) if paper_meta is not None else initial_fallback
+    opening, window_rows = _paper_window(
+        paper_rows, cutoff=cutoff, window_end=window_end, initial=paper_initial
+    )
+    paper_fills, _ = _fills_from_rows(window_rows)
+    paper_metrics = _window_metrics(
+        paper_fills, genesis=opening, rows=window_rows, elapsed_days=elapsed_days
+    )
+    paper_result = SharedResult.from_ledger_rows(
+        run_id=run_id,
+        dataset=dataset_name,
+        window_start_ts=cutoff,
+        window_end_ts=window_end,
+        rows=paper_rows,
+    )
+    return (paper_metrics, paper_result)
+
+
+def _verdict_outcome(
+    verdict: DivergenceVerdict, paper_metrics: MetricsReport, eligible: bool
+) -> _PaperOutcome:
+    """Map the divergence verdict to the promotion outcome; a breach prints its line and fails."""
+    if verdict.blocks_promotion:
+        line = breach_line(verdict)
+        if line is None:
+            raise ConfigError(["divergence verdict blocks without a breach line"])
+        _say(sys.stderr, line)
+        return _PaperOutcome(
+            paper_metrics,
+            verdict.reasons,
+            False,
+            ("divergence breach: " + "|".join(verdict.reasons),),
+            enforce(verdict),
+        )
+    if eligible:
+        return _PaperOutcome(
+            paper_metrics,
+            verdict.reasons,
+            True,
+            ("trial count within limit and paper divergence within D7 defaults",),
+            EXIT_OK,
+        )
+    return _PaperOutcome(paper_metrics, verdict.reasons, False, (), EXIT_OK)
+
+
 def _paper_gate(
     *,
     paper_ledger: str | None,
@@ -93,42 +150,15 @@ def _paper_gate(
     paper_file = Path(paper_ledger)
     if not paper_file.is_file():
         raise UsageError(f"bad --paper-ledger {paper_ledger!r}: want a ledger sqlite file")
-    paper_rows, paper_meta = _read_window_ledger(paper_file, verify=True)
-    paper_initial = int(paper_meta) if paper_meta is not None else initial_fallback
-    opening, window_rows = _paper_window(
-        paper_rows, cutoff=cutoff, window_end=window_end, initial=paper_initial
-    )
-    paper_fills, _ = _fills_from_rows(window_rows)
-    paper_metrics = _window_metrics(
-        paper_fills, genesis=opening, rows=window_rows, elapsed_days=elapsed_days
-    )
-    paper_result = SharedResult.from_ledger_rows(
+    paper_metrics, paper_result = _paper_evidence(
+        paper_file,
+        dataset_name=dataset_name,
         run_id=run_id,
-        dataset=dataset_name,
-        window_start_ts=cutoff,
-        window_end_ts=window_end,
-        rows=paper_rows,
+        cutoff=cutoff,
+        window_end=window_end,
+        elapsed_days=elapsed_days,
+        initial_fallback=initial_fallback,
     )
     backtest_result.compare(paper_result)
     verdict = check(window_metrics, paper_metrics)
-    if verdict.blocks_promotion:
-        line = breach_line(verdict)
-        if line is None:
-            raise ConfigError(["divergence verdict blocks without a breach line"])
-        _say(sys.stderr, line)
-        return _PaperOutcome(
-            paper_metrics,
-            verdict.reasons,
-            False,
-            ("divergence breach: " + "|".join(verdict.reasons),),
-            enforce(verdict),
-        )
-    if eligible:
-        return _PaperOutcome(
-            paper_metrics,
-            verdict.reasons,
-            True,
-            ("trial count within limit and paper divergence within D7 defaults",),
-            EXIT_OK,
-        )
-    return _PaperOutcome(paper_metrics, verdict.reasons, False, (), EXIT_OK)
+    return _verdict_outcome(verdict, paper_metrics, eligible)
