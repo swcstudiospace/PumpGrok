@@ -40,7 +40,7 @@
     {"cmd": "uv run mypy src/  [final]", "exit_code": 0, "output_tail": "Success: no issues found in 212 source files"},
     {"cmd": "make lint", "exit_code": 0, "output_tail": "All checks passed! / 832 files already formatted"},
     {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 212 source files"},
-    {"cmd": "uv run pumpgrok run --mode live --once; test $? -eq 3", "exit_code": 3, "output_tail": "confirmation_record var/live_confirmation.json missing ... No transaction was attempted."},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "[ ] 7 confirmation_record var/live_confirmation.json missing / [ ] 8 adapter_registered no live adapter implementation ships in this release / Fix every unmet line or run in mode=paper. No transaction was attempted."},
     {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 974 tracked path(s), each with one declared owner"},
     {"cmd": "git diff --name-only 6df40f4..HEAD; LC_ALL=C grep -n -P '[^\\x00-\\x7F]' on those files; grep -n -i todo on those files", "exit_code": 1, "output_tail": "(no matches: no non-ASCII bytes and no TODO text in the nine changed files; grep exits 1 on no match)"},
     {"cmd": "uv run pytest -q tests/characterization/execution/test_paper_adapter_batch.py  [red: new pin still RED_PLACEHOLDER]", "exit_code": 1, "output_tail": "FAILED test_batch_scenario_matches_pinned_digest[direct_batch_refused_at_accepted] - assert 'c623616980d0...3fbecbd60d3d1' == 'RED_PLACEHOLDER'", "expects_failure": true},
