@@ -9,8 +9,10 @@ little-endian u64 reserve counters, one-byte completion flag).
 Read-only by construction: stdlib ``urllib`` POST of a single ``getAccountInfo``
 body, no keys loaded, no wallet, no signing path. On success the decoded
 layout is written to ``tests/fixtures/rpc/bonding_curve/probe.json`` and
-``docs/CURVE_LAYOUT_PROBE.md`` records ``Status: VERIFIED`` only when the account is owned by the
-expected program and carries the expected discriminator. On any failure
+``docs/CURVE_LAYOUT_PROBE.md`` records ``Status: DECODED_PENDING_REVIEW`` when the account
+is owned by the expected program and carries the expected discriminator. The probe never
+writes VERIFIED; a human sets it through a reviewed doc change, outside this script.
+On any failure
 (unreachable network, unknown account, undecodable bytes) the script exits 0,
 keeps ``LAYOUT_STATUS`` ASSUMED, writes ``probe.json`` carrying the probe error
 with credentials redacted, and writes the doc with ``Status: ASSUMED`` plus an
@@ -53,6 +55,13 @@ _EXPECTED_SIZE = _CURVE_STRUCT.size
 # are trusted. Both match tests/fixtures/rpc/bonding_curve/layout.json.
 EXPECTED_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
+
+# Shown in the decoded doc. VERIFIED is a human review step, never this script's output.
+_REVIEW_NOTE = (
+    "This probe never writes VERIFIED. DECODED_PENDING_REVIEW means the account decoded "
+    "under the ASSUMED layout and awaits human review. A human sets VERIFIED only through "
+    "a reviewed change to this doc, made outside the probe after checking the decoded values."
+)
 
 # Query-parameter names that carry credentials, matched case-insensitively.
 _CREDENTIAL_NAME = re.compile(r"api[-_]?key|token|secret|password|key", re.IGNORECASE)
@@ -275,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     safe_endpoint = _redact_endpoint(args.endpoint)
     record = {
         "fixture": "bonding_curve_probe",
-        "layout_status": "VERIFIED",
+        "layout_status": "DECODED_PENDING_REVIEW",
         "endpoint": safe_endpoint,
         "account": account,
         "commitment": args.commitment,
@@ -292,11 +301,13 @@ def main(argv: list[str] | None = None) -> int:
     doc.write_text(
         "# Bonding-curve layout probe (INT-10, R65)\n"
         "\n"
-        "Status: VERIFIED\n"
+        "Status: DECODED_PENDING_REVIEW\n"
         "\n"
         f"Endpoint: {safe_endpoint}\n"
         f"Account: {account}\n"
-        "Method: getAccountInfo (read-only, no keys)\n",
+        "Method: getAccountInfo (read-only, no keys)\n"
+        "\n"
+        f"{_REVIEW_NOTE}\n",
         encoding="utf-8",
     )
     return 0

@@ -1,0 +1,41 @@
+{
+  "task_id": "v4-p11-int10-probe-status",
+  "ticket": "INT-10",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-int10-probe-status",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "INT-10: scripts/probe_curve_layout.py must never write VERIFIED. It writes DECODED_PENDING_REVIEW in the JSON record and in docs/CURVE_LAYOUT_PROBE.md after a successful getAccountInfo decode, following scripts/probe_pump_accounts.py. A human sets VERIFIED by a reviewed doc change. Draft pull request against main; do not merge.",
+  "purpose": "Removes the automatic VERIFIED write on a successful decode. Keeps the ASSUMED path and every other output field unchanged. Adds one red-then-green test for the decode record path. Ownership: scripts/** is owned by bot-00-chief in ownership.yaml, and no more specific entry names probe_curve_layout.py. The first ownership read was a read-only check from the owner checkout; the recorded checks run in the worktree.",
+  "status": "Draft pull request open against main. Not merged. approved_by is not recorded; the G-2 gate reports it missing until a human reviewer records approval.",
+  "commands": [
+    {"cmd": "git -C /root/src/repos/pumpgrok fetch origin main", "exit_code": 0, "output_tail": "ok fetched (1 new refs)"},
+    {"cmd": "git -C /root/src/repos/pumpgrok worktree add /root/src/repos/pumpgrok-wt/v4-int10 -b bot-00-chief/v4-int10-probe-status origin/main", "exit_code": 0, "output_tail": "ok"},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK — 10 bots, 192 rules; 1029 tracked path(s), each with one declared owner"},
+    {"cmd": "uv run pytest -q tests/scripts/test_probe_curve_layout.py   # RED: run on origin/main, test file added, probe not yet changed", "exit_code": 1, "output_tail": "tests/scripts/test_probe_curve_layout.py:61: AssertionError: assert 'VERIFIED' != 'VERIFIED'"},
+    {"cmd": "uv run pytest tests/scripts/test_probe_curve_layout.py -p no:cacheprovider --junitxml=/tmp/int10-green.xml   # GREEN", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"1\"; testcase test_successful_decode_is_pending_review_not_verified"},
+    {"cmd": "uv run pytest tests/desk/test_probe_pump_accounts.py -p no:cacheprovider --junitxml=/tmp/int10-pump.xml", "exit_code": 0, "output_tail": "testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"16\""},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check . : All checks passed! ; ruff format --check . : 868 files already formatted ; services lint skipped (services/desk-signer/src absent)"},
+    {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/scripts/test_probe_curve_layout.py", "exit_code": 0, "output_tail": "2 files already formatted"},
+    {"cmd": "git diff -- scripts/probe_curve_layout.py docs/CURVE_LAYOUT_PROBE.md", "exit_code": 0, "output_tail": "scripts/probe_curve_layout.py +16 -5 (docstring, _REVIEW_NOTE constant, layout_status, decoded doc status and note); docs/CURVE_LAYOUT_PROBE.md +2 -0 (review paragraph); _write_assumed unchanged"}
+  ],
+  "claims": [
+    {"claim": "On origin/main, before the fix, the new test fails because the successful decode record writes layout_status VERIFIED.", "evidence_command_index": 3, "expects_failure": true},
+    {"claim": "After the fix, the new test passes: the JUnit report shows one test with no failures or errors.", "evidence_command_index": 4},
+    {"claim": "The pump-accounts probe test module still passes: JUnit report shows 16 tests with no failures or errors.", "evidence_command_index": 5},
+    {"claim": "make lint passes: ruff check and ruff format --check report no findings.", "evidence_command_index": 6},
+    {"claim": "The two touched Python files pass ruff format --check.", "evidence_command_index": 7},
+    {"claim": "The G-1 ownership manifest validates in the worktree.", "evidence_command_index": 2},
+    {"claim": "The diff changes only the decoded path's status and note, the module docstring, and one review-note constant. The ASSUMED writer is unchanged, and the committed doc gains one review paragraph.", "evidence_command_index": 8}
+  ],
+  "unverified": [
+    "No live mainnet getAccountInfo call was made. The RPC call is stubbed in the test, so the ASSUMED layout has not been decoded against a real bonding-curve account.",
+    "The ASSUMED path (no account configured) was not run after the edit. Its writer is unchanged in the diff. The committed doc gained the review paragraph by hand, so a later ASSUMED run rewrites the doc without that paragraph.",
+    "The full repository test suite and the soak test were not run. Only the two probe test modules and make lint were run.",
+    "The layout is not promoted to VERIFIED here. No human has reviewed decoded values, and approved_by is absent by design, so the G-2 gate reports it missing.",
+    "CLAUDE.md line 105 and .planning/REQUIREMENTS.md MKT-03 still describe a live probe as confirming the layout. They are not updated in this draft PR."
+  ],
+  "deviations": [
+    "The first edit attempts used repo-relative paths. The edit tool resolved them to the owner checkout /root/src/repos/pumpgrok, and the edits were rejected on hash mismatch, so nothing was written there. Later edits used absolute worktree paths. The owner checkout's scripts/probe_curve_layout.py was not modified.",
+    "One pytest run with -q printed 'No tests collected' and exit 0, while the -v run and the JUnit XML report one passing test. The JUnit XML is cited as the green evidence. The cause of the -q message was not determined."
+  ]
+}
