@@ -24,19 +24,13 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import halt_key
 from pumpgrok.supervisor.seat_relay import (
-    CLOCK_SKEW_S,
     KIND_HEARTBEAT_STALE,
     KIND_LEDGER_READ_FAILED,
     KIND_RESTART_EXHAUSTED,
-    ClockSkew,
     append_escalation,
     escalation_severity,
-    relay_tail,
 )
 from pumpgrok.supervisor.seat_restart import (
-    BACKOFF_CAP_S,
-    RESTART_CAPACITY,
-    RESTART_WINDOW_S,
     ObserveOnly,
     RestartPolicy,
     resume_after,
@@ -47,23 +41,10 @@ if TYPE_CHECKING:
     from pumpgrok.tools.notify.notifier import Notifier
 
 __all__ = [
-    "BACKOFF_CAP_S",
-    "CLOCK_SKEW_S",
-    "KIND_HEARTBEAT_STALE",
-    "KIND_LEDGER_READ_FAILED",
-    "KIND_RESTART_EXHAUSTED",
-    "RESTART_CAPACITY",
-    "RESTART_WINDOW_S",
     "STALE_CADENCES",
-    "ClockSkew",
     "CycleFn",
-    "ObserveOnly",
-    "RestartPolicy",
     "SeatContext",
     "SeatTask",
-    "append_escalation",
-    "escalation_severity",
-    "relay_tail",
 ]
 
 log = logging.getLogger(__name__)
