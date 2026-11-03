@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
   "task_id": "v4-p11-jupiter-overflow",
   "bot": "bot-01-scout",
   "branch": "bot-01-scout/jupiter-overflow",
@@ -6,7 +8,7 @@
   "phase": "11-engineering-foundation-and-quality",
   "plan": "Regression fix for ef7922c (QLT-06): an integer priceImpact of more than 308 digits makes float() raise OverflowError, which escaped get_quote. The inner guard now treats ArithmeticError as malformed, so ratio is None.",
   "purpose": "Seat receipt for the fail-closed regression in src/pumpgrok/tools/market/jupiter.py. Records the red run against origin/main source, the one-line fix, and the green and gate runs at the branch head.",
-  "status": "awaiting agent review and human approval. approved_by is intentionally absent; the executor never writes it.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
   "files": [
     "src/pumpgrok/tools/market/jupiter.py",
     "tests/tools/market/test_jupiter_errors.py",
