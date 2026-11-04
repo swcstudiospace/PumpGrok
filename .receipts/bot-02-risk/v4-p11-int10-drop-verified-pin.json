@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-04. Owner answer: approved PR #57, stage 1 of the INT-10 split (approve_57).",
   "task_id": "v4-p11-int10-drop-verified-pin",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-int10-drop-verified-pin",
   "phase": "INT-10",
   "plan": "INT-10 split, stage 1 of 3: delete the test that pins VERIFIED for a matching owner and discriminator in tests/docs/test_verify_doc_commands_offline.py. That behaviour is removed by INT-10. The rule is delete, never re-pin.",
   "purpose": "Receipt for a test-only deletion. Removes test_probe_records_verified_for_expected_account, which asserted '\"layout_status\": \"VERIFIED\"' and 'Status: VERIFIED' for the matching owner and discriminator. No other test, fixture or doc changed. The wrong-owner and wrong-discriminator tests remain and still assert the probe never records VERIFIED.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; the owner has not approved this PR. Not merged.",
+  "status": "Approved by the owner for merge on 2026-11-04 (approved_by recorded). Stage 1 of 3. Merge waits for green CI on this head.",
   "rollback_plan": "Revert the single commit on this branch with git revert (no force). The change restores one test function in tests/docs/test_verify_doc_commands_offline.py and touches nothing else. Reverting re-pins VERIFIED for the matching account, so it must not be reverted after INT-10 lands. Expected recovery time: under 5 minutes.",
   "commands": [
     {
