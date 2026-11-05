@@ -131,9 +131,9 @@ class TestWorkflowsParseAndRunOnHostedRunners:
             assert job["runs-on"] == GITHUB_HOSTED, job_name
 
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
-    def test_fork_pull_requests_never_reach_the_pool(self, name):
-        # A job that can run on pull_request must skip a fork's PR: fork code never runs on
-        # the shared pool. A schedule-only job cannot run on pull_request at all.
+    def test_fork_pull_requests_are_skipped(self, name):
+        # A job that can run on pull_request must skip a fork's PR, so fork code never runs in
+        # this repository's CI. A schedule-only job cannot run on pull_request at all.
         for job_name, job in _load_yaml(name)["jobs"].items():
             condition = job.get("if", "")
             if condition == "github.event_name == 'schedule'":
