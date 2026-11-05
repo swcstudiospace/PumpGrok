@@ -49,6 +49,13 @@ LEGACY_TRACKED_RECEIPTS = frozenset(
         ".receipts/bot-02-risk/pr-27-gate-waiver.json",
     }
 )
+# Owner decision for PR 58 (GitHub-hosted runners): this one non-v4 receipt is admitted by name.
+# Each entry needs its own owner decision; this set is not a general exception.
+OWNER_ADMITTED_RECEIPTS = frozenset(
+    {
+        ".receipts/bot-02-risk/00058-github-hosted-runners.json",
+    }
+)
 
 
 def _receipt_allowlist() -> list[str]:
@@ -392,4 +399,5 @@ class TestReceiptDirectories:
         unadmitted = {
             path for path in tracked_json if not any(_admits(line, path) for line in allowed)
         }
-        assert unadmitted <= LEGACY_TRACKED_RECEIPTS, sorted(unadmitted - LEGACY_TRACKED_RECEIPTS)
+        admitted = LEGACY_TRACKED_RECEIPTS | OWNER_ADMITTED_RECEIPTS
+        assert unadmitted <= admitted, sorted(unadmitted - admitted)
