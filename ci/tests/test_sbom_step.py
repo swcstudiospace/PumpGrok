@@ -17,7 +17,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SECURITY_PR = REPO_ROOT / ".github" / "workflows" / "security-pr.yml"
 SBOM_FILE = "sbom.cdx.json"
 SAME_REPO_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
-OMEGA_CI_POOL = ["self-hosted", "linux", "x64", "omega-ci"]
 
 
 @pytest.fixture(scope="module")
@@ -38,8 +37,8 @@ def sbom_run(sbom_job: dict) -> str:
     return "\n".join(runs)
 
 
-def test_sbom_job_runs_on_the_omega_pool(sbom_job: dict):
-    assert sbom_job["runs-on"] == OMEGA_CI_POOL
+def test_sbom_job_runs_on_a_github_hosted_runner(sbom_job: dict):
+    assert sbom_job["runs-on"] == "ubuntu-latest"
 
 
 def test_sbom_job_skips_fork_pull_requests(sbom_job: dict):

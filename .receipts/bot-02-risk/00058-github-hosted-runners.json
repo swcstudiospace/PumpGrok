@@ -1,0 +1,78 @@
+{
+  "task_id": "00058-pumpgrok",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/00058-github-hosted-runners",
+  "approval_note": "Owner decision, fixed for this change: move every CI job from the omega-ci self-hosted pool to GitHub-hosted ubuntu-latest, one draft PR, no merge by the author. Reverses the 2026-10-24 owner rule recorded in .receipts/bot-02-risk/00057-omega-ci-runners.json because the omega-ci controller cannot reach the desktop agents that launch runners.",
+  "commands": [
+    {
+      "cmd": "actionlint .github/workflows/ci.yml .github/workflows/gates.yml .github/workflows/security-pr.yml",
+      "exit_code": 0,
+      "output_tail": "(no output)"
+    },
+    {
+      "cmd": "uv run python -c \"import glob,yaml; jobs=[(f,k,j) for f in sorted(glob.glob('.github/workflows/*.yml')) for k,j in yaml.safe_load(open(f))['jobs'].items()]; assert all(j['runs-on']=='ubuntu-latest' for _,_,j in jobs), jobs; print(len(jobs), 'jobs, all runs-on ubuntu-latest')\"",
+      "exit_code": 0,
+      "output_tail": "9 jobs, all runs-on ubuntu-latest"
+    },
+    {
+      "cmd": "uv run pytest ci/tests/test_security_workflows.py ci/tests/test_sbom_step.py -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "Pytest: 59 passed in 0.67s"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "867 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 222 source files"
+    },
+    {
+      "cmd": "make test",
+      "exit_code": 0,
+      "output_tail": "Required test coverage of 89.9% reached. Total coverage: 91.40%"
+    },
+    {
+      "cmd": "make audit",
+      "exit_code": 0,
+      "output_tail": "No known vulnerabilities found"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The three workflow files parse as YAML and pass actionlint",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "All nine jobs across ci.yml, gates.yml and security-pr.yml run on ubuntu-latest; no omega-ci runner label remains in the workflows",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The workflow guard tests pass, including the fork-PR skip assertions and the Trivy trivy-action assertions (severity HIGH,CRITICAL, exit-code 1, no ignore-unfixed)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The canonical CI commands pass locally: lint, typecheck, the full test suite at 91.40% coverage, and pip-audit",
+      "evidence_command_index": 3
+    }
+  ],
+  "unverified": [
+    "The jobs on GitHub-hosted runners: checked by this PR's own CI run, not locally. Each job's result is reported from that run.",
+    "The Trivy scan through aquasecurity/trivy-action v0.36.0, and gitleaks, semgrep, bandit and pip-audit on GitHub-hosted runners: checked by CI, not locally.",
+    "The pinned trivy-action SHA ed142fd0673e97e23eac54620cfb913e5ce36c25 is the commit that the v0.36.0 tag peels to (checked against the GitHub API); the action itself has not been executed on this host.",
+    "The CHANGELOG entry for this change is not in this PR: CHANGELOG.md is owned by bot-09-journal, so the entry is routed through bot-00-chief.",
+    "Greptile review and the owner's approval: not run by the author; the PR is a draft."
+  ],
+  "files_changed": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/gates.yml",
+    ".github/workflows/security-pr.yml",
+    "ci/tests/test_security_workflows.py",
+    "ci/tests/test_sbom_step.py",
+    ".receipts/bot-02-risk/00058-github-hosted-runners.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this pull request's merge commit with git revert. The workflows return to the omega-ci pool values and the Trivy binary step, and the guard tests return to the omega-ci assertions."
+}
