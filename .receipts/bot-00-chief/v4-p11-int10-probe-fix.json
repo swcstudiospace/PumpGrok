@@ -1,4 +1,6 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-06. Owner answer: approved PR #59, stage 2 of the INT-10 split (approve_59).",
   "task_id": "v4-p11-int10-probe-fix",
   "ticket": "INT-10",
   "bot": "bot-00-chief",
@@ -6,7 +8,7 @@
   "phase": "11-engineering-foundation-and-quality",
   "plan": "INT-10 stage 2 of 3: scripts/probe_curve_layout.py only, on a branch from origin/main. The probe never writes VERIFIED. It writes DECODED_PENDING_REVIEW after a successful decode, and the shared review paragraph carries no uppercase VERIFIED token in either the decoded or the ASSUMED doc. Stage 1 (bot-02-risk) removes the VERIFIED-pinning test in tests/docs and must merge first. Stage 3 is the tests and doc. Draft pull request, not merged.",
   "purpose": "Carries the probe fix from PR 56 head 7f03ef2 onto a branch from origin/main, so PR 56 can be superseded under G-1. Takes scripts/probe_curve_layout.py verbatim from that head. Adds no test or doc file: tests belong to bot-02-risk stage 1, and the doc to stage 3. This receipt is new and does not overwrite the PR 56 receipt.",
-  "status": "Rebased onto origin/main 57982ca after PR 57 (stage 1) merged. Draft pull request against main, not merged. approved_by is not recorded; only the owner approves.",
+  "status": "Approved by the owner for merge on 2026-11-06 (approved_by recorded). Stage 2 of 3. Merge waits for green CI on the approval head.",
   "commands": [
     {"cmd": "git -C /root/src/repos/pumpgrok fetch origin main bot-00-chief/v4-int10-probe-status", "exit_code": 0, "output_tail": "origin main 5f85000a6914c085bb8b389852551aa40b2cf9b3; PR 56 head 7f03ef2e78bd022f049b361bab4e6e95018bb644"},
     {"cmd": "git -C /root/src/repos/pumpgrok worktree add /root/src/repos/pumpgrok-wt/v4-int10-stage2 -b bot-00-chief/v4-int10-probe-fix origin/main", "exit_code": 0, "output_tail": "ok"},
