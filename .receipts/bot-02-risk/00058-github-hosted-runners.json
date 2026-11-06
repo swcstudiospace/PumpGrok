@@ -1,8 +1,9 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
   "task_id": "00058-pumpgrok",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/00058-github-hosted-runners",
-  "approval_note": "Owner decision, fixed for this change: move every CI job from the omega-ci self-hosted pool to GitHub-hosted ubuntu-latest, one draft PR, no merge by the author. Reverses the 2026-10-24 owner rule recorded in .receipts/bot-02-risk/00057-omega-ci-runners.json because the omega-ci controller cannot reach the desktop agents that launch runners.",
+  "approval_note": "Owner decision, fixed for this change: move every CI job from the omega-ci self-hosted pool to GitHub-hosted ubuntu-latest, one draft PR, no merge by the author. Reverses the 2026-10-24 owner rule recorded in .receipts/bot-02-risk/00057-omega-ci-runners.json because the omega-ci controller cannot reach the desktop agents that launch runners. Owner approval for merge, 2026-11-06 (approve_58): approved_by records the owner.",
   "commands": [
     {
       "cmd": "actionlint .github/workflows/ci.yml .github/workflows/gates.yml .github/workflows/security-pr.yml",
