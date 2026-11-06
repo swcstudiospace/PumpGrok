@@ -1,7 +1,7 @@
 """Regression guard for the GitHub workflows and the scanner configs they depend on.
 
 The workflows are YAML, not ci/gates/*.py, so test_gates.py never parses them. A later edit could
-quietly drop a blocking flag, move a job off the Omega CI runner pool, or interpolate a branch
+quietly drop a blocking flag, reintroduce a self-hosted runner, or interpolate a branch
 name into shell source, and the gate suite would stay green. These tests assert what a diff
 review can miss.
 
@@ -47,6 +47,13 @@ LEGACY_TRACKED_RECEIPTS = frozenset(
         ".receipts/bot-02-risk/00057-omega-ci-runners.json",
         ".receipts/bot-02-risk/pr-27-followup.json",
         ".receipts/bot-02-risk/pr-27-gate-waiver.json",
+    }
+)
+# Owner decision for PR 58 (GitHub-hosted runners): this one non-v4 receipt is admitted by name.
+# Each entry needs its own owner decision; this set is not a general exception.
+OWNER_ADMITTED_RECEIPTS = frozenset(
+    {
+        ".receipts/bot-02-risk/00058-github-hosted-runners.json",
     }
 )
 
@@ -115,26 +122,25 @@ def gates() -> dict:
     return _load_yaml("gates.yml")
 
 
-# Every job runs on the Omega CI runner pool (swcstudiospace/Omega-Prime docs/ci-runners.md):
-# never on a GitHub-hosted runner, never on any other self-hosted label set.
-OMEGA_CI_POOL = ["self-hosted", "linux", "x64", "omega-ci"]
+# Every job runs on a GitHub-hosted runner, never on a self-hosted label set.
+GITHUB_HOSTED = "ubuntu-latest"
 SAME_REPO_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
 
 
-class TestWorkflowsParseAndRunOnTheOmegaCiPool:
+class TestWorkflowsParseAndRunOnHostedRunners:
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
     def test_parses_as_yaml_with_jobs(self, name):
         assert _load_yaml(name)["jobs"]
 
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
-    def test_every_job_runs_on_the_omega_ci_pool(self, name):
+    def test_no_job_uses_a_self_hosted_runner(self, name):
         for job_name, job in _load_yaml(name)["jobs"].items():
-            assert job["runs-on"] == OMEGA_CI_POOL, job_name
+            assert job["runs-on"] == GITHUB_HOSTED, job_name
 
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
-    def test_fork_pull_requests_never_reach_the_pool(self, name):
-        # A job that can run on pull_request must skip a fork's PR: fork code never runs on
-        # the shared pool. A schedule-only job cannot run on pull_request at all.
+    def test_fork_pull_requests_are_skipped(self, name):
+        # A job that can run on pull_request must skip a fork's PR, so fork code never runs in
+        # this repository's CI. A schedule-only job cannot run on pull_request at all.
         for job_name, job in _load_yaml(name)["jobs"].items():
             condition = job.get("if", "")
             if condition == "github.event_name == 'schedule'":
@@ -216,13 +222,10 @@ class TestSecurityGatesStillBlock:
         assert "-gt 1" in run
 
     def test_trivy_fails_on_high_and_critical_without_ignore_unfixed(self, security_pr):
-        step = _step(security_pr, "Trivy filesystem scan")
-        assert "uses" not in step, "the pool has no Docker: run the trivy binary"
-        run = step["run"]
-        assert "trivy fs" in run
-        assert "--severity HIGH,CRITICAL" in run
-        assert "--exit-code 1" in run
-        assert "ignore-unfixed" not in run
+        with_ = _step(security_pr, "Trivy filesystem scan")["with"]
+        assert with_["severity"] == "HIGH,CRITICAL"
+        assert with_["exit-code"] == "1"
+        assert "ignore-unfixed" not in with_
 
     def test_pip_audit_scans_the_uv_lock_export_strictly(self, security_pr):
         run = _step(security_pr, "pip-audit")["run"]
@@ -281,7 +284,7 @@ class TestCiWorkflow:
         trigger = _trigger(doc)
         assert any("cron" in item for item in trigger["schedule"])
         soak = doc["jobs"]["soak"]
-        assert soak["runs-on"] == OMEGA_CI_POOL
+        assert soak["runs-on"] == GITHUB_HOSTED
         assert soak["if"] == "github.event_name == 'schedule'"
         step = soak["steps"][-1]
         assert str(step["env"]["PUMPGROK_REQUIRE_SOAK"]) == "1"
@@ -396,4 +399,5 @@ class TestReceiptDirectories:
         unadmitted = {
             path for path in tracked_json if not any(_admits(line, path) for line in allowed)
         }
-        assert unadmitted <= LEGACY_TRACKED_RECEIPTS, sorted(unadmitted - LEGACY_TRACKED_RECEIPTS)
+        admitted = LEGACY_TRACKED_RECEIPTS | OWNER_ADMITTED_RECEIPTS
+        assert unadmitted <= admitted, sorted(unadmitted - admitted)

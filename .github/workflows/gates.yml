@@ -6,9 +6,7 @@
 # python3 ci/gates or pytest run. The PR tree is data under test (diffs, receipts, paths);
 # the gate implementations are never taken from the PR.
 #
-# Every job runs on the Omega CI runner pool ([self-hosted, linux, x64, omega-ci],
-# swcstudiospace/Omega-Prime docs/ci-runners.md), never on GitHub-hosted runners. Pull requests
-# from forks are skipped: fork code never reaches the pool.
+# Runners are GitHub-hosted (ubuntu-latest). Pull requests from forks are skipped on every job.
 
 name: Quality Gates
 
@@ -26,7 +24,7 @@ jobs:
     # Pull requests only. A push to main has no head ref, so the acting bot would resolve to
     # "main" and fail attribution before any gate ran.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -182,7 +180,7 @@ jobs:
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Use trusted gate scripts from base ref

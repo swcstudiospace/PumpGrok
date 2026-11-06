@@ -19,10 +19,7 @@
 # the gate never runs on main itself. The dependency job audits the uv.lock export,
 # so pyproject.toml and uv.lock changes are covered on every run.
 #
-# Every job runs on the Omega CI runner pool ([self-hosted, linux, x64, omega-ci],
-# swcstudiospace/Omega-Prime docs/ci-runners.md), never on GitHub-hosted runners. Pull requests
-# from forks are skipped: fork code never reaches the pool. The pool has no Docker, so Trivy runs
-# as the binary baked into the runner image instead of the Docker-based trivy-action.
+# Runners are GitHub-hosted (ubuntu-latest). Pull requests from forks are skipped on every job.
 
 name: Security PR Gate
 
@@ -39,7 +36,7 @@ jobs:
   secrets:
     name: Gitleaks (secrets)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     # security-events: write is declared per job, not at the workflow root. It is needed only
     # by the optional code-scanning upload below.
     permissions:
@@ -121,7 +118,7 @@ jobs:
   semgrep:
     name: Semgrep (SAST)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
@@ -199,7 +196,7 @@ jobs:
   bandit:
     name: Bandit (Python SAST)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
@@ -305,7 +302,7 @@ jobs:
   dependencies:
     name: pip-audit / Trivy (SCA)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
@@ -332,18 +329,15 @@ jobs:
 
       - name: Trivy filesystem scan — HIGH+ dependency vulnerabilities
         # ignore-unfixed is deliberately NOT set: a HIGH or CRITICAL finding with no fix released
-        # yet is still a HIGH or CRITICAL finding, and this gate fails on it. Trivy is the binary
-        # in the Omega CI runner image (the pool has no Docker for aquasecurity/trivy-action);
-        # its vulnerability database is downloaded into the job's HOME cache on each run.
-        run: |
-          set -euo pipefail
-          trivy --version
-          trivy fs \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            --format sarif \
-            --output trivy.sarif \
-            .
+        # yet is still a HIGH or CRITICAL finding, and this gate fails on it.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
 
       - name: Upload SARIF artifact
         if: always()
@@ -364,7 +358,7 @@ jobs:
   sbom:
     name: CycloneDX SBOM
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, omega-ci]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
