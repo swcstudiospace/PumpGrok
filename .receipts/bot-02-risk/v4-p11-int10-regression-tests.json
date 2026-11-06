@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-06. Owner answer: approved PR #60, stage 3 of the INT-10 split (approve_60).",
   "task_id": "v4-p11-int10-regression-tests",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/v4-int10-regression-tests",
   "phase": "INT-10",
   "plan": "INT-10 stage 3 prep: regression tests for the probe's decoded-pending-review behaviour, copied from PR 56 head 7f03ef2. Prepared only; not pushed and no PR opened.",
   "purpose": "Receipt for a test-only addition. tests/scripts/test_probe_curve_layout.py is copied unchanged from PR 56 head 7f03ef2. It holds two tests: a successful decode is pending review, not VERIFIED; and the assumed-path doc carries the review paragraph. Against main before stage 2 both failed, which was expected. After the rebase onto cf7039d (PR 59) both pass.",
-  "status": "draft pull request; approval pending. approved_by is intentionally absent; only the owner approves. Rebased onto origin/main cf7039d (PR 59, stage 2).",
+  "status": "Approved by the owner for merge on 2026-11-06 (approved_by recorded). Stage 3 of 3. Merge waits for green CI on the approval head.",
   "rollback_plan": "Delete tests/scripts/test_probe_curve_layout.py on this branch before merge, or revert the commit that adds it. The change adds one test file and this receipt; no probe, doc or CI behaviour changes. Expected recovery time: under 5 minutes.",
   "commands": [
     {
