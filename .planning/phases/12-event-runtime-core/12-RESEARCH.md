@@ -389,7 +389,7 @@ Recommended `EventKind` values (discretion; lock them in `docs/design/events-gro
 
 Fixture files use `"kind": "tick"`. That string is not an `EventKind`. Do not add `tick`. The drain test maps a fixture row to `curve_tick` in the test, and does not rewrite `events.jsonl` (its sha256 is in the manifest).
 
-Event id: `sha256(canonical_json({"kind", "entity_id", "payload"}))[:32]`. Use `canonical_json` from `src/pumpgrok/core/idempotency.py`. It rejects floats and serialises `Decimal` as `str`. `[VERIFIED: src/pumpgrok/core/idempotency.py:40-46]` Drop `correlation_id` before hashing, matching `derive_idempotency_key`. Do not call `IdFactory.ulid()` for the event id. A ULID moves when the RNG is consumed in a different order, which breaks dedup and drain parity.
+Event id: `sha256(canonical_json({"kind", "entity_id", "payload", "occurred_at"}))[:32]`. `occurred_at` is required and is part of the id; two identical payloads at different `occurred_at` values have different ids (`derive_event_id` in `src/pumpgrok/events/models.py`). Use `canonical_json` from `src/pumpgrok/core/idempotency.py`. It rejects floats and serialises `Decimal` as `str`. `[VERIFIED: src/pumpgrok/core/idempotency.py:40-46]` Drop `correlation_id` before hashing, matching `derive_idempotency_key`. Do not call `IdFactory.ulid()` for the event id. A ULID moves when the RNG is consumed in a different order, which breaks dedup and drain parity.
 
 Money fields on the event model are `int` with `Field(strict=True)`. No `float`. Prices, if any, are `Decimal` parsed from strings. Do not copy `1_000_000_000`. Import `LAMPORTS_PER_SOL` if a test needs the ceiling. The constant is:
 
