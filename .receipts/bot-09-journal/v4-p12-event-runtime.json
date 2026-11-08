@@ -4,75 +4,30 @@
   "branch": "bot-09-journal/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
   "plan": "CHANGELOG hash pins only. No product code.",
-  "purpose": "Seat receipt for the Phase 12 changelog pins at 2194f97. The hash check ran on the combined tree 9d32a35, which contains this commit. The executor does not write approved_by.",
-  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "purpose": "Seat receipt for the Phase 12 changelog pins at 2194f97 and this receipt commit. The commands below were re-run in this worktree during the Phase 12 ship checkpoint on 2026-11-08. The combined-tree verification (12/12) ran on 9d32a35. The executor does not write approved_by.",
+  "status": "executed and committed; draft pull request opened; not merged. G-2 waits for owner approval. This seat did not approve its own work.",
   "commits": [
-    {
-      "sha": "2194f97",
-      "task": "Phase 12 replay hash pins",
-      "files": [
-        "CHANGELOG.md"
-      ]
-    }
+    {"sha": "2194f97", "task": "Phase 12 replay hash pins", "files": ["CHANGELOG.md"]}
   ],
   "commands": [
-    {
-      "cmd": "roadmap smoke-10m pin from repo root",
-      "exit_code": 0,
-      "output_tail": "Log /tmp/p12-verify/rerun4/c11-hash.log: A=B=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; EXIT:0. The logged CMD is this label; the literal shell text is not recorded in rerun4."
-    },
-    {
-      "cmd": "trading-smoke changelog pin",
-      "exit_code": 0,
-      "output_tail": "Log /tmp/p12-verify/rerun4/c11-changelog-trading.log: P=bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; EXIT:0"
-    },
-    {
-      "cmd": "grep -qF 'Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md && grep -qF 'Phase 12: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d' CHANGELOG.md && grep -qF 'Phase 12: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54' CHANGELOG.md && grep -qF 'Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54' CHANGELOG.md",
-      "exit_code": 0,
-      "output_tail": "Run directly in phase-12-journal after the changelog commit: each of the four grep -qF checks exits 0. Not a rerun4 log."
-    },
-    {
-      "cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py",
-      "exit_code": 0,
-      "output_tail": "Log /tmp/p12-verify/rerun4/c11-pins.log: [100%]; EXIT:0"
-    },
-    {
-      "cmd": "uv run pumpgrok run --mode live --once",
-      "exit_code": 3,
-      "output_tail": "Log /tmp/p12-verify/rerun4/c12-live.log: 8 of 9 preconditions unmet; No transaction was attempted; EXIT:3"
-    },
-    {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-09-journal --base origin/main",
-      "exit_code": 0,
-      "output_tail": "G-1 PASS \u2014 bot-09-journal: 1 file(s) within owned paths. The only product file is CHANGELOG.md."
-    }
+    {"cmd": "r=\"$PWD\"; d=$(mktemp -d); a=$(cd \"$d\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(cd \"$d\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); echo \"A=$a\"; echo \"B=$b\"; test -n \"$a\" && test \"$a\" = \"$b\" && test \"$a\" = \"b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\" && grep -qF \"Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\" CHANGELOG.md && grep -qF \"Phase 12: smoke-10m events.hash after: $a\" CHANGELOG.md", "exit_code": 0, "output_tail": "A and B both equal b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, measured from fresh temporary directories; both Phase 12 smoke-10m lines are present in CHANGELOG.md. Exit 0 from the whole chain."},
+    {"cmd": "p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && echo \"P=$p\" && grep -qF \"Phase 12: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 12: trading-smoke events.hash after: $p\" CHANGELOG.md", "exit_code": 0, "output_tail": "P=bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; both Phase 12 trading-smoke lines are present in CHANGELOG.md. Exit 0."},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "[100%] with no failures. Exit 0."},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "LIVE GATE refusing to start: 8 of 9 preconditions unmet; No transaction was attempted. Exit 3."},
+    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-09-journal --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS: bot-09-journal, 2 files within owned paths (CHANGELOG.md and this receipt). Exit 0."}
   ],
   "claims": [
-    {
-      "claim": "Both smoke-10m measures equal b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, and CHANGELOG.md contains the Phase 12 before and after lines for smoke-10m and trading-smoke.",
-      "evidence_command_index": 0
-    },
-    {
-      "claim": "The replay hash pin tests exit 0.",
-      "evidence_command_index": 3
-    },
-    {
-      "claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.",
-      "evidence_command_index": 4,
-      "expects_failure": true
-    },
-    {
-      "claim": "The journal diff against origin/main is only CHANGELOG.md, which this seat owns.",
-      "evidence_command_index": 5
-    }
+    {"claim": "Both smoke-10m measures equal b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, and CHANGELOG.md carries the Phase 12 smoke-10m before and after lines.", "evidence_command_index": 0},
+    {"claim": "The trading-smoke pin in tests/fixtures/replay/pins/trading_smoke.json, bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, matches the Phase 12 trading-smoke before and after lines in CHANGELOG.md.", "evidence_command_index": 1},
+    {"claim": "The replay hash pin tests exit 0.", "evidence_command_index": 2},
+    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 3, "expects_failure": true},
+    {"claim": "The journal diff against origin/main is only CHANGELOG.md and this receipt, both owned by bot-09-journal.", "evidence_command_index": 4}
   ],
   "unverified": [
     "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
-    "The hash check ran on the combined tree 9d32a35, not again in this worktree after the receipt commit.",
-    "No pull request was opened and nothing was pushed.",
-    "This branch does not contain the event library. That code is on bot-02-risk/phase-12-event-runtime.",
-    "Command 0 records the logged CMD label from rerun4/c11-hash.log, not literal shell text, because rerun4 does not record the literal command. The CHANGELOG lines are proven by the direct greps at index 2, not by command 0."
+    "These commands ran in this worktree, but the combined-tree verification (12/12) ran on 9d32a35, not here.",
+    "The draft pull request is not merged, and the branch was not deleted.",
+    "This branch does not contain the event library. That code is on bot-02-risk/phase-12-event-runtime."
   ],
-  "evidence_logs": "/tmp/p12-verify/rerun4/",
-  "rollback_plan": "Before the merge, revert commit 2194f97 on this branch with git revert (no force) or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+  "rollback_plan": "Before the merge, revert commit 2194f97 and the receipt commit on this branch with git revert (no force), or close the draft pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
 }
