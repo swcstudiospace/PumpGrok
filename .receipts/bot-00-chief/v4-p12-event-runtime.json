@@ -1,13 +1,11 @@
 {
-  "approved_by": "human:SomeRandmGuyy",
-  "approval_note": "Owner approval for merge, 2026-11-08. Owner answer: 'Please push our updates to our main branch' (orchestration request, 2026-11-08). Scope read as the Phase 12 PRs #61, #62 and #63; this receipt covers PR #63 at head f623212. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p12-event-runtime",
   "bot": "bot-00-chief",
   "branch": "bot-00-chief/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
   "plan": "Planning artifacts and the verifier-written 12-VERIFICATION.md. No product code.",
   "purpose": "Seat receipt for the Phase 12 planning files, the verifier-written 12-VERIFICATION.md at 57da233, and the Phase 11 and Phase 12 closure records at 8279e58. The verifier rewrote that report from /tmp/p12-verify/rerun4/ on combined tree 9d32a35. The executor does not write approved_by.",
-  "status": "executed and committed; draft pull request opened; owner approval recorded in approved_by on 2026-11-08 (owner answer quoted in approval_note); merge after gates are green. This seat did not approve its own work.",
+  "status": "executed and committed; draft pull request opened; owner approval voided on 2026-11-08 because the PR head has changed since the approval (it covered f623212) and not re-recorded; merge after gates are green and the owner approves the final head. This seat did not approve its own work.",
   "commits": [
     {"sha": "8279e58", "task": "close Phase 11 and record the Phase 12 checkpoint in STATE and ROADMAP", "files": [".planning/STATE.md", ".planning/ROADMAP.md"]},
     {"sha": "57da233", "task": "record the current phase 12 verification pass", "files": [".planning/phases/12-event-runtime-core/12-VERIFICATION.md"]}
@@ -25,7 +23,7 @@
     {"claim": "Every file in origin/main...HEAD on this branch is owned by bot-00-chief.", "evidence_command_index": 3}
   ],
   "unverified": [
-    "G-2 on this receipt is checked by CI on the pull request, not by this seat.",
+    "Owner approval for the current head is not recorded. The earlier approval covered f623212. G-2 waits for the owner.",
     "12-VERIFICATION.md was written by the verifier, not by this seat. Status passed, score 12/12, re_verification true, head 9d32a35, commit 57da233.",
     "The suite was not re-run in this worktree after the receipt commit.",
     "Draft pull request opened with gh; not merged. Phase 13 was not started."
