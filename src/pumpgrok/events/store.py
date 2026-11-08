@@ -139,12 +139,37 @@ class EventStore:
         return _load(body)
 
     def replace_pending(self, events: list[Event]) -> None:
-        self._db.execute("DELETE FROM pending;")
-        for seq, event in enumerate(events, start=1):
-            self._db.execute(
-                "INSERT INTO pending (seq, event_id, body) VALUES (?, ?, ?);",
-                (seq, event.event_id, _dump(event)),
-            )
+        """Upsert queued events by id. Do not delete rows parked by dlq replay."""
+        db = self._db
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            for event in events:
+                body = _dump(event)
+                existing = db.execute(
+                    "SELECT seq FROM pending WHERE event_id = ?;",
+                    (event.event_id,),
+                ).fetchone()
+                if existing is None:
+                    seq_row = db.execute(
+                        "SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;"
+                    ).fetchone()
+                    seq = int(seq_row[0]) if seq_row is not None else 1
+                    db.execute(
+                        "INSERT INTO pending (seq, event_id, body) VALUES (?, ?, ?);",
+                        (seq, event.event_id, body),
+                    )
+                else:
+                    db.execute(
+                        "UPDATE pending SET body = ? WHERE event_id = ?;",
+                        (body, event.event_id),
+                    )
+            db.execute("COMMIT")
+        except Exception:
+            try:
+                db.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
 
     def load_pending(self) -> list[Event]:
         rows = self._db.execute("SELECT body FROM pending ORDER BY seq;").fetchall()
