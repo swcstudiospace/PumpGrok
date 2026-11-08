@@ -102,3 +102,39 @@ def test_failed_replay_move_leaves_dlq_row(tmp_path: Path) -> None:
         assert store.load_pending() == []
     finally:
         store.close()
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["events", "dlq", "list"],
+        ["events", "dlq", "replay", "row-x"],
+        ["events", "dlq", "purge", "row-x"],
+    ],
+)
+@pytest.mark.parametrize("blocked", ["parent-is-file", "path-is-directory"])
+def test_unopenable_sidecar_exits_config_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    blocked: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    if blocked == "parent-is-file":
+        parent = tmp_path / "not-a-dir"
+        parent.write_text("x", encoding="utf-8")
+        sidecar = parent / "events.sqlite"
+    else:
+        sidecar = tmp_path / "events-dir"
+        sidecar.mkdir()
+    monkeypatch.setenv("PUMPGROK_EVENTS__ENABLED", "true")
+    monkeypatch.setenv("PUMPGROK_EVENTS__SIDECAR_PATH", str(sidecar))
+
+    assert main(argv) == EXIT_CONFIG
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Traceback" not in captured.err
+    problems = [line for line in captured.err.splitlines() if line.startswith("usage error: ")]
+    assert len(problems) == 1
+    assert "sidecar unavailable" in problems[0]

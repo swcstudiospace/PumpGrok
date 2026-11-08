@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _say
 from pumpgrok.config.settings import Settings
 from pumpgrok.events.dlq import list_rows, purge, replay
+from pumpgrok.events.errors import SidecarRefusal
 from pumpgrok.events.store import EventStore
 
 
@@ -20,7 +22,10 @@ def events_verb(args: argparse.Namespace, settings: Settings) -> int:
     command = getattr(args, "dlq_cmd", None)
     if getattr(args, "cmd", None) != "dlq" or command not in {"list", "replay", "purge"}:
         raise UsageError("events requires dlq list, replay, or purge")
-    store = EventStore(settings.events.sidecar_path)
+    try:
+        store = EventStore(settings.events.sidecar_path)
+    except (OSError, sqlite3.Error, SidecarRefusal) as exc:
+        raise UsageError(f"sidecar unavailable: {exc}") from exc
     try:
         if command == "list":
             _say(sys.stdout, json.dumps(list_rows(store)))
