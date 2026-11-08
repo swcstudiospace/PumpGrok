@@ -502,3 +502,180 @@ async def test_superseded_retry_retains_running_handler_past_both_shutdown_bound
     assert not reopened.is_applied(newer.event_id)
     await recovered.shutdown()
     reopened.close()
+
+
+@pytest.mark.parametrize("recover_newer_first", [False, True])
+async def test_late_poison_handoff_retries_after_bounded_shutdown(
+    tmp_path: Path, recover_newer_first: bool
+) -> None:
+    """GP-4506937654: stopped workers may still owe a durable terminal handoff."""
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar)
+    reopened = EventStore(sidecar)
+    clock = FixtureClock(0.0)
+    stale = _tick(1)
+    newer = _tick(2)
+    originals = [event.model_dump(mode="json") for event in (stale, newer)]
+    retry_entered = asyncio.Event()
+    cancellation_seen = asyncio.Event()
+    release = asyncio.Event()
+    calls: list[int] = []
+    delivered: list[str] = []
+    dlq_calls: list[str] = []
+
+    async def handler(event: Event) -> None:
+        calls.append(int(event.payload["n"]))
+        if event.event_id != stale.event_id:
+            return
+        if calls.count(1) == 1:
+            raise TransientEvent(index=1)
+        retry_entered.set()
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                cancellation_seen.set()
+        raise PoisonEvent(index=0)
+
+    async def recovered_handler(event: Event) -> None:
+        delivered.append(event.event_id)
+
+    bus = EventBus(
+        clock=clock,
+        handler=handler,
+        dlq=lambda event: dlq_calls.append(event.event_id),
+        store=store,
+        rng=make_rng(11),
+    )
+    stopping: asyncio.Task[None] | None = None
+    retry_workers: list[asyncio.Task[None]] = []
+    try:
+        await bus.start()
+        await bus.publish(stale)
+        retry_workers = list(bus._workers)
+        await _settle()
+        assert len(retry_workers) == 1
+        assert calls == [1]
+        assert bus.jitters
+        clock.advance_to(BACKOFF_INITIAL_S + BACKOFF_JITTER_S)
+        await _settle()
+        assert retry_entered.is_set()
+        assert calls == [1, 1]
+
+        await bus.publish(newer)
+        await bus.publish(stale)
+        await _settle()
+        # Same-key calls serialize; newer work is recovered only after the retry exits.
+        assert calls == [1, 1]
+        assert bus.pending_p2(newer.kind, newer.entity_id) == newer
+        stop_started_at = clock.now()
+        stopping = asyncio.create_task(bus.shutdown())
+        await _settle()
+        assert not stopping.done()
+        clock.advance_to(stop_started_at + SHUTDOWN_TIMEOUT_S)
+        await _settle()
+        assert cancellation_seen.is_set()
+        assert not stopping.done()
+        clock.advance_to(stop_started_at + 2 * SHUTDOWN_TIMEOUT_S)
+        await _settle()
+        assert stopping.done(), "shutdown must retain its two clock bounds"
+        await stopping
+        assert not retry_workers[0].done()
+        assert bus._p2_active == {stale.event_id: stale}
+        assert bus._p2_failed == {}
+        assert bus._seen == {stale.event_id, newer.event_id}
+        assert [event.event_id for event in store.load_pending()] == [newer.event_id]
+        assert store.list_dlq() == []
+
+        # Repeating shutdown cannot preempt the still-running worker's actual result.
+        await bus.shutdown()
+        assert clock.now() == stop_started_at + 2 * SHUTDOWN_TIMEOUT_S
+        assert not retry_workers[0].done()
+        assert bus._p2_active == {stale.event_id: stale}
+        assert bus._p2_failed == {}
+        assert store.list_dlq() == []
+
+        # The late poison is real; only its durable transaction is unavailable.
+        with closing(sqlite3.connect(sidecar)) as db:
+            db.execute("ALTER TABLE dlq RENAME TO dlq_hidden")
+        release.set()
+        results = await asyncio.gather(*retry_workers, return_exceptions=True)
+        await _settle()
+        assert len(results) == 1
+        assert isinstance(results[0], sqlite3.OperationalError)
+        assert bus._workers == set()
+        assert bus._in_handler == {}
+        assert bus._p2_active == {stale.event_id: stale}
+        assert bus._p2_failed == {stale.event_id: "poison"}
+        assert stale.event_id in bus._p2_retry_gen
+        assert bus._seen == {stale.event_id, newer.event_id}
+        assert [event.event_id for event in store.load_pending()] == [newer.event_id]
+        assert dlq_calls == []
+        assert calls == [1, 1]
+
+        # Shutdown completion is not proof that this later terminal handoff committed.
+        with pytest.raises(sqlite3.OperationalError):
+            await bus.shutdown()
+        assert bus._p2_active == {stale.event_id: stale}
+        assert bus._p2_failed == {stale.event_id: "poison"}
+        assert stale.event_id in bus._seen
+
+        recovered = EventBus(
+            clock=FixtureClock(clock.now()),
+            handler=recovered_handler,
+            dlq=lambda _event: None,
+            store=reopened,
+        )
+        if recover_newer_first:
+            # The old handler has exited; this is not concurrent replay.
+            await recovered.recover()
+            await recovered.recover()
+            assert delivered == [newer.event_id]
+            assert store.load_pending() == []
+        # Restore storage only after observing the retained handoff failure.
+        with closing(sqlite3.connect(sidecar)) as db:
+            db.execute("ALTER TABLE dlq_hidden RENAME TO dlq")
+        assert store.list_dlq() == []
+
+        await bus.shutdown()
+        assert store.list_dlq() == [{"event_id": stale.event_id, "reason": "poison"}]
+        assert reopened.list_dlq() == [{"event_id": stale.event_id, "reason": "poison"}]
+        assert bus._p2_active == {}
+        assert bus._p2_retry_gen == {}
+        assert bus._p2_failed == {}
+        assert stale.event_id not in bus._seen
+        assert calls == [1, 1]
+        assert dlq_calls == []
+        assert clock.now() == stop_started_at + 2 * SHUTDOWN_TIMEOUT_S
+
+        await recovered.recover()
+        await recovered.recover()
+        assert delivered == [newer.event_id]
+        assert reopened.load_pending() == []
+        # Repeated shutdown must not resnapshot the original, already-recovered slot.
+        await bus.shutdown()
+        await recovered.recover()
+        assert delivered == [newer.event_id]
+        assert reopened.load_pending() == []
+        for event in (stale, newer):
+            assert not reopened.is_applied(event.event_id)
+            assert not reopened.is_duplicate(event.event_id, clock.now())
+        assert [event.model_dump(mode="json") for event in (stale, newer)] == originals
+        parked = reopened.take_dlq(stale.event_id)
+        assert parked is not None
+        assert parked.model_dump(mode="json") == originals[0]
+        # Removing the terminal row makes an accidental second settlement observable.
+        await bus.shutdown()
+        assert reopened.list_dlq() == []
+        assert reopened.load_pending() == []
+        assert calls == [1, 1]
+        assert dlq_calls == []
+        await recovered.shutdown()
+    finally:
+        release.set()
+        await asyncio.gather(*retry_workers, return_exceptions=True)
+        if stopping is not None and not stopping.done():
+            stopping.cancel()
+            await asyncio.gather(stopping, return_exceptions=True)
+        reopened.close()
+        store.close()

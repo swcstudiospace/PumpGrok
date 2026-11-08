@@ -70,7 +70,8 @@ class EventBus:
       stays pending: not applied and not in the DLQ. Worker tasks get one more
       SHUTDOWN_TIMEOUT_S; stragglers keep running. Unfinished current P2 events are then
       written to pending. Terminal failures require durable DLQ handoff; superseded
-      retries still in a handler keep ownership until their result is known.
+      retries still in a handler keep ownership until their result is known. Repeated
+      shutdown retries retained terminal handoffs without resnapshotting queued work.
     - recover() runs each pending P0/P1 event once. A row with an applied mark is completed
       without running the handler. Each pending P2 event runs once.
     """
@@ -162,10 +163,12 @@ class EventBus:
     async def shutdown(self) -> None:
         """Stop accepting work and settle what can be settled within SHUTDOWN_TIMEOUT_S.
 
-        Idempotent. Concurrent callers wait for the first call to finish.
+        Concurrent callers serialize. Later calls retry terminal handoffs only: workers
+        that outlive the bounds still own their outcomes, and pending may already be recovered.
         """
         async with self._shutdown_lock:
             if self._shut_down:
+                self._persist_failed_p2()
                 return
             self._closing.set()
             for task in list(self._pausing):
@@ -488,27 +491,31 @@ class EventBus:
         in_flight = {event.event_id for event in self._in_handler.values()}
         events: list[Event] = []
         for event in tuple(self._p2_active.values()):
-            reason = self._p2_failed.get(event.event_id)
-            if reason is None:
-                generation = self._p2_retry_gen.get(event.event_id)
-                key = _coalesce_key(event.kind, event.entity_id)
-                if generation is None or self._p2_gen.get(key) == generation:
-                    events.append(event)
-                    continue
-                # Supersession cannot decide a running retry's result. Its worker still
-                # owns it; neither pending recovery nor DLQ replay may redeliver it.
-                if event.event_id in in_flight:
-                    continue
-                reason = "transient"
-                self._p2_failed[event.event_id] = reason
-            # Retry terminal handoffs without invoking handlers or awaiting notifications.
-            # A failed write keeps the active id and reason, and shutdown can be retried.
-            self._store.fail_to_dlq(event, reason=reason)
-            self._forget_p2(event)
+            if event.event_id in self._p2_failed:
+                continue
+            generation = self._p2_retry_gen.get(event.event_id)
+            key = _coalesce_key(event.kind, event.entity_id)
+            if generation is None or self._p2_gen.get(key) == generation:
+                events.append(event)
+                continue
+            # Supersession cannot decide a running retry's result. Its worker still
+            # owns it; neither pending recovery nor DLQ replay may redeliver it.
+            if event.event_id not in in_flight:
+                self._p2_failed[event.event_id] = "transient"
+        self._persist_failed_p2()
         # Claimed current events precede queued ones.
         for slot in self._p2.values():
             events.extend(slot)
         self._store.replace_pending(events)
+
+    def _persist_failed_p2(self) -> None:
+        """Retry known terminal handoffs, retaining ownership until each write commits."""
+        if self._store is None:
+            return
+        for event_id, reason in tuple(self._p2_failed.items()):
+            event = self._p2_active[event_id]
+            self._store.fail_to_dlq(event, reason=reason)
+            self._forget_p2(event)
 
 
 def _own_task() -> asyncio.Task[Any]:
