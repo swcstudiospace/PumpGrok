@@ -56,6 +56,7 @@ def test_determinism() -> None:
     assert bytes(first) == bytes(second)
     assert first.pending == 0
     assert second.pending == 0
+    assert len(first) > 0
     again = drain(events + events, FixtureClock(0.0), make_rng(_SEED))
     assert again == first
     assert again.pending == 0
@@ -70,6 +71,7 @@ def test_smoke_trading() -> None:
     assert first == second
     assert first.pending == 0
     assert second.pending == 0
+    assert len(first) > 0
     repeated = drain(events, FixtureClock(0.0), make_rng(_SEED))
     assert repeated == first
     assert len(repeated) == len(first)
