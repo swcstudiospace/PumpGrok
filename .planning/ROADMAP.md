@@ -13,7 +13,7 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 
 ## Phases
 
-- [ ] **Phase 11: Engineering foundation and quality** - Pinned replay hashes, waivers removed, soak split, coverage and complexity ratchet, six hotspots split behind characterization tests, v4 planning adopted (35 requirements)
+- [x] **Phase 11: Engineering foundation and quality** - Pinned replay hashes, waivers removed, soak split, coverage and complexity ratchet, six hotspots split behind characterization tests, v4 planning adopted (35 requirements)
 - [ ] **Phase 12: Event runtime core** - Settings skeleton, single event catalog, EventBus with P0 lane, DLQ, deterministic drain and SourceSupervisor (10 requirements)
 - [ ] **Phase 13: Curve truth, live market data and recorder** - Token-first curve layout, read-only live feed, fail-closed LivePriceSource, marks, recorder, fee model v2 selectable, human-reviewed status flips (11 requirements)
 - [ ] **Phase 14: Event-driven desk and Grok gateway** - Event-mode supervisor wake, one Grok gateway, ten seat cycles, Hermes cutover, idle-zero-Grok gate and measurement (26 requirements)
@@ -370,8 +370,8 @@ Ship checkpoints, where the owner approves receipts in batches as human:SomeRand
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Engineering foundation and quality | 0/11 | Not started | - |
-| 12. Event runtime core | 0/5 | Not started | - |
+| 11. Engineering foundation and quality | 11/11 | Complete (PR #55 merged 2026-11-03) | 2026-11-03 |
+| 12. Event runtime core | 5/5 | Verified 12/12; ship checkpoint (draft PRs), owner approval pending | - |
 | 13. Curve truth, live market data and recorder | 0/7 | Not started | - |
 | 14. Event-driven desk and Grok gateway | 0/9 | Not started | - |
 | 15. Strategy framework and multi-strategy paper | 0/8 | Not started | - |
