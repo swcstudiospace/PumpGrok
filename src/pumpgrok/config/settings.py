@@ -59,16 +59,32 @@ from pumpgrok.config.sections.engine import (
     ScoringWeights,
 )
 from pumpgrok.config.sections.ops import HealthSettings, NotifySettings, OpsSettings
+from pumpgrok.config.sections.v4 import (
+    BacktestV2Settings,
+    DatafeedSettings,
+    EventsSettings,
+    GrokGatewaySettings,
+    PaperFeesSettings,
+    PromotionSettings,
+    RecorderSettings,
+    RiskStrategySettings,
+    SignerSettings,
+    StrategiesSettings,
+)
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.risk.limits import EngineLimits
 
 # The section classes live in config/sections. They stay importable from this module because the
 # engine, backtest, replay and test modules import them from pumpgrok.config.settings by name.
 __all__ = [
+    "BacktestV2Settings",
     "DataSettings",
+    "DatafeedSettings",
+    "EventsSettings",
     "ExecutionSettings",
     "ExitsSettings",
     "FilterSettings",
+    "GrokGatewaySettings",
     "GrokSettings",
     "HealthSettings",
     "JupiterSettings",
@@ -76,13 +92,19 @@ __all__ = [
     "Mode",
     "NotifySettings",
     "OpsSettings",
+    "PaperFeesSettings",
     "PlatformSettings",
+    "PromotionSettings",
+    "RecorderSettings",
     "ReplaySettings",
+    "RiskStrategySettings",
     "RpcSettings",
     "SafetySettings",
     "SafetyThresholds",
     "ScoringSettings",
     "ScoringWeights",
+    "SignerSettings",
+    "StrategiesSettings",
     "WalletSettings",
 ]
 
@@ -167,6 +189,16 @@ class Settings(BaseSettings):
     ops: OpsSettings = Field(default_factory=OpsSettings)
     notify: NotifySettings = Field(default_factory=NotifySettings)
     health: HealthSettings = Field(default_factory=HealthSettings)
+    events: EventsSettings = Field(default_factory=EventsSettings)
+    grok_gateway: GrokGatewaySettings = Field(default_factory=GrokGatewaySettings)
+    datafeed: DatafeedSettings = Field(default_factory=DatafeedSettings)
+    recorder: RecorderSettings = Field(default_factory=RecorderSettings)
+    strategies: StrategiesSettings = Field(default_factory=StrategiesSettings)
+    backtest_v2: BacktestV2Settings = Field(default_factory=BacktestV2Settings)
+    risk_strategy: RiskStrategySettings = Field(default_factory=RiskStrategySettings)
+    promotion: PromotionSettings = Field(default_factory=PromotionSettings)
+    signer: SignerSettings = Field(default_factory=SignerSettings)
+    paper_fees: PaperFeesSettings = Field(default_factory=PaperFeesSettings)
 
     @property
     def effective_mode(self) -> Mode:
