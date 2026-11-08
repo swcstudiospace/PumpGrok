@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from pumpgrok.config.sections.v4 import EventsSettings
+from pumpgrok.events import bus as bus_module
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.constants import (
     EVENTS_SIDECAR_PATH,
@@ -16,7 +17,8 @@ from pumpgrok.events.constants import (
     P1_DEDUP_TTL_S,
     P2_DEBOUNCE_S,
 )
-from pumpgrok.events.errors import SidecarRefusal
+from pumpgrok.events.dlq import replay
+from pumpgrok.events.errors import PoisonEvent, SidecarRefusal
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.events.store import EventStore
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -134,3 +136,135 @@ def test_sidecar_tables_exclude_events_and_hash_chain(tmp_path: Path) -> None:
 async def _drain() -> None:
     for _ in range(5):
         await asyncio.sleep(0)
+
+
+def _tick(n: int) -> Event:
+    return Event(
+        kind=EventKind.curve_tick,
+        entity_id="mint",
+        payload={"n": n},
+        occurred_at=f"t{n}",
+    )
+
+
+async def _spin() -> None:
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+
+def _dlq_count(path: Path) -> int:
+    with sqlite3.connect(path) as db:
+        row = db.execute("SELECT COUNT(*) FROM dlq").fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+async def _unused(_event: Event) -> None:
+    return None
+
+
+async def test_overflowed_p1_event_is_deduplicated_and_replays_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(bus_module._LANE_CAP, 1, 1)
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar)
+    dlq_calls: list[str] = []
+
+    def dlq(event: Event) -> None:
+        dlq_calls.append(event.event_id)
+
+    queued = _event(EventKind.trade, "t1", "mint")
+    overflow = _event(EventKind.trade, "t2", "mint")
+    bus = EventBus(clock=FixtureClock(0.0), handler=_unused, dlq=dlq, store=store)
+    await bus.publish(queued)
+    await bus.publish(overflow)
+    await bus.publish(overflow)
+    assert dlq_calls == [overflow.event_id]
+    assert bus.queued(1) == 1
+
+    assert replay(store, overflow.event_id) is not None
+    delivered: list[str] = []
+
+    async def handler(event: Event) -> None:
+        delivered.append(event.event_id)
+
+    recovered = EventBus(
+        clock=FixtureClock(1.0),
+        handler=handler,
+        dlq=lambda _event: None,
+        store=EventStore(sidecar),
+    )
+    await recovered.recover()
+    assert delivered == [overflow.event_id]
+    await recovered.recover()
+    assert delivered == [overflow.event_id]
+
+
+async def test_running_p2_handler_is_not_cancelled_and_newest_value_runs_once(
+    tmp_path: Path,
+) -> None:
+    started = asyncio.Event()
+    gate = asyncio.Event()
+    calls: list[int] = []
+    completed: list[int] = []
+
+    async def handler(event: Event) -> None:
+        n = int(event.payload["n"])
+        calls.append(n)
+        if n == 1:
+            started.set()
+            await gate.wait()
+        completed.append(n)
+
+    bus = EventBus(
+        clock=FixtureClock(0.0),
+        handler=handler,
+        dlq=lambda _event: None,
+        store=EventStore(tmp_path / "events.sqlite"),
+    )
+    await bus.start()
+    await bus.publish(_tick(1))
+    await started.wait()
+    await bus.publish(_tick(2))
+    await _spin()
+    assert calls == [1]
+    assert completed == []
+    gate.set()
+    await _spin()
+    assert completed == [1, 2]
+    assert calls == [1, 2]
+
+
+async def test_p2_poison_goes_to_dlq_instead_of_escaping_its_task(tmp_path: Path) -> None:
+    sidecar = tmp_path / "events.sqlite"
+    dlq_calls: list[str] = []
+
+    def dlq(event: Event) -> None:
+        dlq_calls.append(event.event_id)
+
+    async def handler(_event: Event) -> None:
+        raise PoisonEvent(index=0)
+
+    bus = EventBus(clock=FixtureClock(0.0), handler=handler, dlq=dlq, store=EventStore(sidecar))
+    tick = _tick(1)
+    await bus.start()
+    await bus.publish(tick)
+    await _spin()
+    assert dlq_calls == [tick.event_id]
+    assert _dlq_count(sidecar) == 1
+
+
+async def test_delivered_p2_id_is_removed_from_dedup_state() -> None:
+    delivered: list[str] = []
+
+    async def handler(event: Event) -> None:
+        delivered.append(event.event_id)
+
+    tick = _tick(1)
+    bus = EventBus(clock=FixtureClock(0.0), handler=handler, dlq=lambda _event: None)
+    await bus.start()
+    await bus.publish(tick)
+    await _spin()
+    assert delivered == [tick.event_id]
+    assert tick.event_id not in bus._seen
