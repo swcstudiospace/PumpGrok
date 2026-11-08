@@ -11,6 +11,7 @@
   "source_identity": {
     "journal_doc_head": "34e182675b6fb7fc30502544474d82c7dd7a9c37",
     "receipt_base_head": "34e182675b6fb7fc30502544474d82c7dd7a9c37",
+    "schema_repair_base_head": "00e3160e79c136b600f31251c7a20ab0baa0cb79",
     "risk_source_head": "d30c9ab1fce28e5fd166ceb037fa5bdfe10e1558",
     "chief_source_head": "42d853c566d8bacb1ac375b440df314053d7df75",
     "combined_source_test_head": "b5df08d4aa54478fe9f00166e5422b90cd5c7fe2",
@@ -22,7 +23,9 @@
   "published_evidence": [
     {"path": "/tmp/p12auth_join_20261108/results.json", "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8"},
     {"path": "/tmp/p12auth_join_20261108/lifecycle.json", "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e"},
-    {"path": "/tmp/p12auth_join_20261108/gsd-handoff.json", "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"}
+    {"path": "/tmp/p12auth_join_20261108/gsd-handoff.json", "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"},
+    {"path": "/tmp/p12auth_join_20261108/native-prerequisite.json", "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014"},
+    {"path": "/tmp/p12auth_join_20261108/results.v2.json", "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e"}
   ],
   "commands": [
     {"id": "product-affected-acceptance", "cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety", "command": ["uv", "run", "pytest", "-q", "-rs", "tests/events", "tests/config", "tests/harness", "tests/degradation/test_event_source_faults.py", "tests/cli/test_events_cli.py", "tests/replay/test_event_drain_parity.py", "tests/replay/test_replay_hash_pin.py", "tests/replay/test_trading_smoke_pin.py", "tests/safety"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log", "output_tail": "Retained progress: 457 passed, 0 skipped, 0 failed."},
@@ -36,9 +39,13 @@
     {"id": "gsd-tdd-readiness", "cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw", "command": ["/root/.agents/gsd-core/bin/gsd_run", "check", "tdd.review-checkpoint", "12", "--raw"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log", "output_tail": "block:true, passed:true, violations:4; plans12-02/03/04/05 lack recognized RED/GREEN commit markers. Exit 0 is not workflow completion."}
   ],
   "claims": [
-    {"claim": "Both smoke-10m hashes match b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; trading-smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 matches preserved CHANGELOG before/after pairs.", "evidence": "results.json static_acceptance.smoke_hashes, identical_smoke_hash_pin_passed, trading_hash, changelog_pairs_passed", "evidence_command_indices": [0, 3, 4]},
-    {"claim": "Affected acceptance and the one canonical command passed on the corrected combined source/test tree.", "evidence_command_indices": [0, 1]},
-    {"claim": "Paper replay exited 0; live stayed refused with exit 3.", "evidence_command_indices": [5, 6]},
+    {"claim": "First smoke-10m verification returned b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 3, "evidence": "results.json static_acceptance.smoke_hashes[0]"},
+    {"claim": "Second smoke-10m verification returned the same b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 4, "evidence": "results.json static_acceptance.smoke_hashes[1]"},
+    {"claim": "Replay hash-pin tests passed, including trading-smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; CHANGELOG before/after pairs remain preserved.", "evidence_command_index": 0, "evidence": "results.json static_acceptance.identical_smoke_hash_pin_passed, trading_hash, changelog_pairs_passed"},
+    {"claim": "Affected acceptance passed on the corrected combined source/test tree.", "evidence_command_index": 0},
+    {"claim": "The one canonical make lint typecheck test audit invocation passed on the corrected combined source/test tree.", "evidence_command_index": 1},
+    {"claim": "Paper replay exited 0.", "evidence_command_index": 5},
+    {"claim": "Live stayed refused with exit 3.", "evidence_command_index": 6, "expects_failure": true},
     {"claim": "Standalone real SQLite/EventBus lifecycle completed 10 stages, separate from production gate authority.", "evidence_command_index": 7, "evidence": "lifecycle.json records"}
   ],
   "controlled_verification": {
@@ -58,9 +65,9 @@
   "unverified": [
     "Current owner approval pending; approved_by absent. No owner reapproval request.",
     "Final source-specific G1/strictG2 reserved for final reviewer after all three receipt authors finish; neither rerun nor claimed here.",
-    "Fresh final-head Greptile pending; no clean or 5/5 claim.",
+    "Fresh final-head Greptile review is outside the recorded receipt checks and is not consumed here; no clean or 5/5 review claim.",
     "Trusted repaired-controller activation and genuine production signed gates unavailable. Controller507c6de9828e4ba27d1019a228164a141c9151d8 is local/not installed; test-fixture signatures are not production gate PASS.",
-    "Original controller package test exited1 (/tmp/p12auth_join_20261108/controller-omp-tests.log); remaining OMP test exited1 (/tmp/p12auth_join_20261108/controller-remaining-omp.log). Corrected isolated signature cases do not erase these results. Native-only prerequisite follow-through is separate; no claim it passed and no attribution as product failure.",
+    "Original controller package test exited1 (/tmp/p12auth_join_20261108/controller-omp-tests.log); remaining OMP test exited1 (/tmp/p12auth_join_20261108/controller-remaining-omp.log). These historical failures remain preserved. The isolated locked native build, import and targeted controller case subsequently exited0; /tmp/p12auth_join_20261108/native-prerequisite.json native_prerequisite_resolved:true and results.v2.json record that resolution at controller507c6de9828e4ba27d1019a228164a141c9151d8. This is not production activation, a signed gate PASS or a product rerun.",
     "No latest-product fail-before run. Historical20 failures at8500a8 remain historical, not fresh corrected-tree RED evidence.",
     "Canonical two skip reasons not retained.",
     "No tests/build/lint/format/docs scan/full battery run for this receipt refresh. Source evidence covers combined tree, not recursive receipt self-SHA.",
