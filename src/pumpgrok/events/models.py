@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from collections.abc import Mapping
 from enum import StrEnum
@@ -52,16 +53,16 @@ def priority_of(kind: EventKind) -> Priority:
     return PRIORITY_BY_KIND[kind]
 
 
-def _without_correlation(payload: Mapping[str, Any]) -> dict[str, Any]:
-    stripped: dict[str, Any] = {}
-    for key, value in payload.items():
-        if key == "correlation_id":
-            continue
-        if isinstance(value, dict):
-            stripped[key] = _without_correlation(value)
-        else:
-            stripped[key] = value
-    return stripped
+def _canonical_for_id(value: Any) -> Any:
+    """Hash body: correlation_id is dropped at every depth, in dicts and in lists.
+
+    Keys are not reordered here. canonical_json sorts keys recursively.
+    """
+    if isinstance(value, dict):
+        return {k: _canonical_for_id(v) for k, v in value.items() if k != "correlation_id"}
+    if isinstance(value, list):
+        return [_canonical_for_id(v) for v in value]
+    return value
 
 
 def derive_event_id(
@@ -78,7 +79,7 @@ def derive_event_id(
     body = {
         "kind": str(kind),
         "entity_id": entity_id,
-        "payload": _without_correlation(payload),
+        "payload": _canonical_for_id(dict(payload)),
         "occurred_at": occurred_at,
     }
     digest = hashlib.sha256(canonical_json(body).encode()).hexdigest()
@@ -102,9 +103,10 @@ class Event(BaseModel):
     event_id: str = Field(default="", init=False)
 
     def __init__(self, **data: Any) -> None:
-        payload = data.get("payload", {})
-        if isinstance(payload, Mapping):
-            canonical_json({"payload": _without_correlation(dict(payload))})
+        if isinstance(data.get("payload"), Mapping):
+            payload = copy.deepcopy(dict(data["payload"]))
+            canonical_json({"payload": _canonical_for_id(payload)})
+            data["payload"] = payload
         super().__init__(**data)
         object.__setattr__(
             self,

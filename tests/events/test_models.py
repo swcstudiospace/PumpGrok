@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -58,6 +59,37 @@ def test_occurred_at_is_required_and_changes_the_id() -> None:
     early = _event(occurred_at="2026-01-01T00:00:00Z")
     later = _event(occurred_at="2026-01-01T00:00:01Z")
     assert early.event_id != later.event_id
+
+
+def test_caller_mutation_after_construction_does_not_change_event_or_id() -> None:
+    original: dict[str, Any] = {
+        "reason": "daily_loss",
+        "legs": [{"qty": 1}],
+        "meta": {"tags": ["a"]},
+    }
+    event = _event(payload=original)
+    before = event.event_id
+    original["reason"] = "changed"
+    original["extra"] = 1
+    original["meta"]["tags"].append("b")
+    original["legs"][0]["qty"] = 9
+    expected = {"reason": "daily_loss", "legs": [{"qty": 1}], "meta": {"tags": ["a"]}}
+    assert event.payload == expected
+    assert event.event_id == before
+    assert _event(payload=expected).event_id == before
+
+
+def test_correlation_id_inside_a_list_does_not_change_the_id() -> None:
+    left = _event(payload={"legs": [{"correlation_id": "corr-a", "qty": 1}]})
+    right = _event(payload={"legs": [{"correlation_id": "corr-b", "qty": 1}]})
+    assert left.event_id == right.event_id
+    assert left.event_id != _event(payload={"legs": [{"qty": 2}]}).event_id
+
+
+def test_equal_nested_payloads_with_different_insertion_order_share_an_id() -> None:
+    left = _event(payload={"outer": {"a": 1, "b": {"x": 1, "y": 2}}, "z": [{"p": 1, "q": 2}]})
+    right = _event(payload={"z": [{"q": 2, "p": 1}], "outer": {"b": {"y": 2, "x": 1}, "a": 1}})
+    assert left.event_id == right.event_id
 
 
 def test_float_payload_raises_type_error_and_float_lamports_is_rejected() -> None:
