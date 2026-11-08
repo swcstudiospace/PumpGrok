@@ -1,13 +1,11 @@
 {
-  "approved_by": "human:SomeRandmGuyy",
-  "approval_note": "Owner approval for merge, 2026-11-08. Owner answer: 'Please push our updates to our main branch' (orchestration request, 2026-11-08). Scope read as the Phase 12 PRs #61, #62 and #63; this receipt covers PR #62 at head a6e60e0. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p12-event-runtime",
   "bot": "bot-09-journal",
   "branch": "bot-09-journal/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
   "plan": "CHANGELOG hash pins only. No product code.",
   "purpose": "Seat receipt for the Phase 12 changelog pins at 2194f97 and this receipt commit. The commands below were re-run in this worktree during the Phase 12 ship checkpoint on 2026-11-08. The combined-tree verification (12/12) ran on 9d32a35. The executor does not write approved_by.",
-  "status": "executed and committed; draft pull request opened; owner approval recorded in approved_by on 2026-11-08 (owner answer quoted in approval_note); merge after gates are green. This seat did not approve its own work.",
+  "status": "executed and committed; draft pull request opened; owner approval voided by the 2026-11-08 Greptile remediation (the approval covered a6e60e0) and not re-recorded; merge after gates are green and the owner approves the final head. This seat did not approve its own work.",
   "commits": [
     {"sha": "2194f97", "task": "Phase 12 replay hash pins", "files": ["CHANGELOG.md"]}
   ],
@@ -26,7 +24,7 @@
     {"claim": "The journal diff against origin/main is only CHANGELOG.md and this receipt, both owned by bot-09-journal.", "evidence_command_index": 4}
   ],
   "unverified": [
-    "G-2 on this receipt is checked by CI on the pull request, not by this seat.",
+    "Owner approval for the current head is not recorded. The earlier approval covered a6e60e0. G-2 waits for the owner.",
     "These commands ran in this worktree, but the combined-tree verification (12/12) ran on 9d32a35, not here.",
     "The draft pull request is not merged, and the branch was not deleted.",
     "This branch does not contain the event library. That code is on bot-02-risk/phase-12-event-runtime."
