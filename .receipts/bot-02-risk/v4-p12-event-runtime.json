@@ -1,13 +1,11 @@
 {
-  "approved_by": "human:SomeRandmGuyy",
-  "approval_note": "Owner approval for merge, 2026-11-08. Owner answer: 'Please push our updates to our main branch' (orchestration request, 2026-11-08). Scope read as the Phase 12 PRs #61, #62 and #63; this receipt covers PR #61 at head c866663. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p12-event-runtime",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
-  "plan": "12-01 through 12-05 on the risk worktree. Code only. Planning files and CHANGELOG.md are on the other seats.",
-  "purpose": "Seat receipt for the event-runtime library at 85ad73e. Records commands observed on the combined tree 9d32a35, which contains this tip, and the ownership check run in this worktree. The executor does not write approved_by.",
-  "status": "executed and committed. Owner approval recorded in approved_by on 2026-11-08 (owner answer quoted in approval_note). This seat did not approve its own work.",
+  "plan": "12-01 through 12-05 on the risk worktree, plus the Greptile remediation of 2026-11-08. Code and tests only. Planning files and CHANGELOG.md are on the other seats.",
+  "purpose": "Seat receipt for the event-runtime library after the Greptile remediation. The commands below ran in this worktree on the head that contains the six remediation commits. approved_by was removed on purpose: the owner's earlier answer covered c866663, which this branch no longer contains. The executor does not write approved_by.",
+  "status": "executed, remediated and committed; checks green on this head; owner approval for this head is not recorded; G-2 waits for the owner. This seat did not approve its own work.",
   "commits": [
     {"sha": "cbb1a76", "task": "off-by-default v4 settings skeleton"},
     {"sha": "bace4d7", "task": "catalog, lanes, and occurred_at ids"},
@@ -15,37 +13,46 @@
     {"sha": "6b137a9", "task": "source supervisor and import guard"},
     {"sha": "66246aa", "task": "deterministic drain"},
     {"sha": "1f227b5", "task": "upsert pending without wiping a replayed row"},
-    {"sha": "85ad73e", "task": "clear the phase 12 ruff findings"}
+    {"sha": "85ad73e", "task": "clear the phase 12 ruff findings"},
+    {"sha": "46ad611", "task": "bus durability, recovery, overflow dedup, and P2 delivery (Greptile P1s)"},
+    {"sha": "ff37acd", "task": "reconnect backoff cap and stable-span reset (Greptile P1 and P2)"},
+    {"sha": "f36ba91", "task": "payload copy at construction and correlation ids at every depth (Greptile P2)"},
+    {"sha": "cf85e75", "task": "typed usage error for an unopenable sidecar (Greptile P2)"},
+    {"sha": "a32e862", "task": "drain parity fails on empty drains (Greptile P2)"},
+    {"sha": "33697f4", "task": "design doc matches the remediated bus (Greptile P2)"}
   ],
   "commands": [
-    {"cmd": "make lint", "exit_code": 0, "output_tail": "combined tree 9d32a35. Log /tmp/p12-verify/rerun4/c01-lint.log: ruff check passed; 913 files already formatted; EXIT:0"},
-    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c01-typecheck.log: mypy src/ Success: no issues found in 233 source files; EXIT:0"},
-    {"cmd": "make test", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c01-test.log: progress 0 to 100 percent, only dots and two s, no F or E; coverage 91.26 percent, floor 89.9; EXIT:0. pytest -qq prints no N passed line."},
-    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c01-check.log: 35 skills, 10 agents, 342 markdown files; EXIT:0"},
-    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c01-paper.log: trades filled=2 not_filled=1; EXIT:0"},
-    {"cmd": "uv run pytest -q tests/events/test_models.py tests/events/test_bus_lanes.py tests/events/test_bus_backpressure.py", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c03.log: [100%]; EXIT:0"},
-    {"cmd": "uv run pytest -q tests/events/test_handler_idempotency.py tests/events/test_bus_shutdown.py", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun4/c05.log: EXIT:0"},
-    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Log /tmp/p12-verify/rerun4/c12-live.log: 8 of 9 preconditions unmet; No transaction was attempted; EXIT:3"},
-    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-02-risk --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS — bot-02-risk: 35 file(s) within owned paths. cli/dispatch.py, cli/parsing.py and config/settings.py are owned by bot-02-risk via src/pumpgrok/** and src/pumpgrok/config/**. src/pumpgrok/cli.py remains chief and was not changed."}
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check passed; 897 files already formatted; service lint skipped (services/desk-signer/src absent)"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy --strict: Success: no issues found in 233 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "pytest -m 'not slow' with coverage: no failures; total coverage 91.42 percent, required 89.9 percent"},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "PumpGrok repository structure looks healthy."},
+    {"cmd": "uv run pytest -q tests/events tests/degradation tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py", "exit_code": 0, "output_tail": "96 tests passed"},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "8 tests passed"},
+    {"cmd": "r=\"$PWD\"; d1=$(mktemp -d); d2=$(mktemp -d); a=$(cd \"$d1\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(cd \"$d2\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); test \"$a\" = \"$b\" && test \"$a\" = \"b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\"", "exit_code": 0, "output_tail": "both fresh-directory runs printed b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, equal to the pin"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "replay engine cycle complete; events_read 5"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "LIVE GATE refusing to start in mode=live. 8 of 9 preconditions unmet. No transaction was attempted."},
+    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-02-risk --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS: bot-02-risk: 36 file(s) within owned paths"}
   ],
   "claims": [
-    {"claim": "make lint exits 0 on the combined tree that contains 85ad73e.", "evidence_command_index": 0},
-    {"claim": "make typecheck exits 0. mypy found no issues in 233 source files.", "evidence_command_index": 1},
-    {"claim": "make test exits 0. The log reaches 100 percent with no F or E, and coverage is 91.26 percent.", "evidence_command_index": 2},
+    {"claim": "make lint exits 0 on this head.", "evidence_command_index": 0},
+    {"claim": "make typecheck exits 0 on this head. mypy --strict found no issues in 233 source files.", "evidence_command_index": 1},
+    {"claim": "make test exits 0 on this head. Coverage is 91.42 percent against a 89.9 percent floor.", "evidence_command_index": 2},
     {"claim": "scripts/check.sh exits 0.", "evidence_command_index": 3},
-    {"claim": "The paper smoke replay exits 0 and fills 2 trades.", "evidence_command_index": 4},
-    {"claim": "Event model, lane, and backpressure tests exit 0.", "evidence_command_index": 5},
-    {"claim": "Handler idempotency and shutdown tests exit 0, including the replayed-pending recover test.", "evidence_command_index": 6},
-    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 7, "expects_failure": true},
-    {"claim": "Every file in origin/main...HEAD on this branch is owned by bot-02-risk, including cli/dispatch.py, cli/parsing.py and config/settings.py.", "evidence_command_index": 8}
+    {"claim": "The events, degradation, events CLI, and drain-parity tests pass on this head (96 tests).", "evidence_command_index": 4},
+    {"claim": "The replay hash pin and trading-smoke pin tests pass on this head.", "evidence_command_index": 5},
+    {"claim": "smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d from two fresh directories.", "evidence_command_index": 6},
+    {"claim": "The paper smoke replay exits 0.", "evidence_command_index": 7},
+    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 8, "expects_failure": true},
+    {"claim": "Every file changed on this branch is owned by bot-02-risk.", "evidence_command_index": 9}
   ],
   "unverified": [
-    "G-2 on this receipt is checked by CI on the pull request, not by this seat.",
-    "The suite and live refusal were run on the combined tree 9d32a35, not again on this worktree after the receipt commit.",
-    "No pull request was opened and nothing was pushed.",
-    "Phase 13 was not started. The bus is not wired into the supervisor.",
-    "Notion tracker pages were not updated."
+    "Owner approval for this head is not recorded. approved_by was removed on purpose: the owner's earlier answer covered c866663, which this branch no longer contains. G-2 waits for the owner.",
+    "Greptile has not re-reviewed this head. The seven P1 and seven P2 findings from the earlier review are addressed in code, but Greptile has not checked them.",
+    "Each new regression test was written to fail on the old code, by reading the code. Fail-before was not run for each test.",
+    "The earlier combined-tree verification on 9d32a35 is superseded by the commands above, which ran on this head. The verifier agent has not re-run Phase 12 verification.",
+    "Unexpected handler exceptions that are neither PoisonEvent nor TransientEvent still end the drain task. This is pre-existing and unchanged.",
+    "P2 waiter tasks grow with the number of P2 publishes made while one handler is running. The growth is not measured."
   ],
-  "evidence_logs": "/tmp/p12-verify/rerun4/",
-  "rollback_plan": "Before the merge, revert commits 85ad73e, 1f227b5, 66246aa, 6b137a9, b8de019, bace4d7 and cbb1a76 on this branch with git revert (no force) or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+  "evidence_logs": "/tmp/p12-verify/rerun4/ (earlier run). The outputs above are from this worktree on this head.",
+  "rollback_plan": "Before the merge, revert commits 33697f4, a32e862, cf85e75, f36ba91, ff37acd and 46ad611 on this branch with git revert (no force), or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
 }
