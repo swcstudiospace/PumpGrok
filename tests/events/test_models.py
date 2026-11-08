@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import sys
 from typing import Any
@@ -27,7 +28,7 @@ from pumpgrok.events.constants import (
     STABLE_S,
     STALE_AFTER_S,
 )
-from pumpgrok.events.models import PRIORITY_BY_KIND, Event, EventKind, priority_of
+from pumpgrok.events.models import PRIORITY_BY_KIND, Event, EventKind, FrozenPayload, priority_of
 from pumpgrok.replay.clock import FixtureClock
 
 
@@ -74,7 +75,7 @@ def test_caller_mutation_after_construction_does_not_change_event_or_id() -> Non
     original["meta"]["tags"].append("b")
     original["legs"][0]["qty"] = 9
     expected = {"reason": "daily_loss", "legs": [{"qty": 1}], "meta": {"tags": ["a"]}}
-    assert event.payload == expected
+    assert event.model_dump()["payload"] == expected
     assert event.event_id == before
     assert _event(payload=expected).event_id == before
 
@@ -90,6 +91,72 @@ def test_equal_nested_payloads_with_different_insertion_order_share_an_id() -> N
     left = _event(payload={"outer": {"a": 1, "b": {"x": 1, "y": 2}}, "z": [{"p": 1, "q": 2}]})
     right = _event(payload={"z": [{"q": 2, "p": 1}], "outer": {"b": {"y": 2, "x": 1}, "a": 1}})
     assert left.event_id == right.event_id
+
+
+def test_payload_is_read_only_at_every_depth() -> None:
+    event = _event(payload={"x": 0, "nested": {"k": 0}, "items": [1]})
+    payload: Any = event.payload
+    with pytest.raises(TypeError):
+        payload["x"] = 1
+    with pytest.raises(TypeError):
+        payload["nested"]["k"] = 1
+    with pytest.raises(AttributeError):
+        payload["items"].append(1)
+    assert event.model_dump()["payload"] == {"x": 0, "nested": {"k": 0}, "items": [1]}
+
+
+def test_nested_payload_values_are_frozen_types() -> None:
+    event = _event(payload={"meta": {"tags": ["a"]}, "legs": [{"qty": 1}]})
+    assert isinstance(event.payload, FrozenPayload)
+    assert isinstance(event.payload["meta"], FrozenPayload)
+    assert event.payload["meta"]["tags"] == ("a",)
+    assert isinstance(event.payload["legs"], tuple)
+    assert isinstance(event.payload["legs"][0], FrozenPayload)
+
+
+def test_model_dump_is_plain_dict_and_list_in_python_and_json_modes() -> None:
+    expected = {"reason": "daily_loss", "legs": [{"qty": 1}], "meta": {"tags": ["a"]}}
+    event = _event(payload=expected)
+    python_dump = event.model_dump()["payload"]
+    json_dump = event.model_dump(mode="json")["payload"]
+    for dumped in (python_dump, json_dump):
+        assert type(dumped) is dict
+        assert type(dumped["legs"]) is list
+        assert type(dumped["legs"][0]) is dict
+        assert type(dumped["meta"]["tags"]) is list
+        assert dumped == expected
+    assert json.loads(json.dumps(event.model_dump(mode="json")))["payload"] == expected
+
+
+def test_event_round_trips_through_model_dump_with_the_same_id() -> None:
+    event = _event(
+        correlation_id="corr-a",
+        payload={"reason": "daily_loss", "legs": [{"qty": 1, "meta": {"tags": ["a"]}}]},
+    )
+    rebuilt = Event(**event.model_dump())
+    assert rebuilt.event_id == event.event_id
+    assert rebuilt.payload == event.payload
+    stored = Event.model_validate(json.loads(json.dumps(event.model_dump(mode="json"))))
+    assert stored.event_id == event.event_id
+
+
+def test_tuple_and_frozen_inputs_hash_like_their_list_and_dict_forms() -> None:
+    as_lists = _event(payload={"legs": [{"qty": 1}]})
+    as_tuples = _event(payload={"legs": ({"correlation_id": "corr-x", "qty": 1},)})
+    assert as_tuples.event_id == as_lists.event_id
+    assert _event(payload=as_lists.payload).event_id == as_lists.event_id
+
+
+def test_unserializable_nested_payload_raises_type_error() -> None:
+    with pytest.raises(TypeError):
+        _event(payload={"legs": [{"qty": 1.5}]})
+    with pytest.raises(TypeError):
+        _event(payload={"legs": [{"qty": {1, 2}}]})
+
+
+def test_non_mapping_payload_is_a_validation_error() -> None:
+    with pytest.raises(ValidationError):
+        _event(payload=["not", "a", "mapping"])
 
 
 def test_float_payload_raises_type_error_and_float_lamports_is_rejected() -> None:

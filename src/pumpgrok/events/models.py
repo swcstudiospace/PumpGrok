@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-import copy
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    model_validator,
+)
 
 from pumpgrok.core.idempotency import canonical_json
 
@@ -53,14 +59,77 @@ def priority_of(kind: EventKind) -> Priority:
     return PRIORITY_BY_KIND[kind]
 
 
+class FrozenPayload(Mapping[str, Any]):
+    """Read-only payload. Nested dicts are FrozenPayload; nested lists are tuples.
+
+    Data access is __getitem__, __iter__ and __len__. The Mapping mixin supplies
+    the rest. There are no mutator methods.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: Mapping[str, Any]) -> None:
+        self._data: dict[str, Any] = {key: _freeze(value) for key, value in data.items()}
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+def _freeze(value: object) -> Any:
+    """Recursively wrap mappings as FrozenPayload and sequences as tuples."""
+    if isinstance(value, Mapping):
+        return FrozenPayload(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value: object) -> Any:
+    """Inverse of _freeze: mappings become dict, tuples and lists become list."""
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw(item) for item in value]
+    return value
+
+
+def _validate_payload(value: object) -> FrozenPayload:
+    """Freeze a caller mapping. Unserializable leaves raise TypeError via canonical_json."""
+    if isinstance(value, FrozenPayload):
+        return value
+    if not isinstance(value, Mapping):
+        raise ValueError("payload must be a mapping")
+    frozen = FrozenPayload(value)
+    canonical_json({"payload": _canonical_for_id(frozen)})
+    return frozen
+
+
+def _thaw_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Plain dict and list for model_dump in python and json modes."""
+    return {key: _thaw(item) for key, item in payload.items()}
+
+
+_PayloadField = Annotated[
+    FrozenPayload,
+    PlainValidator(_validate_payload, json_schema_input_type=dict[str, Any]),
+    PlainSerializer(_thaw_payload, return_type=dict[str, Any]),
+]
+
+
 def _canonical_for_id(value: Any) -> Any:
-    """Hash body: correlation_id is dropped at every depth, in dicts and in lists.
+    """Hash body: correlation_id is dropped at every depth. Mappings hash as dicts, tuples as lists.
 
     Keys are not reordered here. canonical_json sorts keys recursively.
     """
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {k: _canonical_for_id(v) for k, v in value.items() if k != "correlation_id"}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_canonical_for_id(v) for v in value]
     return value
 
@@ -93,7 +162,7 @@ class Event(BaseModel):
 
     kind: EventKind
     entity_id: str
-    payload: dict[str, Any]
+    payload: _PayloadField
     occurred_at: str
     correlation_id: str | None = None
     lamports: int | None = Field(default=None, strict=True)
@@ -102,14 +171,11 @@ class Event(BaseModel):
     token_units: int | None = Field(default=None, strict=True)
     event_id: str = Field(default="", init=False)
 
-    def __init__(self, **data: Any) -> None:
-        if isinstance(data.get("payload"), Mapping):
-            payload = copy.deepcopy(dict(data["payload"]))
-            canonical_json({"payload": _canonical_for_id(payload)})
-            data["payload"] = payload
-        super().__init__(**data)
+    @model_validator(mode="after")
+    def _derive_event_id(self) -> Self:
         object.__setattr__(
             self,
             "event_id",
             derive_event_id(self.kind, self.entity_id, self.payload, self.occurred_at),
         )
+        return self
