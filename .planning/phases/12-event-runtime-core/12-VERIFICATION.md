@@ -1,6 +1,6 @@
 ---
 phase: 12-event-runtime-core
-verified: 2026-11-08T11:20:05Z
+verified: 2026-11-08T11:52:28Z
 status: passed
 score: 12/12 must-haves verified
 covered_files:
@@ -118,26 +118,29 @@ covered_files:
   - tests/tools/market/test_jupiter_errors.py
   - tests/tools/onchain/test_onchain_errors.py
   - tests/tools/onchain/test_pump_events.py
-covered_digest: "v3:sha256:a54b4d077bc5dc238258c537f71e43d3ce07920a200a7024f157b1d1b15b3991"
+covered_digest: "v3:sha256:dea9bd4615490bf3e816a4238aa32e4144080e86c9a14738d562c3ed365a9fc4"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification: true
 previous_status: gaps_found
 previous_score: 11/12
 gaps_closed:
-  - "make lint exits 0 after the ruff fixes on the risk tip"
+  - "make test exits 0; tracked receipts are v4-p12-event-runtime.json under bot-00-chief, bot-02-risk, and bot-09-journal"
 gaps_remaining: []
 regressions: []
+advisory:
+  - finding: "None"
+    category: other
+    reason: "Re-verification scan found no new unevidenced architectural or security blocker"
+    evidence_status: "none provided"
 ---
 
 # Phase 12: Event runtime core Verification Report
 
-**Phase Goal:** A typed, bounded, deterministic event runtime exists as a library. Nothing is wired into the supervisor yet and the replay path is untouched.
-**Verified:** 2026-11-08T11:20:05Z
+**Phase Goal:** A typed, bounded, deterministic event runtime exists as a library: every v4 settings section exists once in a config-gated skeleton, frozen event models with derived ids live in one catalog, an EventBus has per-entity FIFO lanes, a never-dropping P0 lane, dedup, coalescing, seeded retry, a persisted DLQ and graceful shutdown, a deterministic drain serves replay, and a SourceSupervisor owns reconnect backoff, staleness, resync and cursors. Nothing is wired into the supervisor yet and the replay path is untouched.
+**Verified:** 2026-11-08T11:52:28Z
 **Status:** passed
-**Re-verification:** Yes. Fresh logs under /tmp/p12-verify/rerun/. Previous gaps were not copied forward. HEAD 3dda008 contains 85ad73e, 2194f97, and 0b27d2e. v4-base is 09f83beb592742ba3322e752d508bec69bb10cca.
-
-Commands that pass -q on top of pyproject addopts -q print progress dots and [100%] and do not print an N passed sentence. A pass below requires that progress line, no failure line, and EXIT:0, except criterion 12.
+**Re-verification:** Yes. Previous report was gaps_found at 11/12 because `.receipts/bot-00-chief/phase-12-event-runtime.json` was tracked outside the receipt allowlist. HEAD is 9d32a35d8f3aebb2bc0aa7dace92e43d554746a0. Versus 3dda008, product code is unchanged. The only covered-file delta in `12-05-PLAN.md` is the allowlist comment on the smoke-10m pin line.
 
 ## Goal Achievement
 
@@ -145,106 +148,57 @@ Commands that pass -q on top of pyproject addopts -q print progress dots and [10
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | lint, typecheck, test, check.sh, and paper replay smoke each exit 0 | VERIFIED | /tmp/p12-verify/rerun/c01-*.log EXIT:0 |
-| 2 | v4 settings skeleton, events settings, live caps, config ruff, and config mypy exit 0 | VERIFIED | c02-pytest.log, c02-ruff.log, c02-mypy.log EXIT:0 |
-| 3 | models, lanes, and backpressure tests exit 0 | VERIFIED | c03-pytest.log [100%] EXIT:0 |
-| 4 | dedup, retry/DLQ, and events CLI tests exit 0 | VERIFIED | c04-pytest.log [100%] EXIT:0 |
-| 5 | idempotency and shutdown tests exit 0 | VERIFIED | c05-pytest.log [100%] EXIT:0 |
-| 6 | sources and source-fault tests exit 0 | VERIFIED | c06-pytest.log [100%] EXIT:0 |
-| 7 | v4 kinds, harness, config tests exit 0 and EventKind is defined once | VERIFIED | c07-pytest.log EXIT:0; c07-eventkind.log EXIT:0 |
-| 8 | drain determinism and smoke_trading pass and the -rs run has no SKIPPED | VERIFIED | c08 logs EXIT:0; c08-rs.log 2 passed, no SKIPPED |
-| 9 | events package has no wall-clock calls and tests/safety exits 0 | VERIFIED | c09-clock-grep.log EXIT:0; c09-safety.log EXIT:0 |
-| 10 | contracts diff against v4-base is empty | VERIFIED | c10-v4-base.log EXIT:0 |
-| 11 | smoke-10m hash is stable from a temp cwd and changelog pins match | VERIFIED | c11-verify.log EXIT:0; c11-pins.log EXIT:0 |
-| 12 | live --once exits 3 | VERIFIED | c12-live.log EXIT:3 |
+| 1 | make lint, make typecheck, make test, ./scripts/check.sh, and paper smoke each exit 0 | VERIFIED | /tmp/p12-verify/rerun4/c01-lint.log EXIT:0; c01-typecheck.log EXIT:0; c01-test.log [100%] EXIT:0, coverage 91.26% against the 89.9% floor, no FAILED line; c01-check.log EXIT:0; c01-paper.log EXIT:0 filled=2 |
+| 2 | v4 settings skeleton tests, ruff, and mypy on config exit 0 | VERIFIED | c02-pytest.log, c02-ruff.log, c02-mypy.log each EXIT:0 |
+| 3 | models, lanes, and backpressure tests exit 0 | VERIFIED | c03.log EXIT:0 |
+| 4 | dedup, retry/DLQ, and events CLI tests exit 0 | VERIFIED | c04.log EXIT:0 |
+| 5 | idempotency and shutdown tests exit 0 | VERIFIED | c05.log EXIT:0 |
+| 6 | sources and fault tests exit 0 | VERIFIED | c06.log EXIT:0 |
+| 7 | one EventKind catalog; harness and config tests exit 0 | VERIFIED | c07-pytest.log EXIT:0; c07-catalog.log COUNT:1 EXIT:0; class EventKind only in src/pumpgrok/events/models.py |
+| 8 | drain determinism and smoke_trading pass and -rs has no SKIPPED | VERIFIED | c08-determinism.log, c08-smoke.log, c08-rs.log each EXIT:0; c08-rs.log has no SKIPPED |
+| 9 | no wall clock in src/pumpgrok/events; tests/safety exits 0 | VERIFIED | c09-clock.log EXIT:0 with no matches; c09-safety.log EXIT:0 |
+| 10 | v4-base is 09f83beb592742ba3322e752d508bec69bb10cca and contracts diff is empty | VERIFIED | c10-rev.log and c10-diff.log EXIT:0; COUNT:0 |
+| 11 | smoke-10m hash pinned twice, changelog before/after lines present, trading-smoke pin tests exit 0 | VERIFIED | c11-hash.log A=B=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d EXIT:0 from repo root; c11-pins.log EXIT:0; c11-changelog-trading.log P=bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 EXIT:0 |
+| 12 | live --once exits 3 | VERIFIED | c12-live.log EXIT:3 and LIVE GATE refusing to start |
 
 **Score:** 12/12 truths verified
 
-### Criterion 1
+### Receipt preflight
 
-Log: /tmp/p12-verify/rerun/c01-lint.log observed EXIT:0. All checks passed! and 913 files already formatted.
-Log: /tmp/p12-verify/rerun/c01-typecheck.log observed EXIT:0. Success: no issues found in 233 source files.
-Log: /tmp/p12-verify/rerun/c01-test.log observed EXIT:0. Progress reached [100%]. Coverage line: Required test coverage of 89.9% reached. Total coverage: 91.26%. No failed or error summary.
-Log: /tmp/p12-verify/rerun/c01-check.log observed EXIT:0. PumpGrok repository structure looks healthy.
-Log: /tmp/p12-verify/rerun/c01-paper.log observed EXIT:0. Paper replay printed trades filled=2 not_filled=1.
+Tracked, each `task_id` is `v4-p12-event-runtime`:
 
-### Criterion 2
+- `.receipts/bot-00-chief/v4-p12-event-runtime.json`
+- `.receipts/bot-02-risk/v4-p12-event-runtime.json`
+- `.receipts/bot-09-journal/v4-p12-event-runtime.json`
 
-Log: /tmp/p12-verify/rerun/c02-pytest.log observed EXIT:0. Five dots and [100%].
-Log: /tmp/p12-verify/rerun/c02-ruff.log observed EXIT:0. All checks passed!
-Log: /tmp/p12-verify/rerun/c02-mypy.log observed EXIT:0. Success: no issues found in 6 source files.
+`.receipts/phase-12-event-runtime.json` is absent and not tracked. `.gitignore` is unchanged versus 3dda008: ignore `.receipts/**/*.json`, exception `!.receipts/bot-0*/v4-p*.json`. The prior receipt-name failure did not reappear in `make test`.
 
-### Criterion 3
+### Advisory (New Scope, Unevidenced)
 
-Log: /tmp/p12-verify/rerun/c03-pytest.log observed EXIT:0. Fourteen dots and [100%].
-
-### Criterion 4
-
-Log: /tmp/p12-verify/rerun/c04-pytest.log observed EXIT:0. Twelve dots and [100%].
-
-### Criterion 5
-
-Log: /tmp/p12-verify/rerun/c05-pytest.log observed EXIT:0. Three dots and [100%].
-
-### Criterion 6
-
-Log: /tmp/p12-verify/rerun/c06-pytest.log observed EXIT:0. Eight dots and [100%].
-
-### Criterion 7
-
-Log: /tmp/p12-verify/rerun/c07-pytest.log observed EXIT:0. Progress reached [100%].
-Log: /tmp/p12-verify/rerun/c07-eventkind.log observed EXIT:0. The EventKind class-count test succeeded, so the catalog class exists in one file.
-
-### Criterion 8
-
-Log: /tmp/p12-verify/rerun/c08-determinism.log observed EXIT:0. One dot and [100%].
-Log: /tmp/p12-verify/rerun/c08-smoke-trading.log observed EXIT:0. One dot and [100%].
-Log: /tmp/p12-verify/rerun/c08-rs.log observed EXIT:0. Summary line: 2 passed in 0.23s. The string SKIPPED is absent.
-
-### Criterion 9
-
-Log: /tmp/p12-verify/rerun/c09-clock-grep.log observed EXIT:0. The negated grep found no datetime.now, utcnow, time.time, or time.sleep under src/pumpgrok/events.
-Log: /tmp/p12-verify/rerun/c09-safety.log observed EXIT:0. Progress reached [100%].
-
-### Criterion 10
-
-Log: /tmp/p12-verify/rerun/c10-v4-base.log observed EXIT:0. git rev-parse v4-base printed 09f83beb592742ba3322e752d508bec69bb10cca. The contracts name-only diff was empty, so the count test passed.
-
-### Criterion 11
-
-Log: /tmp/p12-verify/rerun/c11-verify.log observed EXIT:0. Both temp-cwd runs printed A=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and the same value for B. The shell then matched the Phase 12 smoke-10m before and after changelog lines and printed P=bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 after matching the trading-smoke before and after lines.
-Log: /tmp/p12-verify/rerun/c11-pins.log observed EXIT:0. Eight dots and [100%] for test_replay_hash_pin.py and test_trading_smoke_pin.py.
-
-### Criterion 12
-
-Log: /tmp/p12-verify/rerun/c12-live.log observed EXIT:3. The process printed LIVE GATE: refusing to start in mode=live and No transaction was attempted.
+None. Re-verification ran. No new unevidenced architectural or security finding.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| src/pumpgrok/events/models.py | one EventKind catalog | VERIFIED | criterion 7 count test exit 0 |
-| src/pumpgrok/events/bus.py | lanes, dedup, retry, shutdown | VERIFIED | criteria 3, 4, 5 logs |
-| src/pumpgrok/events/drain.py | deterministic drain | VERIFIED | criterion 8 logs |
-| src/pumpgrok/events/sources.py | SourceSupervisor | VERIFIED | criterion 6 log |
-| src/pumpgrok/cli/events.py | dlq verb | VERIFIED | criterion 4 log |
-| src/pumpgrok/config/sections/v4.py | settings skeleton | VERIFIED | criterion 2 logs |
-| CHANGELOG.md | hash before/after lines | VERIFIED | criterion 11 log |
+| src/pumpgrok/events/ | typed event library | VERIFIED | criteria 3-9 EXIT:0; no supervisor import of pumpgrok.events |
+| src/pumpgrok/config/sections/v4.py | v4 settings skeleton off | VERIFIED | c02 EXIT:0 |
+| src/pumpgrok/cli/events.py | dlq list/replay/purge | VERIFIED | c04 EXIT:0 |
+| tests/safety/test_events_not_wired.py | not wired into supervisor | VERIFIED | c09-safety EXIT:0 |
+| three v4-p12 receipts | admitted by existing glob | VERIFIED | git ls-files; make test EXIT:0 |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| src/pumpgrok/cli/dispatch.py | src/pumpgrok/cli/events.py | top-level events_verb import and events handler | WIRED | criterion 4 CLI tests and criterion 1 paper/live commands ran |
-| src/pumpgrok/events/bus.py | src/pumpgrok/events/store.py | EventStore sidecar | WIRED | shutdown and retry tests exit 0 |
-| tests/replay/test_event_drain_parity.py | src/pumpgrok/events/drain.py | drain() | WIRED | criterion 8 |
+| tests/replay/test_event_drain_parity.py | src/pumpgrok/events/drain.py | drain() | WIRED | criterion 8 EXIT:0 |
+| tests/cli/test_events_cli.py | src/pumpgrok/cli/events.py | events CLI | WIRED | criterion 4 EXIT:0 |
+| tests/safety/test_events_not_wired.py | supervisor and execution roots | import ban | WIRED | tests/safety EXIT:0 |
+| make test | receipt allowlist | git tracked json | WIRED | v4-p12 names match `!.receipts/bot-0*/v4-p*.json`; c01-test.log EXIT:0 |
 
 ### Data-Flow Trace (Level 4)
 
-| Artifact | Data Variable | Source | Produces Real Data | Status |
-| --- | --- | --- | --- | --- |
-| verify --fixture smoke-10m | events hash | fixture replay from a temp cwd | yes, pinned hash | FLOWING |
-| paper --once --replay smoke | trades | tests/fixtures/replay/smoke | yes, filled=2 | FLOWING |
+Library phase. Dynamic desk wiring is intentionally absent. Replay pins and the live refusal are exercised by the criterion commands, not by a static stub return.
 
 ### Behavioral Spot-Checks
 
@@ -252,8 +206,11 @@ Log: /tmp/p12-verify/rerun/c12-live.log observed EXIT:3. The process printed LIV
 | --- | --- | --- | --- |
 | paper smoke | c01-paper.log | EXIT:0 filled=2 | PASS |
 | live refused | c12-live.log | EXIT:3 | PASS |
-| smoke-10m pin | c11-verify.log | hash match twice | PASS |
-| drain not skipped | c08-rs.log | 2 passed, no SKIPPED | PASS |
+| smoke-10m pin | c11-hash.log | both hashes match | PASS |
+| drain not skipped | c08-rs.log | two passed, no SKIPPED | PASS |
+| make test | c01-test.log | [100%] EXIT:0 | PASS |
+
+A login-shell attempt of criterion 11 left the worktree and was discarded. The logs above are the repo-root rerun.
 
 ### Probe Execution
 
@@ -273,24 +230,30 @@ No phase probe script was declared. Step 7c skipped.
 | EVT-09 | 12 | SourceSupervisor | SATISFIED | c06 |
 | EVT-14 | 12 | one catalog, contracts unchanged | SATISFIED | c07, c10 |
 | PRC-11 | 12 | v4 settings skeleton off | SATISFIED | c02 |
-| PRC-01 | 12 | phase close commands | SATISFIED | c01 |
-| LIV-07 | 12 | live stays refused | SATISFIED | c12 |
+| PRC-01 | 12 | phase close commands including make test | SATISFIED | c01-test.log EXIT:0 |
+| LIV-07 | 12 | live stays refused | SATISFIED | c12 EXIT:3 |
 
-EVT-08 fixture_compat on smoke-10m remains a Phase 14 success criterion. This phase first half (determinism, smoke_trading, no SKIPPED) passed in criterion 8.
+EVT-08 fixture_compat on smoke-10m remains a Phase 14 success criterion. The first half passed in criterion 8.
+
+### Decision Coverage
+
+No trackable decisions in CONTEXT.md. Gate skipped. honored 0, total 0.
 
 ### Anti-Patterns Found
 
-None in the fresh command logs. The lint log is clean.
+| File | Line | Pattern | Severity | Impact |
+| --- | --- | --- | --- | --- |
+| none | n/a | none | n/a | no TBD, FIXME, or XXX in src/pumpgrok/events |
 
 ### Human Verification Required
 
-None. Every roadmap success criterion was executed in this process.
+None. All twelve roadmap criteria were executed and logged.
 
 ### Gaps Summary
 
-None. The previous lint gap is closed in c01-lint.log.
+None. The prior gap is closed. The three tracked receipts use `v4-p12-event-runtime` and sit inside the existing allowlist. Product code is unchanged from 3dda008. covered_digest was copied from `gsd_run query verification.fingerprint` output, not computed by hand.
 
 ---
 
-_Verified: 2026-11-08T11:20:05Z_
-_Verifier: Phase12Reverify_
+_Verified: 2026-11-08T11:52:28Z_
+_Verifier: Phase12Final_
