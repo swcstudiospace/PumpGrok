@@ -110,9 +110,9 @@ None.
 
 ## Commands
 
-- `uv run pytest -q tests/config/test_settings_surface_characterization.py tests/config/test_v4_settings_skeleton.py tests/config/test_events_settings.py tests/config/test_live_settings_caps.py` exit 0 (10 passed)
-- `uv run ruff check src/pumpgrok/config` exit 0
-- `uv run mypy src/pumpgrok/config` exit 0
+- `uv run pytest -q tests/config/test_settings_surface_characterization.py tests/config/test_v4_settings_skeleton.py tests/config/test_events_settings.py tests/config/test_live_settings_caps.py` exit 0 (10 passed), run in `/root/src/repos/pumpgrok-wt/phase-12-risk`
+- `cd /root/src/repos/pumpgrok-wt/phase-12-risk && uv run ruff check src/pumpgrok/config` exit 0, after confirming `src/pumpgrok/config/sections/v4.py` is in that worktree
+- `cd /root/src/repos/pumpgrok-wt/phase-12-risk && uv run mypy src/pumpgrok/config` exit 0
 
 ## User Setup Required
 
