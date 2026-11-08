@@ -1,10 +1,15 @@
-"""Sidecar sqlite for dedup, pending, and DLQ. Not the paper ledger."""
+"""Sidecar sqlite for dedup, pending, applied, and DLQ rows. Not the paper ledger.
+
+Each mutating method is either one statement or one transaction. A crash leaves the
+state from before the call or the state after it, never a mix.
+"""
 
 from __future__ import annotations
 
 import contextlib
 import json
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -44,10 +49,20 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 _TTL = {0: P0_DEDUP_TTL_S, 1: P1_DEDUP_TTL_S}
+_OVERFLOW = "overflow"
 
 
 class EventStore:
-    """Opens only the caller path. Refuses the paper ledger before connect."""
+    """Opens only the caller path. Refuses the paper ledger before connect.
+
+    Transaction boundaries:
+    - accept_queued: dedup row + pending row (P0/P1 accepted into a lane).
+    - accept_overflow: dedup row + DLQ row (P0/P1 rejected by a full lane).
+    - complete_applied: applied row + pending delete (P0/P1 handler succeeded).
+    - fail_to_dlq: DLQ row + pending delete (any priority, handler failed terminally).
+    - replace_pending: pending upserts for the given events (shutdown, P2 only).
+    - delete_pending: one statement (P2 handler succeeded).
+    """
 
     def __init__(self, path: str | Path) -> None:
         candidate = Path(path)
@@ -74,18 +89,36 @@ class EventStore:
             return False
         return float(row[0]) > now
 
-    def remember(self, event_id: str, priority: int, now: float) -> None:
-        ttl = _TTL[priority]
-        self._db.execute(
-            "INSERT OR REPLACE INTO dedup (event_id, priority, expires_at) VALUES (?, ?, ?);",
-            (event_id, priority, now + ttl),
-        )
+    def accept_queued(self, event: Event, *, priority: int, now: float) -> None:
+        """One transaction: dedup row and pending row. A raise leaves neither."""
+        with self._transaction() as db:
+            _remember(db, event.event_id, priority, now)
+            _upsert_pending(db, event)
+
+    def accept_overflow(self, event: Event, *, priority: int, now: float) -> None:
+        """One transaction: dedup row and DLQ row with reason overflow."""
+        with self._transaction() as db:
+            _remember(db, event.event_id, priority, now)
+            _insert_dlq(db, event, reason=_OVERFLOW)
+
+    def complete_applied(self, event_id: str, applied_at: float) -> None:
+        """One transaction: applied row and pending delete."""
+        with self._transaction() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO applied (event_id, applied_at) VALUES (?, ?);",
+                (event_id, applied_at),
+            )
+            db.execute("DELETE FROM pending WHERE event_id = ?;", (event_id,))
+
+    def fail_to_dlq(self, event: Event, *, reason: str) -> None:
+        """One transaction: DLQ row and pending delete."""
+        with self._transaction() as db:
+            _insert_dlq(db, event, reason=reason)
+            db.execute("DELETE FROM pending WHERE event_id = ?;", (event.event_id,))
 
     def write_dlq(self, event: Event, *, reason: str) -> None:
-        self._db.execute(
-            "INSERT OR REPLACE INTO dlq (event_id, reason, body) VALUES (?, ?, ?);",
-            (event.event_id, reason, _dump(event)),
-        )
+        """Single-statement DLQ write that leaves pending alone. Seeds rows for tests and tools."""
+        _insert_dlq(self._db, event, reason=reason)
 
     def list_dlq(self) -> list[dict[str, str]]:
         rows = self._db.execute("SELECT event_id, reason FROM dlq ORDER BY event_id;").fetchall()
@@ -107,15 +140,12 @@ class EventStore:
 
     def move_dlq_to_pending(self, event_id: str) -> Event | None:
         """Move one DLQ row into pending. Delete only if that insert commits."""
-        db = self._db
-        db.execute("BEGIN IMMEDIATE")
-        try:
+        with self._transaction() as db:
             row = db.execute(
                 "SELECT body FROM dlq WHERE event_id = ?;",
                 (event_id,),
             ).fetchone()
             if row is None:
-                db.execute("ROLLBACK")
                 return None
             body = str(row[0])
             seq_row = db.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;").fetchone()
@@ -127,43 +157,13 @@ class EventStore:
             deleted = db.execute("DELETE FROM dlq WHERE event_id = ?;", (event_id,))
             if deleted.rowcount != 1:
                 raise sqlite3.OperationalError("dlq row missing before commit")
-            db.execute("COMMIT")
-        except Exception:
-            with contextlib.suppress(sqlite3.Error):
-                db.execute("ROLLBACK")
-            raise
         return _load(body)
 
     def replace_pending(self, events: list[Event]) -> None:
-        """Upsert queued events by id. Do not delete rows parked by dlq replay."""
-        db = self._db
-        db.execute("BEGIN IMMEDIATE")
-        try:
+        """One transaction: upsert pending rows by id. Rows parked by DLQ replay stay."""
+        with self._transaction() as db:
             for event in events:
-                body = _dump(event)
-                existing = db.execute(
-                    "SELECT seq FROM pending WHERE event_id = ?;",
-                    (event.event_id,),
-                ).fetchone()
-                if existing is None:
-                    seq_row = db.execute(
-                        "SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;"
-                    ).fetchone()
-                    seq = int(seq_row[0]) if seq_row is not None else 1
-                    db.execute(
-                        "INSERT INTO pending (seq, event_id, body) VALUES (?, ?, ?);",
-                        (seq, event.event_id, body),
-                    )
-                else:
-                    db.execute(
-                        "UPDATE pending SET body = ? WHERE event_id = ?;",
-                        (body, event.event_id),
-                    )
-            db.execute("COMMIT")
-        except Exception:
-            with contextlib.suppress(sqlite3.Error):
-                db.execute("ROLLBACK")
-            raise
+                _upsert_pending(db, event)
 
     def load_pending(self) -> list[Event]:
         rows = self._db.execute("SELECT body FROM pending ORDER BY seq;").fetchall()
@@ -172,18 +172,58 @@ class EventStore:
     def delete_pending(self, event_id: str) -> None:
         self._db.execute("DELETE FROM pending WHERE event_id = ?;", (event_id,))
 
-    def mark_applied(self, event_id: str, applied_at: float) -> None:
-        self._db.execute(
-            "INSERT OR REPLACE INTO applied (event_id, applied_at) VALUES (?, ?);",
-            (event_id, applied_at),
-        )
-
     def is_applied(self, event_id: str) -> bool:
         row = self._db.execute(
             "SELECT 1 FROM applied WHERE event_id = ?;",
             (event_id,),
         ).fetchone()
         return row is not None
+
+    @contextlib.contextmanager
+    def _transaction(self) -> Iterator[sqlite3.Connection]:
+        db = self._db
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            yield db
+            db.execute("COMMIT")
+        except BaseException:
+            with contextlib.suppress(sqlite3.Error):
+                db.execute("ROLLBACK")
+            raise
+
+
+def _remember(db: sqlite3.Connection, event_id: str, priority: int, now: float) -> None:
+    db.execute(
+        "INSERT OR REPLACE INTO dedup (event_id, priority, expires_at) VALUES (?, ?, ?);",
+        (event_id, priority, now + _TTL[priority]),
+    )
+
+
+def _insert_dlq(db: sqlite3.Connection, event: Event, *, reason: str) -> None:
+    db.execute(
+        "INSERT OR REPLACE INTO dlq (event_id, reason, body) VALUES (?, ?, ?);",
+        (event.event_id, reason, _dump(event)),
+    )
+
+
+def _upsert_pending(db: sqlite3.Connection, event: Event) -> None:
+    body = _dump(event)
+    existing = db.execute(
+        "SELECT seq FROM pending WHERE event_id = ?;",
+        (event.event_id,),
+    ).fetchone()
+    if existing is None:
+        seq_row = db.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;").fetchone()
+        seq = int(seq_row[0]) if seq_row is not None else 1
+        db.execute(
+            "INSERT INTO pending (seq, event_id, body) VALUES (?, ?, ?);",
+            (seq, event.event_id, body),
+        )
+    else:
+        db.execute(
+            "UPDATE pending SET body = ? WHERE event_id = ?;",
+            (body, event.event_id),
+        )
 
 
 def _dump(event: Event) -> str:

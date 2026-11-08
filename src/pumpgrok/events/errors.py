@@ -33,3 +33,12 @@ class SidecarRefusal(PumpgrokError):
             super().__init__(f"sidecar refused path {path_name}")
         else:
             super().__init__(f"sidecar refused index {index}")
+
+
+class EventBusClosed(PumpgrokError):
+    """publish() or start() after shutdown() began. The bus accepts no new work."""
+
+    code = "event_bus_closed"
+
+    def __init__(self) -> None:
+        super().__init__("event bus is closed")

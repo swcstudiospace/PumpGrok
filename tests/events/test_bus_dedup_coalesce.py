@@ -195,10 +195,11 @@ async def test_overflowed_p1_event_is_deduplicated_and_replays_once(
         dlq=lambda _event: None,
         store=EventStore(sidecar),
     )
+    # The queued event was written ahead when accepted, so recovery runs it too.
     await recovered.recover()
-    assert delivered == [overflow.event_id]
+    assert delivered == [queued.event_id, overflow.event_id]
     await recovered.recover()
-    assert delivered == [overflow.event_id]
+    assert delivered == [queued.event_id, overflow.event_id]
 
 
 async def test_running_p2_handler_is_not_cancelled_and_newest_value_runs_once(
