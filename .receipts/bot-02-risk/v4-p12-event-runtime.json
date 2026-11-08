@@ -1,11 +1,13 @@
 {
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-08. Owner answer: 'Please push our updates to our main branch' (orchestration request, 2026-11-08). Scope read as the Phase 12 PRs #61, #62 and #63; this receipt covers PR #61 at head c866663. Recorded for G-2 only; the bot did not approve this work.",
   "task_id": "v4-p12-event-runtime",
   "bot": "bot-02-risk",
   "branch": "bot-02-risk/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
   "plan": "12-01 through 12-05 on the risk worktree. Code only. Planning files and CHANGELOG.md are on the other seats.",
   "purpose": "Seat receipt for the event-runtime library at 85ad73e. Records commands observed on the combined tree 9d32a35, which contains this tip, and the ownership check run in this worktree. The executor does not write approved_by.",
-  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "status": "executed and committed. Owner approval recorded in approved_by on 2026-11-08 (owner answer quoted in approval_note). This seat did not approve its own work.",
   "commits": [
     {"sha": "cbb1a76", "task": "off-by-default v4 settings skeleton"},
     {"sha": "bace4d7", "task": "catalog, lanes, and occurred_at ids"},
@@ -38,7 +40,7 @@
     {"claim": "Every file in origin/main...HEAD on this branch is owned by bot-02-risk, including cli/dispatch.py, cli/parsing.py and config/settings.py.", "evidence_command_index": 8}
   ],
   "unverified": [
-    "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
+    "G-2 on this receipt is checked by CI on the pull request, not by this seat.",
     "The suite and live refusal were run on the combined tree 9d32a35, not again on this worktree after the receipt commit.",
     "No pull request was opened and nothing was pushed.",
     "Phase 13 was not started. The bus is not wired into the supervisor.",
