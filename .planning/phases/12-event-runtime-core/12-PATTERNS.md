@@ -257,6 +257,7 @@ Handler signature is `Callable[[argparse.Namespace, Settings], int]`. Subcommand
 ```python
 from pumpgrok.cli import EXIT_CONFIG, EXIT_OK, main
 
+
 def _confirm(expires: str) -> int:
     return main(["live", "confirm", "--by", _BY, "--notional-cap", _CAP, "--expires", expires])
 ```
