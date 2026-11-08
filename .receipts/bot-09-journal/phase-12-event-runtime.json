@@ -1,0 +1,32 @@
+{
+  "task_id": "phase-12-event-runtime",
+  "bot": "bot-09-journal",
+  "branch": "bot-09-journal/phase-12-event-runtime",
+  "phase": "12-event-runtime-core",
+  "plan": "CHANGELOG hash pins only. No product code.",
+  "purpose": "Seat receipt for the Phase 12 changelog pins at 2194f97. The hash check ran on the combined tree 3dda008, which contains this commit. The executor does not write approved_by.",
+  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "commits": [
+    {"sha": "2194f97", "task": "Phase 12 replay hash pins", "files": ["CHANGELOG.md"]}
+  ],
+  "commands": [
+    {"cmd": "r=\"$PWD\"; d=$(mktemp -d); a=$(cd \"$d\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); b=$(cd \"$d\" && uv run --project \"$r\" pumpgrok verify --fixture smoke-10m | grep -oE '[0-9a-f]{64}' | head -n1); echo \"A=$a\"; echo \"B=$b\"; test -n \"$a\" && test \"$a\" = \"$b\" && test \"$a\" = \"b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\" && grep -qF \"Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d\" CHANGELOG.md && grep -qF \"Phase 12: smoke-10m events.hash after: $a\" CHANGELOG.md && p=$(python3 -c \"import json;print(json.load(open('tests/fixtures/replay/pins/trading_smoke.json'))['events_hash'])\") && echo \"P=$p\" && grep -qF \"Phase 12: trading-smoke events.hash before: $p\" CHANGELOG.md && grep -qF \"Phase 12: trading-smoke events.hash after: $p\" CHANGELOG.md", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c11-verify.log on combined tree 3dda008: A=B=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d P=bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; EXIT:0"},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c11-pins.log: [100%]; EXIT:0"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Log /tmp/p12-verify/rerun/c12-live.log: 8 of 9 preconditions unmet; No transaction was attempted; EXIT:3"},
+    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-09-journal --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS — bot-09-journal: 1 file(s) within owned paths. The only product file is CHANGELOG.md."}
+  ],
+  "claims": [
+    {"claim": "Both smoke-10m measures equal b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d, and CHANGELOG.md contains the Phase 12 before and after lines for smoke-10m and trading-smoke.", "evidence_command_index": 0},
+    {"claim": "The replay hash pin tests exit 0.", "evidence_command_index": 1},
+    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 2, "expects_failure": true},
+    {"claim": "The journal diff against origin/main is only CHANGELOG.md, which this seat owns.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
+    "The hash check ran on the combined tree 3dda008, not again in this worktree after the receipt commit.",
+    "No pull request was opened and nothing was pushed.",
+    "This branch does not contain the event library. That code is on bot-02-risk/phase-12-event-runtime."
+  ],
+  "evidence_logs": "/tmp/p12-verify/rerun/",
+  "rollback_plan": "Before the merge, revert commit 2194f97 on this branch with git revert (no force) or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+}
