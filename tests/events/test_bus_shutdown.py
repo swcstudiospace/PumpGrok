@@ -220,6 +220,43 @@ async def test_shutdown_cancels_handler_past_bound_and_new_bus_recovers_once(
     assert _count(sidecar, "pending") == 0
 
 
+async def test_shutdown_returns_at_its_bounds_when_handler_swallows_cancellation(
+    tmp_path: Path,
+) -> None:
+    sidecar = tmp_path / "events.sqlite"
+    event = _event("stubborn")
+    started = asyncio.Event()
+    never = asyncio.Event()
+
+    async def stubborn(_event: Event) -> None:
+        started.set()
+        while not never.is_set():
+            try:
+                await never.wait()
+            except asyncio.CancelledError:
+                continue
+
+    clock = FixtureClock(0.0)
+    bus = EventBus(clock=clock, handler=stubborn, dlq=_no_dlq, store=EventStore(sidecar))
+    await bus.start()
+    await bus.publish(event)
+    await started.wait()
+    stopping = asyncio.create_task(bus.shutdown())
+    await _settle()
+    clock.advance_to(SHUTDOWN_TIMEOUT_S)
+    await _settle()
+    clock.advance_to(2 * SHUTDOWN_TIMEOUT_S)
+    await stopping
+
+    # The call swallowed its cancellation and is still running. Shutdown returned at its
+    # second bound. The event is pending: not applied and not in the DLQ.
+    assert _count(sidecar, "pending") == 1
+    assert _count(sidecar, "applied") == 0
+    assert _count(sidecar, "dlq") == 0
+    never.set()
+    await _settle()
+
+
 async def test_p2_in_flight_at_bound_and_queued_value_survive_restart(tmp_path: Path) -> None:
     sidecar = tmp_path / "events.sqlite"
     first = _tick(1)
