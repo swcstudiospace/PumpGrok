@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pumpgrok.events.constants import (
     P0_LANE_CAP,
@@ -19,6 +19,9 @@ from pumpgrok.events.models import Event, EventKind, priority_of
 from pumpgrok.events.store import EventStore
 from pumpgrok.replay.clock import Clock
 from pumpgrok.replay.rng import make_rng
+
+if TYPE_CHECKING:
+    from pumpgrok.config.settings import Settings
 
 Handler = Callable[[Event], Awaitable[None]]
 Dlq = Callable[[Event], Awaitable[None] | None]
@@ -59,14 +62,14 @@ class EventBus:
     @classmethod
     def from_settings(
         cls,
-        settings: object,
+        settings: Settings,
         *,
         clock: Clock,
         handler: Handler,
         dlq: Dlq,
         rng: _Jitter | None = None,
     ) -> EventBus:
-        path = settings.events.sidecar_path  # type: ignore[attr-defined]
+        path = settings.events.sidecar_path
         return cls(clock=clock, handler=handler, dlq=dlq, store=EventStore(path), rng=rng)
 
     def queued(self, priority: int) -> int:

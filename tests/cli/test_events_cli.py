@@ -13,6 +13,7 @@ from pumpgrok.cli import EXIT_CONFIG, EXIT_OK, main
 from pumpgrok.config.settings import load_settings
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.events.store import EventStore
+from pumpgrok.events.dlq import replay
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 
 
@@ -80,3 +81,17 @@ def test_load_settings_does_not_open_sidecar(tmp_path: Path, monkeypatch: pytest
     load_settings()
     assert not (tmp_path / "var" / "desk" / "events.sqlite").exists()
     assert not (tmp_path / PAPER_LEDGER_PATH).exists()
+
+def test_failed_replay_move_leaves_dlq_row(tmp_path: Path) -> None:
+    sidecar = tmp_path / "events.sqlite"
+    event_id = _seed(sidecar, "row-fail")
+    store = EventStore(sidecar)
+    try:
+        store._db.execute("ALTER TABLE pending RENAME TO pending_hidden")
+        with pytest.raises(sqlite3.OperationalError):
+            replay(store, event_id)
+        store._db.execute("ALTER TABLE pending_hidden RENAME TO pending")
+        assert store.list_dlq() == [{"event_id": event_id, "reason": "poison"}]
+        assert store.load_pending() == []
+    finally:
+        store.close()

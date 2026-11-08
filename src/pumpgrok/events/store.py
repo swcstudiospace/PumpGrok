@@ -107,6 +107,36 @@ class EventStore:
     def purge_dlq(self, event_id: str) -> bool:
         cursor = self._db.execute("DELETE FROM dlq WHERE event_id = ?;", (event_id,))
         return cursor.rowcount > 0
+    def move_dlq_to_pending(self, event_id: str) -> Event | None:
+        """Move one DLQ row into pending. Delete only if that insert commits."""
+        db = self._db
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            row = db.execute(
+                "SELECT body FROM dlq WHERE event_id = ?;",
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                db.execute("ROLLBACK")
+                return None
+            body = str(row[0])
+            seq_row = db.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;").fetchone()
+            seq = int(seq_row[0]) if seq_row is not None else 1
+            db.execute(
+                "INSERT INTO pending (seq, event_id, body) VALUES (?, ?, ?);",
+                (seq, event_id, body),
+            )
+            deleted = db.execute("DELETE FROM dlq WHERE event_id = ?;", (event_id,))
+            if deleted.rowcount != 1:
+                raise sqlite3.OperationalError("dlq row missing before commit")
+            db.execute("COMMIT")
+        except Exception:
+            try:
+                db.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        return _load(body)
 
     def replace_pending(self, events: list[Event]) -> None:
         self._db.execute("DELETE FROM pending;")

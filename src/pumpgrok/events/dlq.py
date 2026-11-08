@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event
 from pumpgrok.events.store import EventStore
 
@@ -11,13 +10,9 @@ def list_rows(store: EventStore) -> list[dict[str, str]]:
     return store.list_dlq()
 
 
-async def replay(store: EventStore, bus: EventBus, name: str) -> Event | None:
-    event = store.take_dlq(name)
-    if event is None:
-        return None
-    await bus.publish(event)
-    await bus.shutdown()
-    return event
+def replay(store: EventStore, name: str) -> Event | None:
+    """Park the named DLQ row on pending for the next recover(). No bus, no clock."""
+    return store.move_dlq_to_pending(name)
 
 
 def purge(store: EventStore, name: str) -> bool:
