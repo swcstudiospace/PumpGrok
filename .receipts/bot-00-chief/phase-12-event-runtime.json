@@ -1,0 +1,32 @@
+{
+  "task_id": "phase-12-event-runtime",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/phase-12-event-runtime",
+  "phase": "12-event-runtime-core",
+  "plan": "Planning artifacts and the verifier-written 12-VERIFICATION.md. No product code.",
+  "purpose": "Seat receipt for the phase 12 planning files and the verification report at e031578. The verifier rewrote that report from /tmp/p12-verify/rerun/ on combined tree 3dda008. The executor does not write approved_by.",
+  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "commits": [
+    {"sha": "e031578", "task": "record the phase 12 verification pass", "files": [".planning/phases/12-event-runtime-core/12-VERIFICATION.md"]}
+  ],
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "combined tree 3dda008. Log /tmp/p12-verify/rerun/c01-lint.log: EXIT:0"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c01-test.log: progress to 100 percent, no F or E, coverage 91.26 percent; EXIT:0"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Log /tmp/p12-verify/rerun/c12-live.log: 8 of 9 preconditions unmet; No transaction was attempted; EXIT:3"},
+    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-00-chief --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS — bot-00-chief: 16 file(s) within owned paths. The diff is planning files only, including 12-VERIFICATION.md."}
+  ],
+  "claims": [
+    {"claim": "make lint exits 0 on the combined tree whose planning fences this branch formatted.", "evidence_command_index": 0},
+    {"claim": "make test exits 0 on that combined tree. The log reaches 100 percent with no F or E.", "evidence_command_index": 1},
+    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 2, "expects_failure": true},
+    {"claim": "Every file in origin/main...HEAD on this branch is owned by bot-00-chief.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
+    "12-VERIFICATION.md was written by the verifier, not by this seat. Status passed, score 12/12, re_verification true, head 3dda008.",
+    "The suite was not re-run in this worktree after the receipt commit.",
+    "No pull request was opened and nothing was pushed. Phase 13 was not started."
+  ],
+  "evidence_logs": "/tmp/p12-verify/rerun/",
+  "rollback_plan": "Before the merge, revert the phase 12 planning commits on this branch with git revert (no force), ending at e031578, or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+}
