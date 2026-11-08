@@ -56,7 +56,8 @@ def test_determinism() -> None:
     assert bytes(first) == bytes(second)
     assert first.pending == 0
     assert second.pending == 0
-    assert len(first) > 0
+    delivered = [row["event_id"] for row in json.loads(bytes(first))["deliveries"]]
+    assert delivered == [event.event_id for event in events]
     again = drain(events + events, FixtureClock(0.0), make_rng(_SEED))
     assert again == first
     assert again.pending == 0
@@ -71,7 +72,17 @@ def test_smoke_trading() -> None:
     assert first == second
     assert first.pending == 0
     assert second.pending == 0
-    assert len(first) > 0
+    delivered = [row["event_id"] for row in json.loads(bytes(first))["deliveries"]]
+    assert delivered == list(dict.fromkeys(event.event_id for event in events))
     repeated = drain(events, FixtureClock(0.0), make_rng(_SEED))
     assert repeated == first
     assert len(repeated) == len(first)
+
+
+def test_mark_flushes_after_debounce_and_superseded_mark_does_not_deliver() -> None:
+    first_mark = _event(EventKind.mark, "mint-a", 1, "2026-01-01T00:00:00.000Z")
+    second_mark = _event(EventKind.mark, "mint-a", 2, "2026-01-01T00:00:00.500Z")
+    result = drain([first_mark, second_mark], FixtureClock(0.0), make_rng(_SEED))
+    delivered = [row["event_id"] for row in json.loads(bytes(result))["deliveries"]]
+    assert delivered == [second_mark.event_id]
+    assert result.pending == 0
