@@ -70,6 +70,50 @@ def test_backoff_resets_only_after_stable_span(tmp_path: Path) -> None:
     supervisor.close()
 
 
+def test_stable_span_then_failure_starts_initial_backoff(tmp_path: Path) -> None:
+    clock = FixtureClock(0.0)
+    rng = make_rng(11)
+    twin = make_rng(11)
+    supervisor = SourceSupervisor(clock, rng, path=tmp_path / "events.sqlite")
+    supervisor.note_frame()
+    clock.advance_to(STABLE_S)
+    supervisor.note_failure()
+    assert supervisor.next_delay_s() == _delay(0, twin)
+    supervisor.close()
+
+
+def test_short_healthy_span_keeps_increased_step(tmp_path: Path) -> None:
+    clock = FixtureClock(0.0)
+    rng = make_rng(12)
+    twin = make_rng(12)
+    supervisor = SourceSupervisor(clock, rng, path=tmp_path / "events.sqlite")
+    supervisor.note_failure()
+    supervisor.note_frame()
+    clock.advance_to(STABLE_S - 1.0)
+    supervisor.note_failure()
+    assert supervisor.next_delay_s() == _delay(2, twin)
+    supervisor.close()
+
+
+def test_delay_sequence_unchanged_for_unclamped_steps(tmp_path: Path) -> None:
+    twin = make_rng(13)
+    supervisor = SourceSupervisor(FixtureClock(0.0), make_rng(13), path=tmp_path / "events.sqlite")
+    for step in range(1, 12):
+        supervisor.note_failure()
+        assert supervisor.next_delay_s() == _delay(step, twin)
+    supervisor.close()
+
+
+def test_capped_delay_after_two_thousand_failures(tmp_path: Path) -> None:
+    twin = make_rng(14)
+    supervisor = SourceSupervisor(FixtureClock(0.0), make_rng(14), path=tmp_path / "events.sqlite")
+    for _ in range(2000):
+        supervisor.note_failure()
+    delay = supervisor.next_delay_s()
+    assert delay == float(BACKOFF_MAX_S) + twin.random() * BACKOFF_JITTER_S
+    supervisor.close()
+
+
 def test_resync_records_mints_until_good_frame(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
     supervisor.resync(("mint-a", "mint-b"))

@@ -42,6 +42,21 @@ def _clean_cursor() -> dict[str, int]:
     return {"schema": CURSOR_SCHEMA}
 
 
+def _backoff_exponent_cap() -> int:
+    """Smallest exponent whose uncapped delay reaches BACKOFF_MAX_S.
+
+    Clamping to it leaves every delay unchanged and keeps BACKOFF_FACTOR**step
+    from overflowing during long outages.
+    """
+    exponent = 0
+    while BACKOFF_INITIAL_S * BACKOFF_FACTOR**exponent < BACKOFF_MAX_S:
+        exponent += 1
+    return exponent
+
+
+_BACKOFF_EXPONENT_CAP = _backoff_exponent_cap()
+
+
 class SourceSupervisor:
     """Events-package owner of backoff, staleness, resync, and cursors."""
 
@@ -97,15 +112,24 @@ class SourceSupervisor:
             self._status = SourceStatus.live
 
     def note_failure(self) -> None:
-        """Count one disconnect. A later healthy span must be continuous to reset."""
+        """Count one disconnect. A healthy span of STABLE_S or more starts a fresh backoff.
+
+        The stability check runs before the healthy span is cleared. A stable
+        span restarts at the initial step; the failure that ends it is not
+        counted as a new step.
+        """
         self._status = SourceStatus.disconnected
+        if self._is_stable():
+            self._step = 0
+        else:
+            self._step += 1
         self._healthy_since = None
-        self._step += 1
 
     def next_delay_s(self) -> float:
         """Backoff step plus jitter in [0, 1). Does not sleep."""
         self._reset_if_stable()
-        base = min(BACKOFF_INITIAL_S * (BACKOFF_FACTOR**self._step), BACKOFF_MAX_S)
+        exponent = min(self._step, _BACKOFF_EXPONENT_CAP)
+        base = min(BACKOFF_INITIAL_S * (BACKOFF_FACTOR**exponent), BACKOFF_MAX_S)
         return float(base) + self._rng.random() * BACKOFF_JITTER_S
 
     def resync(self, held_mints: Sequence[str]) -> None:
@@ -115,10 +139,13 @@ class SourceSupervisor:
         self._cursor = {**_clean_cursor(), "held_mints": list(self._held_mints)}
         self._write_cursor(self._cursor)
 
-    def _reset_if_stable(self) -> None:
+    def _is_stable(self) -> bool:
         if self._healthy_since is None:
-            return
-        if self._clock.now() - self._healthy_since >= STABLE_S:
+            return False
+        return self._clock.now() - self._healthy_since >= STABLE_S
+
+    def _reset_if_stable(self) -> None:
+        if self._is_stable():
             self._step = 0
 
     def _load_cursor(self) -> None:

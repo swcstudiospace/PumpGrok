@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from harness.faults import FaultMode, FaultyEventSource, InjectedFault
+from pumpgrok.events.constants import BACKOFF_JITTER_S, BACKOFF_MAX_S
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -43,3 +44,16 @@ def test_faulty_disconnect_opens_no_socket(tmp_path: Path) -> None:
         supervisor.note_failure()
     assert supervisor.status_at(clock.now()) == SourceStatus.disconnected
     supervisor.close()
+
+
+def test_long_outage_reconnect_stays_capped(tmp_path: Path) -> None:
+    supervisor = SourceSupervisor(FixtureClock(0.0), make_rng(5), path=tmp_path / "events.sqlite")
+    delays: list[float] = []
+    try:
+        for _ in range(2000):
+            supervisor.note_failure()
+            delays.append(supervisor.next_delay_s())
+    finally:
+        supervisor.close()
+    assert len(delays) == 2000
+    assert all(BACKOFF_MAX_S <= delay < BACKOFF_MAX_S + BACKOFF_JITTER_S for delay in delays[4:])
