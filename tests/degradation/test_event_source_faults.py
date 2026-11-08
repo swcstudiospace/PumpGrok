@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from harness.faults import FaultMode, FaultyEventSource, InjectedFault
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
-from harness.faults import FaultMode, FaultyEventSource, InjectedFault
 
 _REPO = Path(__file__).resolve().parents[2]
 _SOURCES = _REPO / "src" / "pumpgrok" / "events" / "sources.py"

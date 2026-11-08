@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from pathlib import Path
 
@@ -80,7 +81,5 @@ def _row_count(path: Path) -> int:
 
 
 async def _settle() -> None:
-    import asyncio
-
     for _ in range(8):
         await asyncio.sleep(0)

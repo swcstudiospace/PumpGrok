@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from pathlib import Path
 
@@ -35,7 +36,9 @@ def test_settings_sidecar_default_matches_constant() -> None:
     assert EventsSettings().sidecar_path == str(EVENTS_SIDECAR_PATH)
 
 
-def test_store_refuses_paper_ledger_before_connect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_store_refuses_paper_ledger_before_connect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     paper = PAPER_LEDGER_PATH
     with pytest.raises(SidecarRefusal, match="PAPER_LEDGER_PATH") as raised:
@@ -47,7 +50,7 @@ def test_store_refuses_paper_ledger_before_connect(tmp_path: Path, monkeypatch: 
 
 
 def test_importing_events_does_not_open_sqlite() -> None:
-    import pumpgrok.events as events
+    import pumpgrok.events as events  # noqa: PLC0415 - import side effect is the assertion
 
     assert events.__doc__
     source = Path(events.__file__).read_text(encoding="utf-8")
@@ -129,7 +132,5 @@ def test_sidecar_tables_exclude_events_and_hash_chain(tmp_path: Path) -> None:
 
 
 async def _drain() -> None:
-    import asyncio
-
     for _ in range(5):
         await asyncio.sleep(0)

@@ -30,7 +30,9 @@ def _smoke_events() -> list[Event]:
             continue
         row = json.loads(line)
         kind = EventKind.curve_tick if row["kind"] == "tick" else EventKind(row["kind"])
-        payload = {key: value for key, value in row.items() if key not in {"kind", "mint", "ts_utc"}}
+        payload = {
+            key: value for key, value in row.items() if key not in {"kind", "mint", "ts_utc"}
+        }
         events.append(
             Event(
                 kind=kind,

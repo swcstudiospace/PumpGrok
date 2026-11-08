@@ -73,7 +73,11 @@ class EventBus:
         return cls(clock=clock, handler=handler, dlq=dlq, store=EventStore(path), rng=rng)
 
     def queued(self, priority: int) -> int:
-        return sum(len(lane) for (lane_priority, _), lane in self._lanes.items() if lane_priority == priority)
+        return sum(
+            len(lane)
+            for (lane_priority, _), lane in self._lanes.items()
+            if lane_priority == priority
+        )
 
     def pending_p2(self, kind: EventKind, entity_id: str) -> Event | None:
         slot = self._p2.get(_coalesce_key(kind, entity_id))

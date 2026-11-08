@@ -21,7 +21,7 @@ class EventKind(StrEnum):
     halt = "halt"
     exit_signal = "exit_signal"
     risk_veto = "risk_veto"
-    token_created = "token_created"
+    token_created = "token_created"  # noqa: S105 - event kind, not a credential
     migration = "migration"
     trade = "trade"
     position_opened = "position_opened"

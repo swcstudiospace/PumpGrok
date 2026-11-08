@@ -10,6 +10,7 @@ from collections.abc import Callable, Sequence
 from pumpgrok.cli.backtest import _backtest_verb
 from pumpgrok.cli.codes import _FIND_ONLY_ROUTES, EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
+from pumpgrok.cli.events import events_verb
 from pumpgrok.cli.parsing import build_parser
 from pumpgrok.cli.verbs_ops import _doctor_verb, _live_verb, _report_verb, _verify_verb
 from pumpgrok.cli.verbs_state import _killswitch, _paper, _run, _state, _ticket_verb
@@ -34,9 +35,7 @@ def _settings_kwargs(mode: str | None) -> dict[str, str]:
 
 
 def _events_handler(args: argparse.Namespace, settings: Settings) -> int:
-    """Open the events verb only when that verb is selected."""
-    from pumpgrok.cli.events import events_verb
-
+    """Run the events verb. The handler is selected only for that verb."""
     return events_verb(args, settings)
 
 

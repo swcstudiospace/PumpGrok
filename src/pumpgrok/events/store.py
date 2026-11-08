@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
@@ -59,9 +60,7 @@ class EventStore:
         self._db.execute("PRAGMA synchronous = FULL;")
         self._db.execute("PRAGMA busy_timeout = 5000;")
         self._db.executescript(_SCHEMA)
-        self._db.execute(
-            "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');"
-        )
+        self._db.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');")
 
     def close(self) -> None:
         self._db.close()
@@ -89,9 +88,7 @@ class EventStore:
         )
 
     def list_dlq(self) -> list[dict[str, str]]:
-        rows = self._db.execute(
-            "SELECT event_id, reason FROM dlq ORDER BY event_id;"
-        ).fetchall()
+        rows = self._db.execute("SELECT event_id, reason FROM dlq ORDER BY event_id;").fetchall()
         return [{"event_id": str(row[0]), "reason": str(row[1])} for row in rows]
 
     def take_dlq(self, event_id: str) -> Event | None:
@@ -107,6 +104,7 @@ class EventStore:
     def purge_dlq(self, event_id: str) -> bool:
         cursor = self._db.execute("DELETE FROM dlq WHERE event_id = ?;", (event_id,))
         return cursor.rowcount > 0
+
     def move_dlq_to_pending(self, event_id: str) -> Event | None:
         """Move one DLQ row into pending. Delete only if that insert commits."""
         db = self._db
@@ -131,10 +129,8 @@ class EventStore:
                 raise sqlite3.OperationalError("dlq row missing before commit")
             db.execute("COMMIT")
         except Exception:
-            try:
+            with contextlib.suppress(sqlite3.Error):
                 db.execute("ROLLBACK")
-            except sqlite3.Error:
-                pass
             raise
         return _load(body)
 
@@ -165,10 +161,8 @@ class EventStore:
                     )
             db.execute("COMMIT")
         except Exception:
-            try:
+            with contextlib.suppress(sqlite3.Error):
                 db.execute("ROLLBACK")
-            except sqlite3.Error:
-                pass
             raise
 
     def load_pending(self) -> list[Event]:

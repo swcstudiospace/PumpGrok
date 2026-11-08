@@ -28,9 +28,12 @@ def _imports_bus(path: Path) -> bool:
         if isinstance(node, ast.Import):
             if any(alias.name == _BUS or alias.name.startswith(f"{_BUS}.") for alias in node.names):
                 return True
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            if node.module == _BUS or node.module.startswith(f"{_BUS}."):
-                return True
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and (node.module == _BUS or node.module.startswith(f"{_BUS}."))
+        ):
+            return True
     return False
 
 

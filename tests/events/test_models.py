@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sqlite3
+import asyncio
 import subprocess
 import sys
 
@@ -43,7 +43,10 @@ def _event(**overrides: object) -> Event:
 
 def test_event_id_is_stable_32_hex_and_ignores_correlation_id() -> None:
     left = _event(correlation_id="corr-a")
-    right = _event(correlation_id="corr-b", payload={"reason": "daily_loss", "correlation_id": "inner"})
+    right = _event(
+        correlation_id="corr-b",
+        payload={"reason": "daily_loss", "correlation_id": "inner"},
+    )
     assert left.event_id == right.event_id
     assert len(left.event_id) == 32
     assert all(ch in "0123456789abcdef" for ch in left.event_id)
@@ -120,7 +123,9 @@ def test_import_does_not_open_sqlite_or_a_socket() -> None:
         "import pumpgrok.events.constants\n"
         "assert opened == [], opened\n"
     )
-    result = subprocess.run([sys.executable, "-c", probe], check=False, capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", probe], check=False, capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stderr
 
 
@@ -142,7 +147,5 @@ async def test_two_kill_switch_events_with_different_occurred_at_both_deliver() 
 
 
 async def _yield() -> None:
-    import asyncio
-
     await asyncio.sleep(0)
     await asyncio.sleep(0)

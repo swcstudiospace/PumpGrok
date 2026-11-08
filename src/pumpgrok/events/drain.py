@@ -22,6 +22,21 @@ class DrainBytes(bytes):
         return value
 
 
+def _defer_mark(
+    event: Event,
+    now: float,
+    marks: dict[str, Event],
+    mark_due: dict[str, float],
+) -> int | None:
+    if priority_of(event.kind) != 2 or event.kind is not EventKind.mark:
+        return None
+    key = f"{event.kind.value}:{event.entity_id}"
+    mark_due[key] = now + P2_DEBOUNCE_S
+    fresh = key not in marks
+    marks[key] = event
+    return 1 if fresh else 0
+
+
 def drain(events: Sequence[Event], clock: FixtureClock, rng: random.Random) -> DrainBytes:
     """Publish in input order and return canonical delivery bytes.
 
@@ -65,15 +80,11 @@ def drain(events: Sequence[Event], clock: FixtureClock, rng: random.Random) -> D
             raise ValueError("drain events must not move virtual time backwards")
         clock.advance_to(when)
         _due(clock.now())
-        priority = priority_of(event.kind)
-        if priority == 2 and event.kind is EventKind.mark:
-            key = f"{event.kind.value}:{event.entity_id}"
-            if key not in marks:
-                pending += 1
-            marks[key] = event
-            mark_due[key] = clock.now() + P2_DEBOUNCE_S
-            continue
-        _record(event)
+        delta = _defer_mark(event, clock.now(), marks, mark_due)
+        if delta is None:
+            _record(event)
+        else:
+            pending += delta
 
     if mark_due:
         clock.advance_to(max(mark_due.values()))

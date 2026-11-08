@@ -32,8 +32,7 @@ async def test_same_entity_is_fifo_and_other_entities_do_not_block() -> None:
     bus = EventBus(clock=FixtureClock(0.0), handler=handler, dlq=lambda _event: None)
     await bus.start()
     await bus.publish(_event(EventKind.trade, "A", 1, "t1"))
-    while not started_a.is_set():
-        await asyncio.sleep(0)
+    await started_a.wait()
     await bus.publish(_event(EventKind.trade, "A", 2, "t2"))
     await bus.publish(_event(EventKind.trade, "B", 1, "t3"))
     for _ in range(20):
@@ -66,8 +65,7 @@ async def test_slow_p1_does_not_delay_p0() -> None:
     await bus.publish(
         Event(kind=EventKind.trade, entity_id="mint", payload={"n": 1}, occurred_at="t1")
     )
-    while not p1_started.is_set():
-        await asyncio.sleep(0)
+    await p1_started.wait()
     await bus.publish(
         Event(
             kind=EventKind.kill_switch,

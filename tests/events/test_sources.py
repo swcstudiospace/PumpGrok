@@ -88,7 +88,9 @@ def test_resync_records_mints_until_good_frame(tmp_path: Path) -> None:
         if isinstance(node, ast.ImportFrom) and node.module is not None
     }
     assert "LedgerStore" not in imported
-    assert not any(name == "pumpgrok.ledger" or name.startswith("pumpgrok.ledger.") for name in modules)
+    assert not any(
+        name == "pumpgrok.ledger" or name.startswith("pumpgrok.ledger.") for name in modules
+    )
     supervisor.note_frame()
     assert supervisor.status_at(0.0) == SourceStatus.live
     assert supervisor.held_mints == ("mint-a", "mint-b")
@@ -162,8 +164,12 @@ def test_sources_open_no_socket_client() -> None:
             found.extend(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
             found.append(node.module.split(".")[0])
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if node.value.id == "time" and node.attr == "sleep":
-                found.append("time.sleep")
+        elif (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "time"
+            and node.attr == "sleep"
+        ):
+            found.append("time.sleep")
     assert banned.isdisjoint(found)
     assert "time.sleep" not in found

@@ -40,4 +40,3 @@ def events_verb(args: argparse.Namespace, settings: Settings) -> int:
         store.close()
     _say(sys.stdout, json.dumps({"event_id": event.event_id}))
     return EXIT_OK
-

@@ -163,6 +163,7 @@ def _add_events(verbs: _VerbsAction, mode_option: _Parser) -> None:
     purge = dlq_cmd.add_parser("purge", help="drop a named dlq row")
     purge.add_argument("name", help="dlq row name")
 
+
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")

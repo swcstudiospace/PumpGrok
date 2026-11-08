@@ -11,9 +11,9 @@ import pytest
 
 from pumpgrok.cli import EXIT_CONFIG, EXIT_OK, main
 from pumpgrok.config.settings import load_settings
+from pumpgrok.events.dlq import replay
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.events.store import EventStore
-from pumpgrok.events.dlq import replay
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 
 
@@ -29,7 +29,11 @@ def _seed(path: Path, name: str) -> str:
     return event.event_id
 
 
-def test_dlq_list_replay_and_purge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_dlq_list_replay_and_purge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     monkeypatch.chdir(tmp_path)
     sidecar = tmp_path / "custom-events.sqlite"
     monkeypatch.setenv("PUMPGROK_EVENTS__ENABLED", "true")
@@ -76,11 +80,14 @@ def test_disabled_events_refuses_without_socket_or_paper_ledger(
     assert not (tmp_path / "var" / "desk" / "events.sqlite").exists()
 
 
-def test_load_settings_does_not_open_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_settings_does_not_open_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     load_settings()
     assert not (tmp_path / "var" / "desk" / "events.sqlite").exists()
     assert not (tmp_path / PAPER_LEDGER_PATH).exists()
+
 
 def test_failed_replay_move_leaves_dlq_row(tmp_path: Path) -> None:
     sidecar = tmp_path / "events.sqlite"
