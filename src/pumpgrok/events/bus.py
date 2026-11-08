@@ -62,13 +62,14 @@ class EventBus:
       (poison, or transient retries exhausted) is one transaction: DLQ row plus pending delete.
     - P2 writes no dedup, applied, or pending row at accept. Its dedup set is in memory. Success
       deletes any pending row for the id and writes no applied row. Failure writes a DLQ row.
+      Active state and the in-memory id are released only after the handoff succeeds.
     - A P2 key's lock is held only around handler calls. Retry backoff holds no lock. A retry
-      that wakes after a newer publish for its key goes to the DLQ with reason transient.
+      superseded by a newer publish goes to the DLQ with reason transient, even at shutdown.
     - shutdown() sets closing, cancels every pending wait, gives running handler calls
       SHUTDOWN_TIMEOUT_S on the clock to return, then cancels the rest. A cancelled event
       stays pending: not applied and not in the DLQ. Worker tasks get one more
       SHUTDOWN_TIMEOUT_S; stragglers keep running. Unfinished P2 events are then written
-      to pending.
+      to pending, except terminal stale retries whose durable DLQ handoff must finish first.
     - recover() runs each pending P0/P1 event once. A row with an applied mark is completed
       without running the handler. Each pending P2 event runs once.
     """
@@ -95,6 +96,8 @@ class EventBus:
         self._p2_gen: dict[str, int] = {}
         # P2 events claimed from a slot and not yet settled, keyed by event id.
         self._p2_active: dict[str, Event] = {}
+        # Keep retry generations until handoff, including failed DLQ writes and shutdown.
+        self._p2_retry_gen: dict[str, int] = {}
         self._p2_locks: dict[str, asyncio.Lock] = {}
         # Strong references to every worker task until it finishes.
         self._workers: set[asyncio.Task[None]] = set()
@@ -169,8 +172,7 @@ class EventBus:
             for task in list(self._in_handler):
                 task.cancel()
             await self._join_workers()
-            if self._store is not None:
-                self._store.replace_pending(self._unfinished_p2())
+            self._persist_unfinished_p2()
             self._shut_down = True
 
     async def recover(self) -> None:
@@ -275,7 +277,14 @@ class EventBus:
         if claimed is None:
             return
         event, outcome = claimed
-        await self._drive(event, outcome, lambda: self._retry_p2(key, generation, event))
+        if outcome is _Outcome.TRANSIENT:
+            self._p2_retry_gen[event.event_id] = generation
+        await self._drive(
+            event,
+            outcome,
+            lambda: self._retry_p2(key, generation, event),
+            superseded=lambda: self._p2_gen.get(key) != generation,
+        )
 
     async def _claim_and_attempt(self, key: str, generation: int) -> tuple[Event, _Outcome] | None:
         lock = self._p2_lock(key)
@@ -306,10 +315,10 @@ class EventBus:
         lock = self._p2_lock(key)
         await lock.acquire()
         try:
-            if self._closing.is_set():
-                return _Outcome.INTERRUPTED
             if self._p2_gen.get(key) != generation:
                 return _Outcome.STALE
+            if self._closing.is_set():
+                return _Outcome.INTERRUPTED
             return await self._call_once(event)
         finally:
             lock.release()
@@ -324,6 +333,8 @@ class EventBus:
         event: Event,
         outcome: _Outcome,
         again: Callable[[], Awaitable[_Outcome]],
+        *,
+        superseded: Callable[[], bool] | None = None,
     ) -> bool:
         """Settle one claimed event, retrying through `again` as needed.
 
@@ -342,12 +353,19 @@ class EventBus:
                 await self._fail(event, "transient")
                 return True
             if outcome is _Outcome.INTERRUPTED:
+                if attempts and superseded is not None and superseded():
+                    outcome = _Outcome.STALE
+                    continue
                 return False
             attempts += 1
             if attempts >= RETRY_ATTEMPTS:
                 await self._fail(event, "transient")
                 return True
             if not await self._backoff(attempts - 1):
+                # Cancelling a backoff must not erase its generation's stale decision.
+                if superseded is not None and superseded():
+                    outcome = _Outcome.STALE
+                    continue
                 return False
             outcome = await again()
 
@@ -393,22 +411,30 @@ class EventBus:
             self._pausing.discard(task)
         return not self._closing.is_set()
 
-    def _succeed(self, event: Event) -> None:
-        self._p2_active.pop(event.event_id, None)
+    def _forget_p2(self, event: Event) -> None:
         if priority_of(event.kind) == 2:
-            # A delivered P2 id leaves the in-memory dedup set. The design sets no P2 TTL.
+            self._p2_active.pop(event.event_id, None)
+            self._p2_retry_gen.pop(event.event_id, None)
             self._seen.discard(event.event_id)
+
+    def _succeed(self, event: Event) -> None:
+        if priority_of(event.kind) == 2:
             if self._store is not None:
                 self._store.delete_pending(event.event_id)
+            # A delivered P2 id leaves the in-memory dedup set. The design sets no P2 TTL.
+            self._forget_p2(event)
             return
         if self._store is not None:
             self._store.complete_applied(event.event_id, self._clock.now())
 
     async def _fail(self, event: Event, reason: str) -> None:
-        self._p2_active.pop(event.event_id, None)
         if self._store is not None:
             self._store.fail_to_dlq(event, reason=reason)
-        await self._send_dlq(event)
+            self._forget_p2(event)
+            await self._send_dlq(event)
+        else:
+            await self._send_dlq(event)
+            self._forget_p2(event)
 
     async def _send_dlq(self, event: Event) -> None:
         result = self._dlq(event)
@@ -448,12 +474,25 @@ class EventBus:
             lock = self._p2_locks[key] = asyncio.Lock()
         return lock
 
-    def _unfinished_p2(self) -> list[Event]:
-        """Unsettled P2 events: claimed ones (retrying or in flight) first, then queued ones."""
+    def _persist_unfinished_p2(self) -> None:
+        """Persist unfinished P2 work without turning terminal stale retries into fresh work."""
+        if self._store is None:
+            return
+        # A retry may have failed its durable handoff or outlived the worker join bound.
+        # Keep its generation's stale disposition; a failed write keeps the active id and
+        # raises from shutdown rather than parking that retry as fresh pending.
+        # This is a durable write only: notification callbacks cannot add a third shutdown wait.
+        for event_id, generation in tuple(self._p2_retry_gen.items()):
+            event = self._p2_active[event_id]
+            if self._p2_gen.get(_coalesce_key(event.kind, event.entity_id)) == generation:
+                continue
+            self._store.fail_to_dlq(event, reason="transient")
+            self._forget_p2(event)
+        # Claimed events (retrying or in flight) precede queued ones.
         events = list(self._p2_active.values())
         for slot in self._p2.values():
             events.extend(slot)
-        return events
+        self._store.replace_pending(events)
 
 
 def _own_task() -> asyncio.Task[Any]:

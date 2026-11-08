@@ -61,10 +61,11 @@ Completion (P0 and P1):
 
 P2 (with a store):
 
-- Accept writes nothing to the sidecar. There is no dedup row and no pending row. P2 dedup ids are kept in memory only, from acceptance until delivery or replacement.
+- Accept writes nothing to the sidecar. There is no dedup row and no pending row. P2 dedup ids are kept in memory only while queued, active, or awaiting durable failure handoff.
 - Success deletes any pending row for the id and writes no applied row.
-- Failure writes a DLQ row and deletes the pending row.
-- A P2 pending row exists only after shutdown (see below).
+- Failure commits a DLQ row and deletes any pending row in one transaction before releasing the event's active state and in-memory dedup id. Once that handoff commits, the same id may be published again; a failed id must not remain suppressed forever.
+- If the durable handoff fails, the event remains unsettled and retryable. Its active state and dedup id are retained until a durable handoff succeeds; shutdown must not silently lose it. Retrying the handoff for a superseded event must not call its handler again.
+- A P2 pending row exists only after shutdown (see below). P2 failure writes no applied row.
 
 Retries:
 
@@ -75,7 +76,7 @@ P2 latest-wins:
 
 - Each key holds at most one queued event (`P2_COALESCE_CAP`). A newer event replaces it, and the replaced event is dropped, not sent to the DLQ.
 - Handler calls for one key are serialized by a key lock. The lock is held only around handler calls. Retry backoff holds no lock, so a newer publish for the same key is never delayed by a retry sleep.
-- When a retrying P2 event wakes and the key's generation has changed, the bus stops retrying. The stale event is sent to the DLQ with reason `transient`. A newer value runs as soon as the lock is free, so it can run while the stale event is still in its backoff wait.
+- When a retrying P2 event wakes and the key's generation has changed, the bus stops retrying its handler. The stale event is sent to the DLQ with reason `transient`. Shutdown must also settle superseded backoff retries through that durable handoff, not save them as pending live ticks. A newer value runs as soon as the lock is free, so it can run while the stale event is still in its backoff wait.
 - `mark` waits `P2_DEBOUNCE_S` on the clock before delivery. `curve_tick` does not wait.
 - A delivered P2 id leaves the in-memory dedup set, so it can publish again. The design sets no P2 TTL.
 
@@ -83,17 +84,17 @@ Recovery:
 
 - `recover()` runs pending rows in seq order. Call it on a fresh bus before publishing.
 - For a P0 or P1 row that has an applied mark, the handler is skipped and the row is completed.
-- For any other P0 or P1 row, and for every P2 row, the handler runs under the retry rules above. Success and failure then follow the completion rules for that priority.
+- For any other P0 or P1 row, and for every P2 pending row, the handler runs under the retry rules above. Success and failure then follow the completion rules for that priority. Superseded P2 retries belong in the DLQ, not pending: restarting must not deliver an older superseded tick as live work. DLQ replay is an explicit action, not part of pending recovery.
 
 ## Shutdown
 
-`shutdown()` is bounded by `SHUTDOWN_TIMEOUT_S`, measured on the injected clock. It runs in this order:
+`shutdown()` uses two successive waits of up to `SHUTDOWN_TIMEOUT_S` each, measured on the injected clock: one for running handler calls, then one for worker tasks. It runs in this order:
 
 1. The bus closes. From then on `publish()` and `start()` raise `EventBusClosed`. Drain loops stop taking new events from their lanes.
-2. Every wait that is not inside a handler call is cancelled. These are P2 debounce sleeps and retry-backoff sleeps for P0, P1, and P2. Their events stay queued or pending. Nothing is applied and nothing goes to the DLQ.
-3. The bus waits up to `SHUTDOWN_TIMEOUT_S` for running handler calls to return. A call that returns completes normally: applied on success, DLQ on failure.
+2. Every wait that is not inside a handler call is cancelled. These are P2 debounce sleeps and retry-backoff sleeps for P0, P1, and P2. P0 and P1 events and current P2 values stay queued or pending. Cancellation alone applies nothing and writes no DLQ row; a superseded P2 retry still requires the stale-event handoff described above.
+3. The bus waits up to `SHUTDOWN_TIMEOUT_S` for running handler calls to return. A call that returns completes normally: P0/P1 write an applied row on success, P2 writes no applied row, and failure follows the durable DLQ handoff rules above.
 4. Handler calls still running at the bound are cancelled. Their events stay pending. Cancellation is not a handler failure and writes no DLQ row. A handler that catches the cancellation and returns normally counts as completed.
-5. The bus waits up to `SHUTDOWN_TIMEOUT_S` more for its worker tasks to finish. A task still running after that keeps running, and its event stays unsettled. Then every unsettled P2 event (claimed and retrying or in flight, or still queued) is written to pending in one transaction. P0 and P1 need no write at this step, because their pending rows were written at accept.
+5. The bus waits up to `SHUTDOWN_TIMEOUT_S` more for its worker tasks to finish. A task still running after that keeps running, and its event stays unsettled. Then unsettled current P2 values (claimed and retrying or in flight, or still queued) are written to pending in one transaction. Superseded retries are handed off durably to the DLQ instead; they must not be written to pending alongside the latest value. If a required durable handoff fails, shutdown reports the failure and retains unsettled state for retry rather than reporting successful shutdown or releasing the event's dedup id. P0 and P1 need no pending write at this step, because their pending rows were written at accept.
 6. `shutdown()` is idempotent. A second call returns after the first has finished. `start()` after shutdown raises `EventBusClosed`.
 
 Without a store, shutdown writes nothing. Queued events are lost.

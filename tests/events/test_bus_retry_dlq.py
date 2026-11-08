@@ -124,6 +124,8 @@ async def test_p2_transient_retries_wait_on_clock_then_writes_one_dlq_row(tmp_pa
     assert calls == RETRY_ATTEMPTS
     assert len(clock.sleeps) == RETRY_ATTEMPTS - 1
     assert _dlq_count(sidecar) == 1
+    assert _tick().event_id not in bus._seen
+    assert bus._p2_active == {}
 
 
 async def test_poison_writes_one_dlq_row_and_does_not_retry(tmp_path: Path) -> None:

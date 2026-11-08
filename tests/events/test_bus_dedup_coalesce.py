@@ -269,3 +269,83 @@ async def test_delivered_p2_id_is_removed_from_dedup_state() -> None:
     await _spin()
     assert delivered == [tick.event_id]
     assert tick.event_id not in bus._seen
+
+
+@pytest.mark.parametrize("durable", [False, True])
+async def test_failed_p2_ids_leave_dedup_only_after_successful_handoff(
+    tmp_path: Path, durable: bool
+) -> None:
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar) if durable else None
+    fail_notification = not durable
+    dlq_calls: list[str] = []
+
+    async def poison(_event: Event) -> None:
+        raise PoisonEvent(index=0)
+
+    async def dlq(event: Event) -> None:
+        if fail_notification:
+            raise OSError("DLQ unavailable")
+        dlq_calls.append(event.event_id)
+
+    bus = EventBus(clock=FixtureClock(0.0), handler=poison, dlq=dlq, store=store)
+    await bus.start()
+    tick = _tick(1)
+    if store is not None:
+        with sqlite3.connect(sidecar) as db:
+            db.execute("ALTER TABLE dlq RENAME TO dlq_hidden")
+    await bus.publish(tick)
+    results = await asyncio.gather(*bus._workers, return_exceptions=True)
+    assert len(results) == 1
+    assert isinstance(results[0], sqlite3.OperationalError if durable else OSError)
+    assert bus._p2_active == {tick.event_id: tick}
+    assert tick.event_id in bus._seen
+    assert dlq_calls == []
+
+    if store is not None:
+        with sqlite3.connect(sidecar) as db:
+            db.execute("ALTER TABLE dlq_hidden RENAME TO dlq")
+    fail_notification = False
+    await bus._fail(tick, "poison")
+    assert bus._p2_active == {}
+    assert tick.event_id not in bus._seen
+    assert dlq_calls == [tick.event_id]
+
+    # Each later failed event releases its id too; terminal failures must not accumulate.
+    for n in range(2, 6):
+        await bus.publish(_tick(n))
+        await _spin()
+    assert bus._p2_active == {}
+    assert bus._seen == set()
+    assert len(dlq_calls) == 5
+    if store is not None:
+        assert len(store.list_dlq()) == 5
+        assert store.load_pending() == []
+    await bus.shutdown()
+    if store is not None:
+        store.close()
+
+
+async def test_durable_p2_handoff_releases_id_before_notification_finishes(tmp_path: Path) -> None:
+    store = EventStore(tmp_path / "events.sqlite")
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def poison(_event: Event) -> None:
+        raise PoisonEvent(index=0)
+
+    async def dlq(_event: Event) -> None:
+        entered.set()
+        await release.wait()
+
+    bus = EventBus(clock=FixtureClock(0.0), handler=poison, dlq=dlq, store=store)
+    await bus.start()
+    tick = _tick(1)
+    await bus.publish(tick)
+    await entered.wait()
+    assert store.list_dlq() == [{"event_id": tick.event_id, "reason": "poison"}]
+    assert bus._p2_active == {}
+    assert tick.event_id not in bus._seen
+    release.set()
+    await bus.shutdown()
+    store.close()

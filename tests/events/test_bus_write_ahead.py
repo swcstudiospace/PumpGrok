@@ -199,3 +199,65 @@ async def test_p2_success_writes_no_applied_dedup_or_pending_row(tmp_path: Path)
     assert _rows(sidecar, "SELECT COUNT(*) FROM applied") == 0
     assert _rows(sidecar, "SELECT COUNT(*) FROM dedup") == 0
     assert _rows(sidecar, "SELECT COUNT(*) FROM pending") == 0
+
+
+async def test_failed_p2_dlq_handoff_survives_shutdown_and_recovers_once(tmp_path: Path) -> None:
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar)
+    tick = _tick(1)
+    original = tick.model_dump(mode="json")
+    calls: list[str] = []
+    dlq_calls: list[str] = []
+
+    async def poison(event: Event) -> None:
+        calls.append(event.event_id)
+        raise PoisonEvent(index=0)
+
+    bus = EventBus(
+        clock=FixtureClock(0.0),
+        handler=poison,
+        dlq=lambda event: dlq_calls.append(event.event_id),
+        store=store,
+    )
+    await bus.start()
+    _rename(sidecar, "dlq", "dlq_hidden")
+    await bus.publish(tick)
+    results = await asyncio.gather(*bus._workers, return_exceptions=True)
+    assert len(results) == 1
+    assert isinstance(results[0], sqlite3.OperationalError)
+    assert bus._p2_active == {tick.event_id: tick}
+    assert tick.event_id in bus._seen
+    assert dlq_calls == []
+
+    # A failed durable handoff still owns the id; publishing it again must not re-run it.
+    await bus.publish(tick)
+    await _settle()
+    assert calls == [tick.event_id]
+    _rename(sidecar, "dlq_hidden", "dlq")
+    await bus.shutdown()
+    pending = store.load_pending()
+    assert [event.model_dump(mode="json") for event in pending] == [original]
+    assert store.list_dlq() == []
+    store.close()
+
+    delivered: list[Event] = []
+
+    async def handler(event: Event) -> None:
+        delivered.append(event)
+
+    reopened = EventStore(sidecar)
+    recovered = EventBus(
+        clock=FixtureClock(1.0),
+        handler=handler,
+        dlq=lambda _event: None,
+        store=reopened,
+    )
+    await recovered.recover()
+    await recovered.recover()
+    assert [event.model_dump(mode="json") for event in delivered] == [original]
+    assert reopened.load_pending() == []
+    assert reopened.list_dlq() == []
+    assert not reopened.is_applied(tick.event_id)
+    assert _rows(sidecar, "SELECT COUNT(*) FROM dedup") == 0
+    await recovered.shutdown()
+    reopened.close()
