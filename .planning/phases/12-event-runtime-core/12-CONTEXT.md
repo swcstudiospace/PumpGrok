@@ -103,6 +103,11 @@ The operator wants event-driven routines so idle time does not spend Grok credit
 
 Platform for paper and for any later live decision remains pump.fun bonding-curve fills, PumpPortal websocket plus pump.fun REST, Jupiter Swap V2 quote-only, Solana mainnet JSON-RPC, x.ai Grok. No second venue. No devnet execution path.
 
+Operator answers 2026-11-08, recorded and not implemented in this phase:
+- Practice orders stay local simulation. No devnet or testnet order client, no faucet automation, no new wallet.
+- A future live book, if a later human-approved phase ever enables it, is at most 10 open slots. Closing a slot frees the slot, not the exposure cap.
+- That future cap is live exposure: block new risk when open USD notional would exceed 200. No auto-rebalance and no liquidation. This does not replace the recorded 1 SOL notional cap, and it does not arm mainnet.
+
 </specifics>
 
 <deferred>
@@ -112,7 +117,7 @@ Platform for paper and for any later live decision remains pump.fun bonding-curv
 - Flipping the default `wake_mode` to event (next milestone after a week of live-paper evidence, OD-20).
 - Curve-layout probe review, live market data, recorder sealing (Phase 13). Human review is required before any VERIFIED flip.
 - ONB-06 curve-point check and operator address confirmation (Phase 14).
-- Enabling live, funding a wallet, devnet airdrops, and a $200 mainnet book. v4 builds the live path dormant in Phase 18 and never enables it. Notional cap stays at most 1.0 SOL.
+- Enabling live, funding a wallet, devnet airdrops, and a 200 USD mainnet book stay out of this phase. v4 builds the live path dormant in Phase 18 and never enables it. Notional cap stays at most 1.0 SOL. Operator answers above are deferred constraints for that later decision, not a Phase 12 code change.
 - Scheduled promotion cadence from `desk-built-ins`. Not this phase.
 - Phase 13 and later. This autonomous run stops at the Phase 12 ship checkpoint.
 
