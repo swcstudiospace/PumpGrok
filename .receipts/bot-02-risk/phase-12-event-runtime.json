@@ -1,0 +1,49 @@
+{
+  "task_id": "phase-12-event-runtime",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/phase-12-event-runtime",
+  "phase": "12-event-runtime-core",
+  "plan": "12-01 through 12-05 on the risk worktree. Code only. Planning files and CHANGELOG.md are on the other seats.",
+  "purpose": "Seat receipt for the event-runtime library at 85ad73e. Records commands observed on the combined tree 3dda008, which contains this tip, and the ownership check run in this worktree. The executor does not write approved_by.",
+  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "commits": [
+    {"sha": "cbb1a76", "task": "off-by-default v4 settings skeleton"},
+    {"sha": "bace4d7", "task": "catalog, lanes, and occurred_at ids"},
+    {"sha": "b8de019", "task": "sidecar, retry, and dlq verb"},
+    {"sha": "6b137a9", "task": "source supervisor and import guard"},
+    {"sha": "66246aa", "task": "deterministic drain"},
+    {"sha": "1f227b5", "task": "upsert pending without wiping a replayed row"},
+    {"sha": "85ad73e", "task": "clear the phase 12 ruff findings"}
+  ],
+  "commands": [
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "combined tree 3dda008. Log /tmp/p12-verify/rerun/c01-lint.log: ruff check passed; 913 files already formatted; EXIT:0"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c01-typecheck.log: mypy src/ Success: no issues found in 233 source files; EXIT:0"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c01-test.log: progress 0 to 100 percent, only dots and two s, no F or E; coverage 91.26 percent, floor 89.9; EXIT:0. pytest -qq prints no N passed line."},
+    {"cmd": "./scripts/check.sh", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c01-check.log: 35 skills, 10 agents, 342 markdown files; EXIT:0"},
+    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c01-paper.log: trades filled=2 not_filled=1; EXIT:0"},
+    {"cmd": "uv run pytest -q tests/events/test_models.py tests/events/test_bus_lanes.py tests/events/test_bus_backpressure.py", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c03-pytest.log: [100%]; EXIT:0"},
+    {"cmd": "uv run pytest -q tests/events/test_handler_idempotency.py tests/events/test_bus_shutdown.py", "exit_code": 0, "output_tail": "Log /tmp/p12-verify/rerun/c05-pytest.log: EXIT:0"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "Log /tmp/p12-verify/rerun/c12-live.log: 8 of 9 preconditions unmet; No transaction was attempted; EXIT:3"},
+    {"cmd": "python3 ci/gates/check_ownership.py --bot bot-02-risk --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS — bot-02-risk: 35 file(s) within owned paths. cli/dispatch.py, cli/parsing.py and config/settings.py are owned by bot-02-risk via src/pumpgrok/** and src/pumpgrok/config/**. src/pumpgrok/cli.py remains chief and was not changed."}
+  ],
+  "claims": [
+    {"claim": "make lint exits 0 on the combined tree that contains 85ad73e.", "evidence_command_index": 0},
+    {"claim": "make typecheck exits 0. mypy found no issues in 233 source files.", "evidence_command_index": 1},
+    {"claim": "make test exits 0. The log reaches 100 percent with no F or E, and coverage is 91.26 percent.", "evidence_command_index": 2},
+    {"claim": "scripts/check.sh exits 0.", "evidence_command_index": 3},
+    {"claim": "The paper smoke replay exits 0 and fills 2 trades.", "evidence_command_index": 4},
+    {"claim": "Event model, lane, and backpressure tests exit 0.", "evidence_command_index": 5},
+    {"claim": "Handler idempotency and shutdown tests exit 0, including the replayed-pending recover test.", "evidence_command_index": 6},
+    {"claim": "Live stays refused: pumpgrok run --mode live --once exits 3 and no transaction was attempted.", "evidence_command_index": 7, "expects_failure": true},
+    {"claim": "Every file in origin/main...HEAD on this branch is owned by bot-02-risk, including cli/dispatch.py, cli/parsing.py and config/settings.py.", "evidence_command_index": 8}
+  ],
+  "unverified": [
+    "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
+    "The suite and live refusal were run on the combined tree 3dda008, not again on this worktree after the receipt commit.",
+    "No pull request was opened and nothing was pushed.",
+    "Phase 13 was not started. The bus is not wired into the supervisor.",
+    "Notion tracker pages were not updated."
+  ],
+  "evidence_logs": "/tmp/p12-verify/rerun/",
+  "rollback_plan": "Before the merge, revert commits 85ad73e, 1f227b5, 66246aa, 6b137a9, b8de019, bace4d7 and cbb1a76 on this branch with git revert (no force) or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+}
