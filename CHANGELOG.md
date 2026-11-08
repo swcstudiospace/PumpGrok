@@ -2,6 +2,21 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 12: event runtime core
+
+### Added
+
+- A typed event library under `src/pumpgrok/events/`: one `EventKind` catalog, lane bus, sidecar sqlite at `var/desk/events.sqlite`, deterministic drain, and `SourceSupervisor`. It is not wired into the supervisor. Event ids include required `occurred_at`.
+- Ten v4 settings sections, config-gated off. `events.wake_mode` is `cadence` only. `events dlq replay` moves a row from the DLQ to pending in one transaction.
+
+### Verified
+
+- Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 12: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 12: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- `pumpgrok run --mode live --once` exits 3. The smoke-10m hash above was measured from a temp cwd on `bot-02-risk/phase-12-event-runtime` at `66246aa`.
+
 ## [Unreleased] - v4 Phase 11: engineering foundation and quality
 
 ### Changed
