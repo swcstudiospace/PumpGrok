@@ -158,6 +158,7 @@ class _ClosedModel(BaseModel):
 
 class EventType(StrEnum):
     """The 18 CamelCase R32 event types."""
+
     OrderPlaced = "OrderPlaced"
 ```
 

@@ -709,6 +709,7 @@ Handler ledger appends in the test use `idempotency_key=event.event_id`. The sec
 def test_live_notional_cap_defaults_to_one_sol() -> None:
     assert LiveSettings().notional_cap_lamports == 1_000_000_000
 
+
 @pytest.mark.parametrize("cap", [0, 1_000_000_001])
 def test_live_notional_cap_outside_range_is_rejected(cap: int) -> None:
     with pytest.raises(ValidationError):
