@@ -759,15 +759,15 @@ New files under `src/pumpgrok/events/` and `src/pumpgrok/cli/events.py` must not
 
 ## Open Questions
 
-1. **Exact EventKind strings**
+1. **Exact EventKind strings (RESOLVED)**
    - What we know: CONTEXT requires one class and priority as a function of kind. No design doc lists members. `docs/design/events-grok.md` is written by this phase (PROJECT.md says plan 12-02).
-   - What's unclear: Phase 13's bridge may want different names.
+   - Resolution: Plan 12-02 locks the twelve names in docs/design/events-grok.md. No tick member. Phase 13 must map, not rename.
    - Recommendation: Lock the table in Pattern 2 in `docs/design/events-grok.md` in the models plan. Do not leave the names implicit in tests only.
 
-2. **Whether `core/errors.py` should gain types**
+2. **Whether core/errors.py should gain types (RESOLVED)**
    - What we know: No test pins the set of classes in that file. CONTEXT allows the events package to own its errors.
    - What's unclear: A later phase might look for event codes only in `core/errors.py`.
-   - Recommendation: Own them in `events/errors.py` as `PumpgrokError` subclasses. Re-export from `events/__init__.py`. Do not edit `core/errors.py`.
+   - Resolution: events/errors.py owns PumpgrokError subclasses. Do not edit core/errors.py.
 
 ## Environment Availability
 
