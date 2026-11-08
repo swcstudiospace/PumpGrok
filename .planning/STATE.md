@@ -2,10 +2,10 @@
 gsd_state_version: "1.0"
 milestone: v4
 milestone_name: PumpGrok Desk v4
-status: "Phase 12 complete: owner approval recorded 2026-11-08 in approved_by on the three v4-p12 receipts; PRs #61, #62 and #63 merged"
+status: "Phase 12 closure recorded 2026-11-08: owner approval in approved_by on the three v4-p12 receipts; PRs #61, #62 and #63 pending merge"
 last_updated: "2026-11-08"
 last_activity: 2026-11-08
-last_activity_desc: Phase 12 closed 2026-11-08: owner approval recorded, PRs #61, #62 and #63 merged; Phase 13 is next
+last_activity_desc: "Phase 12 approved 2026-11-08 (approved_by recorded); PRs #61, #62 and #63 pending merge; Phase 13 starts after they merge"
 state_head: 8e8c4c3f09f2ce4f1e366d10ea56cb6db832c931
 progress:
   total_phases: 9
@@ -13,7 +13,7 @@ progress:
   percent: 11
   blocked_phases: 0
 current_phase: 12
-stopped_at: "Phase 12 complete 2026-11-08 at the owner approval checkpoint. PRs #61, #62 and #63 merged. Phase 13 is next and starts through gsd-autonomous."
+stopped_at: "Phase 12 approved 2026-11-08 at the owner approval checkpoint. PRs #61, #62 and #63 pending merge; Phase 13 starts after they merge."
 ---
 paid_rpc_provider: none
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-Milestone: v4 (PumpGrok Desk v4). Phase: 12 of 19 closed (merged as PRs #61, #62 and #63, 2026-11-08). Phase 13 of 19 is next.
-Plan: 12-01 to 12-05 on bot-02-risk, bot-09-journal and bot-00-chief (phase-12-event-runtime). Merged 2026-11-08.
-Status: Phase 12 closed on owner approval (approved_by on the three v4-p12 receipts, owner answer quoted in approval_note). Owner answer: the hosting target is deferred to Phase 19.
-Last activity: 2026-11-08, Phase 12 closure. Receipts .receipts/bot-0N/v4-p12-event-runtime.json carry approved_by. Verification report .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
+Milestone: v4 (PumpGrok Desk v4). Phase: 12 of 19 approved 2026-11-08; PRs #61, #62 and #63 pending merge. Phase 13 of 19 is next.
+Plan: 12-01 to 12-05 on bot-02-risk, bot-09-journal and bot-00-chief (phase-12-event-runtime). Draft pull requests, pending merge.
+Status: Phase 12 approved on the owner's answer (approved_by on the three v4-p12 receipts). Merge decision pending: Greptile P1 findings on PR #61 are open. Hosting target deferred to Phase 19.
+Last activity: 2026-11-08, Phase 12 approval recorded. Receipts .receipts/bot-0N/v4-p12-event-runtime.json carry approved_by. Verification report .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
 
 ## Discovery (2026-10-25)
 
@@ -150,8 +150,8 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 ## Session Continuity
 
 - Last update: 2026-11-08, Phase 12 ship checkpoint on bot-00-chief/phase-12-event-runtime.
-- Resume: Phase 13 via gsd-autonomous. Phase 12 verification: .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
-- Owner decisions outstanding: which Hermes cron jobs become event triggers (q2) before Phase 14 planning.
+- Resume: decide the Phase 12 merge route (Greptile P1s on PR #61). Then Phase 13 starts through gsd-autonomous. Phase 12 verification: .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
+- Owner decisions outstanding: the Phase 12 merge route (fix P1s first, merge with findings recorded, or stop); which Hermes cron jobs become event triggers (q2) before Phase 14 planning.
 - ultrathink BUILD_PROMPT (2026-11-08 uplift): reconciled to the v4 roadmap. Its testnet/devnet mode, airdrop funding, wallet key loading and mainnet enable path are not adopted; they conflict with the 2026-11-08 operator answers and the PROJECT security constraints.
 
 ## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
