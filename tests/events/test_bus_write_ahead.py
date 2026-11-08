@@ -201,7 +201,9 @@ async def test_p2_success_writes_no_applied_dedup_or_pending_row(tmp_path: Path)
     assert _rows(sidecar, "SELECT COUNT(*) FROM pending") == 0
 
 
-async def test_failed_p2_dlq_handoff_survives_shutdown_and_recovers_once(tmp_path: Path) -> None:
+async def test_failed_p2_poison_handoff_stays_terminal_through_shutdown_and_recovery(
+    tmp_path: Path,
+) -> None:
     sidecar = tmp_path / "events.sqlite"
     store = EventStore(sidecar)
     tick = _tick(1)
@@ -235,9 +237,12 @@ async def test_failed_p2_dlq_handoff_survives_shutdown_and_recovers_once(tmp_pat
     assert calls == [tick.event_id]
     _rename(sidecar, "dlq_hidden", "dlq")
     await bus.shutdown()
-    pending = store.load_pending()
-    assert [event.model_dump(mode="json") for event in pending] == [original]
-    assert store.list_dlq() == []
+    assert calls == [tick.event_id]
+    assert store.load_pending() == []
+    assert store.list_dlq() == [{"event_id": tick.event_id, "reason": "poison"}]
+    assert bus._p2_active == {}
+    assert tick.event_id not in bus._seen
+    assert tick.model_dump(mode="json") == original
     store.close()
 
     delivered: list[Event] = []
@@ -254,9 +259,12 @@ async def test_failed_p2_dlq_handoff_survives_shutdown_and_recovers_once(tmp_pat
     )
     await recovered.recover()
     await recovered.recover()
-    assert [event.model_dump(mode="json") for event in delivered] == [original]
+    assert delivered == []
     assert reopened.load_pending() == []
-    assert reopened.list_dlq() == []
+    assert reopened.list_dlq() == [{"event_id": tick.event_id, "reason": "poison"}]
+    parked = reopened.take_dlq(tick.event_id)
+    assert parked is not None
+    assert parked.model_dump(mode="json") == original
     assert not reopened.is_applied(tick.event_id)
     assert _rows(sidecar, "SELECT COUNT(*) FROM dedup") == 0
     await recovered.shutdown()

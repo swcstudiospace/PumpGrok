@@ -11,7 +11,7 @@ import pytest
 
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.constants import BACKOFF_INITIAL_S, BACKOFF_JITTER_S, SHUTDOWN_TIMEOUT_S
-from pumpgrok.events.errors import TransientEvent
+from pumpgrok.events.errors import PoisonEvent, TransientEvent
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.events.store import EventStore
 from pumpgrok.replay.clock import FixtureClock
@@ -267,3 +267,238 @@ async def test_stale_p2_dlq_notification_does_not_add_an_unbounded_shutdown_wait
     release.set()
     await _settle()
     store.close()
+
+
+@pytest.mark.parametrize("shutdown_write_fails", [False, True])
+async def test_first_attempt_poison_handoff_cannot_recover_over_newer_success(
+    tmp_path: Path, shutdown_write_fails: bool
+) -> None:
+    """GP001: a failed poison transaction remains terminal, not a fresh live tick."""
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar)
+    stale = _tick(1)
+    newer = _tick(2)
+    original = stale.model_dump(mode="json")
+    clock = FixtureClock(0.0)
+    calls: list[int] = []
+    dlq_calls: list[str] = []
+
+    async def handler(event: Event) -> None:
+        n = int(event.payload["n"])
+        calls.append(n)
+        if n == 1:
+            raise PoisonEvent(index=0)
+
+    bus = EventBus(
+        clock=clock,
+        handler=handler,
+        dlq=lambda event: dlq_calls.append(event.event_id),
+        store=store,
+    )
+    await bus.start()
+    with closing(sqlite3.connect(sidecar)) as db:
+        db.execute("ALTER TABLE dlq RENAME TO dlq_hidden")
+    await bus.publish(stale)
+    results = await asyncio.gather(*bus._workers, return_exceptions=True)
+    assert len(results) == 1
+    assert isinstance(results[0], sqlite3.OperationalError)
+    assert calls == [1]
+    assert bus._p2_active == {stale.event_id: stale}
+    assert stale.event_id in bus._seen
+    assert store.load_pending() == []
+    assert not store.is_duplicate(stale.event_id, clock.now())
+    assert not store.is_applied(stale.event_id)
+    assert dlq_calls == []
+
+    # Republish cannot turn a failed handoff back into a live handler call.
+    await bus.publish(stale)
+    await bus.publish(newer)
+    await _settle()
+    assert calls == [1, 2]
+    assert bus._p2_active == {stale.event_id: stale}
+    assert bus._seen == {stale.event_id}
+    assert store.load_pending() == []
+    assert not store.is_applied(newer.event_id)
+
+    if shutdown_write_fails:
+        with pytest.raises(sqlite3.OperationalError):
+            await bus.shutdown()
+        assert calls == [1, 2]
+        assert bus._p2_active == {stale.event_id: stale}
+        assert bus._seen == {stale.event_id}
+        assert store.load_pending() == []
+        assert dlq_calls == []
+
+    with closing(sqlite3.connect(sidecar)) as db:
+        db.execute("ALTER TABLE dlq_hidden RENAME TO dlq")
+    assert store.list_dlq() == []
+    await bus.shutdown()
+    await bus.shutdown()
+    assert calls == [1, 2]
+    assert clock.now() == 0.0
+    assert store.load_pending() == []
+    assert store.list_dlq() == [{"event_id": stale.event_id, "reason": "poison"}]
+    assert bus._p2_active == {}
+    assert bus._seen == set()
+    assert not store.is_duplicate(stale.event_id, clock.now())
+    assert not store.is_applied(stale.event_id)
+    assert stale.model_dump(mode="json") == original
+    store.close()
+
+    delivered: list[str] = []
+
+    async def recovered_handler(event: Event) -> None:
+        delivered.append(event.event_id)
+
+    reopened = EventStore(sidecar)
+    recovered = EventBus(
+        clock=FixtureClock(1.0), handler=recovered_handler, dlq=lambda _event: None, store=reopened
+    )
+    await recovered.recover()
+    await recovered.recover()
+    assert delivered == []
+    assert reopened.load_pending() == []
+    assert reopened.list_dlq() == [{"event_id": stale.event_id, "reason": "poison"}]
+    parked = reopened.take_dlq(stale.event_id)
+    assert parked is not None
+    assert parked.model_dump(mode="json") == original
+    await recovered.shutdown()
+    reopened.close()
+
+
+async def test_superseded_retry_retains_running_handler_past_both_shutdown_bounds(
+    tmp_path: Path,
+) -> None:
+    """GP002: shutdown cannot declare a still-running retry stale before it succeeds."""
+    sidecar = tmp_path / "events.sqlite"
+    store = EventStore(sidecar)
+    clock = FixtureClock(0.0)
+    stale = _tick(1)
+    newer = _tick(2)
+    original = stale.model_dump(mode="json")
+    retry_entered = asyncio.Event()
+    cancellation_seen = asyncio.Event()
+    release = asyncio.Event()
+    completed = asyncio.Event()
+    calls: list[int] = []
+    dlq_calls: list[str] = []
+
+    async def handler(event: Event) -> None:
+        n = int(event.payload["n"])
+        calls.append(n)
+        if n != 1:
+            return
+        if calls.count(1) == 1:
+            raise TransientEvent(index=1)
+        retry_entered.set()
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                cancellation_seen.set()
+        completed.set()
+
+    bus = EventBus(
+        clock=clock,
+        handler=handler,
+        dlq=lambda event: dlq_calls.append(event.event_id),
+        store=store,
+        rng=make_rng(11),
+    )
+    await bus.start()
+    await bus.publish(stale)
+    await _settle()
+    assert calls == [1]
+    clock.advance_to(BACKOFF_INITIAL_S + BACKOFF_JITTER_S)
+    await _settle()
+    assert retry_entered.is_set()
+    assert calls == [1, 1]
+    retry_workers = list(bus._workers)
+    assert len(retry_workers) == 1
+    stopping: asyncio.Task[None] | None = None
+    try:
+        await bus.publish(newer)
+        await bus.publish(stale)
+        await _settle()
+        # The newer generation is queued, not concurrently executing on the same key.
+        assert calls == [1, 1]
+        assert bus.pending_p2(newer.kind, newer.entity_id) == newer
+        assert not completed.is_set()
+        stop_started_at = clock.now()
+        stopping = asyncio.create_task(bus.shutdown())
+        await _settle()
+        assert not stopping.done()
+
+        clock.advance_to(stop_started_at + SHUTDOWN_TIMEOUT_S)
+        await _settle()
+        assert cancellation_seen.is_set()
+        assert not completed.is_set()
+        assert not stopping.done()
+        assert store.list_dlq() == []
+        assert stale.event_id in bus._p2_active
+        assert stale.event_id in bus._seen
+
+        clock.advance_to(stop_started_at + 2 * SHUTDOWN_TIMEOUT_S)
+        await _settle()
+        assert stopping.done(), "shutdown added a wait beyond its two clock bounds"
+        await stopping
+        assert clock.now() == stop_started_at + 2 * SHUTDOWN_TIMEOUT_S
+        assert not completed.is_set()
+        assert calls == [1, 1]
+        assert not retry_workers[0].done()
+        assert retry_workers[0] in bus._workers
+        assert bus._p2_active == {stale.event_id: stale}
+        assert stale.event_id in bus._seen
+        assert newer.event_id in bus._seen
+        assert store.list_dlq() == []
+        assert dlq_calls == []
+        assert not store.is_applied(stale.event_id)
+        assert newer.event_id in {event.event_id for event in store.load_pending()}
+
+        # The handler's actual success, not shutdown's stale fallback, settles ownership.
+        release.set()
+        await asyncio.gather(*retry_workers)
+        await _settle()
+        assert completed.is_set()
+        assert calls == [1, 1]
+        assert bus._p2_active == {}
+        assert bus._seen == {newer.event_id}
+        assert retry_workers[0] not in bus._workers
+        assert store.list_dlq() == []
+        assert store.move_dlq_to_pending(stale.event_id) is None
+        assert [event.event_id for event in store.load_pending()] == [newer.event_id]
+        assert not store.is_applied(stale.event_id)
+        assert not store.is_duplicate(stale.event_id, clock.now())
+        assert dlq_calls == []
+        assert stale.model_dump(mode="json") == original
+        await bus.shutdown()
+    finally:
+        # Even a regression assertion must release a cancellation-resistant test handler.
+        release.set()
+        await asyncio.gather(*retry_workers, return_exceptions=True)
+        if stopping is not None and not stopping.done():
+            stopping.cancel()
+            await asyncio.gather(stopping, return_exceptions=True)
+        store.close()
+
+    delivered: list[str] = []
+
+    async def recovered_handler(event: Event) -> None:
+        delivered.append(event.event_id)
+
+    reopened = EventStore(sidecar)
+    recovered = EventBus(
+        clock=FixtureClock(clock.now()),
+        handler=recovered_handler,
+        dlq=lambda _event: None,
+        store=reopened,
+    )
+    await recovered.recover()
+    await recovered.recover()
+    assert delivered == [newer.event_id]
+    assert reopened.load_pending() == []
+    assert reopened.list_dlq() == []
+    assert not reopened.is_applied(stale.event_id)
+    assert not reopened.is_applied(newer.event_id)
+    await recovered.shutdown()
+    reopened.close()
