@@ -4,9 +4,10 @@
   "branch": "bot-00-chief/phase-12-event-runtime",
   "phase": "12-event-runtime-core",
   "plan": "Planning artifacts and the verifier-written 12-VERIFICATION.md. No product code.",
-  "purpose": "Seat receipt for the phase 12 planning files and the verifier-written 12-VERIFICATION.md at 57da233. The verifier rewrote that report from /tmp/p12-verify/rerun4/ on combined tree 9d32a35. The executor does not write approved_by.",
-  "status": "executed and committed. G-2 waits for owner approval. This seat did not approve its own work.",
+  "purpose": "Seat receipt for the Phase 12 planning files, the verifier-written 12-VERIFICATION.md at 57da233, and the Phase 11 and Phase 12 closure records at 8279e58. The verifier rewrote that report from /tmp/p12-verify/rerun4/ on combined tree 9d32a35. The executor does not write approved_by.",
+  "status": "executed and committed; draft pull request opened; not merged. G-2 waits for owner approval. This seat did not approve its own work.",
   "commits": [
+    {"sha": "8279e58", "task": "close Phase 11 and record the Phase 12 checkpoint in STATE and ROADMAP", "files": [".planning/STATE.md", ".planning/ROADMAP.md"]},
     {"sha": "57da233", "task": "record the current phase 12 verification pass", "files": [".planning/phases/12-event-runtime-core/12-VERIFICATION.md"]}
   ],
   "commands": [
@@ -25,7 +26,7 @@
     "Owner merge approval is not recorded. approved_by is absent on purpose. G-2 waits for the owner.",
     "12-VERIFICATION.md was written by the verifier, not by this seat. Status passed, score 12/12, re_verification true, head 9d32a35, commit 57da233.",
     "The suite was not re-run in this worktree after the receipt commit.",
-    "No pull request was opened and nothing was pushed. Phase 13 was not started."
+    "Draft pull request opened with gh; not merged. Phase 13 was not started."
   ],
   "evidence_logs": "/tmp/p12-verify/rerun4/",
   "rollback_plan": "Before the merge, revert the phase 12 planning commits on this branch with git revert (no force), ending at 57da233, or close the pull request without merging. After a merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). The live refusal command writes no ledger row and no live state. Data implications: none to the ledger or live state. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
