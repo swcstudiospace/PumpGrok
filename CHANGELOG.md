@@ -9,6 +9,10 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - A typed event library under `src/pumpgrok/events/`: one `EventKind` catalog, lane bus, sidecar sqlite at `var/desk/events.sqlite`, deterministic drain, and `SourceSupervisor`. It is not wired into the supervisor. Event ids include required `occurred_at`.
 - Ten v4 settings sections, config-gated off. `events.wake_mode` is `cadence` only. `events dlq replay` moves a row from the DLQ to pending in one transaction.
 
+### Fixed
+
+- Phase 12 late terminal handoff: bounded shutdown preserves live workers' outcome ownership. Repeated shutdown retries the retained terminal DLQ handoff after storage recovery without resnapshotting consumed queued work, replaying stale prices or duplicating terminal settlement.
+
 ### Verified
 
 - Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
