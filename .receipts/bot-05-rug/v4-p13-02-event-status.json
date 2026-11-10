@@ -1,12 +1,13 @@
 {
   "task_id": "v4-p13-02-event-status",
   "bot": "bot-05-rug",
-  "branch": "bot-05-rug/phase-13-curve-layout",
+  "branch": "bot-05-rug/phase-13-event-status",
   "phase": "13-curve-truth-live-market-data-and-recorder",
   "plan": "13-02 Task 0: independent event decode status characterization",
   "status": "Draft implementation tested offline; independent receipt approval pending.",
+  "historical_evidence": "Prior focused results were recorded on bot-05-rug/phase-13-curve-layout; event-status-final.xml SHA-256 0f05d3ad040483b3f018594b79ced974eb316763e9b6a34910ba65fc8af825e6. The commands below were independently rerun on this isolated task branch.",
   "commands": [
-    {"cmd": "uv run pytest -q tests/tools/onchain/test_event_decode_status.py tests/tools/onchain/test_pump_events.py --junitxml=event-status-final.xml", "exit_code": 0, "output_tail": "JUnit: 37 tests, 0 failures, 0 errors, 0 skipped; SHA-256 0f05d3ad040483b3f018594b79ced974eb316763e9b6a34910ba65fc8af825e6."},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_event_decode_status.py tests/tools/onchain/test_pump_events.py --junitxml=event-status-separated.xml", "exit_code": 0, "output_tail": "JUnit: 37 tests, 0 failures, 0 errors, 0 skipped; SHA-256 5cb6d85e229f9cc49f6cb127de71abc8ae64411a2e9edae644f684585a8240c9."},
     {"cmd": "uv run ruff format --check src/pumpgrok/tools/onchain/pump_events.py tests/tools/onchain/test_event_decode_status.py", "exit_code": 0, "output_tail": "2 files already formatted."},
     {"cmd": "uv run ruff check src/pumpgrok/tools/onchain/pump_events.py tests/tools/onchain/test_event_decode_status.py", "exit_code": 0, "output_tail": "No issues found."},
     {"cmd": "uv run mypy src/pumpgrok/tools/onchain/pump_events.py", "exit_code": 0, "output_tail": "No issues found."}
