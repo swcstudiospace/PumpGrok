@@ -73,5 +73,5 @@
     "No tests/build/lint/format/docs scan/full battery run for this receipt refresh. Source evidence covers combined tree, not recursive receipt self-SHA.",
     "Draft PR62 unmerged; no phase.complete, STATE/ROADMAP, signing or owner checkout changes."
   ],
-  "rollback_plan": "Before merge, revert journal changelog and receipt commits through a new commit (no force), or close draft PR62 without merging. After merge, use a separately reviewed revert PR. Receipt-only refresh has no ledger/live-state data effects."
+  "rollback_plan": "Before merge, revert journal changelog and receipt commits through `git revert <receipt-commit>` (no force), or close draft PR62 without merging. After merge, use `git revert -m 1 <merge-sha>` in a separately reviewed revert PR. Receipt-only refresh has no ledger/live-state data effects. Expected recovery time: under 5 minutes."
 }
