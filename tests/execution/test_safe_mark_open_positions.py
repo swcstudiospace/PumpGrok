@@ -462,3 +462,56 @@ async def test_out_of_order_snapshot_rejected_after_adapter_restart(tmp_path: Pa
         assert adapter._last_price_ts == {}
     finally:
         reopened.close()
+
+
+@pytest.mark.parametrize("timestamp", [START + 302, START - 1, float("nan"), float("inf")])
+async def test_default_invalid_timestamp_preserves_mark_and_blind_deadline(
+    tmp_path: Path, timestamp: float
+) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, 3_000_000_000, BASIS)
+        source = CountingSource(_snapshot())
+        adapter = _adapter(store, clock, price_source=source)
+        assert await adapter.mark_open_positions() is not None
+        before = store.read(limit=None)
+        reserves = adapter._last_reserves.copy()
+        times = adapter._last_price_ts.copy()
+        clock.advance_to(START + 301)
+        source.snapshot = _snapshot().model_copy(update={"s_lamports": S0 * 2, "ts": timestamp})
+
+        assert await adapter.mark_open_positions() is None
+        assert store.read(limit=None) == before
+        assert adapter._last_reserves == reserves
+        assert adapter._last_price_ts == times
+        closed = await adapter.check_blind(MINT)
+        assert closed is not None
+        assert json.loads(str(closed["payload_json"]))["reason"] == "blind_flatten"
+        assert MINT not in _fold(store).positions
+    finally:
+        store.close()
+
+
+async def test_default_regressing_timestamp_is_gap_after_restart(tmp_path: Path) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        marker = _adapter(store, clock, price_source=CountingSource(_snapshot()))
+        assert await marker.mark_open_positions() is not None
+    finally:
+        store.close()
+
+    clock.advance_to(START + 10)
+    reopened = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        stale = _snapshot().model_copy(update={"s_lamports": S0 * 2, "ts": START - 1})
+        adapter = _adapter(reopened, clock, price_source=CountingSource(stale))
+        before = reopened.read(limit=None)
+        assert await adapter.mark_open_positions() is None
+        assert reopened.read(limit=None) == before
+        assert adapter._last_reserves == {}
+        assert adapter._last_price_ts == {}
+    finally:
+        reopened.close()

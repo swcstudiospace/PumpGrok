@@ -221,16 +221,21 @@ class _MarksMixin:
         for mint, curve in snapshots.items():
             if not self._admitted_curve(mint, curve):
                 raise ValueError(f"untrusted or invalid curve snapshot for {mint}")
-            recorded = curve.ts if curve.ts is not None else now
-            ledger_time = _ledger_mark_epoch(held[mint])
-            cached_time = self._last_price_ts.get(mint)
-            if (
-                not math.isfinite(recorded)
-                or recorded > now
-                or (ledger_time is not None and recorded < ledger_time)
-                or (cached_time is not None and recorded < cached_time)
-            ):
+            if not self._admitted_timestamp(mint, held[mint], curve, now):
                 raise ValueError(f"invalid curve snapshot timestamp for {mint}")
+
+    def _admitted_timestamp(
+        self, mint: str, pos: PositionView, curve: CurveSnapshot, now: float
+    ) -> bool:
+        recorded = curve.ts if curve.ts is not None else now
+        ledger_time = _ledger_mark_epoch(pos)
+        cached_time = self._last_price_ts.get(mint)
+        return (
+            math.isfinite(recorded)
+            and recorded <= now
+            and (ledger_time is None or recorded >= ledger_time)
+            and (cached_time is None or recorded >= cached_time)
+        )
 
     @staticmethod
     def _admitted_curve(mint: str, curve: CurveSnapshot) -> bool:
@@ -283,7 +288,11 @@ class _MarksMixin:
         values: dict[str, int] = {}
         for mint, pos in held.items():
             curve = await self._read_curve(mint)
-            if curve is None or not self._admitted_curve(mint, curve):
+            if (
+                curve is None
+                or not self._admitted_curve(mint, curve)
+                or not self._admitted_timestamp(mint, pos, curve, now)
+            ):
                 values[mint] = position_value_lamports(pos)
                 continue
             recorded = curve.ts if curve.ts is not None else now
