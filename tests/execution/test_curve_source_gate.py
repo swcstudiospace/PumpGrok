@@ -128,8 +128,8 @@ async def test_injected_source_cannot_forge_fixture_entry(tmp_path: Path) -> Non
         autonomy="autonomous-paper",  # type: ignore[arg-type]
         get_reserves=lambda _mint: (S0, T0),
     )
-    with pytest.raises((ValueError, OrderRejectedError)):
-        adapter = build_adapter(
+    with pytest.raises(ValueError, match="untrusted.*source"):
+        build_adapter(
             object(),
             store=store,
             risk=risk,
@@ -139,8 +139,6 @@ async def test_injected_source_cannot_forge_fixture_entry(tmp_path: Path) -> Non
             price_source=ScriptedCurves([_snap("fixture"), _snap("fixture")]),
             p_drop=0.0,
         )
-        request = _request(adapter, TICKET, side=Side.BUY, units=None)
-        await _place(adapter, clock, request, seat="bot-04-sniper")
     kinds = [event["type"] for event in store.read(limit=None)]
     assert "OrderPlaced" not in kinds
     assert "FillRecorded" not in kinds
