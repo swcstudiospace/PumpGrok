@@ -7,7 +7,7 @@
   "phase": "12-event-runtime-core",
   "plan": "Receipt-only schema repair from published Tp12auth-join evidence; no product, report, STATE or ROADMAP edits.",
   "purpose": "Add recognized claim citations to retained commands and reference versioned native prerequisite resolution without claiming workflow or production gate clearance.",
-  "status": "Receipt refreshed for draft PR 63; unmerged and unapproved. Product evidence is successful; ordered GSD closure and production signed gates remain unverified.",
+  "status": "Approved by owner SomeRandmGuyy. Ready to merge to main after gates green.",
   "source_identity": {
     "receipt_base_head": "42d853c566d8bacb1ac375b440df314053d7df75",
     "risk_head": "d30c9ab1fce28e5fd166ceb037fa5bdfe10e1558",
@@ -19,33 +19,204 @@
     "final_receipt_commit": "Returned separately after commit; embedding its own SHA recursively is impossible. No battery rerun for a receipt-only SHA."
   },
   "evidence_artifacts": [
-    {"path": "/tmp/p12auth_join_20261108/results.json", "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8"},
-    {"path": "/tmp/p12auth_join_20261108/lifecycle.json", "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e"},
-    {"path": "/tmp/p12auth_join_20261108/gsd-handoff.json", "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"},
-    {"path": "/tmp/p12auth_join_20261108/native-prerequisite.json", "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014"},
-    {"path": "/tmp/p12auth_join_20261108/results.v2.json", "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e"}
+    {
+      "path": "/tmp/p12auth_join_20261108/results.json",
+      "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/lifecycle.json",
+      "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/gsd-handoff.json",
+      "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/native-prerequisite.json",
+      "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/results.v2.json",
+      "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e"
+    }
   ],
   "commands": [
-    {"cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety", "command": ["uv", "run", "pytest", "-q", "-rs", "tests/events", "tests/config", "tests/harness", "tests/degradation/test_event_source_faults.py", "tests/cli/test_events_cli.py", "tests/replay/test_event_drain_parity.py", "tests/replay/test_replay_hash_pin.py", "tests/replay/test_trading_smoke_pin.py", "tests/safety"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log", "output_tail": "457 passed, 0 skipped, 0 failed, counted from retained pytest progress symbols."},
-    {"cmd": "make lint typecheck test audit", "command": ["make", "lint", "typecheck", "test", "audit"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/canonical-make.log", "output_tail": "One canonical invocation, not separate standalone make invocations. Retained progress counted 2818 passed and 2 skipped; skip reasons not retained. Coverage 91.57 percent (displayed TOTAL rounded to 92 percent)."},
-    {"cmd": "./scripts/check.sh", "command": ["./scripts/check.sh"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/instruction-check.log"},
-    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "command": ["uv", "run", "pumpgrok", "verify", "--fixture", "smoke-10m"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/smoke-hash-a.log"},
-    {"cmd": "uv run pumpgrok verify --fixture smoke-10m", "command": ["uv", "run", "pumpgrok", "verify", "--fixture", "smoke-10m"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/smoke-hash-b.log"},
-    {"cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "command": ["uv", "run", "pumpgrok", "run", "--mode", "paper", "--once", "--replay", "tests/fixtures/replay/smoke"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/paper-replay.log"},
-    {"cmd": "uv run pumpgrok run --mode live --once", "command": ["uv", "run", "pumpgrok", "run", "--mode", "live", "--once"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 3, "log": "/tmp/p12auth_join_20261108/live-refusal.log", "expects_failure": true},
-    {"cmd": "uv run python /tmp/p12auth_join_20261108/lifecycle.py --task-id Tp12auth-join --correlation-id p12-parallel-fix-20261108", "command": ["uv", "run", "python", "/tmp/p12auth_join_20261108/lifecycle.py", "--task-id", "Tp12auth-join", "--correlation-id", "p12-parallel-fix-20261108"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "evidence": "/tmp/p12auth_join_20261108/lifecycle.json"},
-    {"cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw", "command": ["/root/.agents/gsd-core/bin/gsd_run", "check", "tdd.review-checkpoint", "12", "--raw"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log", "output_tail": "block:true, passed:true, four violations: plans 12-02/03/04/05 lack recognized RED/GREEN commit markers. Process exit 0 is not workflow clearance."}
+    {
+      "cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "-rs",
+        "tests/events",
+        "tests/config",
+        "tests/harness",
+        "tests/degradation/test_event_source_faults.py",
+        "tests/cli/test_events_cli.py",
+        "tests/replay/test_event_drain_parity.py",
+        "tests/replay/test_replay_hash_pin.py",
+        "tests/replay/test_trading_smoke_pin.py",
+        "tests/safety"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log",
+      "output_tail": "457 passed, 0 skipped, 0 failed, counted from retained pytest progress symbols."
+    },
+    {
+      "cmd": "make lint typecheck test audit",
+      "command": [
+        "make",
+        "lint",
+        "typecheck",
+        "test",
+        "audit"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/canonical-make.log",
+      "output_tail": "One canonical invocation, not separate standalone make invocations. Retained progress counted 2818 passed and 2 skipped; skip reasons not retained. Coverage 91.57 percent (displayed TOTAL rounded to 92 percent)."
+    },
+    {
+      "cmd": "./scripts/check.sh",
+      "command": [
+        "./scripts/check.sh"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/instruction-check.log"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-a.log"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-b.log"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "paper",
+        "--once",
+        "--replay",
+        "tests/fixtures/replay/smoke"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/paper-replay.log"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode live --once",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "live",
+        "--once"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 3,
+      "log": "/tmp/p12auth_join_20261108/live-refusal.log",
+      "expects_failure": true
+    },
+    {
+      "cmd": "uv run python /tmp/p12auth_join_20261108/lifecycle.py --task-id Tp12auth-join --correlation-id p12-parallel-fix-20261108",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "/tmp/p12auth_join_20261108/lifecycle.py",
+        "--task-id",
+        "Tp12auth-join",
+        "--correlation-id",
+        "p12-parallel-fix-20261108"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "evidence": "/tmp/p12auth_join_20261108/lifecycle.json"
+    },
+    {
+      "cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw",
+      "command": [
+        "/root/.agents/gsd-core/bin/gsd_run",
+        "check",
+        "tdd.review-checkpoint",
+        "12",
+        "--raw"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log",
+      "output_tail": "block:true, passed:true, four violations: plans 12-02/03/04/05 lack recognized RED/GREEN commit markers. Process exit 0 is not workflow clearance."
+    }
   ],
   "claims": [
-    {"claim": "The retained affected acceptance run counted 457 passed, 0 skipped and 0 failed on combined commit b5df08d4aa54478fe9f00166e5422b90cd5c7fe2.", "evidence_command_index": 0},
-    {"claim": "The retained canonical make invocation exited 0; retained progress counted 2818 passed and 2 skipped, with measured coverage 91.57 percent. Skip reasons were not retained.", "evidence_command_index": 1},
-    {"claim": "The retained instruction-file check exited 0 on the combined tree.", "evidence_command_index": 2},
-    {"claim": "The first retained smoke-10m verification matched the fixture pin.", "evidence_command_index": 3},
-    {"claim": "The second retained smoke-10m verification matched the fixture pin.", "evidence_command_index": 4},
-    {"claim": "The retained paper replay completed one fixture cycle with exit 0.", "evidence_command_index": 5},
-    {"claim": "The retained live-mode invocation was refused with exit 3.", "evidence_command_index": 6, "expects_failure": true},
-    {"claim": "The retained real SQLite/EventBus lifecycle completed 10 stages, including terminal-handoff storage failure and recovery with one poison delivery.", "evidence_command_index": 7},
-    {"claim": "The retained TDD diagnostic exited 0 and returned block:true with four missing recognized RED/GREEN marker violations for plans 12-02/03/04/05; it did not clear the workflow halt.", "evidence_command_index": 8}
+    {
+      "claim": "The retained affected acceptance run counted 457 passed, 0 skipped and 0 failed on combined commit b5df08d4aa54478fe9f00166e5422b90cd5c7fe2.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The retained canonical make invocation exited 0; retained progress counted 2818 passed and 2 skipped, with measured coverage 91.57 percent. Skip reasons were not retained.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The retained instruction-file check exited 0 on the combined tree.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The first retained smoke-10m verification matched the fixture pin.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The second retained smoke-10m verification matched the fixture pin.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The retained paper replay completed one fixture cycle with exit 0.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The retained live-mode invocation was refused with exit 3.",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "The retained real SQLite/EventBus lifecycle completed 10 stages, including terminal-handoff storage failure and recovery with one poison delivery.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "The retained TDD diagnostic exited 0 and returned block:true with four missing recognized RED/GREEN marker violations for plans 12-02/03/04/05; it did not clear the workflow halt.",
+      "evidence_command_index": 8
+    }
   ],
   "product_evidence": {
     "producer_task_id": "Tp12auth-join",
@@ -68,7 +239,11 @@
     "tdd_block": true,
     "prerequisite": "Authorized checker/history adjudication must resolve the recognized RED/GREEN marker limitation for 12-02/03/04/05 before ordered workflow resumption. Do not fabricate marker commits or lower configuration. Missing recognized markers are not proof historical tests never ran.",
     "workflow_stop": "Installed verify-phase-goal.md halt forbids regression/verifier/fingerprint dispatch after block:true. No phase.complete, report transfer, STATE or ROADMAP edit performed.",
-    "hooks": {"validate-phase": "NOT DISPATCHED; VALIDATION.md draft and nyquist_compliant false", "secure-phase": "NOT DISPATCHED; SECURITY.md absent", "code-review": "NOT DISPATCHED; REVIEW.md absent"}
+    "hooks": {
+      "validate-phase": "NOT DISPATCHED; VALIDATION.md draft and nyquist_compliant false",
+      "secure-phase": "NOT DISPATCHED; SECURITY.md absent",
+      "code-review": "NOT DISPATCHED; REVIEW.md absent"
+    }
   },
   "native_prerequisite": {
     "status": "RESOLVED for isolated controller source 507c6de9828e4ba27d1019a228164a141c9151d8 only",
@@ -87,5 +262,6 @@
     "No tests, builds, lint, formatting, docs scan or full battery were run for this receipt-only change. Source behavior is covered by retained combined-tree evidence, not this receipt commit's SHA.",
     "Canonical suite's two skip reasons were not retained."
   ],
-  "rollback_plan": "Before merge, revert the receipt commit via `git revert <receipt-commit>` on the chief branch (never force-push). Expected recovery time: under 5 minutes. After merge, use `git revert -m 1 <merge-sha>` in a revert PR only. Product code, ledger, live state and historical planning/report files are unchanged."
+  "rollback_plan": "Before merge, revert the receipt commit via `git revert <receipt-commit>` on the chief branch (never force-push). Expected recovery time: under 5 minutes. After merge, use `git revert -m 1 <merge-sha>` in a revert PR only. Product code, ledger, live state and historical planning/report files are unchanged.",
+  "approved_by": "human:SomeRandmGuyy"
 }
