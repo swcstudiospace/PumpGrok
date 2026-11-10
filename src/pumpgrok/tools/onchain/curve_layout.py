@@ -1,10 +1,9 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-[ASSUMED] Anchor-style layout: an 8-byte discriminator, five little-endian
-u64 reserve counters, then a one-byte completion flag (0/1). The layout is
-NOT verified against a mainnet account: every test fixture built with
-:func:`encode_curve_fixture` is marked ASSUMED, and user confirmation of
-the layout is pending. Shared by ``market.price`` and ``onchain.lp_status``.
+[ASSUMED] The Pump IDL describes an 8-byte discriminator, five token-first
+little-endian u64 counters, and a one-byte completion flag. Extended accounts
+carry additional opaque bytes. Neither layout is verified against a reviewed
+mainnet account. Shared by ``market.price`` and ``onchain.lp_status``.
 
 RPC only: this module performs no HTTP reads outside the injected RPC
 client and references no quote endpoint (R44, R46, R47).
@@ -24,6 +23,8 @@ from pumpgrok.tools._common import UNITS_PER_TOKEN
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
+_EXTENDED_CURVE_ACCOUNT_SIZE = 166
+_BONDING_CURVE_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 
 #: Bonding-curve layout verification state (R65). ASSUMED until a live probe
 #: against mainnet bonding-curve accounts decodes under this layout and a
@@ -52,20 +53,20 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
+    extended_data: bytes = b""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
     """Decode raw account bytes with the ASSUMED layout.
 
-    Raises :class:`CurveDecodeError` on any shape mismatch (wrong length,
-    completion flag outside ``{0, 1}``); callers map it to ``DataStale``.
+    Raises :class:`CurveDecodeError` for an unsupported size, discriminator,
+    or completion flag; callers map it to ``DataStale``.
     """
-    if len(data) != CURVE_ACCOUNT_SIZE:
-        raise CurveDecodeError(f"curve account size {len(data)} != ASSUMED {CURVE_ACCOUNT_SIZE}")
-    try:
-        (_, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(data)
-    except struct.error as exc:
-        raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
+    if len(data) not in (CURVE_ACCOUNT_SIZE, _EXTENDED_CURVE_ACCOUNT_SIZE):
+        raise CurveDecodeError(f"unsupported curve account size {len(data)}")
+    discriminator, vtok, vsol, rtok, rsol, supply, complete = _CURVE_STRUCT.unpack_from(data)
+    if discriminator != _BONDING_CURVE_DISCRIMINATOR:
+        raise CurveDecodeError("invalid bonding curve discriminator")
     if complete not in (0, 1):
         raise CurveDecodeError(f"curve completion flag not boolean: {complete!r}")
     for name, value in (
@@ -83,6 +84,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_sol_reserves_lamports=rsol,
         real_token_reserves_units=rtok,
         total_supply_units=supply,
+        extended_data=data[CURVE_ACCOUNT_SIZE:],
         complete=bool(complete),
     )
 
@@ -113,11 +115,11 @@ def encode_curve_fixture(
 ) -> bytes:
     """Build [ASSUMED]-layout account bytes for tests. Never used in production."""
     return _CURVE_STRUCT.pack(
-        b"ASSUMED\x00",
-        virtual_sol_reserves_lamports,
+        _BONDING_CURVE_DISCRIMINATOR,
         virtual_token_reserves_units,
-        real_sol_reserves_lamports,
+        virtual_sol_reserves_lamports,
         real_token_reserves_units,
+        real_sol_reserves_lamports,
         total_supply_units,
         1 if complete else 0,
     )
