@@ -7,6 +7,7 @@ import importlib.util
 import json
 import struct
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,22 +21,22 @@ _SPEC.loader.exec_module(probe_mod)
 # Official base layout: token before SOL for both virtual and real reserves.
 DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 BASE_ACCOUNT = struct.pack("<8sQQQQQB", DISCRIMINATOR, 101, 202, 303, 404, 505, 1)
-EXPECTED = {
-    "discriminator_hex": DISCRIMINATOR.hex(),
-    "virtual_token_reserves_units": 101,
-    "virtual_sol_reserves_lamports": 202,
-    "real_token_reserves_units": 303,
-    "real_sol_reserves_lamports": 404,
-    "total_supply_units": 505,
-    "complete": True,
-}
+EXPECTED = SimpleNamespace(
+    discriminator_hex=DISCRIMINATOR.hex(),
+    virtual_token_reserves_units=101,
+    virtual_sol_reserves_lamports=202,
+    real_token_reserves_units=303,
+    real_sol_reserves_lamports=404,
+    total_supply_units=505,
+    complete=True,
+)
 
 
 @pytest.mark.parametrize("extension", [b"", bytes(range(117))], ids=["base-49", "extended-166"])
 def test_decode_account_uses_token_first_base_prefix(extension: bytes) -> None:
     raw = BASE_ACCOUNT + extension
     assert len(raw) == 49 + len(extension)
-    assert probe_mod._decode_account(raw) == EXPECTED
+    assert SimpleNamespace(**probe_mod._decode_account(raw)) == EXPECTED
 
 
 @pytest.mark.parametrize("extension", [b"", bytes(range(117))], ids=["base-49", "extended-166"])
@@ -73,6 +74,6 @@ def test_offline_probe_remains_pending_human_review(
     )
     record = json.loads(out.read_text(encoding="utf-8"))
     assert record["layout_status"] == "DECODED_PENDING_REVIEW"
-    assert record["decoded"] == EXPECTED
+    assert SimpleNamespace(**record["decoded"]) == EXPECTED
     assert record["account_len"] == len(raw)
     assert "Status: DECODED_PENDING_REVIEW" in doc.read_text(encoding="utf-8")
