@@ -6,9 +6,9 @@
   "plan": "13-05 read-only probe decoder compatibility slice; not a status approval",
   "status": "Focused checks recorded; independent receipt approval and integration pending.",
   "commands": [
-    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout.py --junitxml=probe-green.xml", "exit_code": 0, "output_tail": "JUnit: 4 tests, 0 failures, 0 errors, 0 skipped."},
-    {"cmd": "uv run ruff check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "No issues found."},
-    {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "3 files already formatted."},
+    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout_token_first.py tests/scripts/test_probe_curve_layout.py --junitxml=probe-names-green.xml", "exit_code": 0, "output_tail": "JUnit: 6 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout_token_first.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout_token_first.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "3 files already formatted."},
     {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py tests/tools/onchain/test_curve_layout.py tests/tools/market/test_price.py --junitxml=probe-integration.xml", "cwd": "/root/src/repos/pumpgrok-wt/phase-13-probe-integration", "exit_code": 0, "output_tail": "JUnit: 38 tests, 0 failures, 0 errors, 0 skipped. Tested a staged, uncommitted merge of rug 238e725 and chief e0f8013."}
   ],
   "claims": [
