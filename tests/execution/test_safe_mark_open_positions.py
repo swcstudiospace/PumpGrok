@@ -439,6 +439,42 @@ async def test_default_gap_uses_unmarked_position_basis_in_row_equity(tmp_path: 
         store.close()
 
 
+async def test_zero_mark_preserves_last_good_exit_across_restart(tmp_path: Path) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    units = 3_000_000_000
+    try:
+        _seed_position(store, clock, MINT, units, BASIS)
+        marker = _adapter(store, clock, price_source=CountingSource())
+        assert await marker.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        clock.advance_to(START + 5)
+        assert await marker.mark_open_positions(snapshots={}, zero_mints={MINT}) is not None
+        assert _fold(store).positions[MINT].last_mtm_lamports == 0
+    finally:
+        store.close()
+
+    reopened = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        adapter = _adapter(reopened, clock, price_source=CountingSource())
+        result = await adapter.close_position(
+            mint=MINT, ticket_id="SOL-20260201-001", reason="kill_flatten"
+        )
+        gross = sell_out(S0, T0, units)
+        fees = FeeModel()
+        venue = fees.venue_fee(gross)
+        network = fees.network_cost()
+        proceeds = gross - venue - network
+        assert result["status"] == "closed"
+        assert result["proceeds_lamports"] == proceeds
+        fill = reopened.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == venue
+        assert fill["network_cost_lamports"] == network
+        assert fill["cash_delta_lamports"] == proceeds
+        assert adapter.cash_lamports() == EQUITY + proceeds
+    finally:
+        reopened.close()
+
+
 async def test_out_of_order_snapshot_rejected_after_adapter_restart(tmp_path: Path) -> None:
     clock = FixtureClock(START)
     store = _store(tmp_path)
