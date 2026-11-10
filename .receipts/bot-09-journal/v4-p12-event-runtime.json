@@ -7,7 +7,7 @@
   "phase": "12-event-runtime-core",
   "plan": "Preserve CHANGELOG hash pins; refresh only this seat receipt. No product code.",
   "purpose": "Record actual published corrected Tp12auth-join product evidence. Commands below were executed by the integrator on the combined tree, not rerun in the journal-only checkout.",
-  "status": "Pending owner approval; draft PR 62 remains unmerged. Earlier approval covered a6e60e0 and was voided; no current approval recorded or requested.",
+  "status": "Approved by owner SomeRandmGuyy. Ready to merge to main after gates green.",
   "source_identity": {
     "journal_doc_head": "34e182675b6fb7fc30502544474d82c7dd7a9c37",
     "receipt_base_head": "34e182675b6fb7fc30502544474d82c7dd7a9c37",
@@ -21,32 +21,214 @@
     "scope": "Journal-only checkout does not contain the risk event library. Product behavior evidence covers the combined source/test tree; receipt-only final SHA is not a new product verification."
   },
   "published_evidence": [
-    {"path": "/tmp/p12auth_join_20261108/results.json", "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8"},
-    {"path": "/tmp/p12auth_join_20261108/lifecycle.json", "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e"},
-    {"path": "/tmp/p12auth_join_20261108/gsd-handoff.json", "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"},
-    {"path": "/tmp/p12auth_join_20261108/native-prerequisite.json", "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014"},
-    {"path": "/tmp/p12auth_join_20261108/results.v2.json", "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e"}
+    {
+      "path": "/tmp/p12auth_join_20261108/results.json",
+      "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/lifecycle.json",
+      "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/gsd-handoff.json",
+      "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/native-prerequisite.json",
+      "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/results.v2.json",
+      "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e"
+    }
   ],
   "commands": [
-    {"id": "product-affected-acceptance", "cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety", "command": ["uv", "run", "pytest", "-q", "-rs", "tests/events", "tests/config", "tests/harness", "tests/degradation/test_event_source_faults.py", "tests/cli/test_events_cli.py", "tests/replay/test_event_drain_parity.py", "tests/replay/test_replay_hash_pin.py", "tests/replay/test_trading_smoke_pin.py", "tests/safety"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log", "output_tail": "Retained progress: 457 passed, 0 skipped, 0 failed."},
-    {"id": "canonical-make", "cmd": "make lint typecheck test audit", "command": ["make", "lint", "typecheck", "test", "audit"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/canonical-make.log", "output_tail": "One invocation, not four standalone invocations. Retained progress: 2818 passed, 2 skipped, 0 failed; coverage 91.57%; skip reasons not retained."},
-    {"id": "instruction-check", "cmd": "./scripts/check.sh", "command": ["./scripts/check.sh"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/instruction-check.log"},
-    {"id": "smoke-hash-a", "cmd": "uv run pumpgrok verify --fixture smoke-10m", "command": ["uv", "run", "pumpgrok", "verify", "--fixture", "smoke-10m"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/smoke-hash-a.log"},
-    {"id": "smoke-hash-b", "cmd": "uv run pumpgrok verify --fixture smoke-10m", "command": ["uv", "run", "pumpgrok", "verify", "--fixture", "smoke-10m"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/smoke-hash-b.log"},
-    {"id": "paper-replay", "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "command": ["uv", "run", "pumpgrok", "run", "--mode", "paper", "--once", "--replay", "tests/fixtures/replay/smoke"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/paper-replay.log"},
-    {"id": "live-refusal", "cmd": "uv run pumpgrok run --mode live --once", "command": ["uv", "run", "pumpgrok", "run", "--mode", "live", "--once"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 3, "expects_failure": true, "log": "/tmp/p12auth_join_20261108/live-refusal.log"},
-    {"id": "standalone-lifecycle", "cmd": "uv run python /tmp/p12auth_join_20261108/lifecycle.py --task-id Tp12auth-join --correlation-id p12-parallel-fix-20261108", "command": ["uv", "run", "python", "/tmp/p12auth_join_20261108/lifecycle.py", "--task-id", "Tp12auth-join", "--correlation-id", "p12-parallel-fix-20261108"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "output_artifact": "/tmp/p12auth_join_20261108/lifecycle.json", "output_tail": "10 real SQLite/EventBus lifecycle stages, including deliberate storage failure and terminal handoff retry/recovery."},
-    {"id": "gsd-tdd-readiness", "cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw", "command": ["/root/.agents/gsd-core/bin/gsd_run", "check", "tdd.review-checkpoint", "12", "--raw"], "cwd": "/tmp/p12auth_join_20261108/tree", "exit_code": 0, "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log", "output_tail": "block:true, passed:true, violations:4; plans12-02/03/04/05 lack recognized RED/GREEN commit markers. Exit 0 is not workflow completion."}
+    {
+      "id": "product-affected-acceptance",
+      "cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "-rs",
+        "tests/events",
+        "tests/config",
+        "tests/harness",
+        "tests/degradation/test_event_source_faults.py",
+        "tests/cli/test_events_cli.py",
+        "tests/replay/test_event_drain_parity.py",
+        "tests/replay/test_replay_hash_pin.py",
+        "tests/replay/test_trading_smoke_pin.py",
+        "tests/safety"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log",
+      "output_tail": "Retained progress: 457 passed, 0 skipped, 0 failed."
+    },
+    {
+      "id": "canonical-make",
+      "cmd": "make lint typecheck test audit",
+      "command": [
+        "make",
+        "lint",
+        "typecheck",
+        "test",
+        "audit"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/canonical-make.log",
+      "output_tail": "One invocation, not four standalone invocations. Retained progress: 2818 passed, 2 skipped, 0 failed; coverage 91.57%; skip reasons not retained."
+    },
+    {
+      "id": "instruction-check",
+      "cmd": "./scripts/check.sh",
+      "command": [
+        "./scripts/check.sh"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/instruction-check.log"
+    },
+    {
+      "id": "smoke-hash-a",
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-a.log"
+    },
+    {
+      "id": "smoke-hash-b",
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-b.log"
+    },
+    {
+      "id": "paper-replay",
+      "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "paper",
+        "--once",
+        "--replay",
+        "tests/fixtures/replay/smoke"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/paper-replay.log"
+    },
+    {
+      "id": "live-refusal",
+      "cmd": "uv run pumpgrok run --mode live --once",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "live",
+        "--once"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 3,
+      "expects_failure": true,
+      "log": "/tmp/p12auth_join_20261108/live-refusal.log"
+    },
+    {
+      "id": "standalone-lifecycle",
+      "cmd": "uv run python /tmp/p12auth_join_20261108/lifecycle.py --task-id Tp12auth-join --correlation-id p12-parallel-fix-20261108",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "/tmp/p12auth_join_20261108/lifecycle.py",
+        "--task-id",
+        "Tp12auth-join",
+        "--correlation-id",
+        "p12-parallel-fix-20261108"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "output_artifact": "/tmp/p12auth_join_20261108/lifecycle.json",
+      "output_tail": "10 real SQLite/EventBus lifecycle stages, including deliberate storage failure and terminal handoff retry/recovery."
+    },
+    {
+      "id": "gsd-tdd-readiness",
+      "cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw",
+      "command": [
+        "/root/.agents/gsd-core/bin/gsd_run",
+        "check",
+        "tdd.review-checkpoint",
+        "12",
+        "--raw"
+      ],
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log",
+      "output_tail": "block:true, passed:true, violations:4; plans12-02/03/04/05 lack recognized RED/GREEN commit markers. Exit 0 is not workflow completion."
+    }
   ],
   "claims": [
-    {"claim": "First smoke-10m verification returned b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 3, "evidence": "results.json static_acceptance.smoke_hashes[0]"},
-    {"claim": "Second smoke-10m verification returned the same b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 4, "evidence": "results.json static_acceptance.smoke_hashes[1]"},
-    {"claim": "Replay hash-pin tests passed, including trading-smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; CHANGELOG before/after pairs remain preserved.", "evidence_command_index": 0, "evidence": "results.json static_acceptance.identical_smoke_hash_pin_passed, trading_hash, changelog_pairs_passed"},
-    {"claim": "Affected acceptance passed on the corrected combined source/test tree.", "evidence_command_index": 0},
-    {"claim": "The one canonical make lint typecheck test audit invocation passed on the corrected combined source/test tree.", "evidence_command_index": 1},
-    {"claim": "Paper replay exited 0.", "evidence_command_index": 5},
-    {"claim": "Live stayed refused with exit 3.", "evidence_command_index": 6, "expects_failure": true},
-    {"claim": "Standalone real SQLite/EventBus lifecycle completed 10 stages, separate from production gate authority.", "evidence_command_index": 7, "evidence": "lifecycle.json records"}
+    {
+      "claim": "First smoke-10m verification returned b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+      "evidence_command_index": 3,
+      "evidence": "results.json static_acceptance.smoke_hashes[0]"
+    },
+    {
+      "claim": "Second smoke-10m verification returned the same b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.",
+      "evidence_command_index": 4,
+      "evidence": "results.json static_acceptance.smoke_hashes[1]"
+    },
+    {
+      "claim": "Replay hash-pin tests passed, including trading-smoke pin bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54; CHANGELOG before/after pairs remain preserved.",
+      "evidence_command_index": 0,
+      "evidence": "results.json static_acceptance.identical_smoke_hash_pin_passed, trading_hash, changelog_pairs_passed"
+    },
+    {
+      "claim": "Affected acceptance passed on the corrected combined source/test tree.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The one canonical make lint typecheck test audit invocation passed on the corrected combined source/test tree.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Paper replay exited 0.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Live stayed refused with exit 3.",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "Standalone real SQLite/EventBus lifecycle completed 10 stages, separate from production gate authority.",
+      "evidence_command_index": 7,
+      "evidence": "lifecycle.json records"
+    }
   ],
   "controlled_verification": {
     "owner_status": "STALE",
@@ -73,5 +255,6 @@
     "No tests/build/lint/format/docs scan/full battery run for this receipt refresh. Source evidence covers combined tree, not recursive receipt self-SHA.",
     "Draft PR62 unmerged; no phase.complete, STATE/ROADMAP, signing or owner checkout changes."
   ],
-  "rollback_plan": "Before merge, revert journal changelog and receipt commits through `git revert <receipt-commit>` (no force), or close draft PR62 without merging. After merge, use `git revert -m 1 <merge-sha>` in a separately reviewed revert PR. Receipt-only refresh has no ledger/live-state data effects. Expected recovery time: under 5 minutes."
+  "rollback_plan": "Before merge, revert journal changelog and receipt commits through `git revert <receipt-commit>` (no force), or close draft PR62 without merging. After merge, use `git revert -m 1 <merge-sha>` in a separately reviewed revert PR. Receipt-only refresh has no ledger/live-state data effects. Expected recovery time: under 5 minutes.",
+  "approved_by": "human:SomeRandmGuyy"
 }
