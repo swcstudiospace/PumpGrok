@@ -21,10 +21,6 @@ import base64
 import struct
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
-
-# Independently reviewed event evidence is required before changing this status.
-EVENT_DECODE_STATUS: Final[str] = "ASSUMED"
 
 
 class EventDecodeError(ValueError):
