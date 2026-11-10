@@ -140,7 +140,7 @@ def _fold(store):
     return state
 
 
-async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_path: Path) -> None:
+async def test_supplied_trusted_mark_preserves_multiple_gaps(tmp_path: Path) -> None:
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
@@ -154,9 +154,7 @@ async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_pa
         adapter = _adapter(store, clock, price_source=source)
         before = store.read(limit=None)
 
-        row = await adapter.mark_open_positions(
-            snapshots={MINT: _snapshot()}, zero_mints={ZERO}, correlation_id="safe-marks"
-        )
+        row = await adapter.mark_open_positions(snapshots={MINT: _snapshot()})
 
         assert row is not None
         assert source.reads == []
@@ -171,17 +169,17 @@ async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_pa
         assert prices[MINT]["venue_fee_lamports"] == venue
         assert prices[MINT]["ts_utc"] == format_ts_utc(START)
         assert OTHER not in prices
-        assert prices[ZERO]["mtm_lamports"] == 0
+        assert ZERO not in prices
         assert body["cash_lamports"] == EQUITY
-        assert body["equity_lamports"] == EQUITY + trusted_value + OTHER_MTM
+        assert body["equity_lamports"] == EQUITY + trusted_value + OTHER_MTM + 25_000_000
         assert body["unrealized_lamports"] == (
-            trusted_value + OTHER_MTM - BASIS - OTHER_BASIS - ZERO_BASIS
+            trusted_value + OTHER_MTM + 25_000_000 - BASIS - OTHER_BASIS - ZERO_BASIS
         )
 
         state = _fold(store)
         assert state.positions[MINT].last_mtm_lamports == trusted_value
         assert state.positions[OTHER].last_mtm_lamports == OTHER_MTM
-        assert state.positions[ZERO].last_mtm_lamports == 0
+        assert state.positions[ZERO].last_mtm_lamports == 25_000_000
         assert state.positions[ZERO].last_mtm_ts_utc
         assert state.positions[ZERO].token_units == ZERO_UNITS
         assert state.positions[ZERO].cost_basis_lamports == ZERO_BASIS
@@ -192,34 +190,50 @@ async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_pa
         store.close()
 
 
-async def test_zero_only_writes_mark_and_keeps_position_open(tmp_path: Path) -> None:
+async def test_timeout_zero_is_rejected_and_last_good_exit_survives_restart(
+    tmp_path: Path,
+) -> None:
+    """13-07 must verify that a persisted zero preserves last-good exits after restart."""
     clock = FixtureClock(START)
     store = _store(tmp_path)
+    units = 3_000_000_000
     try:
-        _seed_position(store, clock, ZERO, ZERO_UNITS, ZERO_BASIS)
-        _mark(store, clock, ZERO, 25_000_000, "prior")
-        clock.advance_to(START + 5)
+        _seed_position(store, clock, MINT, units, BASIS)
         source = CountingSource()
         adapter = _adapter(store, clock, price_source=source)
-        adapter._last_reserves[ZERO] = (11, 22)
-        adapter._last_price_ts[ZERO] = START - 20
+        assert await adapter.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        clock.advance_to(START + 5)
         before = store.read(limit=None)
-
-        row = await adapter.mark_open_positions(snapshots={}, zero_mints={ZERO})
-
-        assert row is not None
+        reserves = adapter._last_reserves.copy()
+        timestamps = adapter._last_price_ts.copy()
+        with pytest.raises(ValueError, match="timeout-zero"):
+            await adapter.mark_open_positions(snapshots={MINT: _snapshot()}, zero_mints={MINT})
+        assert store.read(limit=None) == before
+        assert adapter._last_reserves == reserves
+        assert adapter._last_price_ts == timestamps
         assert source.reads == []
-        assert adapter._last_reserves[ZERO] == (11, 22)
-        assert adapter._last_price_ts[ZERO] == START - 20
-        assert [e["type"] for e in store.read(limit=None)[len(before) :]] == ["MarkToMarket"]
-        state = _fold(store)
-        assert state.positions[ZERO].last_mtm_lamports == 0
-        assert state.positions[ZERO].token_units == ZERO_UNITS
-        assert state.positions[ZERO].cost_basis_lamports == ZERO_BASIS
-        assert state.cash_lamports == EQUITY
-        assert adapter.equity_lamports() == EQUITY
     finally:
         store.close()
+
+    reopened = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        adapter = _adapter(reopened, clock, price_source=CountingSource())
+        gross = sell_out(S0, T0, units)
+        fees = FeeModel()
+        venue = fees.venue_fee(gross)
+        proceeds = gross - venue - fees.network_cost()
+        assert _fold(reopened).positions[MINT].last_mtm_lamports == gross - venue
+        result = await adapter.close_position(
+            mint=MINT, ticket_id="SOL-20260201-001", reason="kill_flatten"
+        )
+        assert result["status"] == "closed"
+        assert result["proceeds_lamports"] == proceeds
+        fill = reopened.read(types=["FillRecorded"], limit=None)[-1]["payload"]
+        assert fill["venue_fee_lamports"] == venue
+        assert fill["cash_delta_lamports"] == proceeds
+        assert adapter.cash_lamports() == EQUITY + proceeds
+    finally:
+        reopened.close()
 
 
 @pytest.mark.parametrize(
