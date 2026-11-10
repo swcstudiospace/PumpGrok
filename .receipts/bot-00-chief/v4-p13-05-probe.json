@@ -7,7 +7,7 @@
   "status": "Focused checks recorded; independent receipt approval and integration pending.",
   "red_evidence": "Local untracked raw JUnit SHA-256 62052a7584f27a180d09768b478db9ec439d00b76b4b5e65b7fd37ee7800b8c4; classifier record SHA-256 7b2b150f459ccde053a852deb0dcef11fffeb29b62842943a91b4c58f9a5edc0. The classifier returned RED_EVIDENCE_OK for the token-first assertion.",
   "commands": [
-    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout_token_first.py tests/scripts/test_probe_curve_layout.py --junitxml=probe-final-green.xml", "exit_code": 0, "output_tail": "JUnit: 6 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout_token_first.py tests/desk/test_probe_pump_accounts.py tests/scripts/test_probe_curve_layout.py --junitxml=probe-compatible.xml", "exit_code": 0, "output_tail": "JUnit: 22 tests, 0 failures, 0 errors, 0 skipped."},
     {"cmd": "uv run ruff check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout_token_first.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "No issues found."},
     {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout_token_first.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "3 files already formatted."},
     {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py tests/tools/onchain/test_curve_layout.py tests/tools/market/test_price.py --junitxml=probe-integration.xml", "cwd": "/root/src/repos/pumpgrok-wt/phase-13-probe-integration", "exit_code": 0, "output_tail": "JUnit: 38 tests, 0 failures, 0 errors, 0 skipped. Tested a staged, uncommitted merge of rug 238e725 and chief e0f8013."}
