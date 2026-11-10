@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.121" timestamp="2026-11-10T15:33:52.901095+00:00" hostname="vps"><testcase classname="tests.desk.test_probe_curve_layout" name="test_decode_account_uses_token_first_base_prefix[base-49]" time="0.003"><failure message="AssertionError: assert {'discriminat...ts': 303, ...} == {'discriminat...ts': 303, ...}&#10;  &#10;  Omitting 3 identical items, use -vv to show&#10;  Differing items:&#10;  {'virtual_sol_reserves_lamports': 101} != {'virtual_sol_reserves_lamports': 202}&#10;  {'real_sol_reserves_lamports': 303} != {'real_sol_reserves_lamports': 404}&#10;  {'real_token_reserves_units': 404} != {'real_token_reserves_units': 303}&#10;  {'virtual_token_reserves_units': 202} != {'virtual_token_reserves_units': 101}&#10;  Use -v to get more diff">extension = b''
+
+    @pytest.mark.parametrize("extension", [b"", bytes(range(117))], ids=["base-49", "extended-166"])
+    def test_decode_account_uses_token_first_base_prefix(extension: bytes) -&gt; None:
+        raw = BASE_ACCOUNT + extension
+        assert len(raw) == 49 + len(extension)
+&gt;       assert probe_mod._decode_account(raw) == EXPECTED
+E       AssertionError: assert {'discriminat...ts': 303, ...} == {'discriminat...ts': 303, ...}
+E         
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'virtual_sol_reserves_lamports': 101} != {'virtual_sol_reserves_lamports': 202}
+E         {'real_sol_reserves_lamports': 303} != {'real_sol_reserves_lamports': 404}
+E         {'real_token_reserves_units': 404} != {'real_token_reserves_units': 303}
+E         {'virtual_token_reserves_units': 202} != {'virtual_token_reserves_units': 101}
+E         Use -v to get more diff
+
+tests/desk/test_probe_curve_layout.py:38: AssertionError</failure></testcase></testsuite></testsuites>
