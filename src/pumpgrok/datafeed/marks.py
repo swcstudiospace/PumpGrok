@@ -41,6 +41,7 @@ class HeldMarkScheduler:
         self._lifecycle_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
         self._completion: asyncio.Future[Exception | None] | None = None
+        self._observed_failure: Exception | None = None
         self._closed = False
 
     async def holdings_changed(self) -> None:
@@ -55,7 +56,8 @@ class HeldMarkScheduler:
                 raise RuntimeError("held mark scheduler is closed")
             if self._task is not None and self._task.done():
                 task, self._task = self._task, None
-                task.result()
+                if task.cancelled() or task.exception() is not self._observed_failure:
+                    task.result()
             async with self._lock:
                 held = await self._cycle()
             await self._stop_timer()
@@ -95,6 +97,7 @@ class HeldMarkScheduler:
         """
         failure = await asyncio.shield(self._completion_future())
         if failure is not None:
+            self._observed_failure = failure
             raise failure
 
     @staticmethod

@@ -376,6 +376,30 @@ async def test_owner_wait_observes_ledger_failure_without_holdings_change(
         await desk.scheduler.close()
 
 
+async def test_observed_timer_failure_allows_single_reconciliation_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    original = desk.adapter.mark_open_positions
+
+    async def fail_accounting(**_kwargs: object) -> None:
+        raise RuntimeError("ledger unavailable")
+
+    monkeypatch.setattr(desk.adapter, "mark_open_positions", fail_accounting)
+    owner = asyncio.create_task(desk.scheduler.wait())
+    await desk.advance(60)
+    with pytest.raises(RuntimeError, match="ledger unavailable"):
+        await owner
+    monkeypatch.setattr(desk.adapter, "mark_open_positions", original)
+    await desk.scheduler.holdings_changed()
+    before = len(desk.marks())
+    await desk.advance(60)
+    assert len(desk.marks()) > before
+    await desk.scheduler.close()
+
+
 async def test_owner_wait_completes_on_shutdown_even_when_flat(tmp_path: Path) -> None:
     desk = Desk(tmp_path)
     owner = asyncio.create_task(desk.scheduler.wait())
