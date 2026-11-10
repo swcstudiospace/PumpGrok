@@ -1,0 +1,26 @@
+{
+  "task_id": "v4-p13-05-probe",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/phase-13-curve-probe",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-05 read-only probe decoder compatibility slice; not a status approval",
+  "status": "Focused checks recorded; independent receipt approval and integration pending.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout.py --junitxml=probe-green.xml", "exit_code": 0, "output_tail": "JUnit: 4 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check scripts/probe_curve_layout.py tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py", "exit_code": 0, "output_tail": "3 files already formatted."},
+    {"cmd": "uv run pytest -q tests/desk/test_probe_curve_layout.py tests/desk/test_probe_pump_accounts.py tests/tools/onchain/test_curve_layout.py tests/tools/market/test_price.py --junitxml=probe-integration.xml", "cwd": "/root/src/repos/pumpgrok-wt/phase-13-probe-integration", "exit_code": 0, "output_tail": "JUnit: 38 tests, 0 failures, 0 errors, 0 skipped. Tested a staged, uncommitted merge of rug 238e725 and chief e0f8013."}
+  ],
+  "claims": [
+    {"claim": "Offline probe tests passed for both account lengths without status promotion.", "evidence_command_index": 0},
+    {"claim": "Focused lint and format checks passed.", "evidence_command_index": 1},
+    {"claim": "The staged combined decoder and probe tree passed the focused integration checks.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Independent human receipt approval is absent; no seat self-approval.",
+    "The combined integration tree was not committed or subjected to full canonical gates.",
+    "No live probe, provider compatibility check, human layout or event review, or VERIFIED status was performed.",
+    "Phase 13 and onboarding remain incomplete; Phase 12 verification remains stale."
+  ],
+  "rollback_plan": "Revert the probe branch commits with git revert in a reviewed pull request. Recovery takes under five minutes; source and tests revert while recorded ledger and operator data remain unchanged."
+}
