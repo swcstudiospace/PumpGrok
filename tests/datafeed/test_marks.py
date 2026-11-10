@@ -50,7 +50,9 @@ class Curves:
 
 
 class Desk:
-    def __init__(self, tmp_path: Path, *, capacity: int = 8) -> None:
+    def __init__(
+        self, tmp_path: Path, *, capacity: int = 8, settings: GapSettings | None = None
+    ) -> None:
         self.clock = CountingClock()
         self.store = LedgerStore(str(tmp_path / "ledger.sqlite"))
         self.store.set_meta("initial_equity_lamports", "10000000000")
@@ -78,27 +80,43 @@ class Desk:
         self.scheduler = HeldMarkScheduler(
             adapter=self.adapter,
             clock=self.clock,
-            settings=GapSettings(gap_after_s=30, timeout_after_s=120),
+            settings=settings or GapSettings(gap_after_s=30, timeout_after_s=120),
             max_observations=capacity,
         )
 
     def open(self, mint: str, source: str = "fixture") -> None:
         self.curves.sources[mint] = source
         self.store.append(
-            ts_utc=self.clock.utc_iso(), source="paper", correlation_id="test",
-            idempotency_key=f"open-{mint}", type="PositionOpened",
-            payload={"source": "paper", "mint": mint, "price_entry": "0.00001",
-                     "token_units": UNITS, "cost_basis_lamports": 200_000_000,
-                     "opened_ts_utc": self.clock.utc_iso()},
+            ts_utc=self.clock.utc_iso(),
+            source="paper",
+            correlation_id="test",
+            idempotency_key=f"open-{mint}",
+            type="PositionOpened",
+            payload={
+                "source": "paper",
+                "mint": mint,
+                "price_entry": "0.00001",
+                "token_units": UNITS,
+                "cost_basis_lamports": 200_000_000,
+                "opened_ts_utc": self.clock.utc_iso(),
+            },
         )
 
     def remove(self, mint: str) -> None:
         self.store.append(
-            ts_utc=self.clock.utc_iso(), source="paper", correlation_id="test",
-            idempotency_key=f"close-{mint}", type="PositionClosed",
-            payload={"source": "paper", "mint": mint, "price_exit": "0",
-                     "proceeds_lamports": 0, "realized_pnl_lamports": 0,
-                     "reason": "manual"},
+            ts_utc=self.clock.utc_iso(),
+            source="paper",
+            correlation_id="test",
+            idempotency_key=f"close-{mint}",
+            type="PositionClosed",
+            payload={
+                "source": "paper",
+                "mint": mint,
+                "price_exit": "0",
+                "proceeds_lamports": 0,
+                "realized_pnl_lamports": 0,
+                "reason": "manual",
+            },
         )
 
     def marks(self) -> list[dict]:
@@ -164,7 +182,9 @@ async def test_assumed_live_price_cannot_create_trusted_positive_mark(
     await desk.scheduler.close()
 
 
-async def test_gap_preserves_last_mark_and_timeout_records_zero_without_sale(tmp_path: Path) -> None:
+async def test_gap_preserves_last_mark_and_timeout_records_zero_without_sale(
+    tmp_path: Path,
+) -> None:
     desk = Desk(tmp_path)
     desk.open("a")
     await desk.adapter.mark_open_positions(correlation_id="baseline")
@@ -180,6 +200,48 @@ async def test_gap_preserves_last_mark_and_timeout_records_zero_without_sale(tmp
     assert state.positions["a"].last_mtm_ts_utc
     assert state.positions["a"].token_units == UNITS
     assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
+    await desk.scheduler.close()
+
+
+async def test_mixed_gap_keeps_last_value_until_timeout_while_other_mint_marks(
+    tmp_path: Path,
+) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+    desk.open("b")
+    await desk.scheduler.holdings_changed()
+    original = desk.adapter._fold_state().positions["a"].last_mtm_lamports
+    assert original > 0
+    desk.curves.sources["a"] = None
+    await desk.advance(60)
+    state = desk.adapter._fold_state()
+    assert state.positions["a"].last_mtm_lamports == original
+    assert state.positions["b"].last_mtm_lamports > 0
+    assert "a" not in desk.prices()[-1]
+    assert "b" in desk.prices()[-1]
+    await desk.advance(60)
+    state = desk.adapter._fold_state()
+    assert state.positions["a"].last_mtm_lamports == 0
+    assert state.positions["b"].last_mtm_lamports > 0
+    assert state.positions["a"].token_units == UNITS
+    assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
+    await desk.scheduler.close()
+
+
+async def test_unverified_frames_do_not_extend_short_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
+    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
+    desk.curves.sources["a"] = "rpc"
+    await desk.advance(19)
+    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
+    await desk.advance(1)
+    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports == 0
+    assert desk.adapter._fold_state().positions["a"].token_units == UNITS
     await desk.scheduler.close()
 
 
