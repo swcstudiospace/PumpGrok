@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 from decimal import Decimal
 
@@ -41,12 +42,12 @@ def test_token_first_reserves() -> None:
     assert state.real_sol_reserves_lamports == 404
     assert state.total_supply_units == 505
     assert state.complete is True
-    assert state.extended_data == b""
+    assert state.extended_data_hex == ""
     assert curve_price_sol_per_token(state) == Decimal("0.002")
 
 
 def test_extended_token_first_reserves() -> None:
-    extension = bytes(range(117))
+    extension = bytes(range(116)) + b"\xff"
     state = decode_curve_account(_token_first_account() + extension)
 
     assert state.virtual_token_reserves_units == 101
@@ -55,7 +56,9 @@ def test_extended_token_first_reserves() -> None:
     assert state.real_sol_reserves_lamports == 404
     assert state.total_supply_units == 505
     assert state.complete is True
-    assert state.extended_data == extension
+    assert bytes.fromhex(state.extended_data_hex) == extension
+    dumped = json.loads(json.dumps(state.model_dump()))
+    assert bytes.fromhex(dumped["extended_data_hex"]) == extension
 
 
 @pytest.mark.parametrize("extra", [b"", bytes(117)], ids=["49-byte", "166-byte"])

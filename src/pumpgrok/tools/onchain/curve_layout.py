@@ -53,7 +53,7 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
-    extended_data: bytes = b""
+    extended_data_hex: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
@@ -84,7 +84,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_sol_reserves_lamports=rsol,
         real_token_reserves_units=rtok,
         total_supply_units=supply,
-        extended_data=data[CURVE_ACCOUNT_SIZE:],
+        extended_data_hex=data[CURVE_ACCOUNT_SIZE:].hex(),
         complete=bool(complete),
     )
 
