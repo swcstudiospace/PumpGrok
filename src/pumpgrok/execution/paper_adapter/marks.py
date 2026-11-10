@@ -172,9 +172,11 @@ class _MarksMixin:
         ``snapshots`` or ``zero_mints`` is supplied, those inputs are authoritative:
         omitted positions retain their last value and no price source is read.
         Supplied snapshots must match an open mint and pass the current trust gate.
-        Zero marks are accounting marks only, never exits or last-good prices.
+        Nonempty zero marks are rejected until durable last-good exits are supported.
         All marks for this instant are written in one row.
         """
+        if zero_mints:
+            raise ValueError("timeout-zero marks require durable last-good exit support")
         ledger_source = source if source is not None else self._source
         state = self._fold_state()
         held = {m: p for m, p in state.positions.items() if p.token_units > 0 and not p.mtm_frozen}
@@ -182,12 +184,11 @@ class _MarksMixin:
         supplied = snapshots is not None or zero_mints is not None
         if supplied:
             supplied_snapshots = snapshots if snapshots is not None else {}
-            zeros = zero_mints if zero_mints is not None else set()
-            self._validate_supplied_marks(held, supplied_snapshots, zeros, now)
+            self._validate_supplied_marks(held, supplied_snapshots, now)
         if not held:
             return None
         if supplied:
-            marks, values = self._price_supplied(held, supplied_snapshots, zeros, now)
+            marks, values = self._price_supplied(held, supplied_snapshots, now)
         else:
             marks, values = await self._price_held(held, now)
         if not marks:
@@ -210,14 +211,11 @@ class _MarksMixin:
         self,
         held: dict[str, PositionView],
         snapshots: Mapping[str, CurveSnapshot],
-        zeros: Set[str],
         now: float,
     ) -> None:
         """Reject the whole batch before pricing, writing or changing caches."""
-        if (set(snapshots) | zeros) - held.keys():
+        if set(snapshots) - held.keys():
             raise ValueError("mark input contains a mint without an open position")
-        if snapshots.keys() & zeros:
-            raise ValueError("a mint cannot have both a snapshot and a zero mark")
         for mint, curve in snapshots.items():
             if not self._admitted_curve(mint, curve):
                 raise ValueError(f"untrusted or invalid curve snapshot for {mint}")
@@ -252,7 +250,6 @@ class _MarksMixin:
         self,
         held: dict[str, PositionView],
         snapshots: Mapping[str, CurveSnapshot],
-        zeros: Set[str],
         now: float,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
         """Value validated supplied observations without reading or changing caches."""
@@ -268,15 +265,6 @@ class _MarksMixin:
                 "spot": str(spot(curve.s_lamports, curve.t_units)),
                 "source": "curve",
                 "ts_utc": format_ts_utc(curve.ts if curve.ts is not None else now),
-            }
-        for mint in zeros:
-            values[mint] = 0
-            marks[mint] = {
-                "mtm_lamports": 0,
-                "venue_fee_lamports": 0,
-                "spot": "0",
-                "source": "timeout",
-                "ts_utc": format_ts_utc(now),
             }
         return marks, values
 
