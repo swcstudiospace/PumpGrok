@@ -20,16 +20,16 @@ def snapshot(*, complete: bool = False, source: str = "rpc") -> CurveSnapshot:
 
 def test_open_verified_curve_allows_entry_but_completed_curve_denies_it(monkeypatch):
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-    assert entry_allowed(snapshot()) is True
-    assert entry_allowed(snapshot(complete=True)) is False
-    assert entry_allowed(None) is False
+    assert entry_allowed(snapshot(), now=100.0, max_age_s=10.0) is True
+    assert entry_allowed(snapshot(complete=True), now=100.0, max_age_s=10.0) is False
+    assert entry_allowed(None, now=100.0, max_age_s=10.0) is False
 
 
 def test_assumed_or_unknown_live_curve_never_authorizes_entry(monkeypatch):
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
-    assert entry_allowed(snapshot()) is False
-    assert entry_allowed(snapshot(source="unknown")) is False
-    assert entry_allowed(snapshot(source="fixture")) is True
+    assert entry_allowed(snapshot(), now=100.0, max_age_s=10.0) is False
+    assert entry_allowed(snapshot(source="unknown"), now=100.0, max_age_s=10.0) is False
+    assert entry_allowed(snapshot(source="fixture"), now=100.0, max_age_s=10.0) is True
 
 
 def test_gap_holds_then_timeout_marks_zero_without_a_sale(monkeypatch):
@@ -105,7 +105,9 @@ def test_entry_checks_snapshot_freshness_against_explicit_clock_and_budget(monke
     assert entry_allowed(current, now=105.0, max_age_s=10.0) is True
     assert entry_allowed(current, now=111.0, max_age_s=10.0) is False
     assert entry_allowed(current, now=99.0, max_age_s=10.0) is False
-    assert entry_allowed(current.model_copy(update={"ts": None}), now=105.0, max_age_s=10.0) is False
+    assert (
+        entry_allowed(current.model_copy(update={"ts": None}), now=105.0, max_age_s=10.0) is False
+    )
 
 
 def test_future_last_trusted_time_fails_closed_instead_of_suppressing_timeout():
@@ -118,13 +120,37 @@ def test_latest_trusted_observation_prevents_premature_timeout(monkeypatch):
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
     settings = GapSettings(gap_after_s=10.0, timeout_after_s=30.0)
     recent = snapshot().model_copy(update={"ts": 120.0})
-    assert position_action(recent, last_trusted_at=100.0, now=120.0, settings=settings) == PositionAction.MARK
-    assert position_action(recent, last_trusted_at=100.0, now=131.0, settings=settings) == PositionAction.HOLD
-    assert position_action(recent, last_trusted_at=100.0, now=150.0, settings=settings) == PositionAction.ZERO_MARK
+    assert (
+        position_action(recent, last_trusted_at=100.0, now=120.0, settings=settings)
+        == PositionAction.MARK
+    )
+    assert (
+        position_action(recent, last_trusted_at=120.0, now=131.0, settings=settings)
+        == PositionAction.HOLD
+    )
+    assert (
+        position_action(recent, last_trusted_at=120.0, now=150.0, settings=settings)
+        == PositionAction.ZERO_MARK
+    )
 
 
 def test_unverified_observation_does_not_refresh_timeout(monkeypatch):
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
     settings = GapSettings(gap_after_s=10.0, timeout_after_s=30.0)
     recent = snapshot().model_copy(update={"ts": 129.0})
-    assert position_action(recent, last_trusted_at=100.0, now=130.0, settings=settings) == PositionAction.ZERO_MARK
+    assert (
+        position_action(recent, last_trusted_at=100.0, now=130.0, settings=settings)
+        == PositionAction.ZERO_MARK
+    )
+
+
+def test_repeated_stale_snapshots_never_postpone_timeout(monkeypatch):
+    monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
+    settings = GapSettings(gap_after_s=10.0, timeout_after_s=30.0)
+    for stamp in (115.0, 130.0, 145.0):
+        stale = snapshot().model_copy(update={"ts": stamp})
+        expected = PositionAction.HOLD if stamp + 11.0 < 135.0 else PositionAction.ZERO_MARK
+        assert (
+            position_action(stale, last_trusted_at=105.0, now=stamp + 11.0, settings=settings)
+            == expected
+        )

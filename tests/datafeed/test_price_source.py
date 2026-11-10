@@ -1,7 +1,7 @@
 """Paper prices require fresh, independently admitted live observations."""
 
-import random
 import asyncio
+import random
 from dataclasses import replace
 from pathlib import Path
 
@@ -11,8 +11,9 @@ from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.graduation import entry_allowed
 from pumpgrok.datafeed.price import LivePriceSource
-from pumpgrok.events.sources import STALE_AFTER_S, SourceSupervisor
+from pumpgrok.events.sources import STALE_AFTER_S, SourceStatus, SourceSupervisor
 from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
@@ -29,7 +30,7 @@ def source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     clock = FixtureClock(START)
     health = SourceSupervisor(clock, random.Random(0), path=tmp_path / "cursor.db")
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-    prices = LivePriceSource(clock=clock, health=health, max_age_s=10.0)
+    prices = LivePriceSource(clock=clock, health=health, max_age_s=10.0, max_observations=16)
     yield prices, health, clock
     health.close()
 
@@ -88,15 +89,18 @@ async def test_stale_observation_and_stale_connection_independently_fail_closed(
     assert await prices.curve(MINT) is None
 
 
-async def test_assumed_status_revokes_existing_live_observation_dynamically(source, monkeypatch):
+async def test_assumed_status_denies_entry_but_preserves_exit_observation(source, monkeypatch):
     prices, health, clock = source
     health.note_frame()
     prices.observe(observation(clock))
-    assert await prices.curve(MINT) is not None
+    snap = await prices.curve(MINT)
+    assert entry_allowed(snap, now=clock.now(), max_age_s=10.0)
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
-    assert await prices.curve(MINT) is None
+    snap = await prices.curve(MINT)
+    assert snap is not None and snap.source == "rpc"
+    assert not entry_allowed(snap, now=clock.now(), max_age_s=10.0)
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-    assert await prices.curve(MINT) is not None
+    assert entry_allowed(await prices.curve(MINT), now=clock.now(), max_age_s=10.0)
 
 
 @pytest.mark.parametrize("label", ["fixture", "unknown", "unverified"])
@@ -121,10 +125,7 @@ async def test_future_observation_cannot_block_later_current_observations(source
     prices.observe(observation(clock))
     assert await prices.curve(MINT) is not None
     future = replace(observation(clock), ts_utc="2099-01-01T00:00:00Z")
-    try:
-        prices.observe(future)
-    except ValueError:
-        pass
+    prices.observe(future)
     clock.advance_to(START + 1)
     health.note_frame()
     prices.observe(replace(observation(clock), s_lamports=43_000_000_000))
@@ -150,11 +151,94 @@ async def test_reconnect_requires_new_observation_for_each_mint(source):
     assert await prices.curve(MINT) is not None
 
 
+@pytest.mark.parametrize("interruption", ["failure", "resync"])
+async def test_unobserved_reconnect_fences_each_mint_at_same_timestamp(source, interruption):
+    prices, health, clock = source
+    health.note_frame()
+    prices.observe(observation(clock))
+    prices.observe(replace(observation(clock), mint="another-mint"))
+    assert await prices.curve(MINT) is not None
+    assert await prices.curve("another-mint") is not None
+    if interruption == "failure":
+        health.note_failure()
+    else:
+        health.resync([MINT, "another-mint"])
+    health.note_frame()
+    # No read or clock advance occurred while the connection was interrupted.
+    assert await prices.curve(MINT) is None
+    assert await prices.curve("another-mint") is None
+    prices.observe(observation(clock))
+    assert await prices.curve(MINT) is not None
+    assert await prices.curve("another-mint") is None
+
+
+async def test_silent_stale_interval_fences_cached_mint_after_unrelated_frame(tmp_path: Path):
+    clock = FixtureClock(START)
+    health = SourceSupervisor(clock, random.Random(0), path=tmp_path / "cursor.db")
+    prices = LivePriceSource(
+        clock=clock, health=health, max_age_s=STALE_AFTER_S + 100.0, max_observations=16
+    )
+    try:
+        health.note_frame()
+        prices.observe(observation(clock))
+        assert await prices.curve(MINT) is not None
+        clock.advance_to(START + STALE_AFTER_S + 1)
+        # No status read while stale: an unrelated frame must not revive MINT.
+        health.note_frame()
+        prices.observe(replace(observation(clock), mint="another-mint"))
+        assert await prices.curve("another-mint") is not None
+        assert await prices.curve(MINT) is None
+        prices.observe(observation(clock))
+        assert await prices.curve(MINT) is not None
+    finally:
+        health.close()
+
+
 @pytest.mark.parametrize("max_age_s", [0, -1, float("inf"), float("nan")])
 def test_freshness_budget_must_be_explicit_and_valid(source, max_age_s):
     _, health, clock = source
     with pytest.raises(ValueError):
-        LivePriceSource(clock=clock, health=health, max_age_s=max_age_s)
+        LivePriceSource(clock=clock, health=health, max_age_s=max_age_s, max_observations=16)
+
+
+@pytest.mark.parametrize("bad_frame", [float("nan"), float("inf"), -float("inf"), START - 1])
+def test_invalid_frame_cannot_end_resync_or_change_health(source, bad_frame):
+    _, health, clock = source
+    health.note_frame()
+    health.resync([MINT])
+    generation = health.connection_generation
+    with pytest.raises(ValueError):
+        health.note_frame(bad_frame)
+    assert health.last_frame_at == START
+    assert health.connection_generation == generation
+    assert health.status_at(clock.now()) is SourceStatus.resyncing
+    health.note_frame()
+    assert health.status_at(clock.now()) is SourceStatus.live
+
+
+@pytest.mark.parametrize("capacity", [0, -1, True, 1.5])
+def test_observation_capacity_must_be_a_positive_integer(source, capacity):
+    _, health, clock = source
+    with pytest.raises(ValueError):
+        LivePriceSource(clock=clock, health=health, max_age_s=10.0, max_observations=capacity)
+
+
+async def test_capacity_rejects_new_mints_without_evicting_fresh_data(source):
+    _, health, clock = source
+    prices = LivePriceSource(clock=clock, health=health, max_age_s=10.0, max_observations=2)
+    health.note_frame()
+    prices.observe(observation(clock))
+    prices.observe(replace(observation(clock), mint="another-mint"))
+    with pytest.raises(OverflowError):
+        prices.observe(replace(observation(clock), mint="third-mint"))
+    assert await prices.curve(MINT) is not None
+    assert await prices.curve("another-mint") is not None
+    assert await prices.curve("third-mint") is None
+    clock.advance_to(START + 11)
+    health.note_frame()
+    prices.observe(replace(observation(clock), mint="third-mint"))
+    assert await prices.curve("third-mint") is not None
+    assert await prices.curve(MINT) is None
 
 
 async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: Path):
@@ -177,18 +261,29 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
         autonomy="autonomous-paper",
         get_reserves=lambda _mint: (sol_reserves, token_reserves),
     )
-    prices = LivePriceSource(clock=clock, health=health, max_age_s=300.0)
+    prices = LivePriceSource(clock=clock, health=health, max_age_s=300.0, max_observations=16)
     adapter = PaperAdapter(
-        store=store, risk=risk, ids=IdFactory(clock, make_rng(7)),
-        clock=clock, rng=make_rng(7), budget=budget, price_source=prices, p_drop=0.0,
+        store=store,
+        risk=risk,
+        ids=IdFactory(clock, make_rng(7)),
+        clock=clock,
+        rng=make_rng(7),
+        budget=budget,
+        price_source=prices,
+        p_drop=0.0,
     )
 
     def request(ticket: str, side: Side, units: int | None = None) -> OrderRequest:
         return OrderRequest(
-            ticket_id=ticket, mint=mint, side=side, decision_id=adapter._ids.ulid(),
+            ticket_id=ticket,
+            mint=mint,
+            side=side,
+            decision_id=adapter._ids.ulid(),
             size_lamports=200_000_000 if side is Side.BUY else None,
-            token_units=units, max_slippage_bps=100,
-            approval_id=f"apr-{adapter._ids.ulid()}", correlation_id="test",
+            token_units=units,
+            max_slippage_bps=100,
+            approval_id=f"apr-{adapter._ids.ulid()}",
+            correlation_id="test",
         )
 
     async def place(order: OrderRequest, seat: str, exit_reason: str | None = None):
@@ -207,16 +302,25 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
             if requested_mint != mint:
                 return None
             return CurveSnapshot(
-                mint=mint, s_lamports=sol_reserves, t_units=token_reserves,
-                source="fixture", ts=clock.now(),
+                mint=mint,
+                s_lamports=sol_reserves,
+                t_units=token_reserves,
+                source="fixture",
+                ts=clock.now(),
             )
 
     def observe_rpc() -> None:
         health.note_frame()
-        prices.observe(CurveObservation(
-            mint=mint, ts_utc=clock.utc_iso(), s_lamports=sol_reserves,
-            t_units=token_reserves, complete=False, source="rpc",
-        ))
+        prices.observe(
+            CurveObservation(
+                mint=mint,
+                ts_utc=clock.utc_iso(),
+                s_lamports=sol_reserves,
+                t_units=token_reserves,
+                complete=False,
+                source="rpc",
+            )
+        )
 
     try:
         # Open through trusted replay only; the protective exit uses the real live source.

@@ -7,6 +7,7 @@ open a socket, and it is not wired into the desk supervisor.
 from __future__ import annotations
 
 import json
+import math
 import random
 import sqlite3
 from collections.abc import Sequence
@@ -68,6 +69,7 @@ class SourceSupervisor:
         self._healthy_since: float | None = None
         self._last_frame_at: float | None = None
         self._status = SourceStatus.live
+        self._connection_generation = 0
         self._held_mints: tuple[str, ...] = ()
         self.cursor_reset = False
         self._cursor: dict[str, Any] = _clean_cursor()
@@ -76,6 +78,11 @@ class SourceSupervisor:
     @property
     def last_frame_at(self) -> float | None:
         return self._last_frame_at
+
+    @property
+    def connection_generation(self) -> int:
+        """Fence observations across disconnects, resyncs, and silent stale intervals."""
+        return self._connection_generation
 
     @property
     def held_mints(self) -> tuple[str, ...]:
@@ -105,6 +112,10 @@ class SourceSupervisor:
     def note_frame(self, at: float | None = None) -> None:
         """Record one good frame. Ends resync and starts a healthy span."""
         ts = self._clock.now() if at is None else float(at)
+        if not math.isfinite(ts) or (self._last_frame_at is not None and ts < self._last_frame_at):
+            raise ValueError("frame timestamp must be finite and nondecreasing")
+        if self._last_frame_at is not None and ts - self._last_frame_at > STALE_AFTER_S:
+            self._connection_generation += 1
         self._last_frame_at = ts
         if self._healthy_since is None:
             self._healthy_since = ts
@@ -118,6 +129,7 @@ class SourceSupervisor:
         span restarts at the initial step; the failure that ends it is not
         counted as a new step.
         """
+        self._connection_generation += 1
         self._status = SourceStatus.disconnected
         if self._is_stable():
             self._step = 0
@@ -134,6 +146,7 @@ class SourceSupervisor:
 
     def resync(self, held_mints: Sequence[str]) -> None:
         """Record the caller mint list and stay resyncing until the next good frame."""
+        self._connection_generation += 1
         self._held_mints = tuple(held_mints)
         self._status = SourceStatus.resyncing
         self._cursor = {**_clean_cursor(), "held_mints": list(self._held_mints)}
