@@ -56,18 +56,21 @@ def test_offline_probe_remains_pending_human_review(
     out = tmp_path / "probe.json"
     doc = tmp_path / "probe.md"
 
-    assert probe_mod.main(
-        [
-            "--endpoint",
-            "https://rpc.example.test",
-            "--account",
-            "offline-account",
-            "--out",
-            str(out),
-            "--doc",
-            str(doc),
-        ]
-    ) == 0
+    assert (
+        probe_mod.main(
+            [
+                "--endpoint",
+                "https://rpc.example.test",
+                "--account",
+                "offline-account",
+                "--out",
+                str(out),
+                "--doc",
+                str(doc),
+            ]
+        )
+        == 0
+    )
     record = json.loads(out.read_text(encoding="utf-8"))
     assert record["layout_status"] == "DECODED_PENDING_REVIEW"
     assert record["decoded"] == EXPECTED

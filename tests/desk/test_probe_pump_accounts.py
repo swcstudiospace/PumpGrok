@@ -41,7 +41,7 @@ FORBIDDEN_SEND_TOKENS = ("sendTransaction", "send_transaction", "requestAirdrop"
 
 
 def _account_value(*, owner: str = PROGRAM, disc: bytes = DISCRIMINATOR) -> dict[str, Any]:
-    raw = CURVE.pack(disc, 30_000_000_000, 1_073_000_000, 0, 0, 1_000_000_000, 0)
+    raw = CURVE.pack(disc, 1_073_000_000, 30_000_000_000, 0, 0, 1_000_000_000, 0)
     return {
         "owner": owner,
         "lamports": 2_039_280,
@@ -95,9 +95,7 @@ def test_discriminator_mismatch_stays_assumed() -> None:
     fetch = _Fetch(_account_value(disc=b"\x00" * 8))
     record = probe_mod.probe_account(ACCOUNT, ENDPOINT, fetch, FixtureClock())
     assert record["status"] == "ASSUMED"
-    assert record["error"] == (
-        "discriminator does not match the ASSUMED layout; layout stays ASSUMED"
-    )
+    assert record["error"] == "invalid bonding curve discriminator; layout stays ASSUMED"
 
 
 def test_missing_account_stays_assumed() -> None:

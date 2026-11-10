@@ -4,7 +4,8 @@
 One ``getAccountInfo`` call against the configured public Solana RPC for a
 known bonding-curve account, decoded under the ASSUMED layout in
 ``src/pumpgrok/tools/onchain/curve_layout.py`` (8-byte discriminator, five
-little-endian u64 reserve counters, one-byte completion flag).
+little-endian u64 counters in token-first reserve order, one-byte completion flag,
+and an optional 117-byte extension).
 
 Read-only by construction: stdlib ``urllib`` POST of a single ``getAccountInfo``
 body, no keys loaded, no wallet, no signing path. On success the decoded
@@ -50,6 +51,7 @@ DEFAULT_DOC = REPO_ROOT / "docs" / "CURVE_LAYOUT_PROBE.md"
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 _EXPECTED_SIZE = _CURVE_STRUCT.size
+_EXTENDED_SIZE = 166
 
 # Owner and discriminator a bonding-curve account must carry before its bytes
 # are trusted. Both match tests/fixtures/rpc/bonding_curve/layout.json.
@@ -161,9 +163,11 @@ def _rpc_get_account(endpoint: str, account: str, commitment: str, timeout: floa
 
 def _decode_account(raw: bytes) -> dict:
     """Decode raw account bytes under the ASSUMED layout; raises on mismatch."""
-    if len(raw) != _EXPECTED_SIZE:
-        raise ValueError(f"curve account size {len(raw)} != ASSUMED {_EXPECTED_SIZE}")
-    (disc, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(raw)
+    if len(raw) not in (_EXPECTED_SIZE, _EXTENDED_SIZE):
+        raise ValueError(f"unsupported curve account size {len(raw)}")
+    (disc, vtok, vsol, rtok, rsol, supply, complete) = _CURVE_STRUCT.unpack_from(raw)
+    if disc.hex() != EXPECTED_DISCRIMINATOR_HEX:
+        raise ValueError("invalid bonding curve discriminator")
     if complete not in (0, 1):
         raise ValueError(f"curve completion flag not boolean: {complete!r}")
     for name, value in (
