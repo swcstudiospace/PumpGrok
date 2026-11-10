@@ -7,7 +7,7 @@
   "status": "Draft only; independent receipt approval and full phase integration remain pending.",
   "red_evidence": "The semantic RED for the held-mint marking behavior was classified RED_EVIDENCE_OK. Local marks-red.xml SHA-256 63a374fd1d098a79b32c328a3861a90124b93851aff2daee333af0361458845d.",
   "commands": [
-    {"cmd": "uv run pytest -q tests/datafeed/test_marks.py tests/execution/test_safe_mark_open_positions.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-recovery-final.xml", "exit_code": 0, "output_tail": "JUnit: 49 tests, 0 failures, 0 errors, 0 skipped; includes eight replay pin cases. JUnit SHA-256 9170585ea802028277b0baa5feb40c9e6c98d595a81dd06bc8432c22c0c40560."},
+    {"cmd": "uv run pytest -q tests/datafeed/test_marks.py tests/execution/test_safe_mark_open_positions.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-safe-staged-final.xml", "exit_code": 0, "output_tail": "JUnit: 54 tests, 0 failures, 0 errors, 0 skipped; includes eight replay pin cases. JUnit SHA-256 28cf8e49c3b8d7ee69282574b24880a41f33328cd4d96c203d9df0e826fe410e."},
     {"cmd": "uv run ruff format src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "2 files left unchanged."},
     {"cmd": "uv run ruff check src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "No issues found."},
     {"cmd": "uv run mypy src/pumpgrok/datafeed/marks.py", "exit_code": 0, "output_tail": "No issues found."}
@@ -19,7 +19,7 @@
   ],
   "unverified": [
     "Independent receipt approval is absent; no seat self-approval.",
-    "The stacked sniper mark seam has an open restart defect: timeout zero can erase last durable positive mark and a later protective close can return no_mark. This draft must not be merged until the reviewed 13-07 durable contract resolves it.",
+    "Timeout-zero production writes are disabled, not durably supported. Previously persisted timeout-zero rows can still strand a protective exit after restart. The original failing consumer regression is retained unchanged in test-only commit d553029 and must pass under the reviewed 13-07 contract.",
     "The scheduler is not wired into the live-data composition. Its owner must supervise wait() to observe background errors; graduation close or freeze remains a separate integration step.",
     "The full canonical suite, phase integration, live provider compatibility and trusted production mark provenance are unverified. Layout remains ASSUMED; live trading is disabled."
   ],
