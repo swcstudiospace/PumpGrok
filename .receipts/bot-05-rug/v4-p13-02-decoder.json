@@ -6,6 +6,7 @@
   "plan": "13-02 decoder slice: token-first account layouts and discriminator validation",
   "status": "Focused checks recorded; independent receipt approval and phase integration pending.",
   "admission_red_evidence": "Local untracked JUnit SHA-256 294187b5b5fd640213190c0e47ba229109b0f75f9f435889cc7f6c090290e786; classifier record SHA-256 49c8d36e5477ca891ff36a516753a0127022999e5ce4ca613485c7b01289899c. The classifier returned RED_EVIDENCE_OK for unknown source admission.",
+  "curve_red_evidence": "The unchanged raw JUnit report is preserved byte-for-byte in the output field of .receipts/bot-05-rug/p13-02-curve-red.evidence; SHA-256 ecf0c8d4680287c70d15e723979280652b82bc390f5a3aef1ddb0d30fc3db611. A duplicate raw XML file is kept locally and in prior git history.",
   "commands": [
     {"cmd": "uv run pytest -q tests/tools/onchain/test_curve_layout.py tests/tools/onchain/test_onchain_reads.py tests/tools/market/test_price.py tests/tools/market/test_market_reads.py tests/safety/test_blind_advisory.py --junitxml=curve-green.xml", "exit_code": 0, "output_tail": "JUnit: 54 tests, 0 failures, 0 errors, 0 skipped."},
     {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=curve-pins.xml", "exit_code": 0, "output_tail": "JUnit: 8 tests, 0 failures, 0 errors, 0 skipped."},

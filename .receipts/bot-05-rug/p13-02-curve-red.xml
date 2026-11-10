@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.078" timestamp="2026-11-10T15:19:45.069615+00:00" hostname="vps"><testcase classname="tests.tools.onchain.test_curve_layout" name="test_token_first_reserves" time="0.001"><failure message="assert 202 == 101&#10; +  where 202 = CurveState(virtual_sol_reserves_lamports=101, virtual_token_reserves_units=202, real_sol_reserves_lamports=303, real_token_reserves_units=404, total_supply_units=505, complete=True).virtual_token_reserves_units">def test_token_first_reserves() -&gt; None:
-        state = decode_curve_account(_token_first_account())
-    
-&gt;       assert state.virtual_token_reserves_units == 101
-E       assert 202 == 101
-E        +  where 202 = CurveState(virtual_sol_reserves_lamports=101, virtual_token_reserves_units=202, real_sol_reserves_lamports=303, real_token_reserves_units=404, total_supply_units=505, complete=True).virtual_token_reserves_units
-
-tests/tools/onchain/test_curve_layout.py:32: AssertionError</failure></testcase></testsuite></testsuites>
