@@ -7,7 +7,7 @@
   "status": "Draft only; independent receipt approval and full phase integration remain pending.",
   "red_evidence": "The semantic RED for the held-mint marking behavior was classified RED_EVIDENCE_OK. Local marks-red.xml SHA-256 63a374fd1d098a79b32c328a3861a90124b93851aff2daee333af0361458845d.",
   "commands": [
-    {"cmd": "uv run pytest -q tests/datafeed/test_marks.py tests/execution/test_safe_mark_open_positions.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-owner-final.xml", "exit_code": 0, "output_tail": "JUnit: 48 tests, 0 failures, 0 errors, 0 skipped; includes eight replay pin cases. JUnit SHA-256 98a9d666055d5bde2ba7ede3b1f34a8ed764ec9e38d1acb7073ca2ab51b4c8d3."},
+    {"cmd": "uv run pytest -q tests/datafeed/test_marks.py tests/execution/test_safe_mark_open_positions.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-recovery-final.xml", "exit_code": 0, "output_tail": "JUnit: 49 tests, 0 failures, 0 errors, 0 skipped; includes eight replay pin cases. JUnit SHA-256 9170585ea802028277b0baa5feb40c9e6c98d595a81dd06bc8432c22c0c40560."},
     {"cmd": "uv run ruff format src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "2 files left unchanged."},
     {"cmd": "uv run ruff check src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "No issues found."},
     {"cmd": "uv run mypy src/pumpgrok/datafeed/marks.py", "exit_code": 0, "output_tail": "No issues found."}
