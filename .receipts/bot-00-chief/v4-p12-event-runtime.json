@@ -87,5 +87,5 @@
     "No tests, builds, lint, formatting, docs scan or full battery were run for this receipt-only change. Source behavior is covered by retained combined-tree evidence, not this receipt commit's SHA.",
     "Canonical suite's two skip reasons were not retained."
   ],
-  "rollback_plan": "Revert only this receipt refresh through a new commit on the chief branch; never force-push. Product code, ledger, live state and historical planning/report files are unchanged."
+  "rollback_plan": "Before merge, revert the receipt commit via `git revert <receipt-commit>` on the chief branch (never force-push). Expected recovery time: under 5 minutes. After merge, use `git revert -m 1 <merge-sha>` in a revert PR only. Product code, ledger, live state and historical planning/report files are unchanged."
 }
