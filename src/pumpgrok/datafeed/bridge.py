@@ -2,7 +2,7 @@
 
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.bus import EventBus
-from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.replay.live_recorder import LiveRecorder
 
 
@@ -16,7 +16,7 @@ class ObservationBridge:
         event = Event(
             kind=EventKind.curve_tick,
             entity_id=observation.mint,
-            payload=observation.replay_tick(),
+            payload=FrozenPayload(observation.replay_tick()),
             occurred_at=observation.ts_utc,
         )
         self.recorder.record(observation)

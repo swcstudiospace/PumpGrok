@@ -1,13 +1,13 @@
 """Injected transports guarded by a fail-closed, read-only method boundary."""
 
+from itertools import count
 from typing import Protocol
-from urllib.parse import parse_qsl, unquote_plus, urlsplit
+from urllib.parse import unquote_plus, urlsplit
 
 from pumpgrok.config.settings import KEY_BEARING_VALUE_RE
 
 _RPC_METHODS = frozenset({"logsSubscribe", "getAccountInfo", "getTransaction"})
 _PORTAL_METHODS = frozenset({"subscribeNewToken", "subscribeMigration"})
-_SECRET_QUERY_NAMES = frozenset({"auth", "authorization", "credential", "credentials"})
 
 
 def _validate_endpoint(endpoint: str) -> None:
@@ -23,14 +23,9 @@ def _validate_endpoint(endpoint: str) -> None:
             and parts.password is None
             and parts.port != 0
         )
-        query = parse_qsl(parts.query, keep_blank_values=True)
     except ValueError:
         raise ValueError("read-only endpoint is invalid") from None
-    if (
-        not valid
-        or KEY_BEARING_VALUE_RE.search(unquote_plus(endpoint))
-        or any(name.lower() in _SECRET_QUERY_NAMES for name, _ in query)
-    ):
+    if not valid or bool(parts.query) or KEY_BEARING_VALUE_RE.search(unquote_plus(endpoint)):
         raise ValueError("read-only endpoint is invalid")
 
 
@@ -45,6 +40,7 @@ class ReadOnlyBoundary:
         _validate_endpoint(endpoint)
         self.endpoint = endpoint
         self.transport = transport
+        self._request_ids = count(1)
 
     async def _send(self, frame: dict[str, object]) -> object:
         _validate_endpoint(self.endpoint)
@@ -56,7 +52,9 @@ class ReadOnlyBoundary:
     async def rpc(self, method: str, params: list[object]) -> object:
         if method not in _RPC_METHODS:
             raise ValueError("RPC method is not permitted")
-        return await self._send({"method": method, "params": params})
+        return await self._send(
+            {"jsonrpc": "2.0", "id": next(self._request_ids), "method": method, "params": params}
+        )
 
     async def portal(self, method: str) -> object:
         if method not in _PORTAL_METHODS:
