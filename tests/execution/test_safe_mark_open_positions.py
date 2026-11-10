@@ -95,7 +95,9 @@ def _mark(store: LedgerStore, clock: FixtureClock, mint: str, mtm: int, key: str
     )
 
 
-def _adapter(store: LedgerStore, clock: FixtureClock, *, price_source: CountingSource) -> PaperAdapter:
+def _adapter(
+    store: LedgerStore, clock: FixtureClock, *, price_source: CountingSource
+) -> PaperAdapter:
     engine = RiskEngine(
         store=store,
         budget=RiskBudget(),
@@ -158,7 +160,7 @@ async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_pa
 
         assert row is not None
         assert source.reads == []
-        new_rows = store.read(limit=None)[len(before):]
+        new_rows = store.read(limit=None)[len(before) :]
         assert [event["type"] for event in new_rows] == ["MarkToMarket"]
         body = json.loads(str(row["payload_json"]))
         prices = json.loads(body["prices_json"])
@@ -172,7 +174,9 @@ async def test_supplied_mixed_marks_preserve_gap_and_zero_without_selling(tmp_pa
         assert prices[ZERO]["mtm_lamports"] == 0
         assert body["cash_lamports"] == EQUITY
         assert body["equity_lamports"] == EQUITY + trusted_value + OTHER_MTM
-        assert body["unrealized_lamports"] == trusted_value + OTHER_MTM - BASIS - OTHER_BASIS - ZERO_BASIS
+        assert body["unrealized_lamports"] == (
+            trusted_value + OTHER_MTM - BASIS - OTHER_BASIS - ZERO_BASIS
+        )
 
         state = _fold(store)
         assert state.positions[MINT].last_mtm_lamports == trusted_value
@@ -197,13 +201,17 @@ async def test_zero_only_writes_mark_and_keeps_position_open(tmp_path: Path) -> 
         clock.advance_to(START + 5)
         source = CountingSource()
         adapter = _adapter(store, clock, price_source=source)
+        adapter._last_reserves[ZERO] = (11, 22)
+        adapter._last_price_ts[ZERO] = START - 20
         before = store.read(limit=None)
 
         row = await adapter.mark_open_positions(snapshots={}, zero_mints={ZERO})
 
         assert row is not None
         assert source.reads == []
-        assert [e["type"] for e in store.read(limit=None)[len(before):]] == ["MarkToMarket"]
+        assert adapter._last_reserves[ZERO] == (11, 22)
+        assert adapter._last_price_ts[ZERO] == START - 20
+        assert [e["type"] for e in store.read(limit=None)[len(before) :]] == ["MarkToMarket"]
         state = _fold(store)
         assert state.positions[ZERO].last_mtm_lamports == 0
         assert state.positions[ZERO].token_units == ZERO_UNITS
@@ -214,7 +222,9 @@ async def test_zero_only_writes_mark_and_keeps_position_open(tmp_path: Path) -> 
         store.close()
 
 
-@pytest.mark.parametrize("invalid", ["unknown", "unverified", "mismatch"])
+@pytest.mark.parametrize(
+    "invalid", ["unknown", "unverified", "mismatch", "source", "reserves", "complete", "overlap"]
+)
 async def test_invalid_supplied_snapshot_rejects_atomically(
     tmp_path: Path, invalid: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -233,14 +243,22 @@ async def test_invalid_supplied_snapshot_rejects_atomically(
             snapshots[UNKNOWN] = _snapshot(UNKNOWN)
         elif invalid == "unverified":
             snapshots[OTHER] = _snapshot(OTHER, source="rpc")
-        else:
+        elif invalid == "mismatch":
             snapshots[OTHER] = _snapshot(MINT)
+        elif invalid == "source":
+            snapshots[OTHER] = _snapshot(OTHER, source="unknown")
+        elif invalid == "reserves":
+            snapshots[OTHER] = _snapshot(OTHER).model_copy(update={"s_lamports": 0})
+        elif invalid == "complete":
+            snapshots[OTHER] = _snapshot(OTHER).model_copy(update={"complete": True})
         before_rows = store.read(limit=None)
         before_reserves = adapter._last_reserves.copy()
         before_times = adapter._last_price_ts.copy()
 
         with pytest.raises(ValueError):
-            await adapter.mark_open_positions(snapshots=snapshots, zero_mints=set())
+            await adapter.mark_open_positions(
+                snapshots=snapshots, zero_mints={MINT} if invalid == "overlap" else set()
+            )
 
         assert store.read(limit=None) == before_rows
         assert adapter._last_reserves == before_reserves
@@ -283,7 +301,9 @@ async def test_trust_demotion_rejects_previously_accepted_rpc_snapshot(
         adapter = _adapter(store, clock, price_source=source)
         snap = _snapshot(source="rpc")
         monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-        assert await adapter.mark_open_positions(snapshots={MINT: snap}, zero_mints=set()) is not None
+        assert (
+            await adapter.mark_open_positions(snapshots={MINT: snap}, zero_mints=set()) is not None
+        )
         before_rows = store.read(limit=None)
         before_reserves = adapter._last_reserves.copy()
         before_times = adapter._last_price_ts.copy()
@@ -315,3 +335,130 @@ async def test_default_mark_call_still_reads_existing_price_source(tmp_path: Pat
         assert _fold(store).positions[MINT].last_mtm_lamports == gross - FeeModel().venue_fee(gross)
     finally:
         store.close()
+
+
+@pytest.mark.parametrize("source_name", ["rpc", "unknown"])
+async def test_default_untrusted_snapshot_is_a_gap_without_cache_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_name: str
+) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
+        source = CountingSource(_snapshot(source=source_name))
+        adapter = _adapter(store, clock, price_source=source)
+        adapter._last_reserves[MINT] = (11, 22)
+        adapter._last_price_ts[MINT] = START - 20
+        before = store.read(limit=None)
+
+        assert await adapter.mark_open_positions() is None
+        assert source.reads == [MINT]
+        assert store.read(limit=None) == before
+        assert adapter._last_reserves[MINT] == (11, 22)
+        assert adapter._last_price_ts[MINT] == START - 20
+    finally:
+        store.close()
+
+
+async def test_default_rpc_demotion_preserves_last_trusted_mark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        source = CountingSource(_snapshot(source="rpc"))
+        adapter = _adapter(store, clock, price_source=source)
+        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
+        assert await adapter.mark_open_positions() is not None
+        before = store.read(limit=None)
+        reserves = adapter._last_reserves.copy()
+        timestamps = adapter._last_price_ts.copy()
+        clock.advance_to(START + 5)
+        source.snapshot = _snapshot(source="rpc").model_copy(
+            update={"s_lamports": S0 * 2, "ts": START + 5}
+        )
+        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
+
+        assert await adapter.mark_open_positions() is None
+        assert store.read(limit=None) == before
+        assert adapter._last_reserves == reserves
+        assert adapter._last_price_ts == timestamps
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("timestamp", [START + 11, START - 1, float("nan"), float("inf")])
+async def test_supplied_future_or_regressing_timestamps_reject_atomically(
+    tmp_path: Path, timestamp: float
+) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        adapter = _adapter(store, clock, price_source=CountingSource())
+        assert await adapter.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        clock.advance_to(START + 10)
+        before = store.read(limit=None)
+        reserves = adapter._last_reserves.copy()
+        timestamps = adapter._last_price_ts.copy()
+        invalid = _snapshot().model_copy(update={"s_lamports": S0 * 2, "ts": timestamp})
+
+        with pytest.raises(ValueError):
+            await adapter.mark_open_positions(snapshots={MINT: invalid})
+
+        assert store.read(limit=None) == before
+        assert adapter._last_reserves == reserves
+        assert adapter._last_price_ts == timestamps
+    finally:
+        store.close()
+
+
+async def test_default_gap_uses_unmarked_position_basis_in_row_equity(tmp_path: Path) -> None:
+    class PerMintSource(CountingSource):
+        async def curve(self, mint: str) -> CurveSnapshot | None:
+            self.reads.append(mint)
+            return _snapshot() if mint == MINT else None
+
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        _seed_position(store, clock, OTHER, OTHER_UNITS, OTHER_BASIS)
+        adapter = _adapter(store, clock, price_source=PerMintSource())
+        row = await adapter.mark_open_positions()
+        assert row is not None
+        body = json.loads(str(row["payload_json"]))
+        gross = sell_out(S0, T0, UNITS)
+        net = gross - FeeModel().venue_fee(gross)
+        assert body["equity_lamports"] == EQUITY + net + OTHER_BASIS
+        assert body["unrealized_lamports"] == net - BASIS
+        assert adapter.equity_lamports() == body["equity_lamports"]
+    finally:
+        store.close()
+
+
+async def test_out_of_order_snapshot_rejected_after_adapter_restart(tmp_path: Path) -> None:
+    clock = FixtureClock(START)
+    store = _store(tmp_path)
+    try:
+        _seed_position(store, clock, MINT, UNITS, BASIS)
+        marker = _adapter(store, clock, price_source=CountingSource())
+        assert await marker.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+    finally:
+        store.close()
+
+    clock.advance_to(START + 10)
+    reopened = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    try:
+        adapter = _adapter(reopened, clock, price_source=CountingSource())
+        before = reopened.read(limit=None)
+        old = _snapshot().model_copy(update={"s_lamports": S0 * 2, "ts": START - 1})
+        with pytest.raises(ValueError):
+            await adapter.mark_open_positions(snapshots={MINT: old})
+        assert reopened.read(limit=None) == before
+        assert adapter._last_reserves == {}
+        assert adapter._last_price_ts == {}
+    finally:
+        reopened.close()
