@@ -1,0 +1,27 @@
+{
+  "task_id": "v4-p13-02-decoder",
+  "bot": "bot-05-rug",
+  "branch": "bot-05-rug/phase-13-curve-layout",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-02 decoder slice: token-first account layouts and discriminator validation",
+  "status": "Focused checks recorded; independent receipt approval and phase integration pending.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_curve_layout.py tests/tools/onchain/test_onchain_reads.py tests/tools/market/test_price.py tests/tools/market/test_market_reads.py tests/safety/test_blind_advisory.py --junitxml=curve-green.xml", "exit_code": 0, "output_tail": "JUnit: 54 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=curve-pins.xml", "exit_code": 0, "output_tail": "JUnit: 8 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_curve_layout.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_curve_layout.py", "exit_code": 0, "output_tail": "2 files already formatted."},
+    {"cmd": "uv run mypy src/pumpgrok/tools/onchain/curve_layout.py", "exit_code": 0, "output_tail": "No issues found."}
+  ],
+  "claims": [
+    {"claim": "Focused offline decoder and pricing tests passed.", "evidence_command_index": 0},
+    {"claim": "Both replay pin test files passed.", "evidence_command_index": 1},
+    {"claim": "The decoder and its test passed focused lint, format, and type checks.", "evidence_command_index": 2}
+  ],
+  "unverified": [
+    "Independent human receipt approval is absent; no seat self-approval.",
+    "The Phase 13-02 price source, marks, source allowlist and full phase gates are not completed by this slice.",
+    "Layout status remains ASSUMED; no human account-layout review or live provider probe was performed.",
+    "Phase 12 verification remains stale and its TDD review unresolved."
+  ],
+  "rollback_plan": "Revert the decoder branch commits with git revert in a reviewed pull request. Recovery takes under five minutes; source and tests revert while ledger and operator data remain unchanged."
+}
