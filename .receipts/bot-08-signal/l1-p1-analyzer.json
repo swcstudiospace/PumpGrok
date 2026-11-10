@@ -1,0 +1,28 @@
+{
+  "task_id": "l1-p1-analyzer",
+  "bot": "bot-08-signal",
+  "branch": "bot-08-signal/l1-p1-analyzer",
+  "phase": "L1 audit P1 #3 analyzer fail-closed (from origin/main 1cfd86a)",
+  "approved_by": "human:SomeRandmGuyy",
+  "purpose": "Fix L1 audit P1 #3: a failed analyzer fetch returned None or empty data, which read as a clean analysis.",
+  "plan": "_get and fetch raise the existing typed DataStale on transport, status, JSON, or wrong-shape failures. A successful fetch returns the same analysis as before, pinned by the characterization test.",
+  "rollback_plan": "Revert the commit on bot-08-signal/l1-p1-analyzer. Expected recovery time: about 10 minutes (estimate, not measured). No schema or data migration. No production caller constructs the analyzer, so runtime impact is nil today.",
+  "commands": [
+    {"cmd": "uv sync --frozen --group dev", "exit_code": 0, "output_tail": "dependencies in sync"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "806 files already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "Success: no issues found in 208 source files"},
+    {"cmd": "make test", "exit_code": 0, "output_tail": "full suite, [100%], no failures"}
+  ],
+  "claims": [
+    {"claim": "A failed analyzer fetch raises DataStale from fetch and from analyze. No TokenMetrics is produced, so passes() never sees the failure as clean data.", "evidence_command_index": 3},
+    {"claim": "A healthy empty response is still reported as healthy and not stale.", "evidence_command_index": 3},
+    {"claim": "The success path metrics are identical to the pre-change capture (risk_score 2.77, passes (True, ok)).", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "No production caller constructs the analyzer, so the end-to-end buy block is not verifiable.",
+    "asyncio.gather siblings are not cancelled after the first failure. This is pre-existing and untouched.",
+    "tests/core/test_analyzer_request_timeout.py belongs to bot-02-risk. It was read only and passes unchanged.",
+    "Not yet run on CI or Greptile. Draft PR, not merged."
+  ],
+  "status": "draft PR. Not merged. Owner review required."
+}
