@@ -355,3 +355,31 @@ async def test_concurrent_reconciliations_finish_without_losing_timer(tmp_path: 
     assert desk.clock.sleepers == 1
     await desk.scheduler.close()
     assert desk.clock.sleepers == 0
+
+
+async def test_owner_wait_observes_ledger_failure_without_holdings_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+
+    async def fail_accounting(**_kwargs: object) -> None:
+        raise RuntimeError("ledger unavailable")
+
+    monkeypatch.setattr(desk.adapter, "mark_open_positions", fail_accounting)
+    owner = asyncio.create_task(desk.scheduler.wait())
+    await desk.advance(60)
+    with pytest.raises(RuntimeError, match="ledger unavailable"):
+        await owner
+    with pytest.raises(RuntimeError, match="ledger unavailable"):
+        await desk.scheduler.close()
+
+
+async def test_owner_wait_completes_on_shutdown_even_when_flat(tmp_path: Path) -> None:
+    desk = Desk(tmp_path)
+    owner = asyncio.create_task(desk.scheduler.wait())
+    await desk.clock.yield_to_loop()
+    assert not owner.done()
+    await desk.scheduler.close()
+    await owner

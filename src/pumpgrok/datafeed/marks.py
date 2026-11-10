@@ -40,6 +40,7 @@ class HeldMarkScheduler:
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
+        self._completion: asyncio.Future[Exception | None] | None = None
         self._closed = False
 
     async def holdings_changed(self) -> None:
@@ -59,8 +60,12 @@ class HeldMarkScheduler:
                 held = await self._cycle()
             await self._stop_timer()
             if held:
+                if self._completion is not None and self._completion.done():
+                    self._completion = None
+                self._completion_future()
                 started = asyncio.Event()
                 self._task = asyncio.create_task(self._run(started))
+                self._task.add_done_callback(self._observe_task)
                 await started.wait()
 
     async def close(self) -> None:
@@ -71,6 +76,33 @@ class HeldMarkScheduler:
                 await self._stop_timer()
             finally:
                 self._last_trusted.clear()
+                completion = self._completion_future()
+                if not completion.done():
+                    completion.set_result(None)
+
+    def _completion_future(self) -> asyncio.Future[Exception | None]:
+        if self._completion is None:
+            self._completion = asyncio.get_running_loop().create_future()
+            if self._closed:
+                self._completion.set_result(None)
+        return self._completion
+
+    async def wait(self) -> None:
+        """Wait until shutdown or a background marking failure.
+
+        Owners should supervise this awaitable alongside their service. Waiting
+        does not start a timer, and cancelling a waiter does not stop the desk.
+        """
+        failure = await asyncio.shield(self._completion_future())
+        if failure is not None:
+            raise failure
+
+    @staticmethod
+    def _observe_task(task: asyncio.Task[None]) -> None:
+        # The failure is also retained by wait(); consume the task exception so
+        # asyncio does not report an unhandled task while its owner is notified.
+        if not task.cancelled():
+            task.exception()
 
     async def _stop_timer(self) -> None:
         task, self._task = self._task, None
@@ -83,11 +115,17 @@ class HeldMarkScheduler:
 
     async def _run(self, started: asyncio.Event) -> None:
         started.set()
-        while True:
-            await self._clock.sleep(self._next_delay)
-            async with self._lock:
-                if not await self._cycle():
-                    return
+        try:
+            while True:
+                await self._clock.sleep(self._next_delay)
+                async with self._lock:
+                    if not await self._cycle():
+                        return
+        except Exception as exc:
+            completion = self._completion_future()
+            if not completion.done():
+                completion.set_result(exc)
+            raise
 
     async def _cycle(self) -> bool:
         positions = self._adapter._fold_state().positions
