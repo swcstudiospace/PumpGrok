@@ -82,7 +82,20 @@ def _all_digests() -> dict[str, str]:
 
 
 def test_top_level_fields_are_pinned_in_order() -> None:
-    assert tuple(Settings.model_fields) == PRE_V4_FIELDS
+    fields = tuple(Settings.model_fields)
+    assert fields[: len(PRE_V4_FIELDS)] == PRE_V4_FIELDS
+    assert fields[len(PRE_V4_FIELDS) :] == (
+        "events",
+        "grok_gateway",
+        "datafeed",
+        "recorder",
+        "strategies",
+        "backtest_v2",
+        "risk_strategy",
+        "promotion",
+        "signer",
+        "paper_fees",
+    )
 
 
 def test_every_pre_v4_section_matches_its_pinned_digest() -> None:

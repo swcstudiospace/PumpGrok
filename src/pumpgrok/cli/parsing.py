@@ -152,6 +152,18 @@ def _add_state(verbs: _VerbsAction, mode_option: _Parser) -> None:
     state_resume.add_argument("--by", required=True, help="human resuming the seat")
 
 
+def _add_events(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    events = verbs.add_parser("events", parents=[mode_option], help="event sidecar verbs")
+    events_cmd = events.add_subparsers(dest="cmd", required=True, metavar="EVENTS")
+    dlq = events_cmd.add_parser("dlq", help="sidecar dead-letter queue")
+    dlq_cmd = dlq.add_subparsers(dest="dlq_cmd", required=True, metavar="DLQ")
+    dlq_cmd.add_parser("list", help="list sidecar dlq rows")
+    replay = dlq_cmd.add_parser("replay", help="republish a named dlq row")
+    replay.add_argument("name", help="dlq row name")
+    purge = dlq_cmd.add_parser("purge", help="drop a named dlq row")
+    purge.add_argument("name", help="dlq row name")
+
+
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
@@ -208,5 +220,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_risk_chief_rug(verbs, mode_option)
     _add_journal_ticket(verbs, mode_option)
     _add_state(verbs, mode_option)
+    _add_events(verbs, mode_option)
     _add_tail(verbs, mode_option)
     return parser

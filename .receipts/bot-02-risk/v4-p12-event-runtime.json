@@ -1,0 +1,334 @@
+{
+  "task_id": "v4-p12-event-runtime",
+  "receipt_task_id": "Tp12finish-risk-receipt",
+  "correlation_id": "p12-parallel-fix-20261108",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/phase-12-event-runtime",
+  "phase": "12-event-runtime-core",
+  "plan": "12-01 through 12-05; corrected event-runtime source and tests",
+  "purpose": "Receipt-only refresh from immutable Tp12auth-join product evidence, not a new correction or verification cycle. Supersedes the old 96-test and current-head certification claims.",
+  "status": "Approved by owner SomeRandmGuyy. Ready to merge to main after gates green.",
+  "source_identity": {
+    "risk_source_test_head": "d30c9ab1fce28e5fd166ceb037fa5bdfe10e1558",
+    "receipt_base_head": "d30c9ab1fce28e5fd166ceb037fa5bdfe10e1558",
+    "journal_head": "34e182675b6fb7fc30502544474d82c7dd7a9c37",
+    "chief_head": "42d853c566d8bacb1ac375b440df314053d7df75",
+    "tested_combined_head": "b5df08d4aa54478fe9f00166e5422b90cd5c7fe2",
+    "tested_combined_tree": "f4ee9542cacf3cff67aa4ceac40ca4e702a0d0c2",
+    "tested_cwd": "/tmp/p12auth_join_20261108/tree",
+    "scope": "Combined-head checks cover the listed source/test heads, not the later receipt-only commit. Its self-SHA cannot be embedded recursively; actual final receipt commit is returned separately. No battery rerun for receipt-only SHAs.",
+    "source_digests": {
+      "src/pumpgrok/events/bus.py": "sha256:e3a978b5eb783c6b97c5e49f8617f12d3896aefca289a68d304b3ed87784f61c",
+      "tests/events/test_bus_p2_supersede.py": "sha256:0a95d32d4edcf85714d5bfd634db82486405a6f162ce48389d9c4ea1decf6e05",
+      "docs/design/events-grok.md": "sha256:39c27d3b395181cb0666e89b2eae3a9ec64e6685189470acb9f7b9e009dde1f8"
+    }
+  },
+  "provenance": [
+    {
+      "path": "/tmp/p12auth_join_20261108/results.json",
+      "sha256": "f79291d90e6539e2462da10c8a56b22d2a0b39cbb42329358f1b95361bfb5fc8",
+      "producer_task": "Tp12auth-join"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/lifecycle.json",
+      "sha256": "2083572988c1f3094c239a1de35d8be9ce9d510c526d8b5743f94a990a16285e",
+      "producer_task": "Tp12auth-join"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/gsd-handoff.json",
+      "sha256": "6527262da1a7ab7de76270012d6b289a09e2c2c8bc397231b89f931df3984eab",
+      "producer_task": "Tp12auth-join"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/native-prerequisite.json",
+      "sha256": "55f210db8fec461f3570c464bea079eae922ccff6aa9889aa5b7bbde51999014",
+      "producer_task": "Tp12auth-join"
+    },
+    {
+      "path": "/tmp/p12auth_join_20261108/results.v2.json",
+      "sha256": "52c4dd74d39e4a18680902775338cc019d5c1645c6bd8019208f5d6a19ab5a3e",
+      "producer_task": "Tp12auth-join"
+    }
+  ],
+  "commands": [
+    {
+      "id": "risk-terminal-lifecycle",
+      "cmd": "uv run pytest -q -rs tests/events/test_bus_p2_supersede.py::test_late_poison_handoff_retries_after_bounded_shutdown",
+      "cwd": "/root/src/repos/pumpgrok-wt/phase-12-risk",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "-rs",
+        "tests/events/test_bus_p2_supersede.py::test_late_poison_handoff_retries_after_bounded_shutdown"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/risk-terminal-lifecycle.log"
+    },
+    {
+      "id": "product-affected-acceptance",
+      "cmd": "uv run pytest -q -rs tests/events tests/config tests/harness tests/degradation/test_event_source_faults.py tests/cli/test_events_cli.py tests/replay/test_event_drain_parity.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py tests/safety",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "-rs",
+        "tests/events",
+        "tests/config",
+        "tests/harness",
+        "tests/degradation/test_event_source_faults.py",
+        "tests/cli/test_events_cli.py",
+        "tests/replay/test_event_drain_parity.py",
+        "tests/replay/test_replay_hash_pin.py",
+        "tests/replay/test_trading_smoke_pin.py",
+        "tests/safety"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/product-affected-acceptance.log",
+      "passed": 457,
+      "skipped": 0,
+      "failed": 0,
+      "count_method": "retained pytest progress symbols; no rerun",
+      "coverage_pct": null
+    },
+    {
+      "id": "config-ruff",
+      "cmd": "uv run ruff check src/pumpgrok/config",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "src/pumpgrok/config"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/config-ruff.log"
+    },
+    {
+      "id": "config-mypy",
+      "cmd": "uv run mypy src/pumpgrok/config",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "mypy",
+        "src/pumpgrok/config"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/config-mypy.log"
+    },
+    {
+      "id": "canonical-make",
+      "cmd": "make lint typecheck test audit",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "make",
+        "lint",
+        "typecheck",
+        "test",
+        "audit"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/canonical-make.log",
+      "passed": 2818,
+      "skipped": 2,
+      "failed": 0,
+      "count_method": "retained pytest progress symbols; no rerun",
+      "coverage_pct": 91.57,
+      "coverage_floor_pct": 89.9,
+      "limitations": "One actual make invocation, not four standalone commands. Canonical -qq output did not retain skip reasons. Service lint skipped because services/desk-signer/src is absent."
+    },
+    {
+      "id": "instruction-check",
+      "cmd": "./scripts/check.sh",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "./scripts/check.sh"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/instruction-check.log"
+    },
+    {
+      "id": "smoke-hash-a",
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-a.log"
+    },
+    {
+      "id": "smoke-hash-b",
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "verify",
+        "--fixture",
+        "smoke-10m"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/smoke-hash-b.log"
+    },
+    {
+      "id": "paper-replay",
+      "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "paper",
+        "--once",
+        "--replay",
+        "tests/fixtures/replay/smoke"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/paper-replay.log"
+    },
+    {
+      "id": "live-refusal",
+      "cmd": "uv run pumpgrok run --mode live --once",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "pumpgrok",
+        "run",
+        "--mode",
+        "live",
+        "--once"
+      ],
+      "exit_code": 3,
+      "expected_exit": 3,
+      "log": "/tmp/p12auth_join_20261108/live-refusal.log"
+    },
+    {
+      "id": "standalone-lifecycle",
+      "cmd": "uv run python /tmp/p12auth_join_20261108/lifecycle.py --task-id Tp12auth-join --correlation-id p12-parallel-fix-20261108",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "/tmp/p12auth_join_20261108/lifecycle.py",
+        "--task-id",
+        "Tp12auth-join",
+        "--correlation-id",
+        "p12-parallel-fix-20261108"
+      ],
+      "exit_code": 0,
+      "evidence": "/tmp/p12auth_join_20261108/lifecycle.json",
+      "stages": 10,
+      "observed": "Real EventBus/EventStore, FixtureClock and actual SQLite DLQ rename/restore; resistant old handler exits before newer recovery, then retained terminal poison handoff retries without stale replay, resnapshot or duplicate settlement."
+    },
+    {
+      "id": "gsd-tdd-readiness",
+      "cmd": "/root/.agents/gsd-core/bin/gsd_run check tdd.review-checkpoint 12 --raw",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "/root/.agents/gsd-core/bin/gsd_run",
+        "check",
+        "tdd.review-checkpoint",
+        "12",
+        "--raw"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/gsd-tdd-readiness.log",
+      "block": true
+    },
+    {
+      "id": "gsd-existing-report-status",
+      "cmd": "/root/.agents/gsd-core/bin/gsd_run query verification.status /tmp/p12auth_join_20261108/tree/.planning/phases/12-event-runtime-core",
+      "cwd": "/tmp/p12auth_join_20261108/tree",
+      "command": [
+        "/root/.agents/gsd-core/bin/gsd_run",
+        "query",
+        "verification.status",
+        "/tmp/p12auth_join_20261108/tree/.planning/phases/12-event-runtime-core"
+      ],
+      "exit_code": 0,
+      "log": "/tmp/p12auth_join_20261108/gsd-existing-report-status.log",
+      "owner_status": "stale"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Affected acceptance passed 457 tests with zero skips, replacing the old 96-test claim.",
+      "evidence_command_index": 1,
+      "evidence": "results.json commands[id=product-affected-acceptance].pytest_counts"
+    },
+    {
+      "claim": "Canonical make exited 0 with 91.57 percent coverage; counts are retained progress counts, not a newly exercised run.",
+      "evidence_command_index": 4,
+      "evidence": "results.json commands[id=canonical-make]; canonical-make.log:294"
+    },
+    {
+      "claim": "Smoke hash pin comparison passed; no claim these invocations used fresh directories.",
+      "evidence_command_index": 6,
+      "evidence_command_indices": [
+        6,
+        7
+      ],
+      "evidence": "results.json static_acceptance.identical_smoke_hash_pin_passed; commands[id=smoke-hash-a|smoke-hash-b]"
+    },
+    {
+      "claim": "Lifecycle reached ten stages including terminal storage failure and recovery.",
+      "evidence_command_index": 10,
+      "evidence": "lifecycle.json records; results.json commands standalone lifecycle"
+    },
+    {
+      "claim": "Payload isolation is not certified by deepcopy alone; affected event tests are the exercised corrected-head evidence. This receipt does not substitute copying for deep immutability.",
+      "evidence_command_index": 1,
+      "evidence": "results.json commands[id=product-affected-acceptance]"
+    }
+  ],
+  "gsd": {
+    "report_identity": ".planning/phases/12-event-runtime-core/12-VERIFICATION.md",
+    "old_report_certified_head": "9d32a35",
+    "owner_status": "STALE",
+    "current_combined_tree_certified": false,
+    "tdd_block": true,
+    "missing_recognized_RED_GREEN_commit_markers": [
+      "12-02",
+      "12-03",
+      "12-04",
+      "12-05"
+    ],
+    "interpretation": "Checker/history-adjudication limitation; not proof historical tests never ran. Installed verify-phase-goal.md:102-111 stops regression/verifier/fingerprint after block:true despite command exit 0.",
+    "validate_phase": "NOT DISPATCHED; VALIDATION.md draft, nyquist_compliant false",
+    "secure_phase": "NOT DISPATCHED; SECURITY.md absent",
+    "code_review": "NOT DISPATCHED; REVIEW.md absent",
+    "ordered_regression_executed": false,
+    "new_report_written": false,
+    "fingerprint_computed": false,
+    "phase_complete": false,
+    "evidence": "/tmp/p12auth_join_20261108/gsd-handoff.json"
+  },
+  "unverified": [
+    "Pending owner approval for the eventual final receipt head; approved_by deliberately absent. Earlier approval is not carried forward. No approval requested here.",
+    "Final source-specific G1 and strict G2 are pending the final reviewer after all three receipts finish. Expected approval gap is missing approved_by; no current strict-G2 pass is claimed.",
+    "Final-head Greptile review is outside the recorded receipt checks and intentionally not consumed until corrected receipts and checks finish. No clean review or 5/5 claim.",
+    "Latest authored regressions were NOT run fail-before (results.json fail_before_exercised=false). Historical 20 failures on 8500a8 remain true historical evidence, not latest corrected-regression RED evidence.",
+    "GSD workflow owner must adjudicate the RED/GREEN history stop without fake marker commits, history rewriting, lowered config or waiver. Mandatory validate/security/exact registered code-review hooks must complete through controlled authority before permitted regression/verifier/report/fingerprint and owner verification.status. No dispatch beyond the stop here.",
+    "Trusted fresh repaired-controller process activation remains unavailable: controller 507c6de9828e4ba27d1019a228164a141c9151d8 is local and not installed. Remaining prerequisites are loading the corrected extension exactly once in the production controller, actual source-owner cwd, and existing canonical TaskStore/signer. The isolated native prerequisite is resolved separately. Authentic source-specific signed production gates have not run; fixture signatures are not production PASS.",
+    "Native prerequisite is RESOLVED by the isolated locked build and targeted controller case recorded in /tmp/p12auth_join_20261108/native-prerequisite.json and results.v2.json. This does not activate the repaired production controller or establish genuine signed production gates; immutable product evidence remains unchanged.",
+    "Canonical two skip reasons were not retained. No tests/build/lint/format, full battery, documentation scan or gate rerun was performed during this receipt-only refresh."
+  ],
+  "rollback_plan": "Before merge, close draft PR61 without merging or use `git revert <receipt-commit>` via separately authorized ordinary revert PR. This receipt-only commit changes no runtime, ledger or live state. Do not force-push, merge, alter signing/configuration or complete the phase. Expected recovery time: under 5 minutes. After merge use `git revert -m 1 <merge-sha>` in revert PR.",
+  "approved_by": "human:SomeRandmGuyy"
+}

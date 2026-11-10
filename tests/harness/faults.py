@@ -391,3 +391,24 @@ class FaultyLedgerStore:
     def __getattr__(self, name: str) -> Any:
         """Delegate reads (verify, read, count, close) to the inner store."""
         return getattr(self.__dict__["_inner"], name)
+
+
+class FaultyEventSource:
+    """Stand-in for an event source. Fails closed and holds no socket."""
+
+    def __init__(self, mode: FaultMode = FaultMode.RAISE) -> None:
+        self._mode = mode
+
+    async def read(self) -> None:
+        raise InjectedFault(f"injected event source fault mode={self._mode.value}")
+
+
+class FaultyGrokTransport:
+    """Raising fake. Not a gateway. Does not open a socket."""
+
+    def __init__(self, mode: FaultMode = FaultMode.RAISE) -> None:
+        self._mode = mode
+
+    async def send(self, payload: object) -> None:
+        del payload
+        raise InjectedFault(f"injected grok transport fault mode={self._mode.value}")
