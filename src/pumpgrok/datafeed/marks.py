@@ -15,7 +15,17 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.graduation import GapSettings, PositionAction, position_action
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution.paper_adapter.models import _ledger_mark_epoch
-from pumpgrok.ledger.reducer import PositionView
+
+
+class InMemoryTimeoutSink:
+    """Test-only record of timeout-zero requests; it has no ledger authority."""
+
+    def __init__(self) -> None:
+        self.requests: dict[str, tuple[float, int]] = {}
+
+    def _record(self, mints: set[str], now: float) -> None:
+        for mint in mints:
+            self.requests[mint] = (now, 0)
 
 
 class HeldMarkScheduler:
@@ -28,14 +38,19 @@ class HeldMarkScheduler:
         clock: Clock,
         settings: GapSettings,
         max_observations: int,
+        timeout_sink: InMemoryTimeoutSink | None = None,
     ) -> None:
         if type(max_observations) is not int or max_observations <= 0:
             raise ValueError("max_observations must be a positive integer")
+        if timeout_sink is not None and type(timeout_sink) is not InMemoryTimeoutSink:
+            raise TypeError("timeout_sink must be the in-memory test sink")
         self._adapter = adapter
         self._clock = clock
         self._settings = settings
         self._next_delay = 60.0
         self._max_observations = max_observations
+        self._timeout_sink = timeout_sink
+        self._degraded: set[str] = set()
         self._last_trusted: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
@@ -43,6 +58,11 @@ class HeldMarkScheduler:
         self._completion: asyncio.Future[Exception | None] | None = None
         self._observed_failure: Exception | None = None
         self._closed = False
+
+    @property
+    def degraded_mints(self) -> frozenset[str]:
+        """Held mints whose timeout-zero write is unavailable."""
+        return frozenset(self._degraded)
 
     async def holdings_changed(self) -> None:
         """Reconcile and mark the current book, starting or stopping its timer.
@@ -78,6 +98,7 @@ class HeldMarkScheduler:
                 await self._stop_timer()
             finally:
                 self._last_trusted.clear()
+                self._degraded.clear()
                 completion = self._completion_future()
                 if not completion.done():
                     completion.set_result(None)
@@ -140,18 +161,26 @@ class HeldMarkScheduler:
         self._last_trusted = {
             mint: stamp for mint, stamp in self._last_trusted.items() if mint in mints
         }
+        self._degraded.intersection_update(mints)
         if not mints:
             return False
 
         now = self._clock.now()
-        snapshots, zero_mints, graduated = await self._collect(positions, mints, now)
+        snapshots, zero_mints, graduated = await self._collect(mints, now)
         zero_mints = self._filter_current(snapshots, zero_mints, graduated)
-        # The accounting boundary independently rechecks admission.
-        if snapshots or zero_mints:
-            await self._adapter.mark_open_positions(snapshots=snapshots, zero_mints=zero_mints)
+        new_timeouts = zero_mints - self._degraded
+        self._degraded.update(zero_mints)
+        if self._timeout_sink is not None:
+            self._timeout_sink._record(new_timeouts, now)
+        # Zero accounting is unavailable until a reviewed durable-exit
+        # capability exists. Never send timeout zeros to the paper adapter.
+        if snapshots:
+            await self._adapter.mark_open_positions(snapshots=snapshots)
+            self._degraded.difference_update(snapshots)
             for mint, snapshot in snapshots.items():
-                assert snapshot.ts is not None  # guaranteed by position_action(MARK)
+                assert snapshot.ts is not None
                 self._last_trusted[mint] = snapshot.ts
+        self._degraded.difference_update(graduated)
         remaining = [
             stamp + self._settings.timeout_after_s - now
             for stamp in self._last_trusted.values()
@@ -161,7 +190,7 @@ class HeldMarkScheduler:
         return True
 
     async def _collect(
-        self, positions: dict[str, PositionView], mints: set[str], now: float
+        self, mints: set[str], now: float
     ) -> tuple[dict[str, CurveSnapshot], set[str], dict[str, CurveSnapshot]]:
         snapshots: dict[str, CurveSnapshot] = {}
         zero_mints: set[str] = set()
@@ -178,7 +207,7 @@ class HeldMarkScheduler:
                 snapshots[mint] = snapshot
             elif action is PositionAction.GRADUATED and snapshot is not None:
                 graduated[mint] = snapshot
-            elif action is PositionAction.ZERO_MARK and positions[mint].mtm_source != "timeout":
+            elif action is PositionAction.ZERO_MARK:
                 zero_mints.add(mint)
         return snapshots, zero_mints, graduated
 
@@ -208,10 +237,11 @@ class HeldMarkScheduler:
             if mint in current
             and current[mint].token_units > 0
             and not current[mint].mtm_frozen
-            and current[mint].mtm_source != "timeout"
         }
-        for mint, snapshot in graduated.items():
+        for mint, snapshot in list(graduated.items()):
             if mint in current and current[mint].token_units > 0 and not current[mint].mtm_frozen:
                 assert snapshot.ts is not None
                 self._last_trusted[mint] = max(self._last_trusted[mint], snapshot.ts)
+            else:
+                del graduated[mint]
         return zero_mints

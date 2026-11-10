@@ -12,7 +12,7 @@ import pytest
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.graduation import GapSettings
-from pumpgrok.datafeed.marks import HeldMarkScheduler
+from pumpgrok.datafeed.marks import HeldMarkScheduler, InMemoryTimeoutSink
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
@@ -52,7 +52,12 @@ class Curves:
 
 class Desk:
     def __init__(
-        self, tmp_path: Path, *, capacity: int = 8, settings: GapSettings | None = None
+        self,
+        tmp_path: Path,
+        *,
+        capacity: int = 8,
+        settings: GapSettings | None = None,
+        timeout_sink: InMemoryTimeoutSink | None = None,
     ) -> None:
         self.clock = CountingClock()
         self.store = LedgerStore(str(tmp_path / "ledger.sqlite"))
@@ -83,6 +88,7 @@ class Desk:
             clock=self.clock,
             settings=settings or GapSettings(gap_after_s=30, timeout_after_s=120),
             max_observations=capacity,
+            timeout_sink=timeout_sink,
         )
 
     def open(self, mint: str, source: str = "fixture") -> None:
@@ -183,7 +189,7 @@ async def test_assumed_live_price_cannot_create_trusted_positive_mark(
     await desk.scheduler.close()
 
 
-async def test_gap_preserves_last_mark_and_timeout_records_zero_without_sale(
+async def test_gap_and_timeout_preserve_last_mark_and_degrade_without_sale(
     tmp_path: Path,
 ) -> None:
     desk = Desk(tmp_path)
@@ -191,15 +197,23 @@ async def test_gap_preserves_last_mark_and_timeout_records_zero_without_sale(
     await desk.adapter.mark_open_positions(correlation_id="baseline")
     baseline = desk.adapter._fold_state().positions["a"].last_mtm_lamports
     assert baseline > 0
+    reserves = desk.adapter._last_reserves["a"]
+    last_price = desk.adapter._last_price_ts["a"]
     desk.curves.sources["a"] = None
     await desk.scheduler.holdings_changed()
     await desk.advance(60)
     assert desk.adapter._fold_state().positions["a"].last_mtm_lamports == baseline
+    assert not desk.scheduler.degraded_mints
+    before = len(desk.marks())
     await desk.advance(60)
     state = desk.adapter._fold_state()
-    assert state.positions["a"].last_mtm_lamports == 0
+    assert state.positions["a"].last_mtm_lamports == baseline
+    assert len(desk.marks()) == before
+    assert desk.scheduler.degraded_mints == {"a"}
     assert state.positions["a"].last_mtm_ts_utc
     assert state.positions["a"].token_units == UNITS
+    assert desk.adapter._last_reserves["a"] == reserves
+    assert desk.adapter._last_price_ts["a"] == last_price
     assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
     await desk.scheduler.close()
 
@@ -222,7 +236,9 @@ async def test_mixed_gap_keeps_last_value_until_timeout_while_other_mint_marks(
     assert "b" in desk.prices()[-1]
     await desk.advance(60)
     state = desk.adapter._fold_state()
-    assert state.positions["a"].last_mtm_lamports == 0
+    assert state.positions["a"].last_mtm_lamports == original
+    assert desk.scheduler.degraded_mints == {"a"}
+    assert "a" not in desk.prices()[-1]
     assert state.positions["b"].last_mtm_lamports > 0
     assert state.positions["a"].token_units == UNITS
     assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
@@ -241,7 +257,8 @@ async def test_unverified_frames_do_not_extend_short_timeout(
     await desk.advance(19)
     assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
     await desk.advance(1)
-    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports == 0
+    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
+    assert desk.scheduler.degraded_mints == {"a"}
     assert desk.adapter._fold_state().positions["a"].token_units == UNITS
     await desk.scheduler.close()
 
@@ -295,16 +312,27 @@ async def test_older_snapshot_does_not_block_other_held_mint(tmp_path: Path, mon
     await desk.scheduler.close()
 
 
-async def test_timeout_zero_is_not_repeated_while_gap_continues(tmp_path: Path) -> None:
-    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+async def test_timeout_zero_request_uses_only_test_sink(tmp_path: Path) -> None:
+    sink = InMemoryTimeoutSink()
+    desk = Desk(
+        tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20), timeout_sink=sink
+    )
     desk.open("a")
     await desk.scheduler.holdings_changed()
+    baseline = desk.adapter._fold_state().positions["a"].last_mtm_lamports
     desk.curves.sources["a"] = None
-    await desk.advance(20)
+    await desk.advance(19)
+    assert sink.requests == {}
+    await desk.advance(1)
     count = len(desk.marks())
-    assert desk.prices()[-1]["a"]["mtm_lamports"] == 0
+    assert sink.requests == {"a": (START + 20, 0)}
+    assert desk.adapter._fold_state().positions["a"].last_mtm_lamports == baseline
     await desk.advance(60)
+    assert sink.requests == {"a": (START + 20, 0)}
     assert len(desk.marks()) == count
+    desk.curves.sources["a"] = "fixture"
+    await desk.scheduler.holdings_changed()
+    assert not desk.scheduler.degraded_mints
     await desk.scheduler.close()
 
 
