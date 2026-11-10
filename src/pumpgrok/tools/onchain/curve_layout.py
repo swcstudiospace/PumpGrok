@@ -153,11 +153,13 @@ def curve_market_cap_lamports(state: CurveState) -> int:
 
 
 def rpc_curve_price_allowed(*, curve_source: str) -> bool:
-    """True when a price from ``curve_source`` may price a paper entry.
+    """Allow fixture labels and independently verified RPC layouts for entry.
 
-    RPC-derived reserves are untrusted bytes until the layout is VERIFIED
-    (T-04-08): while ``LAYOUT_STATUS`` is ASSUMED they fail closed with
-    ``data_unavailable`` at the entry gate. Fixture, rest and pumpportal
-    integer ticks never pass through this layout, so replay is unaffected.
+    Unknown and unverified live sources fail closed. This string-only gate
+    cannot establish whether a fixture label actually came from replay.
     """
-    return not (curve_source == "rpc" and LAYOUT_STATUS != "VERIFIED")
+    if curve_source == "fixture":
+        return True
+    if curve_source == "rpc":
+        return LAYOUT_STATUS == "VERIFIED"
+    return False
