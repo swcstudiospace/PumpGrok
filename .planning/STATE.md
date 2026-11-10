@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v4
 milestone_name: PumpGrok Desk v4
-status: "Phase 11 closed; Phase 12 not started"
-last_updated: "2026-11-03"
-last_activity: 2026-11-03
-last_activity_desc: Phase 11 closed (engineering foundation and quality); draft PR for plan 11-11
+status: "Phase 12 verified 12/12; ship checkpoint open (draft PRs, owner receipt approval pending)"
+last_updated: "2026-11-08"
+last_activity: 2026-11-08
+last_activity_desc: Phase 12 verified at 9d32a35; seat branches opened as draft PRs; G-2 awaits owner approval
 state_head: 8e8c4c3f09f2ce4f1e366d10ea56cb6db832c931
 progress:
   total_phases: 9
   completed_phases: 1
   percent: 11
   blocked_phases: 0
-current_phase: none
-stopped_at: "Phase 11 closed 2026-11-03 on bot-00-chief/v4-p11-close (draft PR, not merged). Resume at .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md. Next: Phase 12, a draft stacked on the Phase 11 quality PR."
+current_phase: 12
+stopped_at: "Phase 12 verified 12/12 at 9d32a35 (report commit 57da233). Draft PRs open for bot-02-risk, bot-09-journal and bot-00-chief on phase-12-event-runtime; not merged. Resume after the owner adds approved_by to the three v4-p12 receipts and the PRs merge. Phase 13 starts only after Phase 12 merges (ROADMAP Execution Order)."
 ---
 paid_rpc_provider: none
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-Milestone: v4 (PumpGrok Desk v4). Phase: 11 of 19, Engineering foundation and quality, closed 2026-11-03 by plan 11-11.
-Plan: 11-11 (Phase 11 close), branch bot-00-chief/v4-p11-close, draft pull request, not merged.
-Status: Phase 11 closed; Phase 12 not started. Owner answer: the hosting target is deferred to Phase 19.
-Last activity: 2026-11-03, Phase 11 close record (11-VERIFICATION.md) and receipt .receipts/bot-00-chief/v4-p11-close.json.
+Milestone: v4 (PumpGrok Desk v4). Phase: 11 of 19 closed (merged as PR #55, 2026-11-03). Phase 12 of 19 verified 12/12; ship checkpoint open.
+Plan: 12-01 to 12-05 on bot-02-risk, bot-09-journal and bot-00-chief (phase-12-event-runtime). Draft pull requests, not merged.
+Status: Phase 12 closes when the owner approves its three receipts (G-2) and the PRs merge. Owner answer: the hosting target is deferred to Phase 19.
+Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v4-p12-event-runtime.json on each seat branch. Verification report .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
 
 ## Discovery (2026-10-25)
 
@@ -138,20 +138,21 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 
 ## Phase 11 close (v4, plan 11-11)
 
-- Close record: .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md (chief-owned). Receipt: .receipts/bot-00-chief/v4-p11-close.json. The receipt carries no approved_by; the owner adds it at the ship checkpoint.
+- Close record: .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md (chief-owned). Receipt: .receipts/bot-00-chief/v4-p11-close.json. approved_by human:SomeRandmGuyy recorded 2026-11-03 (approve_55); PR #55 merged the same day.
 - Base: origin/main 8e8c4c3 (PR #54). Tag v4-base: 09f83be (merge of PR #17).
 - Hash evidence, events.hash, identical before and after Phase 11:
   - smoke-10m: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (before and after). Pin: tests/replay/test_replay_hash_pin.py.
   - trading smoke: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (before and after). Pin: tests/fixtures/replay/pins/trading_smoke.json, rows in trading_smoke_rows.json. The trading hash moves only in plan 15-01.
 - Merged to main in Phase 11 (merge SHAs from git): #34 66a1714, #35 0d0da21, #36 ffeeb0f, #37 cf3b168, #38 67a7110, #39 c7ef904, #41 26e4875, #42 3182763, #43 45f0b7e, #44 41c1f5d, #45 c2a7973, #46 42cffd9, #47 61b39af, #48 76a898a, #49 c6317b8, #50 e5c9eef, #51 549ebb9, #52 46b9315, #53 e8c51aa, #54 8e8c4c3.
-- Open items, not done: INT-10. scripts/probe_curve_layout.py still writes Status: VERIFIED on its own (lines 278 and 295); fix before the live-data phase. Stale-branch deletion: listed as open here; the owner approved it, and this record does not verify that it was carried out.
+- Resolved: INT-10. scripts/probe_curve_layout.py writes DECODED_PENDING_REVIEW and never VERIFIED (PRs #59 and #60, merged 2026-11-06). Stale-branch deletion: listed as open here; the owner approved it, and this record does not verify that it was carried out.
 - Fixed in Phase 11: the desk-gateway mypy error, fixed in PR #49 (c6317b8).
 
 ## Session Continuity
 
-- Last update: 2026-11-03, Phase 11 close (plan 11-11) on bot-00-chief/v4-p11-close.
-- Resume: read .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md. Next: Phase 12.
-- Owner decisions outstanding: approved_by on the 11-11 receipt at the ship checkpoint; the INT-10 fix before the live-data phase.
+- Last update: 2026-11-08, Phase 12 ship checkpoint on bot-00-chief/phase-12-event-runtime.
+- Resume: read .planning/phases/12-event-runtime-core/12-VERIFICATION.md. Next: the owner approves the three v4-p12 receipts and the PRs merge; then Phase 13 starts.
+- Owner decisions outstanding: approved_by on the three v4-p12 receipts (G-2) before any merge; which Hermes cron jobs become event triggers before Phase 14 planning (q2).
+- ultrathink BUILD_PROMPT (2026-11-08 uplift): reconciled to the v4 roadmap. Its testnet/devnet mode, airdrop funding, wallet key loading and mainnet enable path are not adopted; they conflict with the 2026-11-08 operator answers and the PROJECT security constraints.
 
 ## Autonomous run ut-8a40d0d875-bac7f745 (v3 closeout)
 
