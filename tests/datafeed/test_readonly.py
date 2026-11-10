@@ -83,6 +83,9 @@ async def test_other_portal_methods_are_refused_before_transport(method: str) ->
         "https://user@rpc.example.invalid",
         "https://rpc.example.invalid?api_key=example-secret",
         "https://rpc.example.invalid?token=example-secret",
+        "https://rpc.example.invalid?api%5Fkey=example-secret",
+        "https://rpc.example.invalid?authorization=example-secret",
+        "http://rpc.example.invalid?token=example-secret",
         "wss://portal.example.invalid/api/data?password=example-secret",
     ],
 )
@@ -114,3 +117,22 @@ async def test_transport_failures_do_not_echo_credentials() -> None:
         await boundary.rpc("getAccountInfo", ["Account111"])
     assert "example-secret" not in str(raised.value)
     assert "example-secret" not in "".join(traceback.format_exception(raised.value))
+
+
+async def test_changed_endpoint_is_checked_again_before_transport() -> None:
+    transport = CaptureTransport()
+    boundary = ReadOnlyBoundary(endpoint="https://rpc.example.invalid", transport=transport)
+    boundary.endpoint = "https://rpc.example.invalid?token=example-secret"
+    with pytest.raises(ValueError):
+        await boundary.rpc("getAccountInfo", ["Account111"])
+    assert transport.frames == []
+
+
+async def test_nonsecret_query_is_allowed() -> None:
+    transport = CaptureTransport()
+    endpoint = "https://rpc.example.invalid?cluster=mainnet"
+    boundary = ReadOnlyBoundary(endpoint=endpoint, transport=transport)
+    await boundary.rpc("getAccountInfo", ["Account111"])
+    assert transport.frames == [
+        (endpoint, {"method": "getAccountInfo", "params": ["Account111"]})
+    ]

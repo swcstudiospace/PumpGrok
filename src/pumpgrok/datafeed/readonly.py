@@ -1,5 +1,37 @@
-# Temporary typed read-only boundary for the Task 2 RED only.
+"""Injected transports guarded by a fail-closed, read-only method boundary."""
+
 from typing import Protocol
+from urllib.parse import parse_qsl, unquote_plus, urlsplit
+
+from pumpgrok.config.settings import KEY_BEARING_VALUE_RE
+
+_RPC_METHODS = frozenset({"logsSubscribe", "getAccountInfo", "getTransaction"})
+_PORTAL_METHODS = frozenset({"subscribeNewToken", "subscribeMigration"})
+_SECRET_QUERY_NAMES = frozenset({"auth", "authorization", "credential", "credentials"})
+
+
+def _validate_endpoint(endpoint: str) -> None:
+    """Apply the TLS and keyless endpoint policy without exposing rejected values."""
+    if not isinstance(endpoint, str) or any(char.isspace() for char in endpoint):
+        raise ValueError("read-only endpoint is invalid")
+    try:
+        parts = urlsplit(endpoint)
+        valid = (
+            parts.scheme.lower() in {"https", "wss"}
+            and bool(parts.hostname)
+            and parts.username is None
+            and parts.password is None
+            and parts.port != 0
+        )
+        query = parse_qsl(parts.query, keep_blank_values=True)
+    except ValueError:
+        raise ValueError("read-only endpoint is invalid") from None
+    if (
+        not valid
+        or KEY_BEARING_VALUE_RE.search(unquote_plus(endpoint))
+        or any(name.lower() in _SECRET_QUERY_NAMES for name, _ in query)
+    ):
+        raise ValueError("read-only endpoint is invalid")
 
 
 class ReadTransport(Protocol):
@@ -7,12 +39,26 @@ class ReadTransport(Protocol):
 
 
 class ReadOnlyBoundary:
+    """Allow only the feed's named read methods before invoking an injected transport."""
+
     def __init__(self, *, endpoint: str, transport: ReadTransport) -> None:
+        _validate_endpoint(endpoint)
         self.endpoint = endpoint
         self.transport = transport
 
+    async def _send(self, frame: dict[str, object]) -> object:
+        _validate_endpoint(self.endpoint)
+        try:
+            return await self.transport.send(self.endpoint, frame)
+        except Exception:
+            raise RuntimeError("read-only transport failed") from None
+
     async def rpc(self, method: str, params: list[object]) -> object:
-        return None
+        if method not in _RPC_METHODS:
+            raise ValueError("RPC method is not permitted")
+        return await self._send({"method": method, "params": params})
 
     async def portal(self, method: str) -> object:
-        return None
+        if method not in _PORTAL_METHODS:
+            raise ValueError("Portal method is not permitted")
+        return await self._send({"method": method})
