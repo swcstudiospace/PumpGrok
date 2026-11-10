@@ -79,5 +79,5 @@
     "Native prerequisite is RESOLVED by the isolated locked build and targeted controller case recorded in /tmp/p12auth_join_20261108/native-prerequisite.json and results.v2.json. This does not activate the repaired production controller or establish genuine signed production gates; immutable product evidence remains unchanged.",
     "Canonical two skip reasons were not retained. No tests/build/lint/format, full battery, documentation scan or gate rerun was performed during this receipt-only refresh."
   ],
-  "rollback_plan": "Before merge, close draft PR61 without merging or use a separately authorized ordinary revert PR. This receipt-only commit changes no runtime, ledger or live state. Do not force-push, merge, alter signing/configuration or complete the phase."
+  "rollback_plan": "Before merge, close draft PR61 without merging or use `git revert <receipt-commit>` via separately authorized ordinary revert PR. This receipt-only commit changes no runtime, ledger or live state. Do not force-push, merge, alter signing/configuration or complete the phase. Expected recovery time: under 5 minutes. After merge use `git revert -m 1 <merge-sha>` in revert PR."
 }
