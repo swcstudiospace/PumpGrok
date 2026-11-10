@@ -13,6 +13,7 @@ from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.fixtures import load_dataset
 from pumpgrok.replay.live_recorder import LiveRecorder
 
 
@@ -80,6 +81,9 @@ async def test_observation_is_recorded_before_real_bus_publication(tmp_path: Pat
     [
         ("ts_utc", "not-a-timestamp"),
         ("ts_utc", "2026-01-01T00:00:00"),
+        ("ts_utc", "2026-01-01T01:00:00+01:00"),
+        ("complete", 1),
+        ("source", ""),
         ("s_lamports", 0),
         ("s_lamports", -1),
         ("s_lamports", True),
@@ -116,3 +120,39 @@ async def test_recording_failure_prevents_publication(tmp_path: Path) -> None:
         await bridge.publish(observation)
     assert bus.pending_p2(EventKind.curve_tick, observation.mint) is None
     assert bus.bytes_at_publish == []
+
+
+async def test_coalescing_does_not_drop_recorded_ticks(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    first = _observation(clock)
+    bus = InspectingBus(clock=clock, events_path=tmp_path / "events.jsonl")
+    recorder = LiveRecorder(tmp_path, clock=clock)
+    bridge = ObservationBridge(bus=bus, recorder=recorder)
+    await bridge.publish(first)
+    clock.advance_to(clock.now() + 1)
+    second = replace(first, ts_utc=clock.utc_iso(), s_lamports=first.s_lamports + 1)
+    await bridge.publish(second)
+
+    published = bus.pending_p2(EventKind.curve_tick, first.mint)
+    assert published is not None
+    assert published.occurred_at == second.ts_utc
+    recorder.seal()
+    ticks = load_dataset(tmp_path).events
+    assert [tick["S"] for tick in ticks] == [first.s_lamports, second.s_lamports]
+    assert [tick["ts_utc"] for tick in ticks] == [first.ts_utc, second.ts_utc]
+
+
+async def test_out_of_order_observation_is_not_published(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    observation = _observation(clock)
+    bus = InspectingBus(clock=clock, events_path=tmp_path / "events.jsonl")
+    recorder = LiveRecorder(tmp_path, clock=clock)
+    bridge = ObservationBridge(bus=bus, recorder=recorder)
+    await bridge.publish(observation)
+    old = replace(observation, ts_utc="2025-12-31T23:59:59Z")
+
+    with pytest.raises(ValueError, match="backwards"):
+        await bridge.publish(old)
+    assert len(bus.bytes_at_publish) == 1
+    recorder.seal()
+    assert len(load_dataset(tmp_path).events) == 1
