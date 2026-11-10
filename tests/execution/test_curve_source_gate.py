@@ -113,6 +113,17 @@ async def _place(
     return await task
 
 
+async def test_injected_source_cannot_forge_fixture_entry(tmp_path: Path) -> None:
+    adapter, clock = _harness(tmp_path, [_snap("fixture"), _snap("fixture")])
+    request = _request(adapter, TICKET, side=Side.BUY, units=None)
+    with pytest.raises(OrderRejectedError) as exc_info:
+        await _place(adapter, clock, request, seat="bot-04-sniper")
+    assert exc_info.value.reason == "data_unavailable"
+    kinds = [event["type"] for event in adapter._store.read(limit=None)]
+    assert "OrderPlaced" not in kinds
+    assert "FillRecorded" not in kinds
+
+
 async def test_rpc_entry_snapshot_is_refused_at_accepted(tmp_path: Path) -> None:
     adapter, clock = _harness(tmp_path, [_snap("rpc"), _snap("rpc")])
     request = _request(adapter, TICKET, side=Side.BUY, units=None)
