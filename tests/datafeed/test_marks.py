@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from pathlib import Path
@@ -252,3 +253,105 @@ async def test_held_capacity_exhaustion_is_explicit(tmp_path: Path) -> None:
     with pytest.raises(OverflowError):
         await desk.scheduler.holdings_changed()
     await desk.scheduler.close()
+
+
+async def test_failed_timer_reports_once_then_restarts(tmp_path: Path, monkeypatch) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    original = desk.curves.curve
+
+    async def failing(_mint: str) -> CurveSnapshot | None:
+        raise RuntimeError("source failed")
+
+    monkeypatch.setattr(desk.curves, "curve", failing)
+    await desk.advance(60)
+    monkeypatch.setattr(desk.curves, "curve", original)
+    with pytest.raises(RuntimeError, match="source failed"):
+        await desk.scheduler.holdings_changed()
+    await desk.scheduler.holdings_changed()
+    await desk.advance(60)
+    assert "a" in desk.prices()[-1]
+    await desk.scheduler.close()
+
+
+async def test_older_snapshot_does_not_block_other_held_mint(tmp_path: Path, monkeypatch) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+    desk.open("b")
+    await desk.scheduler.holdings_changed()
+    await desk.advance(1)
+
+    async def curves(mint: str) -> CurveSnapshot:
+        timestamp = START - 1 if mint == "a" else desk.clock.now()
+        return CurveSnapshot(mint=mint, s_lamports=S, t_units=T, source="fixture", ts=timestamp)
+
+    monkeypatch.setattr(desk.curves, "curve", curves)
+    await desk.scheduler.holdings_changed()
+    assert "a" not in desk.prices()[-1]
+    assert "b" in desk.prices()[-1]
+    await desk.advance(60)
+    assert "b" in desk.prices()[-1]
+    await desk.scheduler.close()
+
+
+async def test_timeout_zero_is_not_repeated_while_gap_continues(tmp_path: Path) -> None:
+    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    desk.curves.sources["a"] = None
+    await desk.advance(20)
+    count = len(desk.marks())
+    assert desk.prices()[-1]["a"]["mtm_lamports"] == 0
+    await desk.advance(60)
+    assert len(desk.marks()) == count
+    await desk.scheduler.close()
+
+
+async def test_fresh_graduation_prevents_timeout_without_sale(tmp_path: Path, monkeypatch) -> None:
+    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    original = desk.adapter._fold_state().positions["a"].last_mtm_lamports
+
+    async def completed(mint: str) -> CurveSnapshot:
+        return CurveSnapshot(
+            mint=mint,
+            s_lamports=S,
+            t_units=T,
+            source="fixture",
+            complete=True,
+            ts=desk.clock.now(),
+        )
+
+    monkeypatch.setattr(desk.curves, "curve", completed)
+    await desk.advance(20)
+    await desk.advance(20)
+    state = desk.adapter._fold_state()
+    assert state.positions["a"].last_mtm_lamports == original
+    assert state.positions["a"].token_units == UNITS
+    assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
+    await desk.scheduler.close()
+
+
+async def test_concurrent_reconciliations_finish_without_losing_timer(tmp_path: Path) -> None:
+    desk = Desk(tmp_path)
+    desk.open("a")
+
+    async def reconcile() -> None:
+        async with desk.clock.timeout(1):
+            await asyncio.gather(
+                desk.scheduler.holdings_changed(), desk.scheduler.holdings_changed()
+            )
+
+    task = asyncio.create_task(reconcile())
+    for _ in range(100):
+        if task.done():
+            break
+        await desk.clock.yield_to_loop()
+    if not task.done():
+        await desk.advance(1)
+    await task
+    assert desk.clock.sleepers == 1
+    await desk.scheduler.close()
+    assert desk.clock.sleepers == 0
