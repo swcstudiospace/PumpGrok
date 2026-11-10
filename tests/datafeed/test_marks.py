@@ -218,6 +218,34 @@ async def test_gap_and_timeout_preserve_last_mark_and_degrade_without_sale(
     await desk.scheduler.close()
 
 
+@pytest.mark.parametrize("marked", [True, False])
+@pytest.mark.parametrize("elapsed", [10, 25])
+async def test_restart_outage_uses_persisted_age_without_granting_trust(
+    tmp_path: Path, marked: bool, elapsed: int
+) -> None:
+    settings = GapSettings(gap_after_s=10, timeout_after_s=20)
+    first = Desk(tmp_path, settings=settings)
+    first.open("a")
+    if marked:
+        await first.adapter.mark_open_positions(correlation_id="baseline")
+    baseline = first.adapter._fold_state().positions["a"].last_mtm_lamports
+    await first.scheduler.close()
+    first.store.close()
+
+    reopened = Desk(tmp_path, settings=settings)
+    reopened.clock.advance_to(START + elapsed)
+    before = len(reopened.marks())
+    await reopened.scheduler.holdings_changed()
+    if elapsed < 20:
+        assert not reopened.scheduler.degraded_mints
+        await reopened.advance(20 - elapsed)
+    assert reopened.scheduler.degraded_mints == {"a"}
+    assert reopened.adapter._fold_state().positions["a"].last_mtm_lamports == baseline
+    assert len(reopened.marks()) == before
+    assert not reopened.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
+    await reopened.scheduler.close()
+
+
 async def test_mixed_gap_keeps_last_value_until_timeout_while_other_mint_marks(
     tmp_path: Path,
 ) -> None:
@@ -355,6 +383,37 @@ async def test_fresh_graduation_prevents_timeout_without_sale(tmp_path: Path, mo
     monkeypatch.setattr(desk.curves, "curve", completed)
     await desk.advance(20)
     await desk.advance(20)
+    state = desk.adapter._fold_state()
+    assert state.positions["a"].last_mtm_lamports == original
+    assert state.positions["a"].token_units == UNITS
+    assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
+    await desk.scheduler.close()
+
+
+async def test_graduation_after_timeout_remains_degraded_without_sale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+    desk.open("a")
+    await desk.scheduler.holdings_changed()
+    original = desk.adapter._fold_state().positions["a"].last_mtm_lamports
+    desk.curves.sources["a"] = None
+    await desk.advance(20)
+    assert desk.scheduler.degraded_mints == {"a"}
+
+    async def completed(mint: str) -> CurveSnapshot:
+        return CurveSnapshot(
+            mint=mint,
+            s_lamports=S,
+            t_units=T,
+            source="fixture",
+            complete=True,
+            ts=desk.clock.now(),
+        )
+
+    monkeypatch.setattr(desk.curves, "curve", completed)
+    await desk.scheduler.holdings_changed()
+    assert desk.scheduler.degraded_mints == {"a"}
     state = desk.adapter._fold_state()
     assert state.positions["a"].last_mtm_lamports == original
     assert state.positions["a"].token_units == UNITS

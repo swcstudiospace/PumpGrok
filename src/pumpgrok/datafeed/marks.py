@@ -9,12 +9,15 @@ places orders. Call ``holdings_changed`` after a change to the paper book and
 from __future__ import annotations
 
 import asyncio
+import math
 from contextlib import suppress
 
 from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.graduation import GapSettings, PositionAction, position_action
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution.paper_adapter.models import _ledger_mark_epoch
+from pumpgrok.ledger.reducer import PositionView
+from pumpgrok.replay.clock import parse_ts_utc
 
 
 class InMemoryTimeoutSink:
@@ -166,7 +169,7 @@ class HeldMarkScheduler:
             return False
 
         now = self._clock.now()
-        snapshots, zero_mints, graduated = await self._collect(mints, now)
+        snapshots, zero_mints, graduated = await self._collect(positions, mints, now)
         zero_mints = self._filter_current(snapshots, zero_mints, graduated)
         new_timeouts = zero_mints - self._degraded
         self._degraded.update(zero_mints)
@@ -180,7 +183,6 @@ class HeldMarkScheduler:
             for mint, snapshot in snapshots.items():
                 assert snapshot.ts is not None
                 self._last_trusted[mint] = snapshot.ts
-        self._degraded.difference_update(graduated)
         remaining = [
             stamp + self._settings.timeout_after_s - now
             for stamp in self._last_trusted.values()
@@ -190,13 +192,15 @@ class HeldMarkScheduler:
         return True
 
     async def _collect(
-        self, mints: set[str], now: float
+        self, positions: dict[str, PositionView], mints: set[str], now: float
     ) -> tuple[dict[str, CurveSnapshot], set[str], dict[str, CurveSnapshot]]:
         snapshots: dict[str, CurveSnapshot] = {}
         zero_mints: set[str] = set()
         graduated: dict[str, CurveSnapshot] = {}
         for mint in sorted(mints):
-            last_trusted_at = self._last_trusted.setdefault(mint, now)
+            if mint not in self._last_trusted:
+                self._last_trusted[mint] = self._initial_deadline(positions[mint], now)
+            last_trusted_at = self._last_trusted[mint]
             snapshot = await self._adapter._read_curve(mint)
             if snapshot is not None and snapshot.mint != mint:
                 snapshot = None
@@ -210,6 +214,17 @@ class HeldMarkScheduler:
             elif action is PositionAction.ZERO_MARK:
                 zero_mints.add(mint)
         return snapshots, zero_mints, graduated
+
+    @staticmethod
+    def _initial_deadline(position: PositionView, now: float) -> float:
+        """Use persisted times only to shorten the outage deadline, not as trust."""
+        try:
+            stamp = _ledger_mark_epoch(position)
+            if stamp is None:
+                stamp = parse_ts_utc(position.opened_ts_utc)
+        except (ValueError, OverflowError, OSError):
+            return now
+        return min(now, stamp) if math.isfinite(stamp) else now
 
     def _filter_current(
         self,
@@ -234,9 +249,7 @@ class HeldMarkScheduler:
         zero_mints = {
             mint
             for mint in zero_mints
-            if mint in current
-            and current[mint].token_units > 0
-            and not current[mint].mtm_frozen
+            if mint in current and current[mint].token_units > 0 and not current[mint].mtm_frozen
         }
         for mint, snapshot in list(graduated.items()):
             if mint in current and current[mint].token_units > 0 and not current[mint].mtm_frozen:
