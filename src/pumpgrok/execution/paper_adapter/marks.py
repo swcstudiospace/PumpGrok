@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Set
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -160,6 +161,8 @@ class _MarksMixin:
         *,
         source: str | None = None,
         correlation_id: str = "desk",
+        snapshots: Mapping[str, CurveSnapshot] | None = None,
+        zero_mints: Set[str] | None = None,
     ) -> dict[str, Any] | None:
         """Mark every open position in one ``MarkToMarket`` row for this instant.
 
