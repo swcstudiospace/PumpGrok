@@ -28,6 +28,8 @@ from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.active_set import read_active_set
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 from pumpgrok.risk.limits import EngineLimits
@@ -46,7 +48,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from pumpgrok.core.ids import Clock
-    from pumpgrok.ledger.store import LedgerStore
 
 __all__ = ["make_promotion_check", "run_promotion_check"]
 
@@ -72,6 +73,7 @@ def _declared_params(space: Sequence[Mapping[str, Any]]) -> dict[str, ParamSet]:
 
 def _check_and_apply(
     store: LedgerStore,
+    operator_store: LedgerStore,
     dataset_dir: str | Path,
     *,
     clock: Clock,
@@ -113,7 +115,7 @@ def _check_and_apply(
         winner = declared.get(search.best_params_hash)
         if winner is None:
             raise ConfigError(["promotion search winner is not in the declared space"])
-        if read_active_set(store) == winner.content_hash:
+        if read_active_set(operator_store) == winner.content_hash:
             return "skipped"
         outcome = _evaluate_holdout(
             spec=spec,
@@ -144,12 +146,12 @@ def _check_and_apply(
             bounds=bounds,
             search=search,
             run_id=manifest.run_id,
-            store=store,
+            store=operator_store,
             backtest=outcome.window_metrics,
             paper=gate.paper_metrics,
         )
         return apply_candidate(
-            store,
+            operator_store,
             verdict,
             candidate_hash=winner.content_hash,
             run_id=manifest.run_id,
@@ -176,19 +178,29 @@ def run_promotion_check(
 ) -> CheckOutcome:
     """Run one promotion check over the declared space; return its outcome.
 
-    skipped: the autonomy level is below autonomous-paper, the declared space is empty, or
-    the search winner is already the active set. Nothing is written. failed: any exception;
-    a structured line names its class, and nothing is promoted. promoted or escalated: the
-    gate's verdict on the search winner was applied (see upgrade.scheduled.apply_candidate).
+    The autonomy level, the active set and every promotion or escalation row live in the
+    operator paper ledger at PAPER_LEDGER_PATH, the store the desk's autonomy verb writes.
+    The paper window comes from store, the replay ledger the check is handed.
+
+    skipped: no operator ledger exists yet, the autonomy level is below autonomous-paper, the
+    declared space is empty, or the search winner is already the active set. Nothing is
+    written. failed: any exception; a structured line names its class, and nothing is
+    promoted. promoted or escalated: the gate's verdict on the search winner was applied
+    (see upgrade.scheduled.apply_candidate).
     """
+    operator_store: LedgerStore | None = None
     try:
-        if read_autonomy(store) != REQUIRED_AUTONOMY_LEVEL:
+        if not PAPER_LEDGER_PATH.exists():
+            return "skipped"
+        operator_store = LedgerStore(str(PAPER_LEDGER_PATH))
+        if read_autonomy(operator_store) != REQUIRED_AUTONOMY_LEVEL:
             return "skipped"
         if not space:
             log.info("promotion_check outcome=skipped detail=no candidates declared")
             return "skipped"
         outcome = _check_and_apply(
             store,
+            operator_store,
             dataset_dir,
             clock=clock,
             space=space,
@@ -202,6 +214,9 @@ def run_promotion_check(
             _one_line(exc),
         )
         return "failed"
+    finally:
+        if operator_store is not None:
+            operator_store.close()
     log.info("promotion_check outcome=%s candidates=%d", outcome, len(space))
     return outcome
 
