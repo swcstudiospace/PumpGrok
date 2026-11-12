@@ -4,6 +4,7 @@ import asyncio
 import random
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,12 +15,15 @@ from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.datafeed.graduation import entry_allowed
 from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.events.sources import STALE_AFTER_S, SourceStatus, SourceSupervisor
-from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
+from pumpgrok.execution.paper_adapter import OrderRejectedError
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
+
+from replay_support import replay_authority, tick
 
 MINT = "mint-1"
 START = 1_767_225_600.0
@@ -94,13 +98,15 @@ async def test_assumed_status_denies_entry_but_preserves_exit_observation(source
     health.note_frame()
     prices.observe(observation(clock))
     snap = await prices.curve(MINT)
-    assert entry_allowed(snap, now=clock.now(), max_age_s=10.0)
+    # Changed (strict gate, owner accept-degrade): a live rpc observation never admits entry.
+    assert not entry_allowed(snap, now=clock.now(), max_age_s=10.0)
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
     snap = await prices.curve(MINT)
     assert snap is not None and snap.source == "rpc"
     assert not entry_allowed(snap, now=clock.now(), max_age_s=10.0)
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-    assert entry_allowed(await prices.curve(MINT), now=clock.now(), max_age_s=10.0)
+    # Changed (strict gate, owner accept-degrade): VERIFIED layout does not admit live entry.
+    assert not entry_allowed(await prices.curve(MINT), now=clock.now(), max_age_s=10.0)
 
 
 @pytest.mark.parametrize("label", ["fixture", "unknown", "unverified"])
@@ -262,14 +268,20 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
         get_reserves=lambda _mint: (sol_reserves, token_reserves),
     )
     prices = LivePriceSource(clock=clock, health=health, max_age_s=300.0, max_observations=16)
-    adapter = PaperAdapter(
+    replay = replay_authority(
+        tmp_path,
+        clock,
+        [tick(START + second, mint, sol_reserves, token_reserves) for second in range(601)],
+    )
+    adapter = build_paper_adapter(
+        SimpleNamespace(risk=budget),
         store=store,
         risk=risk,
         ids=IdFactory(clock, make_rng(7)),
         clock=clock,
         rng=make_rng(7),
-        budget=budget,
-        price_source=prices,
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
 
@@ -297,18 +309,6 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
             await asyncio.sleep(0)
         return await task
 
-    class ReplayOpeningPrice:
-        async def curve(self, requested_mint: str) -> CurveSnapshot | None:
-            if requested_mint != mint:
-                return None
-            return CurveSnapshot(
-                mint=mint,
-                s_lamports=sol_reserves,
-                t_units=token_reserves,
-                source="fixture",
-                ts=clock.now(),
-            )
-
     def observe_rpc() -> None:
         health.note_frame()
         prices.observe(
@@ -324,7 +324,6 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
 
     try:
         # Open through trusted replay only; the protective exit uses the real live source.
-        adapter._price = ReplayOpeningPrice()
         bought = await place(request("SOL-20260201-102", Side.BUY), "bot-04-sniper")
         assert bought.filled_units > 0
         adapter._price = prices
