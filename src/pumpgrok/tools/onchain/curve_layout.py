@@ -1,9 +1,10 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-[ASSUMED] The Pump IDL describes an 8-byte discriminator, five token-first
-little-endian u64 counters, and a one-byte completion flag. Extended accounts
-carry additional opaque bytes. Neither layout is verified against a reviewed
-mainnet account. Shared by ``market.price`` and ``onchain.lp_status``.
+[VERIFIED] The Pump IDL describes an 8-byte discriminator, five token-first
+little-endian u64 counters, and a one-byte completion flag. The 49-byte
+token-first layout was approved by human review (``LAYOUT_REVIEWED_BY``).
+The 166-byte extended layout has no reviewed source and is refused (fail closed).
+Shared by ``market.price`` and ``onchain.lp_status``.
 
 RPC only: this module performs no HTTP reads outside the injected RPC
 client and references no quote endpoint (R44, R46, R47).
@@ -27,12 +28,13 @@ CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
 _EXTENDED_CURVE_ACCOUNT_SIZE = 166
 _BONDING_CURVE_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 
-#: Bonding-curve layout verification state (R65). ASSUMED until a live probe
-#: against mainnet bonding-curve accounts decodes under this layout and a
-#: human reviews the probe record in tests/fixtures/rpc/bonding_curve/.
-#: While ASSUMED, no paper entry may consume an RPC-derived price: the
-#: PaperAdapter refuses with data_unavailable (fail closed).
-LAYOUT_STATUS: Final[str] = "ASSUMED"
+#: Bonding-curve layout verification state (R65). VERIFIED for the 49-byte
+#: token-first account only, set by the human reviewer named in
+#: ``LAYOUT_REVIEWED_BY``. The 166-byte extended layout stays ASSUMED and is
+#: refused by :func:`decode_curve_account`. Price admission does not read this
+#: status; it is gated by :func:`rpc_curve_price_allowed` provenance.
+LAYOUT_STATUS: Final[str] = "VERIFIED"
+LAYOUT_REVIEWED_BY: Final[str] = "human:Ove"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
 #: 85 SOL, the retired oracle ``src/monitor.py:30``). [ASSUMED] threshold.
@@ -40,7 +42,7 @@ COMPLETION_SOL_LAMPORTS = sol_to_lamports(Decimal(85))
 
 
 class CurveDecodeError(ValueError):
-    """The account bytes do not match the ASSUMED curve layout."""
+    """The account bytes do not match the verified curve layout."""
 
 
 class CurveState(BaseModel):
@@ -54,16 +56,20 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
-    extended_data_hex: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
-    """Decode raw account bytes with the ASSUMED layout.
+    """Decode raw account bytes with the VERIFIED 49-byte token-first layout.
 
-    Raises :class:`CurveDecodeError` for an unsupported size, discriminator,
-    or completion flag; callers map it to ``DataStale``.
+    Raises :class:`CurveDecodeError` for the 166-byte extended layout (ASSUMED,
+    refused fail closed), an unsupported size, a discriminator, or a completion
+    flag; callers map it to ``DataStale``.
     """
-    if len(data) not in (CURVE_ACCOUNT_SIZE, _EXTENDED_CURVE_ACCOUNT_SIZE):
+    if len(data) == _EXTENDED_CURVE_ACCOUNT_SIZE:
+        raise CurveDecodeError(
+            f"{_EXTENDED_CURVE_ACCOUNT_SIZE}-byte extended curve layout is ASSUMED; refused"
+        )
+    if len(data) != CURVE_ACCOUNT_SIZE:
         raise CurveDecodeError(f"unsupported curve account size {len(data)}")
     discriminator, vtok, vsol, rtok, rsol, supply, complete = _CURVE_STRUCT.unpack_from(data)
     if discriminator != _BONDING_CURVE_DISCRIMINATOR:
@@ -85,7 +91,6 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_sol_reserves_lamports=rsol,
         real_token_reserves_units=rtok,
         total_supply_units=supply,
-        extended_data_hex=data[CURVE_ACCOUNT_SIZE:].hex(),
         complete=bool(complete),
     )
 

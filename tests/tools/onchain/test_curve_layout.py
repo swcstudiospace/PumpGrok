@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import struct
 from decimal import Decimal
 
 import pytest
 
+from pumpgrok.tools.onchain import curve_layout
 from pumpgrok.tools.onchain.curve_layout import (
     CurveDecodeError,
     curve_price_sol_per_token,
@@ -42,23 +42,15 @@ def test_token_first_reserves() -> None:
     assert state.real_sol_reserves_lamports == 404
     assert state.total_supply_units == 505
     assert state.complete is True
-    assert state.extended_data_hex == ""
     assert curve_price_sol_per_token(state) == Decimal("0.002")
 
 
-def test_extended_token_first_reserves() -> None:
-    extension = bytes(range(116)) + b"\xff"
-    state = decode_curve_account(_token_first_account() + extension)
+def test_extended_166_layout_is_refused_fail_closed() -> None:
+    account = _token_first_account() + bytes(range(116)) + b"\xff"
+    assert len(account) == 166
 
-    assert state.virtual_token_reserves_units == 101
-    assert state.virtual_sol_reserves_lamports == 202
-    assert state.real_token_reserves_units == 303
-    assert state.real_sol_reserves_lamports == 404
-    assert state.total_supply_units == 505
-    assert state.complete is True
-    assert bytes.fromhex(state.extended_data_hex) == extension
-    dumped = json.loads(json.dumps(state.model_dump()))
-    assert bytes.fromhex(dumped["extended_data_hex"]) == extension
+    with pytest.raises(CurveDecodeError, match="166-byte extended curve layout is ASSUMED"):
+        decode_curve_account(account)
 
 
 @pytest.mark.parametrize("extra", [b"", bytes(117)], ids=["49-byte", "166-byte"])
@@ -101,3 +93,8 @@ def test_fixture_encoder_preserves_legacy_economic_values() -> None:
     assert state.virtual_token_reserves_units == 101
     assert state.real_sol_reserves_lamports == 404
     assert state.real_token_reserves_units == 303
+
+
+def test_token_first_49_layout_status_is_verified_by_human_review() -> None:
+    assert curve_layout.LAYOUT_STATUS == "VERIFIED"
+    assert curve_layout.LAYOUT_REVIEWED_BY == "human:Ove"
