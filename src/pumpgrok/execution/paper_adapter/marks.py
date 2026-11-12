@@ -9,16 +9,20 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.curve_math import sell_out, spot
+from pumpgrok.execution.entry_hook import bound_replay_source
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _ledger_mark_epoch
 from pumpgrok.ledger.reducer import PositionView, position_value_lamports
 from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
 from pumpgrok.tools.onchain import curve_layout
+from pumpgrok.tools.onchain.curve_layout import CurveProvenance
 
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.entry_hook import EntryPolicy
     from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.execution.paper_adapter.models import PriceSource
     from pumpgrok.ledger.store import LedgerStore
     from pumpgrok.risk.limits import EngineLimits
 
@@ -26,10 +30,12 @@ if TYPE_CHECKING:
 class _MarksMixin:
     if TYPE_CHECKING:
         _clock: Clock
+        _entry_policy: EntryPolicy | None
         _fees: FeeModel
         _frozen_marks: dict[str, int]
         _ids: IdFactory
         _last_price_ts: dict[str, float]
+        _price: PriceSource | None
         _last_reserves: dict[str, tuple[int, int]]
         _limits: EngineLimits
         _source: Literal["paper", "replay", "manual"]
@@ -217,7 +223,8 @@ class _MarksMixin:
         if set(snapshots) - held.keys():
             raise ValueError("mark input contains a mint without an open position")
         for mint, curve in snapshots.items():
-            if not self._admitted_curve(mint, curve):
+            # Supplied snapshots carry no source identity: they are never replay.
+            if not self._admitted_curve(mint, curve, self._provenance(None, curve)):
                 raise ValueError(f"untrusted or invalid curve snapshot for {mint}")
             if not self._admitted_timestamp(mint, held[mint], curve, now):
                 raise ValueError(f"invalid curve snapshot timestamp for {mint}")
@@ -235,15 +242,30 @@ class _MarksMixin:
             and (cached_time is None or recorded >= cached_time)
         )
 
+    def _provenance(self, read_from: object | None, curve: CurveSnapshot) -> CurveProvenance:
+        """Provenance of one mark snapshot.
+
+        VERIFIED_REPLAY only when the read came from the curve source bound by
+        ``verify_replay`` (identity check). LIVE_RPC for an rpc label. Anything
+        else, including a fixture label from any other source, is UNKNOWN.
+        """
+        if read_from is not None and read_from is bound_replay_source(self._entry_policy):
+            return CurveProvenance.VERIFIED_REPLAY
+        if curve.source == "rpc":
+            return CurveProvenance.LIVE_RPC
+        return CurveProvenance.UNKNOWN
+
     @staticmethod
-    def _admitted_curve(mint: str, curve: CurveSnapshot) -> bool:
+    def _admitted_curve(mint: str, curve: CurveSnapshot, provenance: CurveProvenance) -> bool:
         return (
             curve.mint == mint
             and curve.source in {"fixture", "rpc"}
             and not curve.complete
             and curve.s_lamports > 0
             and curve.t_units > 0
-            and curve_layout.rpc_curve_price_allowed(curve_source=curve.source)
+            and curve_layout.rpc_curve_price_allowed(
+                curve_source=curve.source, provenance=provenance
+            )
         )
 
     def _price_supplied(
@@ -275,12 +297,14 @@ class _MarksMixin:
         marks: dict[str, dict[str, Any]] = {}
         values: dict[str, int] = {}
         for mint, pos in held.items():
+            read_from = self._price
             curve = await self._read_curve(mint)
-            if (
-                curve is None
-                or not self._admitted_curve(mint, curve)
-                or not self._admitted_timestamp(mint, pos, curve, now)
+            if curve is None or not self._admitted_curve(
+                mint, curve, self._provenance(read_from, curve)
             ):
+                values[mint] = position_value_lamports(pos)
+                continue
+            if not self._admitted_timestamp(mint, pos, curve, now):
                 values[mint] = position_value_lamports(pos)
                 continue
             recorded = curve.ts if curve.ts is not None else now

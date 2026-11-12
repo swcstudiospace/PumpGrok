@@ -132,7 +132,7 @@ def build_paper_adapter(
             raise ValueError("price source is not the verified replay curve source")
         from pumpgrok.replay.sources import FixtureCurveSource
 
-        policy = BoundEntryPolicy(replay.curves, supported=(FixtureCurveSource,))
+        policy = BoundEntryPolicy(replay.curves, supported=(FixtureCurveSource,), replay=replay)
         price_source = replay.curves
     budget = getattr(settings, "risk", None)
     if budget is None:
