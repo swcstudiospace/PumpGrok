@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_adapter
 from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
@@ -111,6 +112,38 @@ async def _place(
         clock.advance_to(clock.now() + 1.0)
         await asyncio.sleep(0)
     return await task
+
+
+async def test_injected_source_cannot_forge_fixture_entry(tmp_path: Path) -> None:
+    clock = FixtureClock(START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    store.set_meta("source", "paper")
+    ids = IdFactory(clock, make_rng(7))
+    risk = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=IdFactory(clock, random.Random(7)),
+        clock=clock,
+        autonomy="autonomous-paper",  # type: ignore[arg-type]
+        get_reserves=lambda _mint: (S0, T0),
+    )
+    with pytest.raises((ValueError, OrderRejectedError)):
+        adapter = build_adapter(
+            object(),
+            store=store,
+            risk=risk,
+            ids=ids,
+            clock=clock,
+            rng=make_rng(7),
+            price_source=ScriptedCurves([_snap("fixture"), _snap("fixture")]),
+            p_drop=0.0,
+        )
+        request = _request(adapter, TICKET, side=Side.BUY, units=None)
+        await _place(adapter, clock, request, seat="bot-04-sniper")
+    kinds = [event["type"] for event in store.read(limit=None)]
+    assert "OrderPlaced" not in kinds
+    assert "FillRecorded" not in kinds
 
 
 async def test_rpc_entry_snapshot_is_refused_at_accepted(tmp_path: Path) -> None:

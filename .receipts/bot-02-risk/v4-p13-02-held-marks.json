@@ -1,0 +1,27 @@
+{
+  "task_id": "v4-p13-02-held-marks",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/phase-13-held-marks",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-02 held-position mark scheduler, stacked on sniper mark seam",
+  "status": "Draft only; independent receipt approval and full phase integration remain pending.",
+  "red_evidence": "The semantic RED for the held-mint marking behavior was classified RED_EVIDENCE_OK. Local marks-red.xml SHA-256 63a374fd1d098a79b32c328a3861a90124b93851aff2daee333af0361458845d.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/datafeed/test_marks.py tests/execution/test_safe_mark_open_positions.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-safe-staged-final.xml", "exit_code": 0, "output_tail": "JUnit: 54 tests, 0 failures, 0 errors, 0 skipped; includes eight replay pin cases. JUnit SHA-256 28cf8e49c3b8d7ee69282574b24880a41f33328cd4d96c203d9df0e826fe410e."},
+    {"cmd": "uv run ruff format src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "2 files left unchanged."},
+    {"cmd": "uv run ruff check src/pumpgrok/datafeed/marks.py tests/datafeed/test_marks.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run mypy src/pumpgrok/datafeed/marks.py", "exit_code": 0, "output_tail": "No issues found."}
+  ],
+  "claims": [
+    {"claim": "Scheduler, accounting seam and replay-pin behavior pass on the integrated draft branch using the fixture clock.", "evidence_command_index": 0},
+    {"claim": "Changed scheduler and tests pass focused lint.", "evidence_command_index": 2},
+    {"claim": "Changed scheduler passes focused type checking.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Independent receipt approval is absent; no seat self-approval.",
+    "Timeout-zero production writes are disabled, not durably supported. Previously persisted timeout-zero rows can still strand a protective exit after restart. The original failing consumer regression is retained unchanged in test-only commit d553029 and must pass under the reviewed 13-07 contract.",
+    "The scheduler is not wired into the live-data composition. Its owner must supervise wait() to observe background errors; graduation close or freeze remains a separate integration step.",
+    "The full canonical suite, phase integration, live provider compatibility and trusted production mark provenance are unverified. Layout remains ASSUMED; live trading is disabled."
+  ],
+  "rollback_plan": "Revert the held-mark scheduler commits in a reviewed pull request; retain existing ledger and operator data. Recovery is expected within five minutes."
+}
