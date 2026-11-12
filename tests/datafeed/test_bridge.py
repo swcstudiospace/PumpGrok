@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,8 +11,10 @@ import pytest
 
 from pumpgrok.datafeed.bridge import ObservationBridge
 from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import load_dataset
 from pumpgrok.replay.live_recorder import LiveRecorder
@@ -156,3 +159,133 @@ async def test_out_of_order_observation_is_not_published(tmp_path: Path) -> None
     assert len(bus.bytes_at_publish) == 1
     recorder.seal()
     assert len(load_dataset(tmp_path).events) == 1
+
+
+class StubBus:
+    def __init__(self, order: list[str]) -> None:
+        self.events: list[Event] = []
+        self._order = order
+
+    async def publish(self, event: Event) -> None:
+        self._order.append("bus")
+        self.events.append(event)
+
+
+class OrderedRecorder:
+    def __init__(self, order: list[str]) -> None:
+        self._order = order
+        self.observations: list[CurveObservation] = []
+
+    def record(self, observation: CurveObservation) -> None:
+        self._order.append("record")
+        self.observations.append(observation)
+
+
+class OrderedPrice:
+    def __init__(self, order: list[str]) -> None:
+        self._order = order
+
+    def observe(self, observation: CurveObservation) -> None:
+        self._order.append("price")
+
+
+MARKET_MINT = "MintAAAA1111111111111111111111111111111111"
+OCCURRED = "2026-01-01T00:00:00.000000Z"
+
+
+async def test_market_events_map_to_existing_kinds_with_integer_units() -> None:
+    order: list[str] = []
+    bus = StubBus(order)
+    bridge = ObservationBridge(bus=bus, recorder=OrderedRecorder(order))  # type: ignore[arg-type]
+    await bridge.publish_market_event(
+        kind=EventKind.trade,
+        mint=MARKET_MINT,
+        occurred_at=OCCURRED,
+        payload={"signature": "S1", "position": 3},
+        lamports=1_000,
+        token_units=500,
+    )
+    await bridge.publish_market_event(
+        kind=EventKind.token_created,
+        mint=MARKET_MINT,
+        occurred_at=OCCURRED,
+        payload={"signature": "S2"},
+    )
+    await bridge.publish_market_event(
+        kind=EventKind.migration,
+        mint=MARKET_MINT,
+        occurred_at=OCCURRED,
+        payload={"signature": "S3"},
+    )
+    trade, created, migrated = bus.events
+    assert [event.kind for event in bus.events] == [
+        EventKind.trade,
+        EventKind.token_created,
+        EventKind.migration,
+    ]
+    assert (trade.lamports, trade.token_units) == (1_000, 500)
+    assert type(trade.lamports) is int and type(trade.token_units) is int
+    assert created.lamports is None and migrated.token_units is None
+    assert all(event.entity_id == MARKET_MINT for event in bus.events)
+    assert all(event.occurred_at == OCCURRED for event in bus.events)
+    assert order == ["bus", "bus", "bus"]
+
+
+@pytest.mark.parametrize("kind", [EventKind.curve_tick, EventKind.mark, EventKind.kill_switch])
+async def test_market_path_refuses_kinds_it_does_not_own(kind: EventKind) -> None:
+    order: list[str] = []
+    bus = StubBus(order)
+    bridge = ObservationBridge(bus=bus, recorder=OrderedRecorder(order))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="not a market kind"):
+        await bridge.publish_market_event(
+            kind=kind, mint=MARKET_MINT, occurred_at=OCCURRED, payload={}
+        )
+    assert bus.events == []
+    assert order == []
+
+
+async def test_market_units_must_be_exact_integers() -> None:
+    order: list[str] = []
+    bus = StubBus(order)
+    bridge = ObservationBridge(bus=bus, recorder=OrderedRecorder(order))  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        await bridge.publish_market_event(
+            kind=EventKind.trade,
+            mint=MARKET_MINT,
+            occurred_at=OCCURRED,
+            payload={},
+            lamports=1.5,  # type: ignore[arg-type]
+        )
+    assert bus.events == []
+
+
+async def test_observation_is_recorded_then_priced_then_published() -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    order: list[str] = []
+    bridge = ObservationBridge(
+        bus=StubBus(order),  # type: ignore[arg-type]
+        recorder=OrderedRecorder(order),  # type: ignore[arg-type]
+        price=OrderedPrice(order),  # type: ignore[arg-type]
+    )
+    await bridge.publish(replace(_observation(clock), source="rpc"))
+    assert order == ["record", "price", "bus"]
+
+
+async def test_live_price_source_receives_the_accepted_observation(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    health = SourceSupervisor(clock, random.Random(0), path=tmp_path / "cursor.db")
+    health.note_frame()
+    prices = LivePriceSource(clock=clock, health=health, max_age_s=10.0, max_observations=4)
+    observation = replace(_observation(clock), source="rpc")
+    order: list[str] = []
+    bridge = ObservationBridge(
+        bus=StubBus(order),  # type: ignore[arg-type]
+        recorder=OrderedRecorder(order),  # type: ignore[arg-type]
+        price=prices,
+    )
+    await bridge.publish(observation)
+    snapshot = await prices.curve(observation.mint)
+    assert snapshot is not None
+    assert (snapshot.s_lamports, snapshot.t_units) == (observation.s_lamports, observation.t_units)
+    assert snapshot.source == "rpc"
+    health.close()
