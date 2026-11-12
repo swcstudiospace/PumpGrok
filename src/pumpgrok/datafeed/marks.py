@@ -18,6 +18,7 @@ from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution.paper_adapter.models import _ledger_mark_epoch
 from pumpgrok.ledger.reducer import PositionView
 from pumpgrok.replay.clock import parse_ts_utc
+from pumpgrok.execution.paper_factory import VerifiedReplay
 
 
 class InMemoryTimeoutSink:
@@ -42,12 +43,16 @@ class HeldMarkScheduler:
         settings: GapSettings,
         max_observations: int,
         timeout_sink: InMemoryTimeoutSink | None = None,
+        replay: VerifiedReplay | None = None,
     ) -> None:
         if type(max_observations) is not int or max_observations <= 0:
             raise ValueError("max_observations must be a positive integer")
         if timeout_sink is not None and type(timeout_sink) is not InMemoryTimeoutSink:
             raise TypeError("timeout_sink must be the in-memory test sink")
         self._adapter = adapter
+        if replay is not None and type(replay) is not VerifiedReplay:
+            raise TypeError("replay must be a verify_replay token")
+        self._replay = replay
         self._clock = clock
         self._settings = settings
         self._next_delay = 60.0
@@ -205,11 +210,20 @@ class HeldMarkScheduler:
             if snapshot is not None and snapshot.mint != mint:
                 snapshot = None
             action = position_action(
-                snapshot, last_trusted_at=last_trusted_at, now=now, settings=self._settings
+                snapshot,
+                last_trusted_at=last_trusted_at,
+                now=now,
+                settings=self._settings,
+                replay=self._replay,
             )
-            if action is PositionAction.MARK and snapshot is not None:
-                snapshots[mint] = snapshot
-            elif action is PositionAction.GRADUATED and snapshot is not None:
+            if action is PositionAction.MARK:
+                # The paper adapter refuses every supplied snapshot (strict gate, owner
+                # decision accept-degrade), so an admitted read is a gap: only the timeout
+                # clock applies, and no exception escapes the scheduler.
+                action = position_action(
+                    None, last_trusted_at=last_trusted_at, now=now, settings=self._settings
+                )
+            if action is PositionAction.GRADUATED and snapshot is not None:
                 graduated[mint] = snapshot
             elif action is PositionAction.ZERO_MARK:
                 zero_mints.add(mint)
