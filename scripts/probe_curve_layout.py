@@ -167,14 +167,16 @@ def _layout_problems(values: dict[str, int], complete: int) -> list[str]:
 
 def evaluate_layouts(raw: bytes) -> dict:
     """Read the same bytes under each candidate order; flip only when exactly one passes."""
-    if len(raw) != _EXPECTED_SIZE:
+    if len(raw) < _EXPECTED_SIZE:
         return {
             "passing": [],
             "flip_allowed": False,
             "decoded": None,
-            "problems": {"size": [f"{len(raw)} != {_EXPECTED_SIZE}"]},
+            "problems": {"size": [f"{len(raw)} < {_EXPECTED_SIZE}"]},
         }
-    _disc, *words, complete = _CURVE_STRUCT.unpack(raw)
+    # Live curve accounts are longer than 49 bytes (166 observed); the curve fields are the
+    # 49-byte prefix, so decode that and ignore trailing fields.
+    _disc, *words, complete = _CURVE_STRUCT.unpack(raw[:_EXPECTED_SIZE])
     passing: list[str] = []
     problems: dict[str, list[str]] = {}
     readings: dict[str, dict[str, int]] = {}
@@ -196,12 +198,12 @@ def evaluate_layouts(raw: bytes) -> dict:
 
 
 def filter_curve_candidates(accounts: list[dict]) -> list[dict]:
-    """Keep accounts owned by the pump program, 49 bytes long, with the curve discriminator."""
+    """Keep pump-owned accounts of 49+ bytes with the curve discriminator."""
     return [
         account
         for account in accounts
         if account["owner"] == EXPECTED_PROGRAM_ID
-        and len(account["raw"]) == _EXPECTED_SIZE
+        and len(account["raw"]) >= _EXPECTED_SIZE
         and account["raw"][:8].hex() == EXPECTED_DISCRIMINATOR_HEX
     ]
 

@@ -56,12 +56,14 @@ def _http_error(code: int) -> urllib.error.HTTPError:
 # ---- filter -------------------------------------------------------------------------------
 
 
-def test_filter_keeps_only_program_owned_49_byte_curve_accounts():
+def test_filter_keeps_program_owned_curve_accounts_of_49_bytes_or_more():
     good = {"owner": PROGRAM, "raw": _account_bytes(REPO, VALUES)}
+    live = {"owner": PROGRAM, "raw": good["raw"] + b"\x00" * 117}  # observed live length 166
     wrong_owner = {"owner": "11111111111111111111111111111111", "raw": _account_bytes(REPO, VALUES)}
-    wrong_size = {"owner": PROGRAM, "raw": good["raw"] + b"\x00"}
+    too_short = {"owner": PROGRAM, "raw": good["raw"][:-1]}
     wrong_disc = {"owner": PROGRAM, "raw": b"\x00" * 8 + good["raw"][8:]}
-    assert probe.filter_curve_candidates([wrong_owner, wrong_size, wrong_disc, good]) == [good]
+    kept = probe.filter_curve_candidates([wrong_owner, too_short, wrong_disc, good, live])
+    assert kept == [good, live]
 
 
 # ---- backoff on 429 -----------------------------------------------------------------------
@@ -140,3 +142,11 @@ def test_completion_byte_that_is_not_boolean_is_rejected():
     verdict = probe.evaluate_layouts(bytes(raw))
     assert verdict["flip_allowed"] is False
     assert verdict["passing"] == []
+
+
+def test_live_length_account_decodes_from_its_49_byte_prefix():
+    # Live accounts are 166 bytes; the curve fields are the prefix, trailing bytes are ignored.
+    live = _account_bytes(IDL, VALUES, complete=0) + b"\x00" * 117
+    verdict = probe.evaluate_layouts(live)
+    assert verdict["passing"] == ["idl_order"]
+    assert verdict["flip_allowed"] is True
