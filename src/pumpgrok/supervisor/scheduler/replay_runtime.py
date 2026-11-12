@@ -7,6 +7,7 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from pumpgrok.backtest.results import FillDetail
@@ -19,9 +20,10 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.tool import Tool
 from pumpgrok.engine.pipeline import CandidateVerdict, evaluate_candidates
 from pumpgrok.execution.paper_adapter import PaperAdapter
+from pumpgrok.execution.paper_factory import build_paper_adapter, verify_replay
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.replay.fixtures import FixtureDataset, event_epoch, load_dataset
+from pumpgrok.replay.fixtures import FixtureDataset, event_epoch
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import REPLAY_ROOT, ReplayTrade
 from pumpgrok.replay.sources import FixtureCurveSource
@@ -203,13 +205,21 @@ def open_replay_runtime(
         candidate = active_set.candidate()
         filter_cfg = candidate.filter_settings()
         exits = candidate.exits_settings()
-    dataset = load_dataset(Path(dataset_dir))
+    if clock is None:
+        # verify_replay needs the clock up front: start at zero, then move to the
+        # first fixture stamp once the verified dataset is in hand.
+        fixture_clock = FixtureClock()
+        verified = verify_replay(dataset_dir, fixture_clock)
+        fixture_clock.advance_to(dataset_events_start(verified.dataset))
+        clock = fixture_clock
+    else:
+        verified = verify_replay(dataset_dir, clock)
+    dataset = verified.dataset
     target = (
         Path(ledger_path)
         if ledger_path is not None
         else REPLAY_ROOT / dataset.manifest.dataset / "ledger.sqlite"
     )
-    clock = clock if clock is not None else FixtureClock(start=dataset_events_start(dataset))
     rng = make_rng(seed)
     ids = IdFactory(clock, rng)
     budget = budget if budget is not None else RiskBudget()
@@ -217,7 +227,7 @@ def open_replay_runtime(
     store = LedgerStore(str(target))
     try:
         store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
-        curves = FixtureCurveSource(dataset, clock)
+        curves = verified.curves
         risk = RiskEngine(
             store=store,
             budget=budget,
@@ -230,18 +240,17 @@ def open_replay_runtime(
             env={},
             get_reserves=curves.reserves,
         )
-        adapter = PaperAdapter(
+        adapter = build_paper_adapter(
+            SimpleNamespace(risk=budget, limits=limits),
             store=store,
             risk=risk,
             ids=IdFactory(clock, rng),
             clock=clock,
             rng=make_rng(seed),
-            budget=budget,
-            limits=limits,
-            price_source=curves,
+            replay=verified,
+            source="replay",
             # The fixture is the venue: no random tx drop, so a recorded buy fills.
             p_drop=0.0,
-            source="replay",
         )
         registry, _audits = build_registry(clock=clock, rng=make_rng(seed))
         registry.register(build_place_tool(adapter, lambda: budget, clock))
