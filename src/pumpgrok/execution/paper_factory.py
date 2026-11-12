@@ -30,6 +30,7 @@ from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.limits import EngineLimits
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pumpgrok.datafeed.price import LivePriceSource
     from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter import CurveSnapshot
@@ -114,6 +115,7 @@ def build_paper_adapter(
     replay: VerifiedReplay | None = None,
     live_source: LivePriceSource | None = None,
     fees: FeeModel | None = None,
+    reserves_observer: Callable[[CurveSnapshot], None] | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
@@ -124,13 +126,17 @@ def build_paper_adapter(
     With ``live_source``, the source must be the exact :class:`LivePriceSource`
     (no subclass, no wrapper), the ledger source must be ``"paper"``, and no other
     price source may be given. It is bound by identity and serves sells and exits;
-    its BUY reads stay refused while live RPC provenance is not admitted.
+    its BUY reads stay refused while live RPC provenance is not admitted. With
+    ``reserves_observer`` (live only), each reserves snapshot the live source returns
+    is handed to it synchronously; it never affects admission.
     Without either, ``price_source`` (if any) serves sells and reads only, and every
     BUY is refused with ``data_unavailable``. ``fees`` selects the fee model; the
     default is the v1 :class:`FeeModel`. The operator risk budget and engine limits
     come from ``settings`` (``risk`` / ``limits``); objects without those attributes
     fall back to defaults.
     """
+    if reserves_observer is not None and live_source is None:
+        raise ValueError("reserves observer needs the exact live source")
     policy: EntryPolicy
     if live_source is not None:
         from pumpgrok.datafeed.price import LivePriceSource
@@ -142,6 +148,7 @@ def build_paper_adapter(
         if type(live_source) is not LivePriceSource:
             raise ValueError("live source must be the exact LivePriceSource")
         policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,))
+        live_source.set_observer(reserves_observer)
         price_source = live_source
     elif replay is None:
         policy = _NoReplayEntries()
