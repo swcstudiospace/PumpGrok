@@ -26,7 +26,7 @@ Plan: .planning/phases/13-curve-truth-live-market-data-and-recorder/13-03-PLAN.m
 
 ## Independent review
 
-- Status: PENDING. This receipt is not self-approved. The plan requires a separate, non-self reviewer to approve this receipt before any consumer slice (Task 2b/3) starts.
+- Status: APPROVED by owner human:SomeRandmGuyy on 2026-11-12 as the independent non-self reviewer for this receipt only. Approval covers Task 1 (CLI test change) and the baseline and post runs listed above.
 
 ## Not done in this seat
 
