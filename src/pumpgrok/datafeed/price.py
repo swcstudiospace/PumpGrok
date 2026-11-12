@@ -1,11 +1,16 @@
 """Read-only live curve observations guarded by source health and freshness."""
 
 import math
+from collections.abc import Callable
+from typing import Final
 
 from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+#: The only label live observations carry. Every live snapshot is stamped with it.
+LIVE_SOURCE: Final[str] = "rpc"
 
 
 class LivePriceSource:
@@ -29,10 +34,24 @@ class LivePriceSource:
         self._max_age_s = max_age_s
         self._max_observations = max_observations
         self._observations: dict[str, tuple[float, CurveObservation, int]] = {}
+        self._observer: Callable[[CurveSnapshot], None] | None = None
+        self.observer_failures = 0
+
+    def set_observer(self, observer: Callable[[CurveSnapshot], None] | None) -> None:
+        """Install a synchronous observer of each snapshot curve() is about to return."""
+        if observer is not None and not callable(observer):
+            raise TypeError("observer must be callable or None")
+        self._observer = observer
 
     def observe(self, observation: CurveObservation) -> None:
-        """Store a validated frame; fail explicitly if fresh-mint capacity is full."""
+        """Store a validated live frame; fail explicitly if fresh-mint capacity is full.
+
+        Only frames carrying the live label are stored. Fixture or unknown labels never
+        occupy live state, so they cannot be priced later under any label.
+        """
         stamp = observation.validate()
+        if observation.source != LIVE_SOURCE:
+            return
         now = self._clock.now()
         if (
             not math.isfinite(now)
@@ -71,14 +90,20 @@ class LivePriceSource:
             stamp > now
             or generation != self._health.connection_generation
             or now - stamp > self._max_age_s
-            or observation.source != "rpc"
+            or observation.source != LIVE_SOURCE
         ):
             return None
-        return CurveSnapshot(
+        snapshot = CurveSnapshot(
             mint=observation.mint,
             s_lamports=observation.s_lamports,
             t_units=observation.t_units,
             complete=observation.complete,
-            source=observation.source,
+            source=LIVE_SOURCE,
             ts=stamp,
         )
+        if self._observer is not None:
+            try:
+                self._observer(snapshot)
+            except Exception:  # noqa: BLE001 - an observer must never change admission
+                self.observer_failures += 1
+        return snapshot
