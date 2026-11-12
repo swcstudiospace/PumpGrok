@@ -1,7 +1,7 @@
 # Bonding-curve layout probe (INT-10, R65)
 
 Status: ASSUMED
-Error: no bonding-curve account configured; set BONDING_CURVE_ACCOUNT or pass --account <pubkey>; no RPC call made; layout stays ASSUMED
+Error: ValueError: no 49-byte program-owned curve account in recent signatures
 
 Endpoint: https://api.mainnet-beta.solana.com
 Method: getAccountInfo (read-only, no keys)
