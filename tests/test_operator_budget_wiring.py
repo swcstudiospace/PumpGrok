@@ -8,6 +8,8 @@ RiskEngine with fresh RiskBudget()/EngineLimits() defaults and discarded
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import random
 from collections.abc import Coroutine
@@ -22,12 +24,12 @@ from pumpgrok.config.settings import load_settings
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution import build_adapter
+from pumpgrok.execution import build_adapter, verify_replay
 from pumpgrok.execution.curve_math import buy_out
 from pumpgrok.execution.fees import FeeModel
-from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError
+from pumpgrok.execution.paper_adapter import OrderRejectedError
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.limits import EngineLimits
@@ -62,22 +64,40 @@ TICKET = "SOL-20260201-001"
 # A 200M buy moves the curve about 50 bps: above a 20 bps ceiling, below the 100 bps request.
 MOVED_S1 = S0 + S0 // 400
 MOVED_T1 = S0 * T0 // MOVED_S1
+START = 1_769_900_000.0
 
 
-class _Curves:
-    """Scripted curve reads: the first read prices the decision, later reads confirm."""
-
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
-def _snap(s: int, t: int) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t, complete=False)
+def _write_replay(dataset_dir: Path, ticks: list[tuple[float, int, int]]) -> Path:
+    """Write a manifest-verified fixture dataset holding one MINT curve tick per entry."""
+    dataset_dir.mkdir(parents=True)
+    data = b"".join(
+        (
+            json.dumps(
+                {
+                    "ts_utc": format_ts_utc(stamp),
+                    "kind": "tick",
+                    "mint": MINT,
+                    "S": s,
+                    "T": t,
+                    "complete": False,
+                    "source": "rest",
+                },
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode()
+        for stamp, s, t in ticks
+    )
+    (dataset_dir / "events.jsonl").write_bytes(data)
+    manifest = {
+        "dataset": "operator-wiring",
+        "recorded_from_utc": format_ts_utc(ticks[0][0]),
+        "recorded_to_utc": format_ts_utc(ticks[-1][0]),
+        "seed_hint": 7,
+        "sha256": {"events.jsonl": hashlib.sha256(data).hexdigest()},
+    }
+    (dataset_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return dataset_dir
 
 
 async def _drive(coro: Coroutine[Any, Any, Fill], clock: FixtureClock) -> Fill:
@@ -94,7 +114,7 @@ def _buy_outcome(
     tmp_path: Path, settings: object
 ) -> tuple[list[dict[str, Any]], Fill | OrderRejectedError]:
     """Run one 200M BUY requesting 100 bps through an adapter built from ``settings``."""
-    clock = FixtureClock(1_769_900_000.0)
+    clock = FixtureClock(START)
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     store.set_meta("initial_equity_lamports", str(EQUITY))
     store.set_meta("source", "paper")
@@ -107,6 +127,15 @@ def _buy_outcome(
         autonomy="autonomous-paper",
         get_reserves=lambda _mint: (S0, T0),
     )
+    # The decision prices at START+1 (before the moved tick at START+1.5); the
+    # confirmation read at START+2 sees the moved tick.
+    replay = verify_replay(
+        _write_replay(
+            tmp_path / "replay",
+            [(START - 60.0, S0, T0), (START + 1.5, MOVED_S1, MOVED_T1)],
+        ),
+        clock,
+    )
     adapter = build_adapter(
         settings,
         store=store,
@@ -114,7 +143,8 @@ def _buy_outcome(
         ids=ids,
         clock=clock,
         rng=make_rng(7),
-        price_source=_Curves([_snap(S0, T0), _snap(MOVED_S1, MOVED_T1)]),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
     request = OrderRequest(

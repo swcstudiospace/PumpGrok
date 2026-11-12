@@ -1,7 +1,7 @@
 """TOOL-011 served-verb coverage (R64): every served verb runs its backend.
 
 Registry level: the five exec tools resolve through ``build_registry`` find
-and run against the paper adapter (scripted curves, ``p_drop=0.0`` for
+and run against the paper adapter (a verified replay, ``p_drop=0.0`` for
 deterministic fills). CLI level: paper buy/sell (simulate then place),
 state halt --clear/autonomy/resume, killswitch clear, ticket next/create/list,
 and verify run end to end with exit 0 and JSON. The remaining exit-5 list is
@@ -10,6 +10,7 @@ pinned to the 04-09 handoff exactly.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -28,7 +29,7 @@ from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
-from pumpgrok.execution.paper_adapter import CurveSnapshot
+from pumpgrok.execution import verify_replay
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
@@ -73,31 +74,54 @@ def _04_07_clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name, raising=False)
 
 
-class ScriptedCurves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
+# Recorded before any wall-clock read, so the registry's WallClock sees this tick as history.
+TICK_EPOCH = 1_769_899_940.0
 
 
-def _snap() -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
+def _write_replay(dataset_dir: Path, ticks: list[tuple[float, int, int]]) -> Path:
+    """Write a manifest-verified fixture dataset holding one MINT curve tick per entry."""
+    dataset_dir.mkdir(parents=True)
+    data = b"".join(
+        (
+            json.dumps(
+                {
+                    "ts_utc": format_ts_utc(stamp),
+                    "kind": "tick",
+                    "mint": MINT,
+                    "S": s,
+                    "T": t,
+                    "complete": False,
+                    "source": "rest",
+                },
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode()
+        for stamp, s, t in ticks
+    )
+    (dataset_dir / "events.jsonl").write_bytes(data)
+    manifest = {
+        "dataset": "registry-wiring",
+        "recorded_from_utc": format_ts_utc(ticks[0][0]),
+        "recorded_to_utc": format_ts_utc(ticks[-1][0]),
+        "seed_hint": 7,
+        "sha256": {"events.jsonl": hashlib.sha256(data).hexdigest()},
+    }
+    (dataset_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return dataset_dir
 
 
-def _registry(tmp_path: Path, curves: ScriptedCurves):
-    """Build the operator registry over a tmp ledger with scripted curves."""
+def _registry(tmp_path: Path):
+    """Build the operator registry over a tmp ledger and a verified replay dataset."""
     settings = load_settings()
+    dataset = _write_replay(tmp_path / "replay", [(TICK_EPOCH, S0, T0)])
+    replay = verify_replay(dataset, WallClock())
     reg, manifests, client = build_operator_registry(
         data_dir=tmp_path / "desk",
         repo_root=ROOT,
         settings=settings,
         ledger_path=tmp_path / "ledger.sqlite",
-        price_source=curves,  # type: ignore[arg-type]
+        replay=replay,
         p_drop=0.0,
     )
     assert manifests["bot-04-sniper"].id == SNIPER
@@ -162,7 +186,7 @@ class TestExecBackendCoverage:
     """The five exec tools resolve and run against the paper adapter."""
 
     async def test_served_specs_bind_paper_adapter(self, tmp_path: Path) -> None:
-        reg, manifests, client = _registry(tmp_path, ScriptedCurves([_snap()]))
+        reg, manifests, client = _registry(tmp_path)
         try:
             for name, backend in EXEC_BACKENDS.items():
                 tool = _resolve(reg, manifests, name)
@@ -173,7 +197,7 @@ class TestExecBackendCoverage:
             await client.aclose()
 
     async def test_simulate_writes_no_ledger_row(self, tmp_path: Path) -> None:
-        reg, manifests, client = _registry(tmp_path, ScriptedCurves([_snap(), _snap()]))
+        reg, manifests, client = _registry(tmp_path)
         try:
             store = LedgerStore(str(tmp_path / "ledger.sqlite"))
             try:
@@ -197,7 +221,7 @@ class TestExecBackendCoverage:
             await client.aclose()
 
     async def test_place_buy_fills_and_consumes_approval(self, tmp_path: Path) -> None:
-        reg, manifests, client = _registry(tmp_path, ScriptedCurves([_snap(), _snap()]))
+        reg, manifests, client = _registry(tmp_path)
         try:
             store = LedgerStore(str(tmp_path / "ledger.sqlite"))
             try:
@@ -237,7 +261,7 @@ class TestExecBackendCoverage:
             await client.aclose()
 
     async def test_place_rejects_unknown_approval_without_write(self, tmp_path: Path) -> None:
-        reg, manifests, client = _registry(tmp_path, ScriptedCurves([_snap(), _snap()]))
+        reg, manifests, client = _registry(tmp_path)
         try:
             tool = _resolve(reg, manifests, "exec.place")
             out = await tool(
@@ -261,7 +285,7 @@ class TestExecBackendCoverage:
             await client.aclose()
 
     async def test_cancel_unknown_and_positions_after_buy(self, tmp_path: Path) -> None:
-        reg, manifests, client = _registry(tmp_path, ScriptedCurves([_snap(), _snap()]))
+        reg, manifests, client = _registry(tmp_path)
         try:
             store = LedgerStore(str(tmp_path / "ledger.sqlite"))
             try:

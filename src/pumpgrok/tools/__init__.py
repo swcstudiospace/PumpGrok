@@ -81,6 +81,7 @@ from pumpgrok.tools.safety.score_report import build_score_report_tool
 if TYPE_CHECKING:
     from pumpgrok.config.settings import SafetyThresholds, Settings
     from pumpgrok.core.bot import BotManifest
+    from pumpgrok.execution import VerifiedReplay
     from pumpgrok.execution.paper_adapter import CurveSnapshot, PriceSource
 
 
@@ -311,6 +312,7 @@ def build_operator_registry(
     clock: Clock | None = None,
     ledger_path: Path | None = None,
     price_source: PriceSource | None = None,
+    replay: VerifiedReplay | None = None,
     p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
     seed: int | None = None,  # composition-root seed (INT-05); defaults to settings.replay.seed
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
@@ -321,8 +323,9 @@ def build_operator_registry(
     paper adapter (TOOL-004, R64), so the CLI resolves
     through ``registry.find`` and I1 holds on every verb. ``ledger_path``
     overrides the store location: the CLI passes the canonical paper ledger.
-    ``price_source`` injects curve reads (tests pass scripted curves;
-    production paper trading binds the RPC curve reader in Phase 4).
+    ``replay`` (from ``verify_replay``) is the entry authority: with it, every curve
+    read comes from its verified source and ``price_source`` must be None. Without
+    it, ``price_source`` serves sells and exits, and every BUY is refused.
     ``p_drop`` fixes the confirmation-drop rate with a seeded stream
     (the CLI default ``0.0`` gives deterministic confirms; replay passes
     seeded curves with an explicit rate). ``seed`` is the explicit composition-root
@@ -347,7 +350,10 @@ def build_operator_registry(
     )
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
     live = settings.effective_mode == "live"
+    if replay is not None and price_source is not None:
+        raise ValueError("pass a verified replay or a price source, not both")
     curves = _CachingPriceSource(price_source)
+    reserves = replay.curves.reserves if replay is not None else curves.last.get
     budget = settings.risk
     ensure_paper_genesis(store, budget)
     engine = RiskEngine(
@@ -364,7 +370,7 @@ def build_operator_registry(
             allowlist=settings.notify.allowlist,
             state_dir=data_dir,
         ),
-        get_reserves=curves.last.get,
+        get_reserves=reserves,
     )
     # R62: a missing file is an empty healthy book; a corrupt file quarantines
     # to a degraded book, which refuses buys with reputation_degraded. The degraded marker
@@ -382,7 +388,9 @@ def build_operator_registry(
         ids=IdFactory(active_clock, make_rng(active_seed)),
         clock=active_clock,
         rng=make_rng(active_seed),
-        price_source=curves,
+        price_source=None if replay is not None else curves,
+        replay=replay,
+        source="replay" if replay is not None else "paper",
         p_drop=p_drop,
     )
     engine.attach_flatten_hook(
