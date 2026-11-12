@@ -20,7 +20,7 @@ from pumpgrok.cli import _unflattened_lines, main
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
@@ -147,36 +147,11 @@ class TestPaperRegistryPath:
             assert rows == []
 
 
-class _ScriptedCurves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
 class TestPaperFillPath:
     """Task 3: sniper buy/sell refused as unavailable; the CLI cannot fill (exit 1)."""
 
-    def _fill_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, side: str, size_sol: str
-    ) -> list[str]:
+    def _fill_flags(self, tmp_path: Path, *, side: str, size_sol: str) -> list[str]:
         mint = _TRADE_MINT
-        snap = CurveSnapshot(mint=mint, s_lamports=42_000_000_000, t_units=766_428_571_428_571)
-        curves = _ScriptedCurves([snap, snap, snap, snap, snap])
-        real_registry = cli_mod.build_operator_registry
-
-        def _with_curves(**kwargs: object) -> object:
-            params = dict(kwargs)
-            params.setdefault("price_source", curves)
-            params.setdefault("p_drop", 0.0)
-            return real_registry(**params)  # type: ignore[arg-type]
-
-        monkeypatch.setattr("pumpgrok.cli.wiring.build_operator_registry", _with_curves)
         seat = "bot-04-sniper" if side == "buy" else "bot-06-exit"
         store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
         try:
@@ -229,7 +204,7 @@ class TestPaperFillPath:
         # unavailable (exit 1) and no FillRecorded or OrderPlaced is written.
         monkeypatch.chdir(tmp_path)
         for side, size_sol in (("buy", "0.2"), ("sell", "0.1")):
-            flags = self._fill_flags(tmp_path, monkeypatch, side=side, size_sol=size_sol)
+            flags = self._fill_flags(tmp_path, side=side, size_sol=size_sol)
             assert main(flags) == 1
             payload = json.loads(capsys.readouterr().out)
             assert payload["ok"] is False

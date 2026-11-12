@@ -5,10 +5,21 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import IO
 
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.replay.clock import Clock
-from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest
+from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest, load_dataset
+
+# The only data file a live dataset may hold. Any other *.jsonl is refused at seal time.
+_DATA_FILES = (EVENTS_NAME,)
+
+
+class DatasetConflict(PumpgrokError):
+    """The dataset directory already holds entries, so no fresh dataset can start there."""
+
+    code = "dataset_conflict"
 
 
 def _sync_directory(path: Path) -> None:
@@ -34,6 +45,51 @@ def _ensure_directory(path: Path) -> None:
         _sync_directory(path.parent)
 
 
+def _require_fresh_dataset(path: Path) -> None:
+    """Refuse any existing entry before the first observation is accepted."""
+    if not path.exists():
+        return
+    if not path.is_dir():
+        raise DatasetConflict("dataset path is not a directory", dataset=path.name)
+    entries = sorted(entry.name for entry in path.iterdir())
+    if entries:
+        raise DatasetConflict("dataset directory is not empty", dataset=path.name, entries=entries)
+
+
+def _write_durably(stream: IO[bytes], data: bytes) -> None:
+    if stream.write(data) != len(data):
+        raise OSError("incomplete observation write")
+    stream.flush()
+    os.fsync(stream.fileno())
+
+
+def _create_events_file(path: Path, data: bytes) -> None:
+    """Create events.jsonl, persist its bytes, then persist the directory entry naming it.
+
+    The first observation is published only after this returns, so a crash cannot leave a
+    published tick whose file name or bytes are not yet durable.
+    """
+    with path.open("xb") as stream:
+        _write_durably(stream, data)
+    _sync_directory(path.parent)
+
+
+def _append_events(path: Path, data: bytes) -> None:
+    """Append to an existing events.jsonl. Its directory entry is already durable."""
+    with path.open("ab") as stream:
+        _write_durably(stream, data)
+
+
+def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
+    """Digest every permitted data file. Any other *.jsonl is refused, never omitted."""
+    if any(path.name not in _DATA_FILES for path in dataset_dir.glob("*.jsonl")):
+        raise ValueError("dataset contains an unlisted JSONL file")
+    return {
+        name: hashlib.sha256((dataset_dir / name).read_bytes()).hexdigest()
+        for name in _DATA_FILES
+    }
+
+
 class LiveRecorder:
     """Append ticks before publication and seal their exact bytes with a manifest."""
 
@@ -55,19 +111,19 @@ class LiveRecorder:
             raise ValueError("observation timestamps must not go backwards")
         FixtureManifest._plain_dataset_name(self.dataset_dir.name)
         data = (json.dumps(observation.replay_tick(), separators=(",", ":")) + "\n").encode("utf-8")
+        first = self._first_utc is None
+        if first:
+            # Refused before anything is written, so a conflicting directory stays untouched.
+            _require_fresh_dataset(self.dataset_dir)
+        events = self.dataset_dir / EVENTS_NAME
         try:
             _ensure_directory(self.dataset_dir)
             if (self.dataset_dir / MANIFEST_NAME).exists():
                 raise FileExistsError("dataset is already sealed")
-            if self._first_utc is None and any(self.dataset_dir.glob("*.jsonl")):
-                raise FileExistsError("dataset already contains JSONL files")
-            mode = "xb" if self._first_utc is None else "ab"
-            with (self.dataset_dir / EVENTS_NAME).open(mode) as stream:
-                if stream.write(data) != len(data):
-                    raise OSError("incomplete observation write")
-                stream.flush()
-                os.fsync(stream.fileno())
-            _sync_directory(self.dataset_dir)
+            if first:
+                _create_events_file(events, data)
+            else:
+                _append_events(events, data)
         except OSError:
             self._failed = True
             raise
@@ -84,16 +140,13 @@ class LiveRecorder:
             raise ValueError("cannot seal a dataset without observations")
         linked = False
         try:
-            if any(path.name != EVENTS_NAME for path in self.dataset_dir.glob("*.jsonl")):
-                raise ValueError("dataset contains an unlisted JSONL file")
-            data = (self.dataset_dir / EVENTS_NAME).read_bytes()
             manifest = FixtureManifest(
                 dataset=self.dataset_dir.name,
                 recorded_from_utc=self._first_utc,
                 recorded_to_utc=self._last_utc,
                 seed_hint=0,
                 sources=self._sources,
-                sha256={EVENTS_NAME: hashlib.sha256(data).hexdigest()},
+                sha256=_digest_data_files(self.dataset_dir),
                 notes="Read-only curve observations",
             )
             encoded = (manifest.model_dump_json(indent=2) + "\n").encode("utf-8")
@@ -108,6 +161,8 @@ class LiveRecorder:
                     linked = True
                 finally:
                     temporary.unlink(missing_ok=True)
+            # The replay loader is the acceptance test: a dataset it refuses is never sealed.
+            load_dataset(self.dataset_dir)
             _sync_directory(self.dataset_dir)
         except BaseException:
             self._failed = True
