@@ -97,14 +97,24 @@ class Gap:
 
 
 class GapLedger:
-    """Explicit unrecoverable intervals. Closed gaps are kept up to ``capacity``."""
+    """Explicit unrecoverable intervals.
 
-    def __init__(self, clock: Clock, *, capacity: int = 256) -> None:
+    Each closed gap reaches ``sink`` before it is kept, up to ``capacity`` in memory.
+    """
+
+    def __init__(
+        self,
+        clock: Clock,
+        *,
+        capacity: int = 256,
+        sink: Callable[[Gap], None] | None = None,
+    ) -> None:
         if type(capacity) is not int or capacity <= 0:
             raise ValueError("capacity must be a positive integer")
         self._clock = clock
         self._closed: deque[Gap] = deque(maxlen=capacity)
         self._pending: tuple[str, str] | None = None
+        self._sink = sink
 
     @property
     def gaps(self) -> tuple[Gap, ...]:
@@ -124,13 +134,19 @@ class GapLedger:
         if self._pending is None:
             return
         start, reason = self._pending
-        self._closed.append(Gap(start_ts_utc=start, end_ts_utc=self._clock.utc_iso(), reason=reason))
+        self._finish(Gap(start_ts_utc=start, end_ts_utc=self._clock.utc_iso(), reason=reason))
         self._pending = None
 
     def record_loss(self, reason: str) -> None:
         """Record a single unrecoverable point that has no duration."""
         now = self._clock.utc_iso()
-        self._closed.append(Gap(start_ts_utc=now, end_ts_utc=now, reason=reason))
+        self._finish(Gap(start_ts_utc=now, end_ts_utc=now, reason=reason))
+
+    def _finish(self, gap: Gap) -> None:
+        """Hand a closed gap to the sink before keeping it, so a failed write records nothing."""
+        if self._sink is not None:
+            self._sink(gap)
+        self._closed.append(gap)
 
 
 @dataclass

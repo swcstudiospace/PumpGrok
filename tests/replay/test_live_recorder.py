@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import random
 import stat
 from pathlib import Path
 
@@ -11,12 +12,14 @@ import pytest
 
 from pumpgrok.datafeed.bridge import ObservationBridge
 from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.resync import GapLedger, Recovery
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay import live_recorder as recorder_module
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.replay.fixtures import CorruptFixture, load_dataset
-from pumpgrok.replay.live_recorder import DatasetConflict, LiveRecorder
+from pumpgrok.replay.fixtures import CorruptFixture, load_dataset, read_jsonl
+from pumpgrok.replay.live_recorder import GAPS_NAME, DatasetConflict, LiveRecorder
 
 
 async def _handle(_event: Event) -> None:
@@ -304,3 +307,76 @@ def test_failed_manifest_unlink_reports_indeterminate_durability(
     with pytest.raises(RuntimeError, match="rollback durability is indeterminate"):
         recorder.seal()
     assert (tmp_path / "manifest.json").exists()
+
+
+class _InterruptedFrames:
+    """One stream that goes silent once: the first read times out, the reconnect restores it."""
+
+    def __init__(self) -> None:
+        self._interrupted = False
+
+    async def next_frame(self) -> object:
+        if not self._interrupted:
+            self._interrupted = True
+            raise TimeoutError()
+        return object()
+
+    async def reconnect(self) -> None:
+        return None
+
+
+class _StepClock(FixtureClock):
+    """Sleep advances virtual time at once, so backoff waits return without a driver."""
+
+    async def sleep(self, seconds: float) -> None:
+        self.advance_to(self.now() + seconds)
+
+
+async def _no_subscribe() -> None:
+    return None
+
+
+@pytest.mark.parametrize("gap_first", [True, False])
+async def test_feed_gap_is_appended_sealed_and_accepted_by_the_loader(
+    tmp_path: Path, gap_first: bool
+) -> None:
+    clock = _StepClock(1_767_225_600.0)
+    dataset_dir = tmp_path / "dataset"
+    recorder = LiveRecorder(dataset_dir, clock=clock)
+    supervisor = SourceSupervisor(clock, random.Random(0), path=tmp_path / "cursor.db")
+    gaps = GapLedger(clock, sink=recorder.record_gap)
+    recovery = Recovery(
+        clock=clock,
+        supervisor=supervisor,
+        frames=_InterruptedFrames(),
+        gaps=gaps,
+        subscribe=_no_subscribe,
+        held=lambda: (),
+    )
+
+    def observe() -> None:
+        recorder.record(CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture"))
+        clock.advance_to(clock.now() + 1)
+
+    if gap_first:
+        assert await recovery.receive() is None
+        observe()
+    else:
+        observe()
+        assert await recovery.receive() is None
+    observe()
+    recorder.seal()
+    supervisor.close()
+
+    (gap,) = gaps.gaps
+    assert gap.reason == "TimeoutError"
+    assert gap.end_ts_utc is not None and gap.end_ts_utc > gap.start_ts_utc
+    assert read_jsonl(dataset_dir / GAPS_NAME) == [
+        {"start_ts_utc": gap.start_ts_utc, "end_ts_utc": gap.end_ts_utc, "reason": "TimeoutError"}
+    ]
+    dataset = load_dataset(dataset_dir)
+    assert set(dataset.manifest.sha256) == {"events.jsonl", GAPS_NAME}
+    assert dataset.manifest.sha256[GAPS_NAME] == hashlib.sha256(
+        (dataset_dir / GAPS_NAME).read_bytes()
+    ).hexdigest()
+    assert len(dataset.events) == 2

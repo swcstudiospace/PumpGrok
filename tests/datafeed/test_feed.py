@@ -186,9 +186,13 @@ class Bus:
 @dataclass
 class Recorder:
     observations: list[object] = field(default_factory=list)
+    gaps: list[object] = field(default_factory=list)
 
     def record(self, observation: object) -> None:
         self.observations.append(observation)
+
+    def record_gap(self, gap: object) -> None:
+        self.gaps.append(gap)
 
 
 def _kinds(bus: Bus, kind: EventKind) -> list[object]:

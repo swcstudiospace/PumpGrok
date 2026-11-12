@@ -9,11 +9,14 @@ from typing import IO
 
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.datafeed.events import CurveObservation
-from pumpgrok.replay.clock import Clock
+from pumpgrok.datafeed.resync import Gap
+from pumpgrok.replay.clock import Clock, parse_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest, load_dataset
 
-# The only data file a live dataset may hold. Any other *.jsonl is refused at seal time.
-_DATA_FILES = (EVENTS_NAME,)
+# Closed feed gaps. The file exists only once a gap has closed.
+GAPS_NAME = "gaps.jsonl"
+# The only data files a live dataset may hold. Any other *.jsonl is refused at seal time.
+_DATA_FILES = (EVENTS_NAME, GAPS_NAME)
 
 
 class DatasetConflict(PumpgrokError):
@@ -63,21 +66,19 @@ def _write_durably(stream: IO[bytes], data: bytes) -> None:
     os.fsync(stream.fileno())
 
 
-def _create_events_file(path: Path, data: bytes) -> None:
-    """Create events.jsonl, persist its bytes, then persist the directory entry naming it.
+def _append_record(path: Path, data: bytes) -> None:
+    """Append one durable record. A new file's bytes are durable before its name is synced.
 
     The first observation is published only after this returns, so a crash cannot leave a
     published tick whose file name or bytes are not yet durable.
     """
+    if path.exists():
+        with path.open("ab") as stream:
+            _write_durably(stream, data)
+        return
     with path.open("xb") as stream:
         _write_durably(stream, data)
     _sync_directory(path.parent)
-
-
-def _append_events(path: Path, data: bytes) -> None:
-    """Append to an existing events.jsonl. Its directory entry is already durable."""
-    with path.open("ab") as stream:
-        _write_durably(stream, data)
 
 
 def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
@@ -87,6 +88,7 @@ def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
     return {
         name: hashlib.sha256((dataset_dir / name).read_bytes()).hexdigest()
         for name in _DATA_FILES
+        if (dataset_dir / name).exists()
     }
 
 
@@ -102,6 +104,7 @@ class LiveRecorder:
         self._sources: dict[str, str] = {}
         self._failed = False
         self._sealed = False
+        self._claimed = False
 
     def record(self, observation: CurveObservation) -> None:
         if self._sealed or self._failed:
@@ -111,27 +114,48 @@ class LiveRecorder:
             raise ValueError("observation timestamps must not go backwards")
         FixtureManifest._plain_dataset_name(self.dataset_dir.name)
         data = (json.dumps(observation.replay_tick(), separators=(",", ":")) + "\n").encode("utf-8")
-        first = self._first_utc is None
-        if first:
-            # Refused before anything is written, so a conflicting directory stays untouched.
-            _require_fresh_dataset(self.dataset_dir)
-        events = self.dataset_dir / EVENTS_NAME
-        try:
-            _ensure_directory(self.dataset_dir)
-            if (self.dataset_dir / MANIFEST_NAME).exists():
-                raise FileExistsError("dataset is already sealed")
-            if first:
-                _create_events_file(events, data)
-            else:
-                _append_events(events, data)
-        except OSError:
-            self._failed = True
-            raise
+        self._persist(EVENTS_NAME, data)
         if self._first_utc is None:
             self._first_utc = observation.ts_utc
         self._last_utc = observation.ts_utc
         self._last_epoch = epoch
         self._sources[observation.source] = observation.source
+
+    def record_gap(self, gap: Gap) -> None:
+        """Durably append one closed feed gap to gaps.jsonl. An open gap has no end to record."""
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if gap.end_ts_utc is None:
+            raise ValueError("only closed gaps are recorded")
+        if parse_ts_utc(gap.end_ts_utc) < parse_ts_utc(gap.start_ts_utc):
+            raise ValueError("gap ends before it starts")
+        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        line = {
+            "start_ts_utc": gap.start_ts_utc,
+            "end_ts_utc": gap.end_ts_utc,
+            "reason": gap.reason,
+        }
+        data = (json.dumps(line, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+        self._persist(GAPS_NAME, data)
+
+    def _claim_dataset(self) -> None:
+        """Refuse a directory holding foreign entries before this recorder's first write."""
+        if not self._claimed:
+            # Refused before anything is written, so a conflicting directory stays untouched.
+            _require_fresh_dataset(self.dataset_dir)
+            self._claimed = True
+
+    def _persist(self, name: str, data: bytes) -> None:
+        """Durably append to one data file. Any OSError fails the recorder for good."""
+        self._claim_dataset()
+        try:
+            _ensure_directory(self.dataset_dir)
+            if (self.dataset_dir / MANIFEST_NAME).exists():
+                raise FileExistsError("dataset is already sealed")
+            _append_record(self.dataset_dir / name, data)
+        except OSError:
+            self._failed = True
+            raise
 
     def seal(self) -> None:
         if self._sealed or self._failed:

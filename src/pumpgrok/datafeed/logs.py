@@ -101,7 +101,7 @@ class LogsFeed:
         self._limiter = limiter
         self._dedup = DedupWindow(capacity=dedup_capacity)
         self._stats = FeedStats()
-        self._gaps = GapLedger(clock)
+        self._gaps = GapLedger(clock, sink=bridge.recorder.record_gap)
         self._recovery = Recovery(
             clock=clock,
             supervisor=supervisor,
