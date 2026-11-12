@@ -104,6 +104,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - Ship readiness format (2026-10-26): ultrathink-ship reads phase completion from the YAML frontmatter status of each *-VERIFICATION.md and ignores body text. The v3 reports for phases 6-10 were re-verified at da6c071 and rewritten with that frontmatter (commit d542c72). The earlier 0/5 count was this format gap, not a verification failure. Assess now reports completedPhases 4 of 5, with Phase 6 as the only gap.
 - Owner closure 2026-10-26: Phase 6 closes with two owner-approved deviations (PROJECT V3-5). approved_by human:SomeRandmGuyy. Criterion 17: CI waiver for the phase PR only. Criterion 16: ready PR merged on green CI and Greptile 5/5. Squash merge (ship default).
 - Owner decision 2026-11-12 (HITL answer): the Phase 6 CI waiver for PR 16 in .github/workflows/gates.yml is approved, so G-1, G-2 and G-5/6 are skipped for that PR only. This records the owner's decision; it does not make the gates pass. The waiver stays PR-bound and must be removed in the same change as the milestone waiver, per the deferred list above. Owner: human (HITL reply, 2026-11-12).
+- Owner decision 2026-11-12 (HITL answers): scope is all milestones on the rerun branch, with blocked phases accepted as deferred (Q1, settled earlier). Milestone completion needs only a zero-gap audit, with no separate owner sign-off (Q3 answer: audit-enough). Cleanup is temp-only (Q2).
 
 ## Deferred and backlog (not in v3 requirements)
 
