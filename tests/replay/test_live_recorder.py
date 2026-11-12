@@ -12,13 +12,13 @@ import pytest
 
 from pumpgrok.datafeed.bridge import ObservationBridge
 from pumpgrok.datafeed.events import CurveObservation
-from pumpgrok.datafeed.resync import GapLedger, Recovery
+from pumpgrok.datafeed.resync import Gap, GapLedger, Recovery
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay import live_recorder as recorder_module
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.replay.fixtures import CorruptFixture, load_dataset, read_jsonl
+from pumpgrok.replay.fixtures import EVENTS_NAME, CorruptFixture, load_dataset, read_jsonl
 from pumpgrok.replay.live_recorder import GAPS_NAME, DatasetConflict, LiveRecorder
 
 
@@ -380,3 +380,72 @@ async def test_feed_gap_is_appended_sealed_and_accepted_by_the_loader(
         (dataset_dir / GAPS_NAME).read_bytes()
     ).hexdigest()
     assert len(dataset.events) == 2
+
+
+@pytest.mark.parametrize(
+    ("name", "torn"),
+    [
+        (GAPS_NAME, b'{"start_ts_utc":"2027-01-01T00:0'),
+        (EVENTS_NAME, b'{"kind":"tick"\n'),
+    ],
+)
+async def test_torn_final_line_is_recovered_on_restart_and_the_dataset_seals(
+    tmp_path: Path, name: str, torn: bytes
+) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    dataset_dir = tmp_path / "dataset"
+    observation = CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture")
+    first = LiveRecorder(dataset_dir, clock=clock)
+    first.record(observation)
+    start = clock.utc_iso()
+    clock.advance_to(clock.now() + 1)
+    end = clock.utc_iso()
+    first.record_gap(Gap(start_ts_utc=start, end_ts_utc=end, reason="TimeoutError"))
+    intact = (dataset_dir / name).read_bytes()
+    with (dataset_dir / name).open("ab") as stream:
+        stream.write(torn)  # the process died mid-write
+
+    restarted = LiveRecorder(dataset_dir, clock=clock)
+
+    assert restarted.recovered_tails == {name: len(torn)}
+    assert (dataset_dir / name).read_bytes() == intact
+    restarted.seal()
+    dataset = load_dataset(dataset_dir)
+    assert len(dataset.events) == 1
+    assert dataset.manifest.recorded_from_utc == observation.ts_utc
+    assert read_jsonl(dataset_dir / GAPS_NAME) == [
+        {"start_ts_utc": start, "end_ts_utc": end, "reason": "TimeoutError"}
+    ]
+
+
+def test_corruption_before_the_final_line_is_not_recovered(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    corrupt = b'not json\n{"start_ts_utc":"2027-01-01T00:00:00Z"}\n'
+    (dataset_dir / GAPS_NAME).write_bytes(corrupt)
+
+    with pytest.raises(CorruptFixture):
+        LiveRecorder(dataset_dir, clock=clock)
+    assert (dataset_dir / GAPS_NAME).read_bytes() == corrupt
+
+
+async def test_open_gap_is_closed_and_recorded_when_the_dataset_seals(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    dataset_dir = tmp_path / "dataset"
+    recorder = LiveRecorder(dataset_dir, clock=clock)
+    gaps = GapLedger(clock, sink=recorder.record_gap)
+    recorder.record(CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture"))
+    start = clock.utc_iso()
+    gaps.open("TimeoutError")
+    clock.advance_to(clock.now() + 2)
+    sealed_at = clock.utc_iso()
+
+    recorder.seal(gaps)
+
+    assert not gaps.open_gap
+    assert read_jsonl(dataset_dir / GAPS_NAME) == [
+        {"start_ts_utc": start, "end_ts_utc": sealed_at, "reason": "TimeoutError"}
+    ]
+    dataset = load_dataset(dataset_dir)
+    assert set(dataset.manifest.sha256) == {EVENTS_NAME, GAPS_NAME}

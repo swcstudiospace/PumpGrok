@@ -9,9 +9,15 @@ from typing import IO
 
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.datafeed.events import CurveObservation
-from pumpgrok.datafeed.resync import Gap
+from pumpgrok.datafeed.resync import Gap, GapLedger
 from pumpgrok.replay.clock import Clock, parse_ts_utc
-from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest, load_dataset
+from pumpgrok.replay.fixtures import (
+    EVENTS_NAME,
+    MANIFEST_NAME,
+    CorruptFixture,
+    FixtureManifest,
+    load_dataset,
+)
 
 # Closed feed gaps. The file exists only once a gap has closed.
 GAPS_NAME = "gaps.jsonl"
@@ -49,14 +55,16 @@ def _ensure_directory(path: Path) -> None:
 
 
 def _require_fresh_dataset(path: Path) -> None:
-    """Refuse any existing entry before the first observation is accepted."""
+    """Refuse any entry that is not one of the recorder's own data files, before the first write."""
     if not path.exists():
         return
     if not path.is_dir():
         raise DatasetConflict("dataset path is not a directory", dataset=path.name)
     entries = sorted(entry.name for entry in path.iterdir())
-    if entries:
-        raise DatasetConflict("dataset directory is not empty", dataset=path.name, entries=entries)
+    if any(name not in _DATA_FILES for name in entries):
+        raise DatasetConflict(
+            "dataset directory holds foreign entries", dataset=path.name, entries=entries
+        )
 
 
 def _write_durably(stream: IO[bytes], data: bytes) -> None:
@@ -92,6 +100,56 @@ def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
     }
 
 
+def _is_resumable(path: Path) -> bool:
+    """An unsealed recording: a directory holding only the recorder's own data files."""
+    return path.is_dir() and all(entry.name in _DATA_FILES for entry in path.iterdir())
+
+
+def _refuse_constant(name: str) -> None:
+    raise ValueError(f"non-finite JSON constant {name}")
+
+
+def _is_record(line: bytes) -> bool:
+    """True when the line is one complete JSON object, the only shape a data file holds."""
+    try:
+        value = json.loads(line.decode("utf-8"), parse_constant=_refuse_constant)
+    except ValueError:
+        return False
+    return isinstance(value, dict)
+
+
+def _intact_length(name: str, data: bytes) -> int:
+    """Length of the prefix of whole records. Only the file's final line may be torn."""
+    complete = data.rfind(b"\n") + 1
+    # An unterminated tail is always the torn final line. A terminated last line may be one too.
+    last_may_be_torn = complete == len(data)
+    kept = position = number = 0
+    while position < complete:
+        newline = data.index(b"\n", position)
+        number += 1
+        if _is_record(data[position:newline]):
+            kept = newline + 1
+        elif last_may_be_torn and newline + 1 == complete:
+            break
+        else:
+            raise CorruptFixture("line is not valid JSON", file=name, line=number)
+        position = newline + 1
+    return kept
+
+
+def _recover_torn_tail(path: Path) -> int:
+    """Truncate a torn final line durably. Returns the bytes dropped; 0 when the file is intact."""
+    data = path.read_bytes()
+    kept = _intact_length(path.name, data)
+    if kept == len(data):
+        return 0
+    with path.open("r+b") as stream:
+        stream.truncate(kept)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return len(data) - kept
+
+
 class LiveRecorder:
     """Append ticks before publication and seal their exact bytes with a manifest."""
 
@@ -105,6 +163,41 @@ class LiveRecorder:
         self._failed = False
         self._sealed = False
         self._claimed = False
+        self.recovered_tails: dict[str, int] = {}
+        if _is_resumable(dataset_dir):
+            self._resume()
+
+    def _resume(self) -> None:
+        """Startup recovery: drop each data file's torn final line, then re-derive its span."""
+        for name in _DATA_FILES:
+            path = self.dataset_dir / name
+            if path.is_file():
+                dropped = _recover_torn_tail(path)
+                if dropped:
+                    self.recovered_tails[name] = dropped
+        self._restore_state()
+
+    def _restore_state(self) -> None:
+        """Re-derive the span and sources of a resumed events.jsonl so the manifest stays exact."""
+        path = self.dataset_dir / EVENTS_NAME
+        if not path.is_file():
+            return
+        for number, line in enumerate(path.read_bytes().splitlines(), 1):
+            try:
+                record = json.loads(line)
+                stamp, source = record["ts_utc"], record["source"]
+                epoch = parse_ts_utc(stamp)
+                if not isinstance(source, str):
+                    raise TypeError("source is not a string")
+            except (KeyError, TypeError, ValueError):
+                raise CorruptFixture(
+                    "event record cannot be resumed", file=EVENTS_NAME, line=number
+                ) from None
+            if self._first_utc is None:
+                self._first_utc = stamp
+            self._last_utc = stamp
+            self._last_epoch = epoch
+            self._sources[source] = source
 
     def record(self, observation: CurveObservation) -> None:
         if self._sealed or self._failed:
@@ -157,13 +250,16 @@ class LiveRecorder:
             self._failed = True
             raise
 
-    def seal(self) -> None:
+    def seal(self, *ledgers: GapLedger) -> None:
+        """Close each given ledger's open gap at this instant, then seal. No open gap is dropped."""
         if self._sealed or self._failed:
             raise RuntimeError("recorder is sealed or failed")
         if self._first_utc is None or self._last_utc is None:
             raise ValueError("cannot seal a dataset without observations")
         linked = False
         try:
+            for ledger in ledgers:
+                ledger.close()
             manifest = FixtureManifest(
                 dataset=self.dataset_dir.name,
                 recorded_from_utc=self._first_utc,
