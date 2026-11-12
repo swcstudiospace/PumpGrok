@@ -109,10 +109,20 @@ def _load_probe() -> ModuleType:
 
 
 def _account_payload(owner: str, disc_hex: str) -> dict:
-    """A getAccountInfo payload whose bytes have the right length and plausible counters."""
+    """A getAccountInfo payload with a realistic curve packed in repo field order.
+
+    Order is virtual_sol, virtual_token, real_sol, real_token, supply, complete. Token
+    reserves sit in the token band and SOL reserves in the SOL band, so only repo_order passes.
+    """
     probe = _load_probe()
     raw = probe._CURVE_STRUCT.pack(
-        bytes.fromhex(disc_hex), 30_000_000_000, 1_000_000_000_000, 5_000_000_000, 7, 9, 0
+        bytes.fromhex(disc_hex),
+        30_000_000_000,
+        1_073_000_000_000_000,
+        5_000_000_000,
+        793_000_000_000_000,
+        1_000_000_000_000_000,
+        0,
     )
     data = base64.b64encode(raw).decode("ascii")
     return {
