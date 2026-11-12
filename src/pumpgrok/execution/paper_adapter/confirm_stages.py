@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
+from pumpgrok.execution.entry_hook import EntryDenied
 from pumpgrok.execution.latency import draw_latency
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
@@ -31,6 +32,7 @@ class _ConfirmStagesMixin:
         _rng: random.Random
 
         async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+        async def _read_entry_curve(self, mint: str) -> CurveSnapshot | None: ...
 
         async def _reject(
             self,
@@ -144,7 +146,20 @@ class _ConfirmStagesMixin:
         correlation_id: str,
     ) -> CurveSnapshot:
         """Re-read the curve at CONFIRMING, then apply the layout and graduation gates."""
-        curve1 = await self._read_curve(request.mint)
+        if request.side is Side.BUY:
+            try:
+                curve1 = await self._read_entry_curve(request.mint)
+            except EntryDenied as denied:
+                raise await self._confirm_refuse(
+                    request,
+                    order_id=order_id,
+                    reason="data_unavailable",
+                    detail=denied.detail,
+                    ledger_source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
+        else:
+            curve1 = await self._read_curve(request.mint)
         if curve1 is None:
             raise await self._confirm_refuse(
                 request,

@@ -10,6 +10,7 @@ from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.execution.curve_math import buy_out, impact_buy
+from pumpgrok.execution.entry_hook import EntryDenied
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _BuyConfirmed, _BuyQuote
 from pumpgrok.risk.engine import RiskDecision, order_hash_for
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
@@ -47,6 +48,7 @@ class _BuyMixin:
         def _slippage_bps(self, request: OrderRequest) -> int: ...
 
         async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+        async def _read_entry_curve(self, mint: str) -> CurveSnapshot | None: ...
 
         async def _append_order_batch(
             self,
@@ -235,7 +237,21 @@ class _BuyMixin:
         correlation_id: str,
     ) -> CurveSnapshot:
         """Decision reserves with the ACCEPTED entry gates; refusals raise here."""
-        curve0 = await self._read_curve(request.mint)
+        if request.side is Side.BUY:
+            try:
+                curve0 = await self._read_entry_curve(request.mint)
+            except EntryDenied as denied:
+                raise await self._reject(
+                    request,
+                    request.decision_id,
+                    "data_unavailable",
+                    denied.detail,
+                    stage="ACCEPTED",
+                    source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
+        else:
+            curve0 = await self._read_curve(request.mint)
         if curve0 is None:
             raise await self._reject(
                 request,
