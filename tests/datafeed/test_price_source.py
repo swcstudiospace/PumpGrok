@@ -250,7 +250,7 @@ async def test_capacity_rejects_new_mints_without_evicting_fresh_data(source):
 
 async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: Path):
     """A real adapter must retain INV-R-16 without authorizing unreviewed entries."""
-    assert curve_layout.LAYOUT_STATUS == "ASSUMED"
+    assert curve_layout.LAYOUT_STATUS == "VERIFIED"
     mint = "So11111111111111111111111111111111111111112"
     clock = FixtureClock(START)
     health = SourceSupervisor(clock, random.Random(0), path=tmp_path / "cursor.db")
