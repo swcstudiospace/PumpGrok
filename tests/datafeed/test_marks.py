@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import random
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,15 +16,21 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.graduation import GapSettings
 from pumpgrok.datafeed.marks import HeldMarkScheduler, InMemoryTimeoutSink
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
+
+from replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 S = 42_000_000_000
 T = 766_428_571_428_571
 UNITS = 3_000_000_000
+HORIZON_S = 1000
+_DATASETS = itertools.count()
 
 
 class CountingClock(FixtureClock):
@@ -138,21 +146,125 @@ class Desk:
             await self.clock.yield_to_loop()
 
 
-async def test_held_mints_marked_within_sixty_seconds(tmp_path: Path) -> None:
-    desk = Desk(tmp_path)
+class ReplayDesk:
+    """Scheduler desk over a verified replay: fresh ``a`` and ``b`` ticks every second.
+
+    Every curve read is the replay source bound by ``verify_replay``. The strict gate
+    refuses supplied snapshots, so the scheduler degrades admitted reads to gaps.
+    """
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        capacity: int = 8,
+        settings: GapSettings | None = None,
+        timeout_sink: InMemoryTimeoutSink | None = None,
+    ) -> None:
+        self.clock = CountingClock()
+        self.store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+        self.store.set_meta("initial_equity_lamports", "10000000000")
+        self.store.set_meta("source", "paper")
+        ticks = [
+            tick(START + second, mint, S, T)
+            for second in range(HORIZON_S + 1)
+            for mint in ("a", "b")
+        ]
+        replay = replay_authority(tmp_path, self.clock, ticks, name=f"replay-{next(_DATASETS)}")
+        budget = RiskBudget()
+        risk = RiskEngine(
+            store=self.store,
+            budget=budget,
+            ids=IdFactory(self.clock, random.Random(7)),
+            clock=self.clock,
+            autonomy="autonomous-paper",  # type: ignore[arg-type]
+            get_reserves=lambda _mint: (S, T),
+        )
+        self.adapter = build_paper_adapter(
+            SimpleNamespace(risk=budget),
+            store=self.store,
+            risk=risk,
+            ids=IdFactory(self.clock, random.Random(8)),
+            clock=self.clock,
+            rng=random.Random(9),
+            replay=replay,
+            source="replay",
+            p_drop=0.0,
+        )
+        self.scheduler = HeldMarkScheduler(
+            adapter=self.adapter,
+            clock=self.clock,
+            settings=settings or GapSettings(gap_after_s=30, timeout_after_s=120),
+            max_observations=capacity,
+            timeout_sink=timeout_sink,
+            replay=replay,
+        )
+
+    def open(self, mint: str) -> None:
+        self.store.append(
+            ts_utc=self.clock.utc_iso(),
+            source="paper",
+            correlation_id="test",
+            idempotency_key=f"open-{mint}",
+            type="PositionOpened",
+            payload={
+                "source": "paper",
+                "mint": mint,
+                "price_entry": "0.00001",
+                "token_units": UNITS,
+                "cost_basis_lamports": 200_000_000,
+                "opened_ts_utc": self.clock.utc_iso(),
+            },
+        )
+
+    def remove(self, mint: str) -> None:
+        self.store.append(
+            ts_utc=self.clock.utc_iso(),
+            source="paper",
+            correlation_id="test",
+            idempotency_key=f"close-{mint}",
+            type="PositionClosed",
+            payload={
+                "source": "paper",
+                "mint": mint,
+                "price_exit": "0",
+                "proceeds_lamports": 0,
+                "realized_pnl_lamports": 0,
+                "reason": "manual",
+            },
+        )
+
+    def marks(self) -> list[dict]:
+        return self.store.read(types=["MarkToMarket"], limit=None)
+
+    def prices(self) -> list[dict]:
+        return [json.loads(row["payload"]["prices_json"]) for row in self.marks()]
+
+    async def advance(self, seconds: float) -> None:
+        self.clock.advance_to(self.clock.now() + seconds)
+        for _ in range(4):
+            await self.clock.yield_to_loop()
+
+
+
+async def test_held_mints_degrade_to_gaps_within_sixty_seconds(tmp_path: Path) -> None:
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     desk.open("b")
     await desk.scheduler.holdings_changed()
     await desk.advance(60)
-    marks = desk.prices()
-    # This is the semantic RED target: the temporary scheduler produces no ledger mark.
-    assert {mint for row in marks for mint in row} == {"a", "b"}
-    assert all(row[mint]["mtm_lamports"] > 0 for row in marks for mint in row)
+    # Changed (strict gate, owner accept-degrade): admitted replay reads are gaps, so the
+    # scheduler writes no mark row and no mint is degraded before its 120s timeout.
+    assert desk.marks() == []
+    state = desk.adapter._fold_state()
+    assert state.positions["a"].last_mtm_lamports == 0
+    assert state.positions["b"].last_mtm_lamports == 0
+    assert not desk.scheduler.degraded_mints
     await desk.scheduler.close()
 
 
 async def test_changing_holdings_and_flat_cancel_timer(tmp_path: Path) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     await desk.scheduler.holdings_changed()
     await desk.advance(5)
     assert desk.clock.sleepers == 0
@@ -162,9 +274,10 @@ async def test_changing_holdings_and_flat_cancel_timer(tmp_path: Path) -> None:
     desk.open("b")
     await desk.scheduler.holdings_changed()
     await desk.advance(30)
-    assert any("a" in row for row in desk.prices())
+    # Changed (strict gate, owner accept-degrade): no mark row is written for "a" or "b".
+    assert desk.marks() == []
     await desk.advance(30)
-    assert any("b" in row for row in desk.prices())
+    assert desk.marks() == []
     desk.remove("a")
     desk.remove("b")
     await desk.scheduler.holdings_changed()
@@ -192,14 +305,13 @@ async def test_assumed_live_price_cannot_create_trusted_positive_mark(
 async def test_gap_and_timeout_preserve_last_mark_and_degrade_without_sale(
     tmp_path: Path,
 ) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     await desk.adapter.mark_open_positions(correlation_id="baseline")
     baseline = desk.adapter._fold_state().positions["a"].last_mtm_lamports
     assert baseline > 0
     reserves = desk.adapter._last_reserves["a"]
     last_price = desk.adapter._last_price_ts["a"]
-    desk.curves.sources["a"] = None
     await desk.scheduler.holdings_changed()
     await desk.advance(60)
     assert desk.adapter._fold_state().positions["a"].last_mtm_lamports == baseline
@@ -249,24 +361,28 @@ async def test_restart_outage_uses_persisted_age_without_granting_trust(
 async def test_mixed_gap_keeps_last_value_until_timeout_while_other_mint_marks(
     tmp_path: Path,
 ) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     desk.open("b")
+    # Setup: replay-trusted baselines come from the default mark path (bound replay source).
+    await desk.adapter.mark_open_positions(correlation_id="baseline")
     await desk.scheduler.holdings_changed()
     original = desk.adapter._fold_state().positions["a"].last_mtm_lamports
     assert original > 0
-    desk.curves.sources["a"] = None
+    marks_before = len(desk.marks())
     await desk.advance(60)
     state = desk.adapter._fold_state()
     assert state.positions["a"].last_mtm_lamports == original
     assert state.positions["b"].last_mtm_lamports > 0
-    assert "a" not in desk.prices()[-1]
-    assert "b" in desk.prices()[-1]
+    # Changed (strict gate, owner accept-degrade): the scheduler writes no mark row for
+    # either mint, so the row count is unchanged; prices()[-1] is the baseline row.
+    assert len(desk.marks()) == marks_before
     await desk.advance(60)
     state = desk.adapter._fold_state()
     assert state.positions["a"].last_mtm_lamports == original
-    assert desk.scheduler.degraded_mints == {"a"}
-    assert "a" not in desk.prices()[-1]
+    # Changed: admitted replay reads are gaps for the scheduler, so "b" also times out.
+    assert desk.scheduler.degraded_mints == {"a", "b"}
+    assert len(desk.marks()) == marks_before
     assert state.positions["b"].last_mtm_lamports > 0
     assert state.positions["a"].token_units == UNITS
     assert not desk.store.read(types=["FillRecorded", "PositionClosed"], limit=None)
@@ -277,11 +393,13 @@ async def test_unverified_frames_do_not_extend_short_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
-    desk = Desk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
+    desk = ReplayDesk(tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20))
     desk.open("a")
+    # Setup: the replay-trusted baseline mark comes from the default path, which reads the
+    # bound replay source. The scheduler itself never writes a mark (strict gate).
+    await desk.adapter.mark_open_positions(correlation_id="baseline")
     await desk.scheduler.holdings_changed()
     assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
-    desk.curves.sources["a"] = "rpc"
     await desk.advance(19)
     assert desk.adapter._fold_state().positions["a"].last_mtm_lamports > 0
     await desk.advance(1)
@@ -301,54 +419,57 @@ async def test_held_capacity_exhaustion_is_explicit(tmp_path: Path) -> None:
 
 
 async def test_failed_timer_reports_once_then_restarts(tmp_path: Path, monkeypatch) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     await desk.scheduler.holdings_changed()
-    original = desk.curves.curve
+    original = FixtureCurveSource.curve
 
-    async def failing(_mint: str) -> CurveSnapshot | None:
+    async def failing(self: FixtureCurveSource, _mint: str) -> CurveSnapshot | None:
         raise RuntimeError("source failed")
 
-    monkeypatch.setattr(desk.curves, "curve", failing)
+    monkeypatch.setattr(FixtureCurveSource, "curve", failing)
     await desk.advance(60)
-    monkeypatch.setattr(desk.curves, "curve", original)
+    monkeypatch.setattr(FixtureCurveSource, "curve", original)
     with pytest.raises(RuntimeError, match="source failed"):
         await desk.scheduler.holdings_changed()
     await desk.scheduler.holdings_changed()
     await desk.advance(60)
-    assert "a" in desk.prices()[-1]
+    # Changed (strict gate, owner accept-degrade): the restarted timer degrades "a" to a
+    # gap at its 120s timeout; no mark row is written.
+    assert desk.marks() == []
+    assert desk.scheduler.degraded_mints == {"a"}
     await desk.scheduler.close()
 
 
 async def test_older_snapshot_does_not_block_other_held_mint(tmp_path: Path, monkeypatch) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     desk.open("b")
     await desk.scheduler.holdings_changed()
     await desk.advance(1)
 
-    async def curves(mint: str) -> CurveSnapshot:
+    async def curves(self: FixtureCurveSource, mint: str) -> CurveSnapshot:
         timestamp = START - 1 if mint == "a" else desk.clock.now()
         return CurveSnapshot(mint=mint, s_lamports=S, t_units=T, source="fixture", ts=timestamp)
 
-    monkeypatch.setattr(desk.curves, "curve", curves)
+    monkeypatch.setattr(FixtureCurveSource, "curve", curves)
     await desk.scheduler.holdings_changed()
-    assert "a" not in desk.prices()[-1]
-    assert "b" in desk.prices()[-1]
+    # Changed (strict gate, owner accept-degrade): admitted mints are gaps, so neither
+    # mint writes a mark row; the older snapshot for "a" is never admitted either.
+    assert desk.marks() == []
     await desk.advance(60)
-    assert "b" in desk.prices()[-1]
+    assert desk.marks() == []
     await desk.scheduler.close()
 
 
 async def test_timeout_zero_request_uses_only_test_sink(tmp_path: Path) -> None:
     sink = InMemoryTimeoutSink()
-    desk = Desk(
+    desk = ReplayDesk(
         tmp_path, settings=GapSettings(gap_after_s=10, timeout_after_s=20), timeout_sink=sink
     )
     desk.open("a")
     await desk.scheduler.holdings_changed()
     baseline = desk.adapter._fold_state().positions["a"].last_mtm_lamports
-    desk.curves.sources["a"] = None
     await desk.advance(19)
     assert sink.requests == {}
     await desk.advance(1)
@@ -358,9 +479,10 @@ async def test_timeout_zero_request_uses_only_test_sink(tmp_path: Path) -> None:
     await desk.advance(60)
     assert sink.requests == {"a": (START + 20, 0)}
     assert len(desk.marks()) == count
-    desk.curves.sources["a"] = "fixture"
     await desk.scheduler.holdings_changed()
-    assert not desk.scheduler.degraded_mints
+    # Changed (strict gate, owner accept-degrade): a fresh replay read is still a gap,
+    # so the timeout degradation is not cleared by holdings changes.
+    assert desk.scheduler.degraded_mints == {"a"}
     await desk.scheduler.close()
 
 
@@ -447,7 +569,7 @@ async def test_concurrent_reconciliations_finish_without_losing_timer(tmp_path: 
 async def test_owner_wait_observes_ledger_failure_without_holdings_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     await desk.scheduler.holdings_changed()
 
@@ -457,16 +579,17 @@ async def test_owner_wait_observes_ledger_failure_without_holdings_change(
     monkeypatch.setattr(desk.adapter, "mark_open_positions", fail_accounting)
     owner = asyncio.create_task(desk.scheduler.wait())
     await desk.advance(60)
-    with pytest.raises(RuntimeError, match="ledger unavailable"):
-        await owner
-    with pytest.raises(RuntimeError, match="ledger unavailable"):
-        await desk.scheduler.close()
+    # Changed (strict gate, owner accept-degrade): held mints are gaps, so no ledger
+    # write is attempted, no failure is raised, and the owner waits until shutdown.
+    assert not owner.done()
+    await desk.scheduler.close()
+    await owner
 
 
 async def test_observed_timer_failure_allows_single_reconciliation_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    desk = Desk(tmp_path)
+    desk = ReplayDesk(tmp_path)
     desk.open("a")
     await desk.scheduler.holdings_changed()
     original = desk.adapter.mark_open_positions
@@ -477,14 +600,16 @@ async def test_observed_timer_failure_allows_single_reconciliation_restart(
     monkeypatch.setattr(desk.adapter, "mark_open_positions", fail_accounting)
     owner = asyncio.create_task(desk.scheduler.wait())
     await desk.advance(60)
-    with pytest.raises(RuntimeError, match="ledger unavailable"):
-        await owner
+    # Changed (strict gate, owner accept-degrade): no timer failure is raised.
+    assert not owner.done()
     monkeypatch.setattr(desk.adapter, "mark_open_positions", original)
     await desk.scheduler.holdings_changed()
     before = len(desk.marks())
     await desk.advance(60)
-    assert len(desk.marks()) > before
+    # Changed from "> before": a held mint with no admitted mark writes no row.
+    assert len(desk.marks()) == before
     await desk.scheduler.close()
+    await owner
 
 
 async def test_owner_wait_completes_on_shutdown_even_when_flat(tmp_path: Path) -> None:
