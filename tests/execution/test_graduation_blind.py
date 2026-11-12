@@ -202,7 +202,7 @@ class _RpcSource:
 
 
 async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
-    assert LAYOUT_STATUS == "ASSUMED"
+    assert LAYOUT_STATUS == "VERIFIED"
     assert rpc_curve_price_allowed(curve_source="rpc", provenance=CurveProvenance.LIVE_RPC) is False
     assert (
         rpc_curve_price_allowed(
@@ -263,6 +263,9 @@ async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
 def test_layout_fixture_matches_code_status() -> None:
     fixture = Path("tests/fixtures/rpc/bonding_curve/layout.json")
     record = json.loads(fixture.read_text(encoding="utf-8"))
-    assert record["layout_status"] == LAYOUT_STATUS == "ASSUMED"
+    # The probe record is script output written under the pre-review layout; the
+    # script never writes VERIFIED (human review step), so it cannot track LAYOUT_STATUS.
+    assert record["layout_status"] == "ASSUMED"
+    assert LAYOUT_STATUS == "VERIFIED"
     assert record["layout_status"] != "VERIFIED"
     assert "probe_error" in record
