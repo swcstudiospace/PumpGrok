@@ -347,3 +347,64 @@ async def test_assumed_live_rpc_denies_buy_but_allows_protective_sell(tmp_path: 
     finally:
         health.close()
         store.close()
+
+
+async def test_snapshot_label_is_the_explicit_live_rpc_stamp(source):
+    prices, health, clock = source
+    health.note_frame()
+    prices.observe(observation(clock))
+    snapshot = await prices.curve(MINT)
+    assert snapshot is not None
+    assert snapshot.source == "rpc"
+
+
+async def test_observer_receives_the_exact_snapshot_that_is_returned(source):
+    prices, health, clock = source
+    health.note_frame()
+    prices.observe(observation(clock))
+    seen = []
+    prices.set_observer(seen.append)
+    snapshot = await prices.curve(MINT)
+    assert snapshot is not None
+    assert len(seen) == 1 and seen[0] is snapshot
+
+
+async def test_observer_failure_never_changes_admission(source):
+    prices, health, clock = source
+    health.note_frame()
+    prices.observe(observation(clock))
+
+    def failing(_snapshot):
+        raise RuntimeError("risk cache offline")
+
+    prices.set_observer(failing)
+    snapshot = await prices.curve(MINT)
+    assert snapshot is not None
+    assert snapshot.source == "rpc"
+    assert prices.observer_failures == 1
+
+
+async def test_observer_is_not_called_when_admission_refuses(source):
+    prices, health, clock = source
+    seen = []
+    prices.set_observer(seen.append)
+    prices.observe(observation(clock))
+    assert await prices.curve(MINT) is None
+    assert seen == []
+
+
+async def test_fixture_labelled_observation_never_reaches_the_observer(source):
+    prices, health, clock = source
+    health.note_frame()
+    seen = []
+    prices.set_observer(seen.append)
+    prices.observe(observation(clock, source="fixture"))
+    assert await prices.curve(MINT) is None
+    assert seen == []
+
+
+def test_observer_must_be_callable_or_none(source):
+    prices, _, _ = source
+    with pytest.raises(TypeError):
+        prices.set_observer("not callable")
+    prices.set_observer(None)
