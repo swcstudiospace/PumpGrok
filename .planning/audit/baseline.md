@@ -11,4 +11,4 @@ Run on the branch `bot-00-chief/phase-6-integrity` at the commit that precedes t
 
 Commands are the repository's own targets in `Makefile` (`lint`, `typecheck`, `test`, `audit`). None were added or changed by this milestone audit.
 
-Scope note: `make test` covers the full suite, so it is the HEAD re-check referenced by `MILESTONE-AUDIT.md` for every requirement family. The UPG family was additionally re-run on its own earlier, on the same HEAD lineage, with the same exit 0.
+Scope note: `make test` covers the full suite, so it is the HEAD re-check referenced by `v3-MILESTONE-AUDIT.md` for every requirement family. The UPG family was additionally re-run on its own earlier, on the same HEAD lineage, with the same exit 0.

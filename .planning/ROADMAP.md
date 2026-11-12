@@ -17,6 +17,7 @@ Coverage: all 34 v3 requirements map to exactly one phase (see Traceability in `
 - [x] **Phase 8: Backtest and paper evaluation** - Run manifests, holdout and trial accounting, `pumpgrok backtest` verb, shared result schema and divergence check (10 requirements)
 - [x] **Phase 9: Bounded paper self-upgrade** - Content-hashed bounded parameter promotion with exact rollback, BLIND advisory rule and the approved constitution amendment (6 requirements)
 - [x] **Phase 10: Live readiness, kept disabled** - Live refused with exit 3, no live adapter, import-graph proof and a deferred live-readiness record (2 requirements)
+- Archived, left unfinished (q1 default): v2 phase 3 (v2-3) is BLOCKED on a human-supplied account; it stays archived with this note and is not reopened.
 
 ## Phase Details
 

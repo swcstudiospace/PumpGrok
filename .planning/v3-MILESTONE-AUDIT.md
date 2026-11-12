@@ -1,3 +1,9 @@
+---
+milestone: v3
+status: tech_debt
+note: hand-written audit (not produced by gsd-audit-milestone); status reflects the owner-accepted G1 and G2 recorded in the Result section
+---
+
 # Milestone audit: PumpGrok Desk v3
 
 Audit date: 2026-11-12. Branch `bot-00-chief/phase-6-integrity`, HEAD at the commit preceding this file.
