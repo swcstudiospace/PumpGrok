@@ -454,7 +454,9 @@ class _SellStagesMixin:
         )
         stored = self._store.append_batch(rows)
         self._inflight.discard(plan.order_id)
-        self._last_price_ts[request.mint] = self._clock.now()
+        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
+        observed = curve1.ts
+        self._last_price_ts[request.mint] = observed if observed is not None else self._clock.now()
         self._last_reserves[request.mint] = (curve1.s_lamports, curve1.t_units)
         return Fill(
             order_id=plan.order_id,
