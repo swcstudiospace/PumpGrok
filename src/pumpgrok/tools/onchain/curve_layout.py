@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import struct
 from decimal import Decimal
+from enum import Enum
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict
@@ -152,14 +153,24 @@ def curve_market_cap_lamports(state: CurveState) -> int:
     ) // state.virtual_token_reserves_units
 
 
-def rpc_curve_price_allowed(*, curve_source: str) -> bool:
-    """Allow fixture labels and independently verified RPC layouts for entry.
+class CurveProvenance(Enum):
+    """Where a bonding-curve snapshot came from. Only replay provenance may admit entry."""
 
-    Unknown and unverified live sources fail closed. This string-only gate
-    cannot establish whether a fixture label actually came from replay.
+    VERIFIED_REPLAY = "verified_replay"
+    UNVERIFIED_FIXTURE = "unverified_fixture"
+    LIVE_RPC = "live_rpc"
+    UNKNOWN = "unknown"
+
+
+#: The curve source label a verified replay read carries (replay/sources.py).
+VERIFIED_REPLAY_SOURCE: Final[str] = "fixture"
+
+
+def rpc_curve_price_allowed(*, curve_source: str, provenance: CurveProvenance) -> bool:
+    """Admit an entry price only from verified replay provenance (fail closed).
+
+    Every provenance other than ``VERIFIED_REPLAY`` is refused, including a
+    non-replay snapshot whose source label reads ``fixture``. ``LAYOUT_STATUS``
+    does not widen admission: no live RPC provenance is admitted yet.
     """
-    if curve_source == "fixture":
-        return True
-    if curve_source == "rpc":
-        return LAYOUT_STATUS == "VERIFIED"
-    return False
+    return provenance is CurveProvenance.VERIFIED_REPLAY and curve_source == VERIFIED_REPLAY_SOURCE
