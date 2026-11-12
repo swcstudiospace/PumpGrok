@@ -4,13 +4,13 @@
 :class:`PaperAdapter` with an entry policy. BUY entries need replay authority:
 :func:`verify_replay` loads the dataset through the verifying loader and binds
 the one :class:`FixtureCurveSource` built from that result. Every other
-composition (no source, an injected source, a live source) installs a policy
-that refuses each BUY read before it happens. Sells, flatten and protective
-exits keep their curve reads.
+composition (no source, an injected source) installs a policy that refuses each BUY
+read before it happens. A live source is composed only as the exact
+:class:`LivePriceSource`, bound by identity; its BUY reads stay refused until RPC
+provenance is admitted, and it serves sells, flatten and protective exits.
 
 This module never imports ``pumpgrok.execution.live`` and never signs or moves
-funds. Time comes from the injected clock; money is integer lamports. Live
-composition is not admitted here; plan 13-04 completes it.
+funds. Time comes from the injected clock; money is integer lamports.
 """
 
 from __future__ import annotations
@@ -30,6 +30,8 @@ from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.limits import EngineLimits
 
 if TYPE_CHECKING:
+    from pumpgrok.datafeed.price import LivePriceSource
+    from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter import CurveSnapshot
     from pumpgrok.replay.sources import FixtureCurveSource
 
@@ -110,6 +112,8 @@ def build_paper_adapter(
     rng: random.Random,
     price_source: PriceSource | None = None,
     replay: VerifiedReplay | None = None,
+    live_source: LivePriceSource | None = None,
+    fees: FeeModel | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
@@ -117,13 +121,29 @@ def build_paper_adapter(
 
     With ``replay``, entries price only from ``replay.curves``, the exact object
     :func:`verify_replay` bound, and the ledger source must be ``"replay"``.
-    Without it, ``price_source`` (if any) serves sells and reads only, and every
-    BUY is refused with ``data_unavailable``. The operator risk budget and engine
-    limits come from ``settings`` (``risk`` / ``limits``); objects without those
-    attributes fall back to defaults.
+    With ``live_source``, the source must be the exact :class:`LivePriceSource`
+    (no subclass, no wrapper), the ledger source must be ``"paper"``, and no other
+    price source may be given. It is bound by identity and serves sells and exits;
+    its BUY reads stay refused while live RPC provenance is not admitted.
+    Without either, ``price_source`` (if any) serves sells and reads only, and every
+    BUY is refused with ``data_unavailable``. ``fees`` selects the fee model; the
+    default is the v1 :class:`FeeModel`. The operator risk budget and engine limits
+    come from ``settings`` (``risk`` / ``limits``); objects without those attributes
+    fall back to defaults.
     """
     policy: EntryPolicy
-    if replay is None:
+    if live_source is not None:
+        from pumpgrok.datafeed.price import LivePriceSource
+
+        if replay is not None or price_source is not None:
+            raise ValueError("live composition takes the live source alone")
+        if source != "paper":
+            raise ValueError("live composition composes only the paper ledger source")
+        if type(live_source) is not LivePriceSource:
+            raise ValueError("live source must be the exact LivePriceSource")
+        policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,))
+        price_source = live_source
+    elif replay is None:
         policy = _NoReplayEntries()
     else:
         if source != "replay":
@@ -148,6 +168,7 @@ def build_paper_adapter(
         rng=rng,
         budget=budget,
         limits=limits,
+        fees=fees,
         price_source=price_source,
         entry_policy=policy,
         source=source,
