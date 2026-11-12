@@ -1,6 +1,6 @@
 # Constitution amendment, 2026-10-25
 
-Status: approved by the owner on 2026-10-25 as drafted, with BLIND narrowed to SAFE-4 and SAFE-8. The verbatim wording below is the reference for requirement UPG-06. Owner confirmation of this exact wording is requested at v3 roadmap approval. Until it is confirmed, this text is a draft and must not be applied.
+Status: approved by the owner on 2026-10-25 as drafted, with BLIND narrowed to SAFE-4 and SAFE-8. Owner confirmation of this exact wording was given on 2026-11-12 (HITL answer: approve as drafted). The verbatim wording below is the reference for requirement UPG-06 and is now confirmed.
 
 ## Scope
 
