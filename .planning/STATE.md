@@ -105,6 +105,7 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 - Owner closure 2026-10-26: Phase 6 closes with two owner-approved deviations (PROJECT V3-5). approved_by human:SomeRandmGuyy. Criterion 17: CI waiver for the phase PR only. Criterion 16: ready PR merged on green CI and Greptile 5/5. Squash merge (ship default).
 - Owner decision 2026-11-12 (HITL answer): the Phase 6 CI waiver for PR 16 in .github/workflows/gates.yml is approved, so G-1, G-2 and G-5/6 are skipped for that PR only. This records the owner's decision; it does not make the gates pass. The waiver stays PR-bound and must be removed in the same change as the milestone waiver, per the deferred list above. Owner: human (HITL reply, 2026-11-12).
 - Owner decision 2026-11-12 (HITL answers): scope is all milestones on the rerun branch, with blocked phases accepted as deferred (Q1, settled earlier). Milestone completion needs only a zero-gap audit, with no separate owner sign-off (Q3 answer: audit-enough). Cleanup is temp-only (Q2).
+- Owner decision 2026-11-12 (HITL answers): live execution code may be changed only with the repo's existing risk gates and explicit human sign-off for each live-path change (live-scope answer). Plugin version stays 0.1.0: commit 8a01a67 aligned all four manifests to pyproject.toml and renamed the desk to ten-seat, recorded as intended (Phase 7 OVERRIDE-A). The version reset goes in the audit, not a revert. UPG tick re-verified on HEAD 01f80e3.
 
 ## Deferred and backlog (not in v3 requirements)
 
