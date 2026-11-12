@@ -13,13 +13,16 @@ from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.curve_math import sell_out
 from pumpgrok.execution.fees import FeeModel
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
+
+from .replay_support import replay_authority, tick
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 EQUITY = 10_000_000_000
@@ -62,8 +65,8 @@ def _position(store: LedgerStore, clock: FixtureClock) -> None:
     )
 
 
-def _adapter(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> PaperAdapter:
-    engine = RiskEngine(
+def _engine(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> RiskEngine:
+    return RiskEngine(
         store=store,
         budget=RiskBudget(),
         ids=IdFactory(clock, random.Random(52)),
@@ -72,6 +75,10 @@ def _adapter(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> PaperAd
         get_reserves=lambda _mint: (S0, T0),
         env={},
     )
+
+
+def _adapter(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> PaperAdapter:
+    engine = _engine(store, clock, ids)
     return PaperAdapter(
         store=store,
         risk=engine,
@@ -121,13 +128,18 @@ async def test_buy_on_graduated_curve_rejected(tmp_path: Path) -> None:
     try:
         ids = IdFactory(clock, make_rng(52))
         adapter = _adapter(store, clock, ids)
-        complete = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0, complete=True)
-
-        class _Complete:
-            async def curve(self, mint: str) -> CurveSnapshot | None:
-                return complete
-
-        adapter._price = _Complete()  # type: ignore[assignment]
+        replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0, complete=True)])
+        adapter = build_paper_adapter(
+            object(),
+            store=store,
+            risk=_engine(store, clock, ids),
+            ids=ids,
+            clock=clock,
+            rng=make_rng(52),
+            replay=replay,
+            source="replay",
+            p_drop=0.0,
+        )
         order = OrderRequest(
             ticket_id=TICKET,
             mint=MINT,

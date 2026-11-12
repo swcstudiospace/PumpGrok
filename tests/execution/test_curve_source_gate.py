@@ -3,6 +3,9 @@
 RPC-derived reserves are refused with ``data_unavailable`` while the curve
 layout is ASSUMED, decided per snapshot rather than by a constructor value.
 Exposure after a partial sell reports the cost basis the reducer keeps.
+
+BUYs that fill here do so through a verify_replay token. Refusals that need an
+injected rpc-labelled source use an unbound adapter, which holds no replay authority.
 """
 
 from __future__ import annotations
@@ -19,14 +22,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution import build_adapter
+from pumpgrok.execution import build_adapter, build_paper_adapter
 from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools._common import fold_current_state
 from pumpgrok.tools.portfolio.exposure import ExposureIn, run_exposure
+
+from .replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 EQUITY = 10_000_000_000
@@ -53,13 +59,8 @@ def _snap(source: str) -> CurveSnapshot:
     return CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0, source=source)
 
 
-def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, FixtureClock]:
-    clock = FixtureClock(START)
-    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
-    store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
-    ids = IdFactory(clock, make_rng(7))
-    engine = RiskEngine(
+def _engine(store: LedgerStore, clock: FixtureClock) -> RiskEngine:
+    return RiskEngine(
         store=store,
         budget=RiskBudget(),
         ids=IdFactory(clock, random.Random(7)),
@@ -67,10 +68,18 @@ def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, 
         autonomy="autonomous-paper",  # type: ignore[arg-type]
         get_reserves=lambda _mint: (S0, T0),
     )
+
+
+def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, FixtureClock]:
+    """Unbound adapter over injected reads: no replay authority, refusals only."""
+    clock = FixtureClock(START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    store.set_meta("source", "paper")
     adapter = PaperAdapter(
         store=store,
-        risk=engine,
-        ids=ids,
+        risk=_engine(store, clock),
+        ids=IdFactory(clock, make_rng(7)),
         clock=clock,
         rng=make_rng(7),
         budget=RiskBudget(),
@@ -78,6 +87,44 @@ def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, 
         p_drop=0.0,
     )
     return adapter, clock
+
+
+def _replay_harness(tmp_path: Path) -> tuple[PaperAdapter, FixtureClock, FixtureCurveSource]:
+    """Replay-bound adapter over one verified tick of S0/T0 at START."""
+    clock = FixtureClock(START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    store.set_meta("source", "replay")
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+    adapter = build_paper_adapter(
+        object(),
+        store=store,
+        risk=_engine(store, clock),
+        ids=IdFactory(clock, make_rng(7)),
+        clock=clock,
+        rng=make_rng(7),
+        replay=replay,
+        source="replay",
+        p_drop=0.0,
+    )
+    return adapter, clock, replay.curves
+
+
+def _rpc_on_read(monkeypatch: pytest.MonkeyPatch, *, read_index: int) -> None:
+    """The bound replay source reports an rpc-labelled snapshot on read ``read_index``."""
+    real = FixtureCurveSource.curve
+    calls = 0
+
+    async def curve(self: FixtureCurveSource, mint: str) -> CurveSnapshot | None:
+        nonlocal calls
+        index = calls
+        calls += 1
+        snapshot = await real(self, mint)
+        if index == read_index and snapshot is not None:
+            return snapshot.model_copy(update={"source": "rpc"})
+        return snapshot
+
+    monkeypatch.setattr(FixtureCurveSource, "curve", curve)
 
 
 def _request(adapter: PaperAdapter, ticket: str, *, side: Side, units: int | None) -> OrderRequest:
@@ -160,8 +207,11 @@ async def test_rpc_entry_snapshot_is_refused_at_accepted(tmp_path: Path) -> None
     assert "FillRecorded" not in kinds
 
 
-async def test_rpc_confirmation_snapshot_is_refused_at_confirming(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap("fixture"), _snap("rpc")])
+async def test_rpc_confirmation_snapshot_is_refused_at_confirming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adapter, clock, _curves = _replay_harness(tmp_path)
+    _rpc_on_read(monkeypatch, read_index=1)
     request = _request(adapter, TICKET, side=Side.BUY, units=None)
     with pytest.raises(OrderRejectedError) as exc_info:
         await _place(adapter, clock, request, seat="bot-04-sniper")
@@ -173,7 +223,7 @@ async def test_rpc_confirmation_snapshot_is_refused_at_confirming(tmp_path: Path
 
 
 async def test_exposure_after_partial_sell_matches_reducer_cost_basis(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap("fixture")] * 5)
+    adapter, clock, _curves = _replay_harness(tmp_path)
     buy_request = _request(adapter, TICKET, side=Side.BUY, units=None)
     buy = await _place(adapter, clock, buy_request, seat="bot-04-sniper")
     units = buy.filled_units
@@ -197,9 +247,14 @@ async def test_exposure_after_partial_sell_matches_reducer_cost_basis(tmp_path: 
 
 async def test_rpc_sell_is_not_refused_by_the_entry_gate(tmp_path: Path) -> None:
     """Entries only: a stop-loss exit on an rpc snapshot fills; the source gate is buy-only."""
-    adapter, clock = _harness(tmp_path, [_snap("fixture")] * 2 + [_snap("rpc")] * 8)
+    adapter, clock, curves = _replay_harness(tmp_path)
     buy = _request(adapter, TICKET, side=Side.BUY, units=None)
     bought = await _place(adapter, clock, buy, seat="bot-04-sniper")
+
+    async def rpc_read(mint: str) -> CurveSnapshot:
+        return _snap("rpc")
+
+    curves.curve = rpc_read  # type: ignore[method-assign]
     sell = _request(adapter, TICKET, side=Side.SELL, units=bought.filled_units)
     sold = await _place(adapter, clock, sell, seat="bot-06-exit", exit_reason="stop_loss")
     assert sold.filled_units > 0
