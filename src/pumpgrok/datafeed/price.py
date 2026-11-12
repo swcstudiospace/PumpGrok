@@ -1,6 +1,7 @@
 """Read-only live curve observations guarded by source health and freshness."""
 
 import math
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Final
 
@@ -107,3 +108,40 @@ class LivePriceSource:
             except Exception:  # noqa: BLE001 - an observer must never change admission
                 self.observer_failures += 1
         return snapshot
+
+
+class ReservesCache:
+    """Bounded latest-reserves map shared by the risk engine and the live observer.
+
+    Eviction is least-recently-stored. Reserves are integer base units; a
+    non-positive or non-integer pair is refused rather than stored.
+    """
+
+    def __init__(self, *, capacity: int) -> None:
+        if type(capacity) is not int or capacity <= 0:
+            raise ValueError("capacity must be a positive integer")
+        self._capacity = capacity
+        self._entries: OrderedDict[str, tuple[int, int]] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def observe(self, snapshot: CurveSnapshot) -> None:
+        """Record the reserves of a snapshot the live source is returning."""
+        self.store(snapshot.mint, snapshot.s_lamports, snapshot.t_units)
+
+    def store(self, mint: str, s_lamports: int, t_units: int) -> None:
+        if (
+            type(s_lamports) is not int
+            or s_lamports <= 0
+            or type(t_units) is not int
+            or t_units <= 0
+        ):
+            raise ValueError("reserves must be positive integers")
+        self._entries[mint] = (s_lamports, t_units)
+        self._entries.move_to_end(mint)
+        while len(self._entries) > self._capacity:
+            self._entries.popitem(last=False)
+
+    def get(self, mint: str) -> tuple[int, int] | None:
+        return self._entries.get(mint)

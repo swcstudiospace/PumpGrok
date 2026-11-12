@@ -13,10 +13,11 @@ from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.datafeed.graduation import entry_allowed
-from pumpgrok.datafeed.price import LivePriceSource
+from pumpgrok.datafeed.price import LivePriceSource, ReservesCache
 from pumpgrok.events.sources import STALE_AFTER_S, SourceStatus, SourceSupervisor
 from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.paper_adapter import OrderRejectedError
+from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -408,3 +409,42 @@ def test_observer_must_be_callable_or_none(source):
     with pytest.raises(TypeError):
         prices.set_observer("not callable")
     prices.set_observer(None)
+
+
+def _snapshot(mint: str, s: int, t: int) -> CurveSnapshot:
+    return CurveSnapshot(mint=mint, s_lamports=s, t_units=t, complete=False, source="rpc", ts=1.0)
+
+
+def test_reserves_cache_keeps_the_latest_exact_reserves_per_mint():
+    cache = ReservesCache(capacity=4)
+    cache.observe(_snapshot("A", 10, 20))
+    cache.observe(_snapshot("A", 11, 21))
+    assert cache.get("A") == (11, 21)
+    assert cache.get("B") is None
+    assert len(cache) == 1
+
+
+def test_reserves_cache_is_bounded_and_evicts_the_least_recently_stored():
+    cache = ReservesCache(capacity=2)
+    cache.observe(_snapshot("A", 1, 1))
+    cache.observe(_snapshot("B", 2, 2))
+    cache.store("A", 3, 3)
+    cache.observe(_snapshot("C", 4, 4))
+    assert cache.get("B") is None
+    assert cache.get("A") == (3, 3)
+    assert cache.get("C") == (4, 4)
+    assert len(cache) == 2
+
+
+@pytest.mark.parametrize("capacity", [0, -1, True, 1.5])
+def test_reserves_cache_capacity_must_be_a_positive_integer(capacity):
+    with pytest.raises(ValueError):
+        ReservesCache(capacity=capacity)
+
+
+@pytest.mark.parametrize(("s", "t"), [(0, 1), (1, 0), (True, 1), (1.5, 1)])
+def test_reserves_cache_refuses_non_positive_or_non_integer_reserves(s, t):
+    cache = ReservesCache(capacity=2)
+    with pytest.raises(ValueError):
+        cache.store("A", s, t)
+    assert cache.get("A") is None

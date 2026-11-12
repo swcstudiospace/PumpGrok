@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.execution.latency import P_DROP
@@ -11,6 +11,12 @@ from pumpgrok.execution.paper_adapter import PaperAdapter, PriceSource
 from pumpgrok.execution.paper_factory import VerifiedReplay, build_paper_adapter, verify_replay
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.risk.engine import RiskEngine
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pumpgrok.datafeed.price import LivePriceSource
+    from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 
 __all__ = [
     "PaperAdapter",
@@ -32,6 +38,8 @@ def build_adapter(
     rng: random.Random,
     price_source: PriceSource | None = None,
     replay: VerifiedReplay | None = None,
+    live_source: LivePriceSource | None = None,
+    reserves_observer: Callable[[CurveSnapshot], None] | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
@@ -50,6 +58,8 @@ def build_adapter(
         rng=rng,
         price_source=price_source,
         replay=replay,
+        live_source=live_source,
+        reserves_observer=reserves_observer,
         source=source,
         p_drop=p_drop,
     )
