@@ -96,6 +96,11 @@ async def test_other_portal_methods_are_refused_before_transport(method: str) ->
         "https://rpc.example.invalid?access%4Bey=example-secret",
         "https://rpc.example.invalid?%61ccess%4bey=example-secret",
         "https://rpc.example.invalid?authorization=example-secret",
+        "https://rpc.example.invalid?signature=example-secret",
+        "https://rpc.example.invalid?sig=example-secret",
+        "https://rpc.example.invalid?Sig=example-secret",
+        "https://rpc.example.invalid?X-Amz-Signature=example-secret",
+        "https://rpc.example.invalid?cluster=devnet&sig=example-secret",
         "http://rpc.example.invalid?token=example-secret",
         "wss://portal.example.invalid/api/data?password=example-secret",
     ],
@@ -154,3 +159,45 @@ async def test_rpc_request_ids_are_distinct() -> None:
     await boundary.rpc("getAccountInfo", ["Account111"])
     await boundary.rpc("getAccountInfo", ["Account222"])
     assert transport.frames[0][1]["id"] != transport.frames[1][1]["id"]
+
+
+@pytest.mark.parametrize("channel", ["rpc", "portal"])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "signature=example-secret",
+        "sig=example-secret",
+        "X-Amz-Signature=example-secret",
+    ],
+)
+async def test_signed_urls_swapped_in_after_construction_are_refused(
+    query: str, channel: str
+) -> None:
+    transport = CaptureTransport()
+    boundary = ReadOnlyBoundary(endpoint="https://rpc.example.invalid", transport=transport)
+    boundary.endpoint = f"https://rpc.example.invalid?{query}"
+
+    with pytest.raises(ValueError) as raised:
+        if channel == "rpc":
+            await boundary.rpc("getAccountInfo", ["Account111"])
+        else:
+            await boundary.portal("subscribeNewToken")
+    assert "example-secret" not in str(raised.value)
+    assert transport.frames == []
+
+
+async def test_every_rpc_frame_carries_the_complete_jsonrpc_envelope() -> None:
+    transport = CaptureTransport()
+    boundary = ReadOnlyBoundary(endpoint="https://rpc.example.invalid", transport=transport)
+    params_sent: list[list[object]] = [["Account111"], ["Account222"], ["Account333"]]
+    for params in params_sent:
+        await boundary.rpc("getAccountInfo", params)
+
+    assert len(transport.frames) == len(params_sent)
+    for (_, frame), params in zip(transport.frames, params_sent, strict=True):
+        assert set(frame) == {"jsonrpc", "id", "method", "params"}
+        assert frame["jsonrpc"] == "2.0"
+        assert frame["method"] == "getAccountInfo"
+        assert frame["params"] == params
+    ids = [frame["id"] for _, frame in transport.frames]
+    assert len(set(ids)) == len(ids)

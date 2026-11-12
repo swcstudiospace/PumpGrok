@@ -16,7 +16,7 @@ from pumpgrok.events.models import Event, EventKind
 from pumpgrok.replay import live_recorder as recorder_module
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import CorruptFixture, load_dataset
-from pumpgrok.replay.live_recorder import LiveRecorder
+from pumpgrok.replay.live_recorder import DatasetConflict, LiveRecorder
 
 
 async def _handle(_event: Event) -> None:
@@ -165,9 +165,16 @@ def test_seal_refuses_unlisted_jsonl(tmp_path: Path) -> None:
     assert not (tmp_path / "manifest.json").exists()
 
 
-@pytest.mark.parametrize("conflict", ["invalid-name", "existing-jsonl"])
+@pytest.mark.parametrize(
+    ("conflict", "expected"),
+    [
+        ("invalid-name", ValueError),
+        ("existing-jsonl", DatasetConflict),
+        ("stray-file", DatasetConflict),
+    ],
+)
 async def test_dataset_conflicts_are_refused_before_publication(
-    tmp_path: Path, conflict: str
+    tmp_path: Path, conflict: str, expected: type[Exception]
 ) -> None:
     clock = FixtureClock(1_767_225_600.0)
     observation = CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture")
@@ -175,13 +182,60 @@ async def test_dataset_conflicts_are_refused_before_publication(
     if conflict == "existing-jsonl":
         dataset.mkdir()
         (dataset / "other.jsonl").write_text("{}\n", encoding="utf-8")
+    if conflict == "stray-file":
+        dataset.mkdir()
+        (dataset / "notes.txt").write_text("stray\n", encoding="utf-8")
     bus = EventBus(clock=clock, handler=_handle, dlq=lambda _event: None)
     recorder = LiveRecorder(dataset, clock=clock)
 
-    with pytest.raises((ValueError, FileExistsError)):
+    with pytest.raises(expected):
         await ObservationBridge(bus=bus, recorder=recorder).publish(observation)
     assert bus.pending_p2(EventKind.curve_tick, observation.mint) is None
     assert not (dataset / "events.jsonl").exists()
+    assert not (dataset / "manifest.json").exists()
+
+
+async def test_new_dataset_directory_sync_failure_prevents_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    observation = CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture")
+    dataset_dir = tmp_path / "outer" / "dataset"
+    real_sync = recorder_module._sync_directory
+
+    def fail_parent_sync(path: Path) -> None:
+        if path == tmp_path:
+            raise OSError("parent directory fsync failed")
+        real_sync(path)
+
+    monkeypatch.setattr(recorder_module, "_sync_directory", fail_parent_sync)
+    bus = EventBus(clock=clock, handler=_handle, dlq=lambda _event: None)
+    recorder = LiveRecorder(dataset_dir, clock=clock)
+
+    with pytest.raises(OSError, match="parent directory fsync failed"):
+        await ObservationBridge(bus=bus, recorder=recorder).publish(observation)
+    assert bus.pending_p2(EventKind.curve_tick, observation.mint) is None
+    assert not (dataset_dir / "events.jsonl").exists()
+    with pytest.raises(RuntimeError, match="failed"):
+        recorder.seal()
+
+
+def test_seal_rolls_back_when_replay_loader_refuses_the_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    recorder = LiveRecorder(tmp_path, clock=clock)
+    recorder.record(CurveObservation("Mint111", clock.utc_iso(), 10, 20, False, "fixture"))
+
+    def refuse(_dataset_dir: Path) -> None:
+        raise CorruptFixture("refused by test")
+
+    monkeypatch.setattr(recorder_module, "load_dataset", refuse)
+    with pytest.raises(CorruptFixture, match="refused by test"):
+        recorder.seal()
+    assert not (tmp_path / "manifest.json").exists()
+    with pytest.raises(RuntimeError, match="failed"):
+        recorder.seal()
 
 
 def test_temporary_unlink_failure_rolls_back_manifest_and_syncs_removal(
