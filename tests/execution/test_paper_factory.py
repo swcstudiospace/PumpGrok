@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Literal
 
@@ -162,6 +162,7 @@ def _live_adapter(
     replay: VerifiedReplay | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     fees: FeeModel | None = None,
+    reserves_observer: Callable[[CurveSnapshot], None] | None = None,
 ) -> PaperAdapter:
     risk = RiskEngine(
         store=store,
@@ -183,6 +184,7 @@ def _live_adapter(
         replay=replay,
         source=source,
         fees=fees,
+        reserves_observer=reserves_observer,
         p_drop=0.0,
     )
 
@@ -269,3 +271,34 @@ def test_fee_model_defaults_to_v1_and_accepts_a_selected_model(live_env) -> None
     assert _live_adapter(clock, store, live)._fees == FeeModel()
     selected = FeeModel(venue_fee_bps=200)
     assert _live_adapter(clock, store, live, fees=selected)._fees is selected
+
+
+def test_reserves_observer_requires_the_live_source(tmp_path: Path) -> None:
+    clock = FixtureClock(START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    with pytest.raises(ValueError):
+        _live_adapter(clock, store, None, reserves_observer=lambda _snapshot: None)
+
+
+async def test_reserves_observer_receives_the_actual_returned_snapshot(live_env) -> None:
+    clock, store, health, live = live_env
+    health.note_frame()
+    live.observe(_live_observation(clock))
+    seen: list[CurveSnapshot] = []
+    adapter = _live_adapter(clock, store, live, reserves_observer=seen.append)
+    snapshot = await adapter._read_curve(MINT)
+    assert snapshot is not None
+    assert len(seen) == 1
+    assert seen[0] is snapshot
+
+
+async def test_reserves_observer_does_not_admit_a_buy(live_env) -> None:
+    clock, store, health, live = live_env
+    health.note_frame()
+    live.observe(_live_observation(clock))
+    seen: list[CurveSnapshot] = []
+    adapter = _live_adapter(clock, store, live, reserves_observer=seen.append)
+    with pytest.raises(OrderRejectedError):
+        await _place(adapter, clock, _buy_request(adapter))
+    assert "FillRecorded" not in [event["type"] for event in store.read(limit=None)]
