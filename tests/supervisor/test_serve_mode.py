@@ -13,18 +13,51 @@ import logging
 import os
 import urllib.request
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import FilterSettings
+from pumpgrok.config.settings import FilterSettings, load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.supervisor.health import HealthServer
 from pumpgrok.supervisor.metrics import NINE_FAMILIES
 from pumpgrok.supervisor.scheduler import ROSTER, build_serve_replay
+from pumpgrok.tools import ensure_paper_genesis
 
 SMOKE = Path(__file__).resolve().parent.parent / "fixtures" / "replay" / "smoke"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, as the onboarding verbs record it.
+
+    The paper genesis is written first, then the operator key and an HMAC-authenticated
+    allow per roster tool, so the paper startup gate reads complete authority inputs.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 @pytest.fixture(autouse=True)
@@ -167,6 +200,7 @@ def test_serve_cli_needs_a_health_port(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--serve", "--replay", str(SMOKE)]) == 1
     assert "PUMPGROK_HEALTH__PORT" in capsys.readouterr().err
     assert not (tmp_path / "var").exists()
@@ -176,6 +210,7 @@ def test_one_shot_still_exits_zero_without_binding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
 
 
