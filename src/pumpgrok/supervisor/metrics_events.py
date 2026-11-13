@@ -21,7 +21,7 @@ callables, and the gateway transport. A wrapper never changes a result or an exc
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from prometheus_client import CollectorRegistry, Counter
 
@@ -44,14 +44,13 @@ class _Request(Protocol):
     def agent(self) -> str: ...
 
 
-_R = TypeVar("_R", bound=_Request)
-_RC = TypeVar("_RC", bound=_Request, contravariant=True)
+_RC_contra = TypeVar("_RC_contra", bound=_Request, contravariant=True)
 
 
-class _Transport(Protocol[_RC]):
+class _Transport(Protocol[_RC_contra]):
     """The gateway transport seam as the observer sees it: a call that returns response text."""
 
-    async def __call__(self, request: _RC, text: str) -> str: ...
+    async def __call__(self, request: _RC_contra, text: str) -> str: ...
 
 
 class EventCollectors:
@@ -115,19 +114,19 @@ class EventCollectors:
     def _count_dlq(self, event: Event) -> None:
         self.event_dlq_total.labels(kind=event.kind.value).inc()
 
-    def observe_transport(self, transport: _Transport[_R]) -> _Transport[_R]:
+    def observe_transport[R: _Request](self, transport: _Transport[R]) -> _Transport[R]:
         """Wrap the gateway transport: every call it is charged for is counted once."""
         return _ObservedTransport(transport, self.grok_calls_total)
 
 
-class _ObservedTransport(Generic[_R]):
+class _ObservedTransport[R: _Request]:
     """A transport that counts each call it forwards."""
 
-    def __init__(self, inner: _Transport[_R], calls: Counter) -> None:
+    def __init__(self, inner: _Transport[R], calls: Counter) -> None:
         self._inner = inner
         self._calls = calls
 
-    async def __call__(self, request: _R, text: str) -> str:
+    async def __call__(self, request: R, text: str) -> str:
         try:
             response = await self._inner(request, text)
         except BaseException:
