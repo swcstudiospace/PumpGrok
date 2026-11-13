@@ -116,8 +116,7 @@ def test_cadence_mode_reports_superseded_job_without_refusing(hermes_home: Path)
     lines = doctor.doctor_report(Settings(mode="paper"))
     info = [line for line in lines if "hermes-jobs" in line]
     assert info == [
-        "info  hermes-jobs: superseded enabled: scout-discover "
-        "(cadence; event mode refused)"
+        "info  hermes-jobs: superseded enabled: scout-discover (cadence; event mode refused)"
     ]
 
 

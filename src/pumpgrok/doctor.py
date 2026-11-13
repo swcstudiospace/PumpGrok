@@ -428,9 +428,7 @@ def _xai_record(settings: Settings, mode: str) -> InputRecord:
 
 
 def _wallet_env_set(environ: Mapping[str, str]) -> bool:
-    return any(
-        name.startswith(WALLET_ENV_PREFIX) and environ[name].strip() for name in environ
-    )
+    return any(name.startswith(WALLET_ENV_PREFIX) and environ[name].strip() for name in environ)
 
 
 def _wallet_record(settings: Settings, mode: str, environ: Mapping[str, str]) -> InputRecord:

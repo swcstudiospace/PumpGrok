@@ -231,9 +231,7 @@ def test_setup_documents_every_onboarding_command() -> None:
         (EVENTS_RUNBOOK, EVENTS_PHRASES),
     ],
 )
-def test_onboarding_docs_state_the_paper_and_gate_rules(
-    rel: str, phrases: tuple[str, ...]
-) -> None:
+def test_onboarding_docs_state_the_paper_and_gate_rules(rel: str, phrases: tuple[str, ...]) -> None:
     text = _normalized(rel)
     missing = [phrase for phrase in phrases if phrase.lower() not in text]
     assert not missing, f"{rel} lacks required statements: {missing}"
