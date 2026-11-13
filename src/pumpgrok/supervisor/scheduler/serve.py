@@ -361,7 +361,7 @@ def _build_serve(
                 seq = 0
             return {"ledger_seq": seq, "kill_switch": kill_switch_engaged(store)}
 
-        metrics = Metrics(snapshot=_snapshot)
+        metrics = Metrics(snapshot=_snapshot, event_mode=wake_mode == "event")
         supervisor = Supervisor(
             store=store,
             clock=runtime.clock,
