@@ -305,16 +305,20 @@ SCENARIOS: dict[str, Callable[[Path], Awaitable[dict[str, Any]]]] = {
 }
 
 _PIN_TABLE = """
-confirm_direct_sell 3e8fa100bfa6ff0cb35073e5e39c56d3db5aa219fe56d3025cc5e42aaaf44edf
-confirm_timeout_sell bab61d09d430d16e86df4e5e28dcfe86d452859e91cec7f1adc0b2a917ab1036
-cancel_sell_during_latency f60b970e4b0ff355468e08a4a2d3e4cef705094575416d08e7e18e2327031cf4
-recheck_refused_sell fa20a328b104216d94bc8c58318daaab35ac3003824229b3f9122cb1f046125a
-tx_dropped_sell ddb19f56cfa14d8fdb78d4f1ea4cff4d88b3ba5af7d52b56004dc84d1b025819
-buy_no_reserves_confirming 3697af27688006932f120ced452150c0a16a381eb2640766f2e4d7525e184045
-buy_data_unavailable_confirming 15f3111c28551bf849491e6b1b48674526c5c3c696a16b61d3b1aaba0d4adac6
-buy_post_graduation_confirming 2e942b6683832b8ad3a8b483bdaf5910e78b613b82bf9927391c0dda7a4f3233
+confirm_direct_sell d0bd211fa0b3e5f61248ba6af2b18624b054e325ccfec119e682d5a048dcf05e
+confirm_timeout_sell ee1f7ada95a6677749f73a31165e1f51aac257ee1de217b14d4b19df9695c2a3
+cancel_sell_during_latency 83ce6c54a7af5b5765651a6a09081e962b8290ff45b5bbf1001df5beb59fd6c8
+recheck_refused_sell 7966be29584c1c9c8e0d967c56dbff0ac940dcb8af49b0f4bdf182c83096d5ef
+tx_dropped_sell c4cf29190bf980905374877200a8df3038a2f46e4e9621d1841b9942ae8ce349
+# Outcome changed from refusal to fill under verified replay (13-07 changelog).
+buy_no_reserves_confirming a0fa1398fb57f2671d68de1112effb55bae7423845193bd63ee766381e793472
+# Outcome changed from refusal to fill under verified replay (13-07 changelog).
+buy_data_unavailable_confirming a0fa1398fb57f2671d68de1112effb55bae7423845193bd63ee766381e793472
+buy_post_graduation_confirming 178d45891ce8972653b4690d0a30617051d57b4db9d03a73a659d651bb587510
 """
-PINS: dict[str, str] = dict(line.split() for line in _PIN_TABLE.strip().splitlines())
+PINS: dict[str, str] = dict(
+    line.split() for line in _PIN_TABLE.strip().splitlines() if not line.startswith("#")
+)
 
 
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
