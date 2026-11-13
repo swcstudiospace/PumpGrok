@@ -2,15 +2,17 @@
 
 Pins ``engine/agents/*`` against the vendor agents plus ``core/ratelimit.py``,
 ``core/budget.py`` and ``core/llm.py`` against ``vendor/grokbot-pumpfun/src/ops.py``.
-Every x.ai response is served by ``httpx.MockTransport`` from the
-hand-authored ``tests/fixtures/http/xai_chat.json`` envelope: no test here
-reaches the live network. Time is virtual (an immediate test clock) and
-jitter comes from ``make_rng`` seeds, so retries are deterministic.
+Every x.ai response is served by ``httpx.MockTransport`` behind the real
+``XaiTransport`` and ``GrokGateway``, from the hand-authored
+``tests/fixtures/http/xai_chat.json`` envelope: no test here reaches the live
+network. Time is virtual (an immediate test clock), so cache and budget windows
+are deterministic.
 
 Vendor divergences: prompts are English (prompt edits change the canonical
-request hash, so the smoke LLM records were authored last); retry and
-timeout knobs travel as agent constructor arguments, not settings; the
-circuit breaker is Phase 4 per R52, so ``precheck`` reports the budget only.
+request hash, so the smoke LLM records were authored last); agents reach the
+model only through ``GrokGateway.admit``, which owns the prefilter, cache,
+breaker and layered budget; the transport makes one attempt per admitted call,
+so there is no retry loop and no backoff.
 """
 
 from __future__ import annotations
@@ -18,38 +20,44 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from decimal import Decimal
 from pathlib import Path
-from random import Random
 from typing import Any
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from pumpgrok.config.settings import GrokSettings
 from pumpgrok.core.budget import CallBudget
 from pumpgrok.core.llm import GrokOps
 from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.engine.agents.auditor import AuditorAgent
-from pumpgrok.engine.agents.base import extract_json
+from pumpgrok.engine.agents.base import extract_json, result_schemas, system_prompts
 from pumpgrok.engine.agents.checker import CheckerAgent
 from pumpgrok.engine.agents.narrative import NarrativeAgent
 from pumpgrok.engine.agents.timing import TimingAgent
 from pumpgrok.engine.models import Analysis, Token, TokenMetrics
-from pumpgrok.replay.rng import make_rng
+from pumpgrok.grok.budget import LayeredBudget
+from pumpgrok.grok.cache import ResponseCache
+from pumpgrok.grok.gateway import Candidate, GrokGateway
+from pumpgrok.grok.transport import XaiTransport
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "http" / "xai_chat.json"
 
 CHAT_PATH = "/v1/chat/completions"
-
-
+NOW = 1_767_225_600.0
 class ImmediateClock:
     """Virtual time for agent tests: fixed now, sleeps resolve at once."""
 
-    def __init__(self, now: float = 1_767_225_600.0) -> None:
+    def __init__(self, now: float = NOW) -> None:
         self._now = now
 
     def now(self) -> float:
         return self._now
+
+    def set_now(self, now: float) -> None:
+        self._now = now
 
     def monotonic(self) -> float:
         return self._now
@@ -67,12 +75,8 @@ class ImmediateClock:
             yield
 
         return _scope()
-
-
 def _grok() -> GrokSettings:
-    return GrokSettings()
-
-
+    return GrokSettings(api_key=SecretStr("test-key"))
 def _chat_envelope(content: object, model: str = "grok-4.20-0309-non-reasoning") -> dict[str, Any]:
     return {
         "id": "chatcmpl-test-001",
@@ -88,8 +92,6 @@ def _chat_envelope(content: object, model: str = "grok-4.20-0309-non-reasoning")
         ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
-
-
 def _client(
     handler: Callable[[httpx.Request], httpx.Response], seen: list[httpx.Request]
 ) -> httpx.AsyncClient:
@@ -98,8 +100,6 @@ def _client(
         return handler(request)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(_wrapped))
-
-
 def _ok(content: object) -> Callable[[httpx.Request], httpx.Response]:
     def _handle(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "api.x.ai"
@@ -107,31 +107,52 @@ def _ok(content: object) -> Callable[[httpx.Request], httpx.Response]:
         return httpx.Response(200, json=_chat_envelope(content))
 
     return _handle
-
-
+def _candidate(now: float) -> Candidate:
+    """Facts that pass every prefilter rule for a token created five minutes before ``now``."""
+    return Candidate(
+        mint="M",
+        created_at=now - 300.0,
+        first_trade_at=now - 60.0,
+        unique_buyers=10,
+        prerank=Decimal("0.8"),
+        last_decision_at=None,
+    )
+def _admit(now: float = NOW) -> dict[str, Any]:
+    """Gateway admission arguments for one agent call at ``now``."""
+    return {"event_id": "EV-TEST", "candidate": _candidate(now)}
+def _at(clock: ImmediateClock, now: float) -> dict[str, Any]:
+    """Move the test clock to ``now`` and return admission arguments for that instant."""
+    clock.set_now(now)
+    return _admit(now)
+def _gateway(tmp_path: Path, clock: ImmediateClock, client: httpx.AsyncClient) -> GrokGateway:
+    grok = _grok()
+    transport = XaiTransport(
+        api_key=grok.api_key.get_secret_value(),
+        base_url=grok.base_url,
+        client=client,
+        prompts=system_prompts(),
+        schemas=result_schemas(),
+    )
+    return GrokGateway(
+        clock=clock,
+        transport=transport,
+        cache=ResponseCache(tmp_path / "cache.sqlite", clock),
+        budget=LayeredBudget(tmp_path / "budget.sqlite", clock),
+    )
 def _agents(
+    tmp_path: Path,
     seen: list[httpx.Request],
     handler: Callable[[httpx.Request], httpx.Response],
     clock: ImmediateClock | None = None,
-    ops: GrokOps | None = None,
-    seed: int = 7,
 ) -> tuple[NarrativeAgent, CheckerAgent, TimingAgent, AuditorAgent]:
     owned_clock = clock or ImmediateClock()
-    rng = make_rng(seed)
-    client = _client(handler, seen)
-    kwargs: dict[str, Any] = {
-        "clock": owned_clock,
-        "rng": rng,
-        "client": client,
-        "ops": ops,
-    }
+    gateway = _gateway(tmp_path, owned_clock, _client(handler, seen))
+    kwargs: dict[str, Any] = {"gateway": gateway, "clock": owned_clock}
     narrative = NarrativeAgent(_grok(), **kwargs)
     checker = CheckerAgent(_grok(), **kwargs)
     timing = TimingAgent(_grok(), cache_seconds=900.0, **kwargs)
     auditor = AuditorAgent(_grok(), **kwargs)
     return narrative, checker, timing, auditor
-
-
 def _analysis(token: Token) -> Analysis:
     return Analysis(token=token, metrics=TokenMetrics(risk_score=2.0))
 
@@ -151,9 +172,10 @@ def test_smoke_fixture_is_a_usable_chat_completion() -> None:
 # --- model selection and endpoint ------------------------------------------
 
 
-async def test_narrative_uses_fast_model_on_sdk_base_url() -> None:
+async def test_narrative_uses_fast_model_on_sdk_base_url(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
     narrative, _, _, _ = _agents(
+        tmp_path,
         seen,
         _ok(
             {
@@ -166,7 +188,7 @@ async def test_narrative_uses_fast_model_on_sdk_base_url() -> None:
         ),
     )
     token = Token(mint="M", name="n", image_uri="i")
-    result = await narrative.run(token)
+    result = await narrative.run(token, **_admit())
     assert result.trend_fit == 1.0
     (request,) = seen
     assert str(request.url) == "https://api.x.ai" + CHAT_PATH
@@ -176,21 +198,24 @@ async def test_narrative_uses_fast_model_on_sdk_base_url() -> None:
     assert [m["role"] for m in body["messages"]] == ["system", "user"]
 
 
-async def test_checker_uses_strong_model() -> None:
+async def test_checker_uses_strong_model(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
     _, checker, _, _ = _agents(
-        seen, _ok({"approve": False, "reason": "thin", "flags": ["thin"], "confidence": 0.2})
+        tmp_path,
+        seen,
+        _ok({"approve": False, "reason": "thin", "flags": ["thin"], "confidence": 0.2}),
     )
-    result = await checker.run(_analysis(Token(mint="M")))
+    result = await checker.run(_analysis(Token(mint="M")), **_admit())
     assert result.approve is False
     (request,) = seen
     body = json.loads(request.content.decode())
     assert body["model"] == "grok-4.3"
 
 
-async def test_timing_and_auditor_use_fast_model() -> None:
+async def test_timing_and_auditor_use_fast_model(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
     _, _, timing, auditor = _agents(
+        tmp_path,
         seen,
         _ok(
             {
@@ -202,13 +227,14 @@ async def test_timing_and_auditor_use_fast_model() -> None:
             }
         ),
     )
-    await timing.get(now=1_767_225_600.0)
+    await timing.get(now=NOW, **_admit())
     models = [json.loads(request.content.decode())["model"] for request in seen]
     assert models == ["grok-4.20-0309-non-reasoning"]
     seen.clear()
     token = Token(mint="M", creator="C", created_timestamp=1_767_225_000.0)
     auditor_seen: list[httpx.Request] = []
     _, _, _, auditor2 = _agents(
+        tmp_path,
         auditor_seen,
         _ok(
             {
@@ -223,94 +249,84 @@ async def test_timing_and_auditor_use_fast_model() -> None:
             }
         ),
     )
-    result = await auditor2.run(token, [], [])
+    result = await auditor2.run(token, [], [], **_admit())
     assert result.organic_buyer_share == 0.9
     body = json.loads(auditor_seen[0].content.decode())
     assert body["model"] == "grok-4.20-0309-non-reasoning"
     _ = auditor
 
 
-# --- retry, backoff, fallback ----------------------------------------------
+# --- one attempt, fallback ---------------------------------------------------
 
 
-async def test_retry_then_success_records_usage() -> None:
+async def test_server_error_is_one_attempt_then_falls_back(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
-    calls = {"n": 0}
-
-    def _flaky(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return httpx.Response(500, json={"error": "sick"})
-        return httpx.Response(
-            200,
-            json=_chat_envelope(
-                {
-                    "trend_fit": 0.5,
-                    "virality": 0.5,
-                    "community_signals": 0.5,
-                    "launch_timing": 0.5,
-                    "reasoning": "recovered",
-                }
-            ),
-        )
-
-    narrative, _, _, _ = _agents(seen, _flaky)
-    result = await narrative.run(Token(mint="M"))
-    assert result.trend_fit == 0.5
-    assert calls["n"] == 2
+    narrative, _, _, _ = _agents(
+        tmp_path, seen, lambda request: httpx.Response(500, json={"error": "sick"})
+    )
+    result = await narrative.run(Token(mint="M"), **_admit())
+    assert result.trend_fit == 0.0
+    assert len(seen) == 1
 
 
-async def test_backoff_is_seeded_jitter() -> None:
-    seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, _ok({}), seed=11)
-    expected = 1.0 * (0.5 + Random(11).random())
-    assert narrative._backoff(1) == pytest.approx(expected)
-
-
-async def test_transport_failure_falls_back_pessimistic() -> None:
+async def test_transport_failure_falls_back_pessimistic(tmp_path: Path) -> None:
     def _boom(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down", request=request)
 
     seen: list[httpx.Request] = []
-    _, checker, _, _ = _agents(seen, _boom)
-    result = await checker.run(_analysis(Token(mint="M")))
+    _, checker, _, _ = _agents(tmp_path, seen, _boom)
+    result = await checker.run(_analysis(Token(mint="M")), **_admit())
     assert result.approve is False
     assert result.flags == ["agent_failure"]
-    assert len(seen) == 3
+    assert len(seen) == 1
 
 
-async def test_bad_json_falls_back_pessimistic() -> None:
+async def test_bad_json_falls_back_pessimistic(tmp_path: Path) -> None:
     def _prose(request: httpx.Request) -> httpx.Response:
         envelope = _chat_envelope("just some words, no object")
         envelope["choices"][0]["message"]["content"] = "just some words, no object"
         return httpx.Response(200, json=envelope)
 
     seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, _prose)
-    result = await narrative.run(Token(mint="M"))
+    narrative, _, _, _ = _agents(tmp_path, seen, _prose)
+    result = await narrative.run(Token(mint="M"), **_admit())
     assert result.trend_fit == 0.0
 
 
-async def test_schema_violation_falls_back_pessimistic() -> None:
+async def test_schema_violation_falls_back_pessimistic(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, _ok({"wrong": "shape"}))
-    result = await narrative.run(Token(mint="M"))
+    narrative, _, _, _ = _agents(tmp_path, seen, _ok({"wrong": "shape"}))
+    result = await narrative.run(Token(mint="M"), **_admit())
     assert result.trend_fit == 0.0
 
 
-async def test_client_error_does_not_retry() -> None:
+async def test_client_error_does_not_retry(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, lambda request: httpx.Response(401, json={}))
-    result = await narrative.run(Token(mint="M"))
+    narrative, _, _, _ = _agents(tmp_path, seen, lambda request: httpx.Response(401, json={}))
+    result = await narrative.run(Token(mint="M"), **_admit())
     assert result.trend_fit == 0.0
     assert len(seen) == 1
 
 
-async def test_prompt_error_falls_back_without_http() -> None:
+async def test_prompt_error_falls_back_without_http(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, _ok({}))
-    result = await narrative.run(None)  # type: ignore[arg-type]
+    narrative, _, _, _ = _agents(tmp_path, seen, _ok({}))
+    result = await narrative.run(None, **_admit())  # type: ignore[arg-type]
     assert result.trend_fit == 0.0
+    assert seen == []
+
+
+async def test_budget_refusal_falls_back_without_http(tmp_path: Path) -> None:
+    clock = ImmediateClock()
+    budget = LayeredBudget(tmp_path / "budget.sqlite", clock)
+    # Ordinary callers keep the reserve share: a minute holds 6 calls, 4 of them ordinary.
+    for _ in range(4):
+        assert budget.try_charge(reserve_priority=False) is True
+    seen: list[httpx.Request] = []
+    narrative, _, _, _ = _agents(tmp_path, seen, _ok({}), clock=clock)
+    result = await narrative.run(Token(mint="M"), **_admit())
+    assert result.trend_fit == 0.0
+    assert result.reasoning == "budget_exhausted"
     assert seen == []
 
 
@@ -328,25 +344,14 @@ async def test_ops_slot_counts_and_snapshot_reports() -> None:
     assert snapshot["budget_spent"] == 0
 
 
-async def test_precheck_block_falls_back_without_http() -> None:
-    clock = ImmediateClock()
-    budget = CallBudget(max_per_day=1, clock=clock)
-    assert budget.try_spend() is True
-    ops = GrokOps(RateLimiter(600.0, None, clock), budget)
-    seen: list[httpx.Request] = []
-    narrative, _, _, _ = _agents(seen, _ok({}), clock=clock, ops=ops)
-    result = await narrative.run(Token(mint="M"))
-    assert result.trend_fit == 0.0
-    assert seen == []
-    assert ops.snapshot()["blocked"] == {"narrative": 1}
-
-
 # --- timing cache -----------------------------------------------------------
 
 
-async def test_timing_caches_within_window_and_refreshes_after() -> None:
+async def test_timing_caches_within_window_and_refreshes_after(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
+    clock = ImmediateClock(now=1_000.0)
     _, _, timing, _ = _agents(
+        tmp_path,
         seen,
         _ok(
             {
@@ -357,29 +362,35 @@ async def test_timing_caches_within_window_and_refreshes_after() -> None:
                 "reasoning": "steady",
             }
         ),
+        clock=clock,
     )
-    first = await timing.get(now=1_000.0)
-    second = await timing.get(now=1_100.0)
+    first = await timing.get(now=1_000.0, **_at(clock, 1_000.0))
+    second = await timing.get(now=1_100.0, **_at(clock, 1_100.0))
     assert second is first
     assert len(seen) == 1
-    third = await timing.get(now=1_901.0)
+    third = await timing.get(now=1_901.0, **_at(clock, 1_901.0))
     assert third is not first
     assert len(seen) == 2
 
 
-async def test_timing_failure_is_not_cached() -> None:
+async def test_timing_failure_is_not_cached(tmp_path: Path) -> None:
     seen: list[httpx.Request] = []
-    _, _, timing, _ = _agents(seen, lambda request: httpx.Response(500, json={}))
-    first = await timing.get(now=2_000.0)
-    assert first.anomalies == ["agent_failure"]
-    second = await timing.get(now=2_001.0)
-    assert second is not first
-    assert len(seen) == 6
-
-
-async def test_timing_invalidate_forces_refresh() -> None:
-    seen: list[httpx.Request] = []
+    clock = ImmediateClock(now=2_000.0)
     _, _, timing, _ = _agents(
+        tmp_path, seen, lambda request: httpx.Response(500, json={}), clock=clock
+    )
+    first = await timing.get(now=2_000.0, **_at(clock, 2_000.0))
+    assert first.anomalies == ["agent_failure"]
+    second = await timing.get(now=2_001.0, **_at(clock, 2_001.0))
+    assert second is not first
+    assert len(seen) == 2
+
+
+async def test_timing_invalidate_forces_refresh(tmp_path: Path) -> None:
+    seen: list[httpx.Request] = []
+    clock = ImmediateClock(now=3_000.0)
+    _, _, timing, _ = _agents(
+        tmp_path,
         seen,
         _ok(
             {
@@ -390,10 +401,11 @@ async def test_timing_invalidate_forces_refresh() -> None:
                 "reasoning": "soft",
             }
         ),
+        clock=clock,
     )
-    await timing.get(now=3_000.0)
+    await timing.get(now=3_000.0, **_at(clock, 3_000.0))
     timing.invalidate()
-    await timing.get(now=3_001.0)
+    await timing.get(now=3_001.0, **_at(clock, 3_001.0))
     assert len(seen) == 2
 
 
