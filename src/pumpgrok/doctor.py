@@ -169,7 +169,7 @@ def _job_stores(home: Path) -> list[tuple[str, Path]]:
     return [(label, path) for label, path in candidates if path.is_file()]
 
 
-def _read_store(path: Path) -> list[dict] | None:
+def _read_store(path: Path) -> list[dict[str, object]] | None:
     """Jobs in one store, or None when the store cannot be read (fail closed)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -187,7 +187,7 @@ def _read_store(path: Path) -> list[dict] | None:
     return jobs
 
 
-def _superseded_id(job: dict) -> str | None:
+def _superseded_id(job: dict[str, object]) -> str | None:
     job_id = str(job.get("id") or "").strip()
     name = str(job.get("name") or "").strip()
     for stable_id, installed_name in SUPERSEDED_HERMES_JOBS:
@@ -196,7 +196,7 @@ def _superseded_id(job: dict) -> str | None:
     return None
 
 
-def _is_active(job: dict) -> bool:
+def _is_active(job: dict[str, object]) -> bool:
     """Hermes is_job_runnable: enabled (default true) and carrying no pause marker."""
     paused = str(job.get("state") or "").strip() == "paused" or bool(job.get("paused_at"))
     return bool(job.get("enabled", True)) and not paused

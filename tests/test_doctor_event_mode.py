@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from pumpgrok import doctor
 from pumpgrok.config.sections.v4 import EventsSettings
@@ -138,8 +139,6 @@ def test_unreadable_store_refuses_event_mode(hermes_home: Path) -> None:
 
 
 def test_superseded_list_matches_cutover_yaml() -> None:
-    import yaml
-
     root = Path(__file__).resolve().parents[1]
     spec = yaml.safe_load((root / "hermes" / "cron" / "jobs.yaml").read_text(encoding="utf-8"))
     yaml_jobs = {job["id"]: job["name"] for job in spec["jobs"]}
