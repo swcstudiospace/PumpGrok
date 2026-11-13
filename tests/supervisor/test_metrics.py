@@ -72,6 +72,20 @@ def test_exposition_carries_exactly_the_nine_names() -> None:
     assert pumpgrok_lines == expected, sorted(pumpgrok_lines ^ expected)
 
 
+def test_default_exposition_adds_no_family_beyond_the_nine() -> None:
+    # Event and Grok families are event-mode only (GRK-10). The shared registry in a default
+    # (cadence) exposition must hold exactly the nine families, so any family added to it shows
+    # up here first. Counter `_created` companions are prometheus_client bookkeeping, not families.
+    metrics = Metrics(snapshot=_snapshot)
+    metrics.observe("bot-00-chief", 1.0, "ok")
+    metrics.note_order("buy", "filled")
+    body = metrics.exposition().decode("utf-8")
+    types = [line.split()[2] for line in body.splitlines() if line.startswith("# TYPE pumpgrok_")]
+    families = {name.removesuffix("_total") for name in types if not name.endswith("_created")}
+    expected = {family.removesuffix("_total") for family in NINE_FAMILIES}
+    assert families == expected, sorted(families ^ expected)
+
+
 def test_cycle_seconds_histogram_uses_virtual_seconds() -> None:
     metrics = Metrics()
     metrics.observe("bot-00-chief", 2.5, "ok")
