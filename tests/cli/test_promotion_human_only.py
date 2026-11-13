@@ -1,4 +1,4 @@
-"""Promotion is a human action only: the serve-path check never changes the level or activates a set.
+"""Promotion is a human action only: the serve-path check never changes the level or promotes.
 
 The serve tick runs the scheduled promotion check on its own clock. Even when a human has set
 autonomous-paper and the paper window is complete, that automatic tick must not activate a

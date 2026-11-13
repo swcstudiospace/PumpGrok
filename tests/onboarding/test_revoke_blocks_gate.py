@@ -1,4 +1,4 @@
-"""A revoked roster tool is not authority: the paper start gate refuses and doctor reports it missing.
+"""A revoked roster tool is not authority: paper start refuses and doctor reports it missing.
 
 Every roster tool of every seat first carries a real, bound allow. One tool is then revoked
 through the same protected ledger the operator uses. Only the latest decision for a tool counts,
