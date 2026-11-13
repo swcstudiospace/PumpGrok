@@ -1,5 +1,6 @@
 """Read-only live curve observations guarded by source health and freshness."""
 
+import logging
 import math
 from collections import OrderedDict
 from collections.abc import Callable
@@ -9,6 +10,8 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+log = logging.getLogger(__name__)
 
 #: The only label live observations carry. Every live snapshot is stamped with it.
 LIVE_SOURCE: Final[str] = "rpc"
@@ -107,6 +110,7 @@ class LivePriceSource:
                 self._observer(snapshot)
             except Exception:  # an observer must never change admission
                 self.observer_failures += 1
+                log.exception("live price observer failed; admission unchanged")
         return snapshot
 
 
