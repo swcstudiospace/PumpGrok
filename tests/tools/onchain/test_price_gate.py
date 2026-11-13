@@ -21,15 +21,14 @@ def test_non_replay_snapshot_labelled_fixture_is_refused(provenance: CurveProven
 
 def test_verified_replay_provenance_is_admitted() -> None:
     assert (
-        rpc_curve_price_allowed(
-            curve_source="fixture", provenance=CurveProvenance.VERIFIED_REPLAY
-        )
+        rpc_curve_price_allowed(curve_source="fixture", provenance=CurveProvenance.VERIFIED_REPLAY)
         is True
     )
 
 
 @pytest.mark.parametrize(
-    "source", ["unknown_live_feed", "solana_rpc", "rpc:verified", "RPC", "rpc", "rest", "pumpportal"]
+    "source",
+    ["unknown_live_feed", "solana_rpc", "rpc:verified", "RPC", "rpc", "rest", "pumpportal"],
 )
 def test_unknown_source_is_refused_even_with_verified_replay(source: str) -> None:
     assert (
