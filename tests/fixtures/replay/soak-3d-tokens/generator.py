@@ -7,11 +7,16 @@ first and is never written. soak-3d itself stays byte-identical.
 Mapping. Each tick row is one candidate: one sighting of a mint at the tick's time.
 
 - ``ts_utc``, ``mint``, ``S``, ``T``, ``complete``, ``source``: copied from the tick.
-- ``name``: ``"Soak 3d "`` plus the first six characters of the mint.
+- Launch window. The prefilter admits a candidate only while it is between ``MIN_AGE_S`` and
+  ``MAX_AGE_S`` old, so one creation time per mint could admit at most that mint's first hour of
+  ticks. Each mint's ticks are therefore cut into UTC-aligned launch windows of ``WINDOW_S``, and
+  each window is one token instance. The soak holds no separate creation or first-trade record, so
+  the mint's first tick in each window stands for both.
+- ``name``: ``"Soak 3d "`` plus the first six characters of the mint, then ``" w"`` and the
+  two-digit window index from ``00``, so each window's token text is distinct.
 - ``image_uri``: ``fixture://soak-3d-tokens/token.png``.
-- ``created_ts_utc`` and ``first_trade_ts_utc``: the time of the mint's first tick. The soak holds
-  no separate creation or first-trade record, so its first observed tick stands for both.
-- ``unique_buyers``: the tick's 1-based ordinal within its mint. The soak carries no wallet
+- ``created_ts_utc`` and ``first_trade_ts_utc``: the time of the mint's first tick in its window.
+- ``unique_buyers``: the tick's 1-based ordinal within its mint's window. The soak carries no wallet
   identities, so each tick is taken as one buy by a distinct buyer.
 - ``prerank``: ``min(S, G) / G`` floored to two decimals, where ``G`` is the reserve ``S`` of the
   soak's first ``complete`` tick (its graduation). Derived from the source, never typed in.
@@ -58,6 +63,7 @@ SOURCE_DIR = DIR.parent / "soak-3d"
 COMMAND = ".venv/bin/python tests/fixtures/replay/soak-3d-tokens/generator.py"
 SEED_HINT = 20260101
 IMAGE_URI = "fixture://soak-3d-tokens/token.png"
+WINDOW_S = 6 * 3600  # UTC-aligned launch window: one token instance per mint per window
 LLM_LATENCY_S = 1.9  # the soak-3d recorded LLM latency
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _SCORE_FIELDS = ("trend_fit", "virality", "community_signals", "launch_timing")
@@ -118,24 +124,27 @@ def _token_rows(source: list[dict[str, Any]]) -> list[dict[str, Any]]:
     graduation = next((int(row["S"]) for row in source if row.get("complete")), None)
     if not graduation:
         raise RuntimeError("soak-3d has no complete tick; the prerank scale is undefined")
-    first_seen: dict[str, str] = {}
-    ordinal: Counter[str] = Counter()
+    first_window = int(parse_ts_utc(str(source[0]["ts_utc"])) // WINDOW_S)
+    first_seen: dict[tuple[str, int], str] = {}
+    ordinal: Counter[tuple[str, int]] = Counter()
     rows: list[dict[str, Any]] = []
     for tick in source:
         mint = str(tick["mint"])
-        first_seen.setdefault(mint, str(tick["ts_utc"]))
-        ordinal[mint] += 1
+        window = int(parse_ts_utc(str(tick["ts_utc"])) // WINDOW_S) - first_window
+        instance = (mint, window)
+        first_seen.setdefault(instance, str(tick["ts_utc"]))
+        ordinal[instance] += 1
         hundredths = min(int(tick["S"]), graduation) * 100 // graduation
         rows.append(
             {
                 "ts_utc": tick["ts_utc"],
                 "kind": "tick",
                 "mint": mint,
-                "name": f"Soak 3d {mint[:6]}",
+                "name": f"Soak 3d {mint[:6]} w{window:02d}",
                 "image_uri": IMAGE_URI,
-                "created_ts_utc": first_seen[mint],
-                "first_trade_ts_utc": first_seen[mint],
-                "unique_buyers": ordinal[mint],
+                "created_ts_utc": first_seen[instance],
+                "first_trade_ts_utc": first_seen[instance],
+                "unique_buyers": ordinal[instance],
                 "prerank": f"{hundredths // 100}.{hundredths % 100:02d}",
                 "S": tick["S"],
                 "T": tick["T"],
@@ -227,8 +236,10 @@ def build_files() -> dict[str, bytes]:
         f"`{COMMAND}` from the repository root. Built from tests/fixtures/replay/soak-3d "
         f"(events.jsonl sha256 {source_hashes['events']}, manifest.json sha256 "
         f"{source_hashes['manifest']}). Each soak-3d tick is one candidate; token facts are "
-        "derived as the module docstring of generator.py maps them: created and first trade at "
-        "the mint's first tick, buyers by tick ordinal, prerank from the reserve against the "
+        "derived as the module docstring of generator.py maps them: each mint's ticks are cut "
+        f"into {WINDOW_S // 3600}-hour launch windows; a window's first tick is its created and "
+        "first trade time, buyers by tick ordinal within the window, prerank from the reserve "
+        "against the "
         f"soak graduation tick. {len(observations)} raw candidates: {len(admitted)} admitted by "
         "pumpgrok.grok.gateway.prefilter with the mint cooldown fed by earlier admissions, and "
         f"{len(observations) - len(admitted)} rejected by it ({mix}). Each admitted request has "
