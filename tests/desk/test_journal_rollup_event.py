@@ -58,8 +58,6 @@ async def _open(tmp_path: Path) -> Harness:
         store=store,
         degraded=DegradedState(),
         rpc=None,
-        replay_llm=None,
-        dataset_name="none",
         dataset_events=[],
         trading=None,
         journal_dir=tmp_path / "journal",

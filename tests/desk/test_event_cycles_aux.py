@@ -2,9 +2,10 @@
 
 Every event goes through the real EventBus into the supervisor's event dispatch. The seats
 recorded for each event are compared with the owner-confirmed wake matrix. Shill has no row in
-that matrix, so no event may ever run it. The signal body reads recorded model outcomes from the
-smoke-10m fixture; the whale body reports BLIND without an RPC endpoint and never invents
-transfers; the journal body writes its own notes through ``journal.append``.
+that matrix, so no event may ever run it. The signal body reports a SYNTHETIC per-token score from
+each candidate's own fixture row, never a model result; the whale body reports BLIND without an
+RPC endpoint and never invents transfers; the journal body writes its own notes through
+``journal.append``.
 """
 
 from __future__ import annotations
@@ -21,18 +22,21 @@ from typing import Any
 import pytest
 
 from pumpgrok.config.settings import FilterSettings
+from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.constants import P2_DEBOUNCE_S
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import parse_ts_utc
-from pumpgrok.replay.recorder import canonical_request_hash, load_llm_records
+from pumpgrok.replay.recorder import load_llm_records
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.replay.runner import llm_request_for
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor, open_replay_runtime
 from pumpgrok.supervisor.scheduler.degraded import DegradedState
 from pumpgrok.supervisor.scheduler.event_cycles import build_event_cycles, merge_event_cycles
-from pumpgrok.supervisor.scheduler.event_cycles_aux import build_aux_event_cycles
+from pumpgrok.supervisor.scheduler.event_cycles_aux import (
+    build_aux_event_cycles,
+    synthetic_signal_score,
+)
 from pumpgrok.supervisor.scheduler.orders import _replay_trading
 from pumpgrok.supervisor.scheduler.replay_cycles import _replay_cycles
 from pumpgrok.supervisor.scheduler.replay_runtime import ReplayRuntime, _ReplayTrading
@@ -52,6 +56,8 @@ EVENT_AUX = REPO / "src" / "pumpgrok" / "supervisor" / "scheduler" / "event_cycl
 SEED = 20260101
 #: Pre-graduation mint with a curve read at 00:00:01.250Z (fixture S = 42.35e9 lamports).
 MINT_A = "SmokeMintAAAA1111111111111111111111111111111"
+#: Second smoke mint (fixture S = 9.8e9 lamports, complete, 9 buyers): a different candidate.
+MINT_B = "SmokeMintBBBB2222222222222222222222222222222"
 TICK_A = "2026-01-01T00:00:01.250Z"
 
 CHIEF = "bot-00-chief"
@@ -159,8 +165,6 @@ async def _open(
         store=runtime.store,
         degraded=degraded,
         rpc=rpc,
-        replay_llm=replay_llm,
-        dataset_name=dataset_name,
         dataset_events=list(runtime.dataset.events),
         trading=trading,
         journal_dir=journal_dir,
@@ -279,41 +283,78 @@ async def test_signal_stands_down_on_kill_switch_and_halt(tmp_path: Path, kind: 
         await _close(h)
 
 
-async def test_signal_scores_a_candidate_from_its_recorded_outcome(tmp_path: Path) -> None:
-    h = await _open(tmp_path, dataset=SMOKE_10M)
+async def test_signal_scores_each_candidate_from_its_own_fixture_fields(tmp_path: Path) -> None:
+    h = await _open(tmp_path, dataset=SMOKE)
+    clock_before = h.runtime.clock.now()
     try:
-        first = h.runtime.dataset.events[0]
-        mint = str(first["mint"])
-        request = llm_request_for(
-            h.runtime.dataset.manifest.dataset, list(h.runtime.dataset.events)
+        alpha = await _publish(h, EventKind.token_created, entity_id=MINT_A)
+        beta = await _publish(h, EventKind.token_created, entity_id=MINT_B)
+        again = await _publish(
+            h, EventKind.token_created, entity_id=MINT_A, occurred_at="2026-01-01T00:00:02.000Z"
         )
-        recorded = load_llm_records(SMOKE_10M)
-        assert recorded is not None
-        expected = recorded.lookup(canonical_request_hash(request)).outcome
-        clock_before = h.runtime.clock.now()
-        seen = await _publish(h, EventKind.token_created, entity_id=mint)
-        result = _result(seen, SIGNAL)
-        assert result["scoring"] == "llm"
-        assert result["outcome"] == expected
-        assert result["trigger"] == EventKind.token_created.value
+        a, b, a2 = (_result(seen, SIGNAL) for seen in (alpha, beta, again))
+        assert a["scoring"] == "synthetic"
+        assert b["scoring"] == "synthetic"
+        assert "outcome" not in a
+        assert a["score"] != b["score"]
+        assert a2["score"] == a["score"]
+        assert 0.0 <= a["score"] <= 1.0
         assert h.runtime.clock.now() == clock_before
     finally:
         await _close(h)
 
 
-async def test_signal_without_recorded_model_outcomes_is_skipped_not_invented(
-    tmp_path: Path,
-) -> None:
-    h = await _open(tmp_path)
+async def test_signal_skips_a_candidate_with_no_fixture_row(tmp_path: Path) -> None:
+    unknown = "UnknownMintWithNoFixtureRow11111111111111111"
+    h = await _open(tmp_path, dataset=SMOKE)
     try:
-        seen = await _publish(h, EventKind.token_created)
+        seen = await _publish(h, EventKind.token_created, entity_id=unknown)
         assert _result(seen, SIGNAL) == {
             "scoring": "skipped",
-            "reason": "no_model_records",
+            "reason": "no_fixture_row",
+            "mint": unknown,
             "trigger": EventKind.token_created.value,
         }
     finally:
         await _close(h)
+
+
+def _row(**fields: Any) -> dict[str, Any]:
+    """A fixture row for MINT_A's first tick, with the given fields replaced or added."""
+    row: dict[str, Any] = {
+        "mint": MINT_A,
+        "ts_utc": TICK_A,
+        "S": 42_100_000_000,
+        "unique_buyers": 12,
+        "created_ts_utc": "2025-12-31T23:30:00.000Z",
+    }
+    row.update(fields)
+    return row
+
+
+def test_synthetic_score_is_the_same_for_the_same_row() -> None:
+    assert synthetic_signal_score(_row()) == synthetic_signal_score(_row())
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"unique_buyers": 3}, {"S": 9_800_000_000}, {"created_ts_utc": "2026-01-01T00:00:00.000Z"}],
+    ids=["buyers", "reserves", "created"],
+)
+def test_synthetic_score_moves_when_a_fixture_field_moves(change: dict[str, Any]) -> None:
+    assert synthetic_signal_score(_row(**change)) != synthetic_signal_score(_row())
+
+
+def test_synthetic_score_reads_absent_fields_as_no_evidence() -> None:
+    assert synthetic_signal_score({}) == 0.0
+    assert synthetic_signal_score({"S": CURVE_COMPLETION_LAMPORTS}) == 0.3
+
+
+def test_synthetic_score_is_bounded_and_rejects_malformed_fields() -> None:
+    full = {"unique_buyers": 10**6, "S": 10**15, "created_ts_utc": TICK_A, "ts_utc": TICK_A}
+    assert synthetic_signal_score(full) == 1.0
+    malformed = {"unique_buyers": True, "S": -5, "created_ts_utc": "not a time", "ts_utc": TICK_A}
+    assert synthetic_signal_score(malformed) == 0.0
 
 
 async def test_whale_reports_blind_without_rpc_and_invents_no_transfers(tmp_path: Path) -> None:

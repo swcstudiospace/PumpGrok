@@ -19,20 +19,31 @@ instant. A golden pins two hashes of that run:
 The trace is what pins the seats that write nothing to the ledger (whale, signal, journal, rug,
 chief). smoke-10m admits no candidate, so its ledger is the seeded grants and rollover only.
 
-Only a probe run may set a pin. Probe command (repository root, offline, injected clock):
+SYNTHETIC SIGNAL: the signal result in the trace is a per-token synthetic score computed from each
+candidate's own fixture row (``synthetic_signal_score``). It is not a Grok or model result. The
+fixtures record no per-token model outcomes and this sandbox cannot record any, so the owner chose
+this deterministic stand-in. No run in this module calls a model.
+
+Only a probe run may set a pin. Probe command (repository root, offline, injected clock). Run it
+once per fixture, each in its own process, so hash-seed randomisation is exercised too:
 
     .venv/bin/python -c "import sys, asyncio, pathlib, tempfile; sys.path.insert(0, 'tests/desk'); \
-import test_event_golden_hashes as g; \
-[print(n, asyncio.run(g.run_event_fixture(g.FIXTURES / n, pathlib.Path(tempfile.mkdtemp())))) \
-for n in ('smoke-10m', 'smoke')]"
+import test_event_golden_hashes as g; n = sys.argv[1]; \
+r = asyncio.run(g.run_event_fixture(g.FIXTURES / n, pathlib.Path(tempfile.mkdtemp()))); \
+print(n, f'ledger={r.ledger_hash} trace={r.trace_hash} rows={r.rows} intents={r.intents} errors={r.errors} dlq={r.dlq}')" smoke-10m
 
-Probe output (two independent runs per fixture, each in a fresh scratch directory; both runs
-agreed, and the values above were copied from this output):
+Probe output (two independent processes per fixture, each with a fresh scratch directory; the two
+runs of every fixture agreed, and the values below were copied from this output):
 
-    smoke-10m first  ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=2effbd39926857b7a30612b21d98c5cc1a3717d0cab64b44743e44b615b619e9 rows=145 intents=0 errors=[] dlq=0
-    smoke-10m second ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=2effbd39926857b7a30612b21d98c5cc1a3717d0cab64b44743e44b615b619e9 rows=145 intents=0 errors=[] dlq=0
-    smoke first      ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=328c8f93a63014a545016bd6bb4fc1e972393610c0a6bdbf6afdeb6a86ba5aa8 rows=154 intents=2 errors=[] dlq=0
-    smoke second     ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=328c8f93a63014a545016bd6bb4fc1e972393610c0a6bdbf6afdeb6a86ba5aa8 rows=154 intents=2 errors=[] dlq=0
+    smoke-10m first  ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6 rows=145 intents=0 errors=[] dlq=0
+    smoke-10m second ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6 rows=145 intents=0 errors=[] dlq=0
+    smoke first      ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02 rows=154 intents=2 errors=[] dlq=0
+    smoke second     ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02 rows=154 intents=2 errors=[] dlq=0
+    soak-3d first   ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95 trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338 rows=147 intents=0 errors=[] dlq=0
+    soak-3d second  ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95 trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338 rows=147 intents=0 errors=[] dlq=0
+
+soak-3d admits no candidate: its rows carry no ``unique_buyers``, so the engine fails closed and
+the sniper path is not exercised there. Its golden pins the seat trace and the seeded ledger only.
 
 The legacy cadence pins are not touched here: smoke-10m events.hash 1dffa784... (seeded head pin)
 and the trading smoke pin 106495a9... stay in their own tests.
@@ -81,11 +92,15 @@ JOURNAL = "bot-09-journal"
 GOLDEN_RUNS: dict[str, tuple[str, str]] = {
     "smoke-10m": (
         "1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4",
-        "2effbd39926857b7a30612b21d98c5cc1a3717d0cab64b44743e44b615b619e9",
+        "45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6",
     ),
     "smoke": (
         "f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747",
-        "328c8f93a63014a545016bd6bb4fc1e972393610c0a6bdbf6afdeb6a86ba5aa8",
+        "24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02",
+    ),
+    "soak-3d": (
+        "6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95",
+        "3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338",
     ),
 }
 
@@ -218,8 +233,6 @@ async def run_event_fixture(dataset_dir: Path, scratch: Path) -> EventRun:
         store=runtime.store,
         degraded=degraded,
         rpc=None,
-        replay_llm=replay_llm,
-        dataset_name=dataset_name,
         dataset_events=events,
         trading=trading,
         journal_dir=scratch / "journal",
@@ -286,69 +299,70 @@ async def run_event_fixture(dataset_dir: Path, scratch: Path) -> EventRun:
     )
 
 
-@pytest.fixture(scope="module")
-def smoke_10m(tmp_path_factory: pytest.TempPathFactory) -> EventRun:
-    scratch = tmp_path_factory.mktemp("event-smoke-10m")
-    return asyncio.run(run_event_fixture(FIXTURES / "smoke-10m", scratch))
+#: Every golden fixture, in pin order. The module runs each once through the real bus.
+FIXTURE_NAMES = ("smoke-10m", "smoke", "soak-3d")
 
 
 @pytest.fixture(scope="module")
-def smoke(tmp_path_factory: pytest.TempPathFactory) -> EventRun:
-    scratch = tmp_path_factory.mktemp("event-smoke")
-    return asyncio.run(run_event_fixture(FIXTURES / "smoke", scratch))
+def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, EventRun]:
+    return {
+        name: asyncio.run(
+            run_event_fixture(FIXTURES / name, tmp_path_factory.mktemp(f"event-{name}"))
+        )
+        for name in FIXTURE_NAMES
+    }
 
 
-def _by_name(name: str, smoke_10m: EventRun, smoke: EventRun) -> EventRun:
-    return smoke_10m if name == "smoke-10m" else smoke
-
-
-@pytest.mark.parametrize("name", ["smoke-10m", "smoke"])
-def test_event_run_matches_its_pinned_golden(
-    name: str, smoke_10m: EventRun, smoke: EventRun
-) -> None:
-    run = _by_name(name, smoke_10m, smoke)
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_event_run_matches_its_pinned_golden(name: str, runs: dict[str, EventRun]) -> None:
+    run = runs[name]
     assert name in GOLDEN_RUNS, f"no pinned golden for {name}"
     ledger, trace = GOLDEN_RUNS[name]
     assert run.ledger_hash == ledger
     assert run.trace_hash == trace
 
 
-@pytest.mark.parametrize("name", ["smoke-10m", "smoke"])
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
 def test_event_run_has_no_errors_and_no_dead_letters(
-    name: str, smoke_10m: EventRun, smoke: EventRun
+    name: str, runs: dict[str, EventRun]
 ) -> None:
-    run = _by_name(name, smoke_10m, smoke)
+    run = runs[name]
     assert run.errors == []
     assert run.dlq == 0
 
 
-def test_shill_never_runs_in_the_event_runs(smoke_10m: EventRun, smoke: EventRun) -> None:
-    for run in (smoke_10m, smoke):
+def test_shill_never_runs_in_the_event_runs(runs: dict[str, EventRun]) -> None:
+    for run in runs.values():
         assert not [key for key in run.dispatch if key[0] == SHILL]
 
 
-def test_smoke_intents_run_the_sniper_once_per_admitted_candidate(smoke: EventRun) -> None:
-    assert smoke.intents == 2
-    assert smoke.dispatch[(SNIPER, EventKind.strategy_intent.value)] == 2
+def test_smoke_intents_run_the_sniper_once_per_admitted_candidate(
+    runs: dict[str, EventRun],
+) -> None:
+    assert runs["smoke"].intents == 2
+    assert runs["smoke"].dispatch[(SNIPER, EventKind.strategy_intent.value)] == 2
 
 
 def test_smoke_10m_admits_no_candidate_so_no_intent_reaches_the_sniper(
-    smoke_10m: EventRun,
+    runs: dict[str, EventRun],
 ) -> None:
-    assert smoke_10m.intents == 0
-    assert smoke_10m.dispatch[(SNIPER, EventKind.strategy_intent.value)] == 0
+    assert runs["smoke-10m"].intents == 0
+    assert runs["smoke-10m"].dispatch[(SNIPER, EventKind.strategy_intent.value)] == 0
 
 
-def test_whale_and_signal_run_on_each_new_mint_and_never_on_ticks(smoke_10m: EventRun) -> None:
-    created = smoke_10m.dispatch[(WHALE, EventKind.token_created.value)]
-    assert created >= 1
-    assert smoke_10m.dispatch[(SIGNAL, EventKind.token_created.value)] == created
-    assert smoke_10m.dispatch[(WHALE, EventKind.curve_tick.value)] == 0
-    assert smoke_10m.dispatch[(SIGNAL, EventKind.curve_tick.value)] == 0
+def test_whale_and_signal_run_on_each_new_mint_and_never_on_ticks(
+    runs: dict[str, EventRun],
+) -> None:
+    for run in runs.values():
+        created = run.dispatch[(WHALE, EventKind.token_created.value)]
+        assert created >= 1
+        assert run.dispatch[(SIGNAL, EventKind.token_created.value)] == created
+        assert run.dispatch[(WHALE, EventKind.curve_tick.value)] == 0
+        assert run.dispatch[(SIGNAL, EventKind.curve_tick.value)] == 0
 
 
-def test_journal_runs_only_on_its_timer_in_the_event_runs(smoke_10m: EventRun, smoke: EventRun) -> None:
-    for run in (smoke_10m, smoke):
+def test_journal_runs_only_on_its_timer_in_the_event_runs(runs: dict[str, EventRun]) -> None:
+    for run in runs.values():
         assert run.dispatch[(JOURNAL, EventKind.curve_tick.value)] == 0
         assert run.dispatch[(JOURNAL, EventKind.token_created.value)] == 0
         assert run.dispatch[(JOURNAL, "timer")] >= 1
