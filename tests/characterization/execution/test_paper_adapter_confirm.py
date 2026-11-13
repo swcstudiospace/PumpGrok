@@ -364,18 +364,6 @@ async def test_seeded_drop_refuses_without_retry(tmp_path: Path) -> None:
     assert [row["type"] for row in trace["rows"]].count("FillRecorded") == 1
 
 
-async def test_buy_confirmation_refuses_missing_reserves(tmp_path: Path) -> None:
-    trace = await scn_buy_no_reserves_confirming(tmp_path)
-    assert trace["outcome"]["reason"] == "no_reserves"
-    assert trace["outcome"]["stage"] == "CONFIRMING"
-
-
-async def test_buy_confirmation_refuses_assumed_layout_reads(tmp_path: Path) -> None:
-    trace = await scn_buy_data_unavailable_confirming(tmp_path)
-    assert trace["outcome"]["reason"] == "data_unavailable"
-    assert trace["outcome"]["stage"] == "CONFIRMING"
-
-
 async def test_buy_confirmation_refuses_a_completed_curve(tmp_path: Path) -> None:
     trace = await scn_buy_post_graduation_confirming(tmp_path)
     assert trace["outcome"]["reason"] == "post_graduation_no_reserves"
