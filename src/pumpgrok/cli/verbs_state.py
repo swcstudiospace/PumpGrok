@@ -11,7 +11,6 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from pumpgrok.cli.codes import (
     _TRADE_UNAVAILABLE,
@@ -28,7 +27,6 @@ from pumpgrok.cli.errors import (
     _say,
     _tool_error,
 )
-from pumpgrok.cli.promotion import make_promotion_check
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
@@ -39,7 +37,6 @@ from pumpgrok.cli.wiring import (
 from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
-from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
@@ -64,7 +61,6 @@ from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 from pumpgrok.upgrade.params import ParamSet
-from pumpgrok.upgrade.space import load_declared_space
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -83,14 +79,6 @@ def operator_active_set(settings: Settings) -> ParamSet | None:
         return read_active_param_set(store)
     finally:
         store.close()
-
-
-def _declared_space() -> tuple[dict[str, Any], ...]:
-    """The declared search space; a load defect is the CLI's typed configuration error."""
-    try:
-        return load_declared_space()
-    except PumpgrokError as exc:
-        raise ConfigError([exc.message]) from exc
 
 
 def _tool_authenticated(decisions: dict[str, oc.Decision], seat: str, tool: str) -> bool:
@@ -206,15 +194,6 @@ def _serve_replay_loop(source: Path, settings: Settings, wake_mode: str) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     host = settings.health.host
-    space = _declared_space()
-    promotion = make_promotion_check(
-        source,
-        space=space,
-        seed=settings.replay.seed,
-        initial_equity_lamports=settings.risk.paper_equity_lamports,
-        budget=settings.risk,
-        limits=settings.limits,
-    )
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(
         serve_replay(
@@ -227,7 +206,6 @@ def _serve_replay_loop(source: Path, settings: Settings, wake_mode: str) -> int:
             budget=settings.risk,
             limits=settings.limits,
             active_set=operator_active_set(settings),
-            promotion_check=promotion,
             wake_mode=wake_mode,
         )
     )

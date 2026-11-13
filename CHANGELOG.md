@@ -7,6 +7,7 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Changed
 
 - Replay builds its registry with the operator gate (commit `e2dca99`). The replay ledger held no operator grants, so every roster tool was denied and the replay pins measured that denial.
+- Serve no longer runs the scheduled promotion check. `cli/promotion.py` drops `make_promotion_check`, and `run --serve` no longer loads the declared space. Promotion stays human-invoked through `run_promotion_check(automatic=False)`. `serve_replay` and `serve_fixture_timeline` drop their `promotion_check` and `store` parameters; `rules_reload` still runs at each tick boundary.
 - `open_replay_runtime` seeds one replay-scoped `ConfigChanged` row per (seat, roster tool) into the replay ledger (`src/pumpgrok/replay/grants.py`). Each row is labelled `by=replay:seed`, is stamped at the fixture's first event, and carries a fixed idempotency key. `ReplayGrants` admits a (seat, tool) only when the replay ledger holds its seeded row. Seeding never reads or writes `var/operator` or the live ledger, and it writes no `human:` label.
 - Re-pinned replay hashes. The seeded rows are new ledger events, so the event hash and chain length move. The fixture events read (41 and 5) are unchanged, and every pre-existing trading row is unchanged apart from its seq.
 - Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
