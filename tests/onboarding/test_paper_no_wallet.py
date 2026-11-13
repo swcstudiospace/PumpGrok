@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,11 @@ import pytest
 from pumpgrok.cli import main
 from pumpgrok.config import settings as settings_mod
 from pumpgrok.config.sections import core as core_mod
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.tools import ensure_paper_genesis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
@@ -24,6 +30,34 @@ SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 MALFORMED_ENTRY = "0OIl"
 MALFORMED_ALLOWLIST_ENV = f'["{MALFORMED_ENTRY}"]'
 MALFORMED_SECTION_ENV = "{not json"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, recorded as the onboarding verbs record it.
+
+    The paper genesis is written first, as ``_record_tool`` does, then the operator key and an
+    allow per roster tool. Each allow is an HMAC-authenticated protected record bound to a
+    ConfigChanged row in the paper ledger, the same records the startup gate reads.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, settings_mod.load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 @pytest.fixture
@@ -96,6 +130,7 @@ def test_paper_run_starts_with_malformed_wallet_env(
 ) -> None:
     monkeypatch.setenv("PUMPGROK_WALLET__ALLOWLIST", MALFORMED_ALLOWLIST_ENV)
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
     out, err = capsys.readouterr()
     assert MALFORMED_ENTRY not in out + err

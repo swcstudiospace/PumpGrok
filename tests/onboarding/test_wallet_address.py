@@ -8,6 +8,7 @@ captured stdout and stderr.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,9 +17,42 @@ from pydantic import ValidationError
 from pumpgrok.cli import dispatch as dispatch_mod
 from pumpgrok.config import settings as settings_mod
 from pumpgrok.core.ed25519_point import decode_public_point
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.tools import ensure_paper_genesis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, recorded as the onboarding verbs record it.
+
+    The paper genesis is written first, as ``_record_tool`` does, then the operator key and an
+    allow per roster tool. Each allow is an HMAC-authenticated protected record bound to a
+    ConfigChanged row in the paper ledger, the same records the startup gate reads.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, settings_mod.load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
+
 
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
@@ -232,6 +266,7 @@ def test_confirmation_is_not_required_for_paper_or_read_only_verbs(
     monkeypatch.setenv("PUMPGROK_WALLET__ALLOWLIST", f'["{VALID_ENTRY}"]')
     monkeypatch.setattr(dispatch_mod, "_stdio_is_interactive", lambda: False)
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert dispatch_mod.main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
 
 
