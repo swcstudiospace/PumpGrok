@@ -158,7 +158,10 @@ async def _sniper(ctx: SeatContext, *, trading: _ReplayTrading) -> dict[str, Any
 
 
 async def _rug(ctx: SeatContext, *, degraded: DegradedState, curves: FixtureCurveSource) -> dict[str, Any]:
-    """Rug: BLIND when every RPC endpoint is down; UNREAD when the mint's curve cannot be read."""
+    """Rug: BLIND when every RPC endpoint is down; UNREAD when the curve cannot be read; READABLE otherwise.
+
+    READABLE is not a rug determination: no rug analysis service exists yet.
+    """
     event = TRIGGER_EVENT.get()
     mint = None if event is None else event.entity_id
     if degraded.rpc_blind:
@@ -166,7 +169,7 @@ async def _rug(ctx: SeatContext, *, degraded: DegradedState, curves: FixtureCurv
     elif mint is None or await curves.curve(mint) is None:
         verdict = "UNREAD"
     else:
-        verdict = "CLEAR"
+        verdict = "READABLE"  # the curve is readable; this is NOT a rug determination
     return {"verdict": verdict, "mint": mint, "trigger": _trigger_name(event)}
 
 

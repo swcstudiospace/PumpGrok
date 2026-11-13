@@ -219,7 +219,7 @@ async def test_each_bound_role_reports_its_own_service_result(tmp_path: Path) ->
         assert set(risk) >= {"halt", "trigger"}
 
         rug = _result(await _publish(h, EventKind.curve_tick, MINT_A), RUG)
-        assert rug["verdict"] in {"CLEAR", "BLIND", "UNREAD"}
+        assert rug["verdict"] in {"READABLE", "BLIND", "UNREAD"}
 
         exit_seat = _result(await _publish(h, EventKind.exit_signal, MINT_A), EXIT)
         assert isinstance(exit_seat["rule_sells"], int)
