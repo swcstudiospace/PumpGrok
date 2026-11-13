@@ -26,11 +26,19 @@ from pumpgrok.cli.validators import (
 )
 from pumpgrok.cli.verbs_state import operator_active_set
 from pumpgrok.cli.wiring import _repo_root
+from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.units import sol_to_lamports
-from pumpgrok.doctor import doctor_report, failing_inputs, input_inventory, inventory_json
+from pumpgrok.doctor import (
+    doctor_report,
+    event_mode_problems,
+    failing_inputs,
+    input_inventory,
+    installed_job_findings,
+    inventory_json,
+)
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.reporting.daily import DailyReport
@@ -43,9 +51,14 @@ log = logging.getLogger("pumpgrok.cli")
 
 
 def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
+    wake_mode = resolve_wake_mode(args.wake_mode, settings.events.wake_mode)
     if not args.json:
-        _say(sys.stdout, *doctor_report(settings))
+        _say(sys.stdout, *doctor_report(settings, wake_mode=wake_mode))
         return EXIT_OK
+    if wake_mode == "event":
+        problems = event_mode_problems(installed_job_findings())
+        if problems:
+            raise ConfigError(problems)
     records = input_inventory(settings, settings.effective_mode)
     _say(sys.stdout, inventory_json(records))
     return EXIT_CONFIG if failing_inputs(records) else EXIT_OK

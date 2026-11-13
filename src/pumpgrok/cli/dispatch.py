@@ -93,12 +93,21 @@ def _route(args: argparse.Namespace, settings: Settings) -> int:
     return handler(args, settings)
 
 
+def _apply_wake_mode(args: argparse.Namespace, settings: Settings) -> Settings:
+    """The `--wake-mode` flag overrides events.wake_mode; only run and doctor carry the flag."""
+    wake_mode = getattr(args, "wake_mode", None)
+    if wake_mode is None:
+        return settings
+    events = settings.events.model_copy(update={"wake_mode": wake_mode})
+    return settings.model_copy(update={"events": events})
+
+
 def _dispatch(argv: Sequence[str]) -> int:
     refuse_cli_secrets(argv)
     if argv and argv[0] == "tools":
         return _tools_entry(list(argv[1:]))
     args = build_parser().parse_args(list(argv))
-    settings = load_settings(**_settings_kwargs(args.mode))
+    settings = _apply_wake_mode(args, load_settings(**_settings_kwargs(args.mode)))
     _confirm_live_wallet(args, settings)
     setup_logging(mode=settings.effective_mode, profile=current_profile())
     return _route(args, settings)

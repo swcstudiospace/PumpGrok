@@ -36,13 +36,19 @@ from pumpgrok.cli.wiring import (
     _seat_manifest_id,
     _unflattened_lines,
 )
+from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
-from pumpgrok.doctor import failing_inputs, input_inventory
+from pumpgrok.doctor import (
+    event_mode_problems,
+    failing_inputs,
+    input_inventory,
+    installed_job_findings,
+)
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
 from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.active_set import read_active_param_set
@@ -144,6 +150,21 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
     refusal = _mode_refusal(args)
     if refusal is not None:
         return refusal
+    if resolve_wake_mode(args.wake_mode, settings.events.wake_mode) == "event":
+        problems = event_mode_problems(installed_job_findings())
+        if problems:
+            _say(
+                sys.stderr,
+                "event mode refused: no supervisor was started",
+                *(f"  - {problem}" for problem in problems),
+            )
+            return EXIT_CONFIG
+        _say(
+            sys.stderr,
+            "event mode refused: run --replay cannot wake seats from events yet; the replay "
+            "supervisor entry points do not take wake_mode (supervisor/scheduler/serve.py)",
+        )
+        return EXIT_NOT_IMPLEMENTED
     if settings.effective_mode == "paper":
         missing = _paper_start_gate(settings)
         if missing:
