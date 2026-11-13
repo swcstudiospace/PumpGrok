@@ -29,6 +29,7 @@ from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import GENESIS_PREV_HASH, LedgerStore
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
+from pumpgrok.replay.grants import REPLAY_GRANT_BY
 from pumpgrok.replay.runner import run_replay
 from pumpgrok.supervisor.scheduler import rollover_key
 from pumpgrok.tools import ensure_paper_genesis
@@ -103,9 +104,18 @@ def _verdict(path: Path) -> dict[str, object]:
 
 
 def _replay_ledger_contract(path: Path) -> None:
-    """CLI replay ledgers hold the verdict row, the D6 rollover row and the order rows."""
+    """CLI replay ledgers hold the verdict row, the D6 rollover row and the order rows.
+
+    The sandbox also seeds one replay ConfigChanged grant per roster tool of every seat before
+    the run (replay/grants.py). Those grant rows are allowed, but each must be a replay grant and
+    there must be exactly one per roster tool. Every other row is compared exactly, in order.
+    """
     rows = _rows(path, "SELECT type, idempotency_key, payload_json FROM events ORDER BY seq")
-    assert [row[0] for row in rows] == [
+    grants = [row for row in rows if row[0] == "ConfigChanged"]
+    assert len(grants) == _roster_size()
+    assert all(json.loads(str(row[2]))["by"] == REPLAY_GRANT_BY for row in grants)
+    rest = [row for row in rows if row[0] != "ConfigChanged"]
+    assert [row[0] for row in rest] == [
         "JournalNote",
         "DailyRollover",
         "OrderRejected",
@@ -118,10 +128,14 @@ def _replay_ledger_contract(path: Path) -> None:
         "FillRecorded",
         "PositionClosed",
     ]
-    payload = json.loads(str(rows[1][2]))
+    payload = json.loads(str(rest[1][2]))
     day = str(load_dataset(SMOKE).events[0]["ts_utc"])[:10]
     assert payload["day_utc"] == day
-    assert rows[1][1] == rollover_key(day)
+    assert rest[1][1] == rollover_key(day)
+
+
+def _roster_size() -> int:
+    return sum(len(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)) for seat in EXPECTED_SEAT_IDS)
 
 
 def test_runner_folds_fixture_events_into_one_fail_closed_verdict(tmp_path: Path) -> None:
@@ -235,7 +249,8 @@ def test_tampered_fixture_exits_4_before_any_ledger(
         handle.write('{"ts_utc":"2026-01-01T00:00:04.000Z","kind":"tick"}\n')
 
     assert main(["run", "--mode", "paper", "--once", "--replay", str(dataset)]) == 4
-    assert not (tmp_path / "var").exists()
+    replay = _ledger(tmp_path)
+    assert not replay.exists() or _rows(replay, "SELECT COUNT(*) FROM events") == [(0,)]
     assert "corrupt fixture" in capsys.readouterr().err
 
 

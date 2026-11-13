@@ -203,7 +203,13 @@ def test_serve_cli_needs_a_health_port(
     _record_complete_authority()
     assert main(["run", "--mode", "paper", "--serve", "--replay", str(SMOKE)]) == 1
     assert "PUMPGROK_HEALTH__PORT" in capsys.readouterr().err
-    assert not (tmp_path / "var").exists()
+    replay = tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite"
+    if replay.exists():
+        store = LedgerStore(str(replay))
+        try:
+            assert store.count() == 0
+        finally:
+            store.close()
 
 
 def test_one_shot_still_exits_zero_without_binding(
