@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pumpgrok.cli.errors import _Parser
 from pumpgrok.cli.validators import _approval_id, _mint, _size_sol, _slippage_bps, _ticket
+from pumpgrok.config.sections.v4 import WAKE_MODES
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -50,6 +51,16 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
     _add_seat(parser)
 
 
+def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--wake-mode",
+        choices=WAKE_MODES,
+        default=None,
+        dest="wake_mode",
+        help="supervisor wake: cadence (default) or event; overrides events.wake_mode",
+    )
+
+
 def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run = verbs.add_parser("run", parents=[mode_option], help="run the desk")
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
@@ -65,11 +76,13 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run.add_argument(
         "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
     )
+    _add_wake_mode(run)
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     doctor = verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
     doctor.add_argument("--json", action="store_true", help="one record per operator input")
+    _add_wake_mode(doctor)
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
     verify.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to verify")

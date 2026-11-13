@@ -9,6 +9,10 @@ Probe warnings never fail the report: exit 0 means the process started with vali
 `doctor --json` prints the mode-aware operator input inventory instead (ONB-01, ONB-02): one
 record per input with its name, requirement, status and source, never a value. A missing
 required input, or a forbidden input present, makes the verb exit nonzero.
+
+Installed Hermes cron jobs and host clock sync are reported too (EVT-13). Event mode is refused
+(ConfigError) while a superseded job is enabled or a job store is unreadable; cadence mode only
+reports them as info. A missing job store is a pass, never a skip.
 """
 
 from __future__ import annotations
@@ -17,14 +21,17 @@ import http.client
 import importlib.util
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import urllib.error
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from pumpgrok.config.settings import Settings, current_profile
+from pumpgrok.config.sections.v4 import resolve_wake_mode
+from pumpgrok.config.settings import ConfigError, Settings, current_profile
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -121,14 +128,183 @@ def onb08_rpc_line(
     return "ok    ONB-08 rpc=default (no operator endpoint choice recorded)"
 
 
-def doctor_report(settings: Settings) -> list[str]:
-    """Lines for stdout: mode, subsystem lines, the ONB-08 RPC line, endpoint probes, summary."""
+#: Superseded Hermes cron jobs (EVT-13): (stable id, installed name) from hermes/cron/jobs.yaml.
+#: Installed jobs get Hermes-generated ids, so a job is matched by its stable id or its name.
+SUPERSEDED_HERMES_JOBS: tuple[tuple[str, str], ...] = (
+    ("scout-discover", "[bot:scout] discover"),
+    ("risk-audit-open-leads", "[bot:risk] audit-open-leads"),
+    ("chief-pickup", "[bot:chief] pickup"),
+    ("rug-watch-paper", "[bot:rug] watch-paper"),
+    ("chief-journal-rollup", "[bot:chief] journal-rollup"),
+    ("scout-pipeline", "[bot:scout] pipeline"),
+)
+
+
+@dataclass(frozen=True)
+class InstalledJobFindings:
+    """Installed-state probe result: counts and job ids only, never prompts or values."""
+
+    stores: int
+    jobs: int
+    superseded_active: tuple[str, ...]
+    unreadable: tuple[str, ...]
+
+
+def hermes_home_dir() -> Path:
+    """The Hermes root: HERMES_HOME when set, else ~/.hermes (the Linux platform default)."""
+    raw = os.environ.get("HERMES_HOME", "").strip()
+    return Path(raw).expanduser() if raw else Path.home() / ".hermes"
+
+
+def _job_stores(home: Path) -> list[tuple[str, Path]]:
+    """Existing cron stores: the default profile, then each named profile under profiles/."""
+    candidates = [("default", home / "cron" / "jobs.json")]
+    profiles = home / "profiles"
+    if profiles.is_dir():
+        candidates.extend(
+            (child.name, child / "cron" / "jobs.json")
+            for child in sorted(profiles.iterdir())
+            if child.is_dir()
+        )
+    return [(label, path) for label, path in candidates if path.is_file()]
+
+
+def _read_store(path: Path) -> list[dict] | None:
+    """Jobs in one store, or None when the store cannot be read (fail closed)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    jobs = data.get("jobs", []) if isinstance(data, dict) else data
+    if isinstance(jobs, dict):
+        jobs = [
+            {**value, "id": value.get("id") or key}
+            for key, value in jobs.items()
+            if isinstance(value, dict)
+        ]
+    if not isinstance(jobs, list) or not all(isinstance(job, dict) for job in jobs):
+        return None
+    return jobs
+
+
+def _superseded_id(job: dict) -> str | None:
+    job_id = str(job.get("id") or "").strip()
+    name = str(job.get("name") or "").strip()
+    for stable_id, installed_name in SUPERSEDED_HERMES_JOBS:
+        if job_id == stable_id or name == installed_name:
+            return stable_id
+    return None
+
+
+def _is_active(job: dict) -> bool:
+    """Hermes is_job_runnable: enabled (default true) and carrying no pause marker."""
+    paused = str(job.get("state") or "").strip() == "paused" or bool(job.get("paused_at"))
+    return bool(job.get("enabled", True)) and not paused
+
+
+def installed_job_findings() -> InstalledJobFindings:
+    """Read every installed Hermes cron store that exists. A missing store is simply absent."""
+    stores = _job_stores(hermes_home_dir())
+    jobs_seen = 0
+    active: set[str] = set()
+    unreadable: list[str] = []
+    for label, path in stores:
+        jobs = _read_store(path)
+        if jobs is None:
+            unreadable.append(label)
+            continue
+        jobs_seen += len(jobs)
+        for job in jobs:
+            stable_id = _superseded_id(job)
+            if stable_id is not None and _is_active(job):
+                active.add(stable_id)
+    return InstalledJobFindings(
+        stores=len(stores),
+        jobs=jobs_seen,
+        superseded_active=tuple(sorted(active)),
+        unreadable=tuple(unreadable),
+    )
+
+
+def event_mode_problems(findings: InstalledJobFindings) -> list[str]:
+    """Why event mode is refused. Empty when event mode may start (EVT-13)."""
+    problems = [
+        f"superseded Hermes job {stable_id} is enabled; disable it before event mode"
+        for stable_id in findings.superseded_active
+    ]
+    problems.extend(
+        f"Hermes job store unreadable for profile {label}; event mode refused"
+        for label in findings.unreadable
+    )
+    return problems
+
+
+def hermes_jobs_line(findings: InstalledJobFindings) -> str:
+    """Installed-state line. A pass when no store or no superseded job exists; never a skip."""
+    if findings.unreadable:
+        labels = ", ".join(findings.unreadable)
+        return (
+            f"info  hermes-jobs: store unreadable for profile {labels} "
+            "(cadence; event mode refused)"
+        )
+    if findings.superseded_active:
+        ids = ", ".join(findings.superseded_active)
+        return f"info  hermes-jobs: superseded enabled: {ids} (cadence; event mode refused)"
+    if findings.jobs == 0:
+        return "ok    hermes-jobs: no installed jobs found (default profile)"
+    return f"ok    hermes-jobs: {findings.jobs} installed, no superseded job enabled"
+
+
+def timedatectl_synchronized() -> bool | None:
+    """NTP sync state from systemd `timedatectl`: True, False, or None when unreadable."""
+    exe = shutil.which("timedatectl")
+    if exe is None:
+        return None
+    try:
+        proc = subprocess.run(
+            [exe, "show", "--property=NTPSynchronized", "--value"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return {"yes": True, "no": False}.get(proc.stdout.strip().lower())
+
+
+def clock_sync_line(probe: Callable[[], bool | None] | None = None) -> str:
+    """Host clock sync, report only. Never warn: the fixed warn shapes stay unchanged."""
+    synced = (timedatectl_synchronized if probe is None else probe)()
+    if synced is True:
+        return "ok    clock-sync (NTP synchronized)"
+    if synced is False:
+        return "info  clock-sync (not NTP-synchronized; wall clock may drift)"
+    return "info  clock-sync (unknown: timedatectl unavailable)"
+
+
+def doctor_report(settings: Settings, *, wake_mode: str | None = None) -> list[str]:
+    """Lines for stdout: mode, subsystem lines, ONB-08, Hermes jobs, clock, probes, summary.
+
+    Raises ConfigError when the resolved wake mode is event and a superseded Hermes job is
+    enabled or a job store is unreadable (EVT-13). `wake_mode` is the `--wake-mode` value; None
+    defers to settings.events.wake_mode.
+    """
+    findings = installed_job_findings()
+    if resolve_wake_mode(wake_mode, settings.events.wake_mode) == "event":
+        problems = event_mode_problems(findings)
+        if problems:
+            raise ConfigError(problems)
     statuses = subsystem_statuses()
     present = sum(1 for status in statuses if status.present)
     absent = len(statuses) - present
     lines = [f"info  mode={settings.effective_mode} profile={current_profile()}"]
     lines.extend(status.line() for status in statuses)
     lines.append(onb08_rpc_line())
+    lines.append(hermes_jobs_line(findings))
+    lines.append(clock_sync_line())
     port = settings.health.port
     if port <= 0:
         lines.append("warn  /healthz (not served: health.port=0, only `run --serve` binds a port)")

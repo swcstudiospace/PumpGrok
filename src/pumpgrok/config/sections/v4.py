@@ -6,19 +6,29 @@ only when a section is explicitly enabled.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
 
+#: Supervisor wake modes. `cadence` is the default and stays byte-identical; `event` wakes seats
+#: from the event bus (EVT-10). Selected by `--wake-mode` or `events.wake_mode`.
+WakeMode = Literal["cadence", "event"]
+WAKE_MODES: tuple[str, ...] = get_args(WakeMode)
+
+
+def resolve_wake_mode(cli_value: str | None, settings_value: str) -> str:
+    """The explicit `--wake-mode` flag wins; with no flag the settings value applies."""
+    return settings_value if cli_value is None else cli_value
+
 
 class EventsSettings(BaseModel):
-    """Event sidecar. Cadence wake only; the path is a local file, not a socket."""
+    """Event sidecar. Wake mode selects cadence or event; the path is a local file, not a socket."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
-    wake_mode: Literal["cadence"] = "cadence"
+    wake_mode: WakeMode = "cadence"
     sidecar_path: str = "var/desk/events.sqlite"
 
 
