@@ -56,7 +56,7 @@ jobs:
 
   - id: chief-journal-rollup
     owner: chief
-    enabled: true
+    enabled: false  # EVT-13 superseded in event mode: EVENT_TIMERS bot-09-journal (300 s) renders the daily rollup
     schedule: "0 12 * * *"
     name: "[bot:chief] journal-rollup"
     deliver: telegram
