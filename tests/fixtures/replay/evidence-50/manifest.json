@@ -2,15 +2,15 @@
   "dataset": "evidence-50",
   "provenance": "synthetic",
   "recorded_from_utc": "2026-01-01T00:00:00.000Z",
-  "recorded_to_utc": "2026-01-01T01:28:30.000Z",
+  "recorded_to_utc": "2026-01-01T07:28:30.000Z",
   "seed_hint": 20260101,
   "sources": {
     "rest": "synthetic",
     "pumpportal": "synthetic"
   },
   "sha256": {
-    "events.jsonl": "fa3d2d29bee22e9438976fb0b0ddac3536e91b9b556aa147ba404c6aafe735e5",
-    "llm.jsonl": "aef2d2772ff5413ebdf79b0e6ad8db2e65eb892763af004a3760b7c2777cf6f7"
+    "events.jsonl": "de0e7052b295513f4fd76403dfde9e0ed2efac301f3e8d0faa8af66093c641a0",
+    "llm.jsonl": "ce12e3d56af05e7101fb5f000af7d1266ec9887e3811ea68afb98701f2a40eb0"
   },
-  "notes": "SYNTHETIC. Not market evidence. Regenerate with `.venv/bin/python tests/fixtures/replay/evidence-50/generator.py` from the repository root. Built from tests/fixtures/replay/smoke (events.jsonl sha256 ed9447d9ce4725a82e782f83a6bb45dbd6522c2370953c2c59e25e34b1ae6570) and tests/fixtures/replay/smoke-10m (events.jsonl sha256 751a0a6e42df9461465bd644b99d82416d8741dd24beeb1a9eb65aa563444bc0). 60 candidate rows: 50 admitted by pumpgrok.grok.gateway.prefilter and 10 planned rejections cycling too_young, too_old, market_window_closed, too_few_buyers, low_prerank. Arrivals every 90 s from the smoke-10m start. Token facts come from smoke token rows; prerank, first trade and answers are deterministic synthetic values. Each admitted request has one llm.jsonl record keyed by the gateway request key; llm answers are synthetic, not model output."
+  "notes": "SYNTHETIC. Not market evidence. Regenerate with `.venv/bin/python tests/fixtures/replay/evidence-50/generator.py` from the repository root. Built from tests/fixtures/replay/smoke (events.jsonl sha256 ed9447d9ce4725a82e782f83a6bb45dbd6522c2370953c2c59e25e34b1ae6570) and tests/fixtures/replay/smoke-10m (events.jsonl sha256 751a0a6e42df9461465bd644b99d82416d8741dd24beeb1a9eb65aa563444bc0). 300 candidate rows: 50 admitted by pumpgrok.grok.gateway.prefilter, one row in 6, and 250 rejected by it (too_young 50, too_old 50, market_window_closed 50, too_few_buyers 50, low_prerank 50). Arrivals every 90 s from the smoke-10m start. Token facts come from smoke token rows; prerank, first trade and answers are deterministic synthetic values. Each admitted request has one llm.jsonl record keyed by the gateway request key; llm answers are synthetic, not model output."
 }

@@ -10,7 +10,8 @@ This module proves, with no network and no skips:
 2. the manifest is labeled synthetic and records the command that regenerates it;
 3. the generator reproduces the bytes on disk exactly;
 4. events are strictly parsed and stay in time order;
-5. at least 50 candidates are admitted by the real gateway prefilter;
+5. at least 250 raw candidates, exactly 50 admitted by the real gateway prefilter, and the
+   rest rejected by the real prefilter rules in the planned mix;
 6. every admitted candidate replays a recorded outcome through the real gateway, and the recorded
    set holds exactly the admitted requests, nothing more and nothing less.
 
@@ -25,6 +26,7 @@ import json
 import shutil
 import socket
 import sys
+from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -46,7 +48,15 @@ EVENTS = DATASET / "events.jsonl"
 SMOKE = DATASET.parent / "smoke"
 SMOKE10M = DATASET.parent / "smoke-10m"
 LLM = DATASET / "llm.jsonl"
-MIN_ADMITTED = 50
+MIN_RAW = 250
+ADMITTED = 50
+REJECTED_MIX = {
+    "too_young": 50,
+    "too_old": 50,
+    "market_window_closed": 50,
+    "too_few_buyers": 50,
+    "low_prerank": 50,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -106,12 +116,23 @@ def test_events_parse_strictly_and_stay_in_time_order() -> None:
     assert stamps == sorted(stamps)
 
 
-def test_at_least_fifty_candidates_are_admitted_by_the_real_prefilter(
+def test_raw_rows_and_exactly_fifty_admitted_by_the_real_prefilter(
     generator: ModuleType,
 ) -> None:
     observations = generator.observe(read_jsonl(EVENTS))
+    assert len(observations) >= MIN_RAW, f"only {len(observations)} raw candidate rows"
     admitted = [o for o in observations if prefilter(o.request.candidate, now=o.now).admit]
-    assert len(admitted) >= MIN_ADMITTED, f"only {len(admitted)} candidates admitted"
+    assert len(admitted) == ADMITTED, f"{len(admitted)} candidates admitted, expected {ADMITTED}"
+
+
+def test_rejections_follow_the_planned_mix_from_the_real_prefilter(
+    generator: ModuleType,
+) -> None:
+    observations = generator.observe(read_jsonl(EVENTS))
+    verdicts = [prefilter(o.request.candidate, now=o.now) for o in observations]
+    rejected = Counter(v.reason for v in verdicts if not v.admit)
+    assert dict(rejected) == REJECTED_MIX, f"rejection mix drifted: {dict(rejected)}"
+    assert sum(rejected.values()) == len(observations) - ADMITTED
 
 
 async def test_admitted_candidates_replay_through_the_gateway_and_nothing_else_is_recorded(
@@ -122,7 +143,7 @@ async def test_admitted_candidates_replay_through_the_gateway_and_nothing_else_i
     replay = ReplayTransport(ReplayLlm.from_rows(llm_rows))
 
     admitted = [o for o in observations if prefilter(o.request.candidate, now=o.now).admit]
-    assert len(admitted) >= MIN_ADMITTED, f"only {len(admitted)} candidates admitted"
+    assert len(admitted) == ADMITTED, f"{len(admitted)} candidates admitted, expected {ADMITTED}"
     needed = {generator.request_key(o.request) for o in admitted}
     recorded = {row["request_hash"] for row in llm_rows}
     assert recorded == needed, (
@@ -146,7 +167,7 @@ async def test_admitted_candidates_replay_through_the_gateway_and_nothing_else_i
             fresh += 1
         else:
             assert outcome.status == "prefilter_skip", observation.request.event_id
-    assert fresh == len(admitted) >= MIN_ADMITTED
+    assert fresh == len(admitted) == ADMITTED
 
 
 def _copy_with_provenance(source: Path, tmp_path: Path, value: str) -> Path:
