@@ -11,6 +11,7 @@ import asyncio
 import random
 import sys
 from collections.abc import Callable, Iterator
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
@@ -117,10 +118,8 @@ async def test_factory_injected_fixture_buy_is_not_filled(tmp_path: Path) -> Non
         approval_id=f"apr-{adapter._ids.ulid()}",
         correlation_id="test",
     )
-    try:
+    with suppress(OrderRejectedError):
         await _place(adapter, clock, request)
-    except OrderRejectedError:
-        pass
     kinds = [event["type"] for event in store.read(limit=None)]
     assert "FillRecorded" not in kinds
 

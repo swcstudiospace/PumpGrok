@@ -76,7 +76,7 @@ class BoundEntryPolicy:
             self._provenance = CurveProvenance.UNKNOWN
         else:
             # Lazy: the factory imports this module at load time.
-            from pumpgrok.execution.paper_factory import VerifiedReplay
+            from pumpgrok.execution.paper_factory import VerifiedReplay  # noqa: PLC0415
 
             if not isinstance(replay, VerifiedReplay) or replay.curves is not source:
                 raise ValueError("entry policy replay token does not bind this source")
