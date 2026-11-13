@@ -21,7 +21,7 @@ import pytest
 
 from pumpgrok.config.settings import GrokSettings
 from pumpgrok.engine.agents import AuditorAgent, CheckerAgent, NarrativeAgent, TimingAgent
-from pumpgrok.engine.agents.base import system_prompts
+from pumpgrok.engine.agents.base import gateway_candidate, system_prompts
 from pumpgrok.engine.models import (
     Analysis,
     AuditResult,
@@ -29,7 +29,6 @@ from pumpgrok.engine.models import (
     NarrativeResult,
     Token,
 )
-from pumpgrok.engine.pipeline import gateway_candidate
 from pumpgrok.grok.budget import LayeredBudget
 from pumpgrok.grok.cache import ResponseCache
 from pumpgrok.grok.gateway import Candidate, GrokGateway, GrokRequest

@@ -20,13 +20,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS, passes_filter
-from pumpgrok.grok.gateway import Candidate
 from pumpgrok.replay.clock import parse_ts_utc
 
 #: Decisions the replay pipeline can report. ``buy`` means the candidate
@@ -141,27 +139,3 @@ def decide_replay(
 def format_decision(decision: EngineDecision) -> str:
     """Stdout and note-text rendering of a replay verdict."""
     return f"engine decision={decision.decision} reason={decision.reason}"
-
-
-def gateway_candidate(
-    token: Token,
-    *,
-    prerank: Decimal,
-    first_trade_at: float,
-    last_decision_at: float | None = None,
-) -> Candidate:
-    """Admission facts the gateway prefilter reads, from the token and the caller.
-
-    The token supplies the creation time and the buyer count. The caller supplies
-    the rule prerank, the first trade time and the mint's last decision time,
-    which no agent holds. Missing buyer evidence counts as zero buyers, so the
-    prefilter fails closed before any spend.
-    """
-    return Candidate(
-        mint=token.mint,
-        created_at=token.created_timestamp,
-        first_trade_at=first_trade_at,
-        unique_buyers=0 if token.unique_buyers is None else token.unique_buyers,
-        prerank=prerank,
-        last_decision_at=last_decision_at,
-    )
