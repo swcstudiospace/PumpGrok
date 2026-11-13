@@ -40,8 +40,11 @@ from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
+from pumpgrok.doctor import failing_inputs, input_inventory
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
+from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.active_set import read_active_param_set
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -84,16 +87,56 @@ def _declared_space() -> tuple[dict[str, Any], ...]:
         raise ConfigError([exc.message]) from exc
 
 
+def _tool_authenticated(decisions: dict[str, oc.Decision], seat: str, tool: str) -> bool:
+    decision = decisions.get(oc.tool_scope(seat, tool))
+    return decision is not None and decision.bound
+
+
+def _unauthenticated_seat_lines() -> list[str]:
+    """One line per seat whose roster tools lack an authenticated decision (ONB-04)."""
+    try:
+        decisions = oc.read_authority(oc.OPERATOR_DIR, PAPER_LEDGER_PATH)
+    except (oc.OperatorChoiceError, OSError, ValueError, sqlite3.Error):
+        decisions = {}
+    lines: list[str] = []
+    for seat in EXPECTED_SEAT_IDS:
+        try:
+            tools = sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat))
+        except (OSError, ValueError):
+            lines.append(f"    - seat {seat}: roster is unreadable")
+            continue
+        lacking = [tool for tool in tools if not _tool_authenticated(decisions, seat, tool)]
+        if lacking:
+            lines.append(
+                f"    - seat {seat}: {len(lacking)} of {len(tools)} roster tools "
+                "lack an authenticated decision"
+            )
+    return lines
+
+
+def _paper_start_gate(settings: Settings) -> list[str]:
+    """Lines naming each missing paper input, or none when the start may proceed.
+
+    Runs before any supervisor starts. It names inputs, seats and counts, never a value. The
+    paper inventory marks the wallet not-read, so this reads no wallet input.
+    """
+    failing = failing_inputs(input_inventory(settings, "paper"))
+    lines = [f"  - {record.name}: {record.status} (required for paper)" for record in failing]
+    if any(record.name == "seat_tool_access" for record in failing):
+        lines.extend(_unauthenticated_seat_lines())
+    return lines
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
-    gate = LiveGate(
-        mode=settings.effective_mode,
-        environ=os.environ,
-        root=Path.cwd(),
-        live_enabled=settings.live.enabled,
-        wallet_allowlist=settings.wallet.allowlist,
-        notional_cap_lamports=settings.live.notional_cap_lamports,
-    )
     if settings.effective_mode == "live":
+        gate = LiveGate(
+            mode=settings.effective_mode,
+            environ=os.environ,
+            root=Path.cwd(),
+            live_enabled=settings.live.enabled,
+            wallet_allowlist=settings.wallet.allowlist,
+            notional_cap_lamports=settings.live.notional_cap_lamports,
+        )
         preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
@@ -107,13 +150,24 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
             )
             return EXIT_NOT_IMPLEMENTED
-        return _serve_replay_loop(Path(args.replay), settings)
-    if not (args.once and args.replay):
+    elif not (args.once and args.replay):
         _say(
             sys.stderr,
             "not implemented: this release runs only `run --mode paper --once --replay <dir>`",
         )
         return EXIT_NOT_IMPLEMENTED
+    if settings.effective_mode == "paper":
+        missing = _paper_start_gate(settings)
+        if missing:
+            _say(
+                sys.stderr,
+                "paper start refused: required inputs are missing; no supervisor was started "
+                "(see `pumpgrok onboarding list`)",
+                *missing,
+            )
+            return EXIT_CONFIG
+    if args.serve:
+        return _serve_replay_loop(Path(args.replay), settings)
     return _skip_cycle(Path(args.replay), settings)
 
 
