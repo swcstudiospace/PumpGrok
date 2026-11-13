@@ -9,15 +9,48 @@ artifact. Offline only: recorded fixtures, no network.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pumpgrok.cli import main
+from pumpgrok.config.settings import load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.active_set import read_active_set
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.tools import ensure_paper_genesis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, as the onboarding verbs record it.
+
+    The paper genesis is written first, then the operator key and an HMAC-authenticated
+    allow per roster tool, so the paper startup gate reads complete authority inputs.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 def _autonomy_changes(store: LedgerStore) -> list[dict]:
@@ -48,6 +81,8 @@ def test_manual_ticket_cycle_performs_no_upgrade(tmp_path, monkeypatch) -> None:
         assert read_autonomy(store) == "manual-ticket"
     finally:
         store.close()
+
+    _record_complete_authority()
 
     assert main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
 
