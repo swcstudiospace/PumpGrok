@@ -7,8 +7,8 @@ SYNTHETIC and says so in its manifest. This module proves, with no network and n
    ``"provenance": "synthetic"`` with the regeneration command;
 2. the notes record the soak-3d source hashes, and that source verifies;
 3. the generator reproduces the files byte for byte;
-4. at least one candidate is admitted by the real gateway prefilter, and every row's verdict
-   matches a fresh prefilter run;
+4. at least 50 candidates are admitted by the real gateway prefilter, the rejections match the
+   pinned mix, and every row's verdict matches a fresh prefilter run;
 5. ``llm.jsonl`` holds exactly one ok record per admitted request, keyed by the gateway request key;
 6. a missing or tampered soak-3d source fails the test instead of skipping it.
 """
@@ -21,6 +21,7 @@ import json
 import shutil
 import socket
 import sys
+from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -36,6 +37,9 @@ GENERATOR = DATASET / "generator.py"
 MANIFEST = DATASET / "manifest.json"
 EVENTS = DATASET / "events.jsonl"
 LLM = DATASET / "llm.jsonl"
+
+MIN_ADMITTED = 50
+EXPECTED_REJECTIONS = {"mint_cooldown": 432, "too_few_buyers": 72, "too_old": 3576, "too_young": 24}
 
 
 @pytest.fixture(autouse=True)
@@ -99,12 +103,14 @@ def test_generator_reproduces_the_files_byte_for_byte(generator: ModuleType) -> 
         assert (DATASET / name).read_bytes() == data, f"regeneration drift: {name}"
 
 
-def test_at_least_one_admitted_by_the_real_prefilter(generator: ModuleType) -> None:
+def test_at_least_fifty_admitted_by_the_real_prefilter(generator: ModuleType) -> None:
     observations = generator.observe(read_jsonl(EVENTS))
     source_rows = read_jsonl(SOURCE / "events.jsonl")
     assert len(observations) == len(source_rows), "every soak-3d tick must be one candidate"
-    admitted = [o for o in observations if prefilter(o.request.candidate, now=o.now).admit]
-    assert len(admitted) >= 1, "the real prefilter admitted no candidate"
+    verdicts = Counter(prefilter(o.request.candidate, now=o.now).reason for o in observations)
+    admitted = verdicts.pop("admitted", 0)
+    assert admitted >= MIN_ADMITTED, f"the real prefilter admitted only {admitted} candidates"
+    assert dict(verdicts) == EXPECTED_REJECTIONS, f"rejection mix drift: {dict(verdicts)}"
     for observation in observations:
         fresh = prefilter(observation.request.candidate, now=observation.now)
         assert observation.verdict == fresh, observation.request.event_id
