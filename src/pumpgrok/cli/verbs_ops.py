@@ -51,7 +51,7 @@ log = logging.getLogger("pumpgrok.cli")
 
 
 def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
-    wake_mode = resolve_wake_mode(args.wake_mode, settings.events.wake_mode)
+    wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
     if not args.json:
         _say(sys.stdout, *doctor_report(settings, wake_mode=wake_mode))
         return EXIT_OK
