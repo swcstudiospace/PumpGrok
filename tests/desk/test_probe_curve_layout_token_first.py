@@ -59,7 +59,7 @@ def _fetch_returning(value: dict[str, Any]) -> Callable[[str, str, float], dict[
 
 
 def test_discriminator_gate_matches_official_layout() -> None:
-    assert probe_mod.EXPECTED_DISCRIMINATOR_HEX == DISCRIMINATOR.hex()
+    assert DISCRIMINATOR.hex() == probe_mod.EXPECTED_DISCRIMINATOR_HEX
 
 
 def test_base_49_account_decodes_token_first() -> None:
