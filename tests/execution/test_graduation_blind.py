@@ -263,9 +263,8 @@ async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
 def test_layout_fixture_matches_code_status() -> None:
     fixture = Path("tests/fixtures/rpc/bonding_curve/layout.json")
     record = json.loads(fixture.read_text(encoding="utf-8"))
-    # The probe record is script output written under the pre-review layout; the
-    # script never writes VERIFIED (human review step), so it cannot track LAYOUT_STATUS.
-    assert record["layout_status"] == "ASSUMED"
+    # The probe record was reviewed and promoted to VERIFIED by human:Ove (f4e09a0);
+    # it must track LAYOUT_STATUS.
+    assert record["layout_status"] == "VERIFIED"
     assert LAYOUT_STATUS == "VERIFIED"
-    assert record["layout_status"] != "VERIFIED"
     assert "probe_error" in record
