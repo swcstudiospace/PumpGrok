@@ -15,8 +15,10 @@ stamps; no wall clock, no network.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -24,12 +26,19 @@ import pytest
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.errors import ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
+from pumpgrok.grok.budget import LayeredBudget
+from pumpgrok.grok.cache import ResponseCache
+from pumpgrok.grok.gateway import Candidate, GrokGateway, GrokRequest, _request_key, sanitize
+from pumpgrok.grok.transport import ReplayTransport, admit_replay
 from pumpgrok.ledger.export import export_ledger
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import parse_ts_utc
+from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
+from pumpgrok.replay.recorder import ReplayLlm
 from pumpgrok.replay.runner import ledger_events_hash, run_replay
+
+GROK_START = 1_800_000_000.0
 
 T0 = "2026-01-01T00:00:00.000Z"
 T1 = "2026-01-01T00:00:15.000Z"
@@ -142,3 +151,74 @@ def test_missing_llm_record_fails_replay(tmp_path: Path) -> None:
     assert excinfo.value.fields["request_hash"] != "0" * 64
     assert len(excinfo.value.fields["request_hash"]) == 64
     assert not (tmp_path / "miss.sqlite").exists()
+
+
+def _grok_request(text: str, index: int) -> GrokRequest:
+    return GrokRequest(
+        event_id=f"ev-{index}",
+        agent="narrative",
+        model="grok-test",
+        prompt_sha="c" * 64,
+        schema="verdict.v1",
+        input={"mint": "MINT1"},
+        text=text,
+        candidate=Candidate(
+            mint="MINT1",
+            created_at=GROK_START - 600,
+            first_trade_at=GROK_START - 300,
+            unique_buyers=9,
+            prerank=Decimal("0.8"),
+            last_decision_at=None,
+        ),
+    )
+
+
+def test_grok_replay_outcomes_repeat_exactly_on_fresh_handles(tmp_path: Path) -> None:
+    """GRK-08: identical records and requests give identical gateway outcomes on every run."""
+    rows = [
+        {
+            "request_hash": _request_key(_grok_request("a", 0), sanitize("a")),
+            "outcome": "ok",
+            "latency_s": 0.5,
+            "response": {"content": '{"verdict":"ok"}'},
+        },
+        {
+            "request_hash": _request_key(_grok_request("b", 0), sanitize("b")),
+            "outcome": "timeout",
+            "latency_s": 0.5,
+            "response": {"note": "recorded"},
+        },
+    ]
+    texts = ["a", "b", "a"]
+
+    def run(root: Path) -> list[tuple[str, str | None, str | None]]:
+        root.mkdir()
+        clock = FixtureClock(start=GROK_START)
+        replay = ReplayTransport(ReplayLlm.from_rows(rows))
+        gateway = GrokGateway(
+            clock=clock,
+            transport=replay,
+            cache=ResponseCache(root / "cache.sqlite", clock),
+            budget=LayeredBudget(root / "budget.sqlite", clock),
+        )
+
+        async def drive() -> list[tuple[str, str | None, str | None]]:
+            results = []
+            for index, text in enumerate(texts):
+                outcome = await admit_replay(
+                    gateway, replay, _grok_request(text, index), clock=clock
+                )
+                results.append((outcome.status, outcome.reason, outcome.response))
+            return results
+
+        return asyncio.run(drive())
+
+    first = run(tmp_path / "run-1")
+    second = run(tmp_path / "run-2")
+
+    assert first == second
+    assert first == [
+        ("fresh", None, '{"verdict":"ok"}'),
+        ("rule_fallback", "timeout", None),
+        ("cache_hit", None, '{"verdict":"ok"}'),
+    ]
