@@ -59,3 +59,25 @@ Do not recreate the other five jobs; they are kept and still run.
 - Telegram heartbeat. Event-mode `journal rollup` renders the report with `deliver=False`. The 12:00 Telegram heartbeat from `chief-journal-rollup` has no event-mode path. Disabling that job removes it.
 - Installer. `scripts/hermes-install-cron.sh` ignores `enabled` (see Detection). Making the installer honor the flag is a separate change.
 - Doctor. Refusing event mode while a superseded job is enabled (EVT-13) is a separate change. This runbook does not claim it exists.
+
+## Event mode after onboarding
+
+Onboarding is not part of the wake table. The paper start gate in `run` runs before any supervisor starts, whichever wake mode is configured. A missing operator input refuses the start: the gate prints `paper start refused`, one line per missing input, and exits 1.
+
+Check the inputs before a serving start:
+
+```bash
+uv run pumpgrok onboarding list
+uv run pumpgrok doctor --json
+```
+
+Serve the replay dataset. `PUMPGROK_HEALTH__PORT` must be nonzero:
+
+```bash
+uv run pumpgrok run --mode paper --serve --replay tests/fixtures/replay/smoke
+```
+
+- The gate needs every roster tool of every seat to hold a bound decision. One missing decision refuses the whole start; it does not disable one seat.
+- A tool without an allow decision is not granted to its seat.
+- The gate counts a bound revoke as a recorded decision. After `uv run pumpgrok onboarding revoke --seat <seat> --tool <tool>`, check `onboarding list`; the gate alone does not catch a revoke.
+- The wake table, the timers and the superseded-job decisions above are unchanged by onboarding.
