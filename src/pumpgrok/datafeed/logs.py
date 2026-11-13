@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from typing import TypeGuard
 
 from pumpgrok.datafeed.bridge import ObservationBridge
 from pumpgrok.datafeed.events import CurveObservation
@@ -43,7 +44,7 @@ _INVOKE = re.compile(r"Program (\S+) invoke \[\d+\]")
 _RESULT = re.compile(r"Program (\S+) (?:success|failed.*)")
 
 
-def _is_list_of_str(value: object) -> bool:
+def _is_list_of_str(value: object) -> TypeGuard[list[str]]:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 

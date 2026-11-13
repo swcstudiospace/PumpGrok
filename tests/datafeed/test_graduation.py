@@ -174,21 +174,15 @@ def test_latest_trusted_observation_prevents_premature_timeout(monkeypatch, tmp_
     settings = GapSettings(gap_after_s=10.0, timeout_after_s=30.0)
     recent, replay = _verified(tmp_path, ts=120.0)
     assert (
-        position_action(
-            recent, last_trusted_at=100.0, now=120.0, settings=settings, replay=replay
-        )
+        position_action(recent, last_trusted_at=100.0, now=120.0, settings=settings, replay=replay)
         == PositionAction.MARK
     )
     assert (
-        position_action(
-            recent, last_trusted_at=120.0, now=131.0, settings=settings, replay=replay
-        )
+        position_action(recent, last_trusted_at=120.0, now=131.0, settings=settings, replay=replay)
         == PositionAction.HOLD
     )
     assert (
-        position_action(
-            recent, last_trusted_at=120.0, now=150.0, settings=settings, replay=replay
-        )
+        position_action(recent, last_trusted_at=120.0, now=150.0, settings=settings, replay=replay)
         == PositionAction.ZERO_MARK
     )
 

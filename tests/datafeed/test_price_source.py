@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from replay_support import replay_authority, tick
 
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
@@ -23,8 +24,6 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
-
-from replay_support import replay_authority, tick
 
 MINT = "mint-1"
 START = 1_767_225_600.0
@@ -386,7 +385,7 @@ async def test_observer_failure_never_changes_admission(source):
 
 
 async def test_observer_is_not_called_when_admission_refuses(source):
-    prices, health, clock = source
+    prices, _health, clock = source
     seen = []
     prices.set_observer(seen.append)
     prices.observe(observation(clock))

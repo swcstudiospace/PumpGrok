@@ -10,8 +10,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from execution.replay_support import replay_authority, tick
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory

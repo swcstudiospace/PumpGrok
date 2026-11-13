@@ -553,7 +553,7 @@ def test_dedup_window_is_bounded_and_forgets_the_oldest_key() -> None:
 
 
 def _portal(tmp_path: Path, *, transport: Transport, watch: WatchSet, frames: ScriptedFrames):
-    clock, supervisor, bus, recorder, bridge, boundary, limiter = _world(
+    clock, supervisor, bus, _recorder, bridge, boundary, limiter = _world(
         tmp_path, transport=transport, watch=watch
     )
     supervisor.note_frame()
@@ -666,7 +666,7 @@ async def test_portal_timeout_disconnects_and_reseeds_subscriptions(tmp_path: Pa
     transport = Transport()
     watch = WatchSet(max_watched_mints=4)
     frames = ScriptedFrames([TimeoutError()])
-    feed, clock, supervisor, _, _ = _portal(
+    feed, _clock, supervisor, _, _ = _portal(
         tmp_path, transport=transport, watch=watch, frames=frames
     )
     await feed.subscribe()

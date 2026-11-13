@@ -16,9 +16,9 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.graduation import GapSettings, PositionAction, position_action
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution.paper_adapter.models import _ledger_mark_epoch
+from pumpgrok.execution.paper_factory import VerifiedReplay
 from pumpgrok.ledger.reducer import PositionView
 from pumpgrok.replay.clock import parse_ts_utc
-from pumpgrok.execution.paper_factory import VerifiedReplay
 
 
 class InMemoryTimeoutSink:

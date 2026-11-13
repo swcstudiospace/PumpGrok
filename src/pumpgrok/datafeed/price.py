@@ -105,7 +105,7 @@ class LivePriceSource:
         if self._observer is not None:
             try:
                 self._observer(snapshot)
-            except Exception:  # noqa: BLE001 - an observer must never change admission
+            except Exception:  # an observer must never change admission
                 self.observer_failures += 1
         return snapshot
 

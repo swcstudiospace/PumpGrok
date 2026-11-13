@@ -376,9 +376,10 @@ async def test_feed_gap_is_appended_sealed_and_accepted_by_the_loader(
     ]
     dataset = load_dataset(dataset_dir)
     assert set(dataset.manifest.sha256) == {"events.jsonl", GAPS_NAME}
-    assert dataset.manifest.sha256[GAPS_NAME] == hashlib.sha256(
-        (dataset_dir / GAPS_NAME).read_bytes()
-    ).hexdigest()
+    assert (
+        dataset.manifest.sha256[GAPS_NAME]
+        == hashlib.sha256((dataset_dir / GAPS_NAME).read_bytes()).hexdigest()
+    )
     assert len(dataset.events) == 2
 
 

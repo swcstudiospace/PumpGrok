@@ -10,9 +10,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from execution.replay_support import replay_authority, tick
 from pydantic import ValidationError
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord, parse_human_phrase, record_human_approval
 from pumpgrok.core.errors import OrderRejectedError

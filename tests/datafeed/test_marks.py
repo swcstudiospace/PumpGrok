@@ -10,20 +10,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from replay_support import replay_authority, tick
 
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.graduation import GapSettings
 from pumpgrok.datafeed.marks import HeldMarkScheduler, InMemoryTimeoutSink
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution import build_paper_adapter
+from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
-
-from replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 S = 42_000_000_000
@@ -244,7 +243,6 @@ class ReplayDesk:
         self.clock.advance_to(self.clock.now() + seconds)
         for _ in range(4):
             await self.clock.yield_to_loop()
-
 
 
 async def test_held_mints_degrade_to_gaps_within_sixty_seconds(tmp_path: Path) -> None:
