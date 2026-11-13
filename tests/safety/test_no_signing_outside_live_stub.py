@@ -1,4 +1,4 @@
-"""No fund-moving symbols outside the refusing live stub (SEC-003), no ed25519 import outside the decoder.
+"""No fund-moving symbols outside the refusing live stub (SEC-003), no ed25519 import elsewhere.
 
 Walks the AST of every ``src/pumpgrok/**/*.py`` file and fails on any exact
 ``sign``, ``send_transaction``, ``sendTransaction`` or ``Keypair`` symbol,

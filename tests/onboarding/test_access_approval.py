@@ -189,7 +189,7 @@ def test_ledger_truncation_past_a_deny_is_denied(operator_home: Path) -> None:
 
 
 def test_protected_store_rollback_is_denied(operator_home: Path) -> None:
-    """Restoring an older protected file cannot re-grant: the ledger's latest row no longer binds."""
+    """Restoring an older protected file cannot re-grant: the latest ledger row no longer binds."""
     name = _tool_names()[0]
     _record("allow")
     snapshot = CHOICES.read_text(encoding="utf-8")

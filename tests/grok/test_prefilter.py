@@ -105,7 +105,7 @@ def test_thresholds_are_the_design_a_values() -> None:
     assert MIN_UNIQUE_BUYERS == 5
     assert MARKET_WINDOW_S == 3600
     assert MINT_COOLDOWN_S == 300
-    assert MIN_PRERANK == Decimal("0.5")
+    assert Decimal("0.5") == MIN_PRERANK
     assert BREAKER_COOLDOWN_S == 60
 
 

@@ -1,4 +1,4 @@
-"""ONB-08: an explicit RPC choice records only scheme, host and port; a default is never a choice."""
+"""ONB-08: an explicit RPC choice records only scheme, host and port; defaults are never choices."""
 
 from __future__ import annotations
 

@@ -171,26 +171,10 @@ class ToolRegistry:
                     str(cid),
                     live=True,
                 )
-            grant = bot.grant_for(spec.name)
-            if grant is None:
+            denial = self._denial(spec, bot, max_side_effect)
+            if denial is not None:
                 if capability == spec.name:
-                    self._refuse(bot, spec.name, spec.side_effect, "not_in_roster", str(cid))
-                continue
-            if spec.side_effect.exceeds(grant.side_effect):
-                if capability == spec.name:
-                    self._refuse(bot, spec.name, spec.side_effect, "exceeds_grant", str(cid))
-                continue
-            if spec.side_effect.exceeds(max_side_effect):
-                if capability == spec.name:
-                    self._refuse(
-                        bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid)
-                    )
-                continue
-            if self._operator_gate is not None and not self._operator_gate(bot.id, spec.name):
-                if capability == spec.name:
-                    self._refuse(
-                        bot, spec.name, spec.side_effect, "not_operator_approved", str(cid)
-                    )
+                    self._refuse(bot, spec.name, spec.side_effect, denial, str(cid))
                 continue
             self._audit(
                 GrantAudit(
@@ -206,6 +190,19 @@ class ToolRegistry:
             return self._wrap(t, bot)
         self._refuse(bot, capability, max_side_effect, "no_granted_tool_in_namespace", str(cid))
         raise AssertionError("unreachable")
+
+    def _denial(self, spec: ToolSpec, bot: BotManifest, max_side_effect: SideEffect) -> str | None:
+        """Why `bot` may not be granted `spec` at `max_side_effect`, or None when it may."""
+        grant = bot.grant_for(spec.name)
+        if grant is None:
+            return "not_in_roster"
+        if spec.side_effect.exceeds(grant.side_effect):
+            return "exceeds_grant"
+        if spec.side_effect.exceeds(max_side_effect):
+            return "exceeds_requested_max"
+        if self._operator_gate is not None and not self._operator_gate(bot.id, spec.name):
+            return "not_operator_approved"
+        return None
 
     def _refuse(
         self,

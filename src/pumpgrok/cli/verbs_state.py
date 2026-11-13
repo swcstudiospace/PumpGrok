@@ -141,6 +141,26 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
+    refusal = _mode_refusal(args)
+    if refusal is not None:
+        return refusal
+    if settings.effective_mode == "paper":
+        missing = _paper_start_gate(settings)
+        if missing:
+            _say(
+                sys.stderr,
+                "paper start refused: required inputs are missing; no supervisor was started "
+                "(see `pumpgrok onboarding list`)",
+                *missing,
+            )
+            return EXIT_CONFIG
+    if args.serve:
+        return _serve_replay_loop(Path(args.replay), settings)
+    return _skip_cycle(Path(args.replay), settings)
+
+
+def _mode_refusal(args: argparse.Namespace) -> int | None:
+    """Exit code refusing a `run` argument combination this release does not run, or None."""
     if args.record is not None or args.duration is not None:
         return _not_implemented("run --record")
     if args.serve:
@@ -156,19 +176,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             "not implemented: this release runs only `run --mode paper --once --replay <dir>`",
         )
         return EXIT_NOT_IMPLEMENTED
-    if settings.effective_mode == "paper":
-        missing = _paper_start_gate(settings)
-        if missing:
-            _say(
-                sys.stderr,
-                "paper start refused: required inputs are missing; no supervisor was started "
-                "(see `pumpgrok onboarding list`)",
-                *missing,
-            )
-            return EXIT_CONFIG
-    if args.serve:
-        return _serve_replay_loop(Path(args.replay), settings)
-    return _skip_cycle(Path(args.replay), settings)
+    return None
 
 
 def _serve_replay_loop(source: Path, settings: Settings) -> int:

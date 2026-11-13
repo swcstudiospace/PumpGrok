@@ -241,7 +241,9 @@ def build_files() -> dict[str, bytes]:
         else:
             rejections[verdict.reason] += 1
     if len(admitted) != ADMITTED:
-        raise RuntimeError(f"only {len(admitted)} candidates admitted; evidence-50 needs {ADMITTED}")
+        raise RuntimeError(
+            f"only {len(admitted)} candidates admitted; evidence-50 needs {ADMITTED}"
+        )
 
     llm_bytes = _jsonl(
         [
@@ -264,7 +266,8 @@ def build_files() -> dict[str, bytes]:
         f"`{COMMAND}` from the repository root. Built from tests/fixtures/replay/smoke "
         f"(events.jsonl sha256 {pins['smoke']}) and tests/fixtures/replay/smoke-10m "
         f"(events.jsonl sha256 {pins['smoke-10m']}). {len(observations)} candidate rows: "
-        f"{len(admitted)} admitted by pumpgrok.grok.gateway.prefilter, one row in {ADMITTED_EVERY}, "
+        f"{len(admitted)} admitted by pumpgrok.grok.gateway.prefilter, "
+        f"one row in {ADMITTED_EVERY}, "
         f"and {rejected} rejected by it ({mix}). Arrivals every {CADENCE_S} s from the "
         "smoke-10m start. Token facts come from smoke token rows; prerank, first trade and "
         "answers are deterministic synthetic values. Each admitted request has one llm.jsonl "

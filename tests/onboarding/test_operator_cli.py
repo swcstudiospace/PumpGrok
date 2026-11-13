@@ -193,7 +193,7 @@ def test_key_creation_needs_a_terminal(
 def test_module_entrypoint_without_terminal_writes_nothing(tmp_path: Path) -> None:
     """A real subprocess has no terminal on stdin: the agent-style path is refused."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "src")}
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             "-c",

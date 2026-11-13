@@ -19,7 +19,6 @@ from pumpgrok.grok.budget import (
 )
 from pumpgrok.replay.clock import FixtureClock
 
-
 # 08:00:00 UTC on an hour boundary, so minute and hour windows are predictable.
 START = 1_800_000_000.0
 

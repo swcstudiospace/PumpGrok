@@ -14,6 +14,7 @@ treat that as a refusal to spend, never as a free call.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -139,7 +140,5 @@ def _spent(con: sqlite3.Connection, layer: str, window: str) -> int:
 
 
 def _rollback_quietly(con: sqlite3.Connection) -> None:
-    try:
+    with contextlib.suppress(sqlite3.Error):
         con.execute("ROLLBACK")
-    except sqlite3.Error:
-        pass

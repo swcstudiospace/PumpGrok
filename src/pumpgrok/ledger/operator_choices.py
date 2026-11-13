@@ -71,12 +71,12 @@ __all__ = [
     "endpoint_choice",
     "init_key",
     "operator_label",
-    "writer_identity",
     "read_authority",
     "record_rpc_choice",
     "record_tool_choice",
     "rpc_status",
     "tool_scope",
+    "writer_identity",
 ]
 
 OPERATOR_DIR = Path("var") / "operator"

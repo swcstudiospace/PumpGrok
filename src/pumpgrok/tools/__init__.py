@@ -85,6 +85,7 @@ from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from pumpgrok.config.settings import SafetyThresholds, Settings
     from pumpgrok.core.bot import BotManifest
     from pumpgrok.datafeed.price import LivePriceSource

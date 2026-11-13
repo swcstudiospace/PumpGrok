@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -147,10 +148,8 @@ async def test_owner_cancellation_releases_the_key_and_waiters_get_a_fallback(
     assert waiter_outcome.status == "rule_fallback"
     assert waiter_outcome.reason == "cancelled"
     assert waiter_outcome.event_id == "waiter"
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await owner
-    except asyncio.CancelledError:
-        pass
 
     transport.gate.set()
     retry = await gateway.admit(request("retry"))

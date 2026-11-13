@@ -18,6 +18,7 @@ chooses observe-only or pessimistic handling from the reason.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import re
 import unicodedata
@@ -88,23 +89,38 @@ class PrefilterVerdict:
 
 def prefilter(candidate: Candidate, *, now: float) -> PrefilterVerdict:
     """Pure, ordered admission rules. The same inputs always give the same verdict."""
+    reason = _window_refusal(candidate, now=now)
+    if reason is None:
+        reason = _cooldown_refusal(candidate, now=now)
+    if reason is None:
+        return PrefilterVerdict(True, "admitted")
+    return PrefilterVerdict(False, reason)
+
+
+def _window_refusal(candidate: Candidate, *, now: float) -> str | None:
+    """First failing rule among the range, age and market-window rules, in order."""
     if not 0 <= candidate.prerank <= 1:
-        return PrefilterVerdict(False, "prerank_out_of_range")
+        return "prerank_out_of_range"
     age = now - candidate.created_at
     if age < MIN_AGE_S:
-        return PrefilterVerdict(False, "too_young")
+        return "too_young"
     if age > MAX_AGE_S:
-        return PrefilterVerdict(False, "too_old")
+        return "too_old"
     if now - candidate.first_trade_at > MARKET_WINDOW_S:
-        return PrefilterVerdict(False, "market_window_closed")
+        return "market_window_closed"
+    return None
+
+
+def _cooldown_refusal(candidate: Candidate, *, now: float) -> str | None:
+    """First failing rule among the mint-cooldown, buyer and prerank rules, in order."""
     last_decision = candidate.last_decision_at
     if last_decision is not None and now - last_decision < MINT_COOLDOWN_S:
-        return PrefilterVerdict(False, "mint_cooldown")
+        return "mint_cooldown"
     if candidate.unique_buyers < MIN_UNIQUE_BUYERS:
-        return PrefilterVerdict(False, "too_few_buyers")
+        return "too_few_buyers"
     if candidate.prerank < MIN_PRERANK:
-        return PrefilterVerdict(False, "low_prerank")
-    return PrefilterVerdict(True, "admitted")
+        return "low_prerank"
+    return None
 
 
 @dataclass(frozen=True)
@@ -235,10 +251,7 @@ class GrokGateway:
 
         pending = self._inflight.get(key)
         if pending is not None:
-            shared = await asyncio.shield(pending)
-            if shared.response is not None:
-                return replace(shared, event_id=request.event_id, status="coalesced")
-            return replace(shared, event_id=request.event_id)
+            return await _join_inflight(request, pending)
 
         return await self._own(request, text, key)
 
@@ -265,19 +278,12 @@ class GrokGateway:
             async with self._clock.timeout(TRANSPORT_DEADLINE_S), self._slots:
                 # Re-check after the wait: the breaker may have opened, and the budget
                 # may have run out, while this call was queued.
-                if not self._breaker.admits():
-                    return _fallback(request, "breaker_open")
-                try:
-                    charged = self._budget.try_charge(
-                        reserve_priority=request.agent in RESERVE_AGENTS
-                    )
-                except BudgetUnavailable:
-                    return _fallback(request, "budget_unavailable")
-                if not charged:
-                    return _fallback(request, "budget_exhausted")
+                refusal = self._transport_refusal(request)
+                if refusal is not None:
+                    return _fallback(request, refusal)
                 self._breaker.start()
                 started = True
-                response = await self._transport(request, text)
+                response: object = await self._transport(request, text)
         except TimeoutError:
             if not started:  # timed out in the slot queue; the transport never ran
                 return _fallback(request, "timeout")
@@ -288,22 +294,35 @@ class GrokGateway:
             if started:  # only the call that took the half-open probe may release it
                 self._breaker.abandon()
             raise
+        else:
+            return self._settled(request, key, response)
 
+    def _transport_refusal(self, request: GrokRequest) -> str | None:
+        """Reason the transport may not run now, or None once one call is charged."""
+        if not self._breaker.admits():
+            return "breaker_open"
+        try:
+            charged = self._budget.try_charge(reserve_priority=request.agent in RESERVE_AGENTS)
+        except BudgetUnavailable:
+            return "budget_unavailable"
+        if not charged:
+            return "budget_exhausted"
+        return None
+
+    def _settled(self, request: GrokRequest, key: str, response: object) -> GrokOutcome:
+        """Book a finished transport call. A reply that is not text is a transport failure."""
         if not isinstance(response, str):
             return self._failed(request, key, "transport_error")
         self._breaker.record_success()
-        try:
+        # The response is valid and already paid for; only the reuse is lost if caching fails.
+        with contextlib.suppress(CacheUnavailable):
             self._cache.put_ok(key, agent=request.agent, response=response)
-        except CacheUnavailable:
-            pass  # the response is valid and already paid for; only the reuse is lost
         return GrokOutcome("fresh", request.event_id, response, None)
 
     def _failed(self, request: GrokRequest, key: str, reason: str) -> GrokOutcome:
         self._breaker.record_failure()
-        try:
+        with contextlib.suppress(CacheUnavailable):
             self._cache.put_error(key, agent=request.agent)
-        except CacheUnavailable:
-            pass
         return _fallback(request, reason)
 
 
@@ -321,3 +340,11 @@ def _request_key(request: GrokRequest, text: str) -> str:
 
 def _fallback(request: GrokRequest, reason: str) -> GrokOutcome:
     return GrokOutcome("rule_fallback", request.event_id, None, reason)
+
+
+async def _join_inflight(request: GrokRequest, pending: asyncio.Future[GrokOutcome]) -> GrokOutcome:
+    """Share the owner's verdict; a shared success is reported as coalesced."""
+    shared = await asyncio.shield(pending)
+    if shared.response is not None:
+        return replace(shared, event_id=request.event_id, status="coalesced")
+    return replace(shared, event_id=request.event_id)

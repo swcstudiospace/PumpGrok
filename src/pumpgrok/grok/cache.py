@@ -12,6 +12,7 @@ are never written here; the gateway enforces that.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -205,7 +206,5 @@ def _count(con: sqlite3.Connection) -> int:
 
 
 def _rollback_quietly(con: sqlite3.Connection) -> None:
-    try:
+    with contextlib.suppress(sqlite3.Error):
         con.execute("ROLLBACK")
-    except sqlite3.Error:
-        pass

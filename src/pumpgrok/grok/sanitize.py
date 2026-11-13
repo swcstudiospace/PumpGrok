@@ -12,15 +12,13 @@ messages never echo model text, so an injected key name cannot reach logs.
 from __future__ import annotations
 
 import json
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from pumpgrok.core.errors import PumpgrokError
 
 __all__ = ["StrictParseError", "parse_strict"]
-
-T = TypeVar("T", bound=BaseModel)
 
 
 class StrictParseError(PumpgrokError):
@@ -42,7 +40,7 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def parse_strict(raw: str, model: type[T]) -> T:
+def parse_strict[T: BaseModel](raw: str, model: type[T]) -> T:
     """Parse ``raw`` as one JSON object that validates against ``model`` exactly."""
     if not isinstance(raw, str):
         raise StrictParseError("model answer is not text")
