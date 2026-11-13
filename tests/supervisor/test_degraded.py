@@ -177,7 +177,7 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
             "FillRecorded",
             "PositionClosed",
         ]
-        rollover = rows[1]
+        rollover = rows[145]
         assert rollover["type"] == "DailyRollover"
         assert rollover["payload"]["day_utc"] == "2026-01-01"
         assert rollover["idempotency_key"] == rollover_key("2026-01-01")
