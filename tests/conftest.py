@@ -16,6 +16,8 @@ import websockets.asyncio.client
 
 import pumpgrok.engine.monitor
 from harness import NetworkBlocked
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
 
 _MESSAGE = "outbound network is blocked in tests; use httpx.MockTransport"
 
@@ -35,3 +37,22 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(websockets.asyncio.client, "connect", _blocked_sync)
     monkeypatch.setattr(websockets, "connect", _blocked_sync)
     monkeypatch.setattr(pumpgrok.engine.monitor, "connect", _blocked_sync)
+
+
+
+@pytest.fixture
+def roster_operator_grants(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Grant each seat every tool its own roster lists, without writing ledger rows.
+
+    The production gate reads grants from ConfigChanged rows in the paper ledger. Tests that
+    assert that ledger exactly (for example an empty event list) cannot carry those rows, so
+    they opt in here and the grant is supplied at the gate. The roster still decides: a seat
+    never receives a tool its own roster does not list.
+    """
+
+    def allows(_self: oc.OperatorGrants, seat: str, tool: str) -> bool:
+        if seat not in EXPECTED_SEAT_IDS:
+            return False
+        return tool in roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)
+
+    monkeypatch.setattr(oc.OperatorGrants, "allows", allows)

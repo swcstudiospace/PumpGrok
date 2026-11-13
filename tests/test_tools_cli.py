@@ -64,6 +64,9 @@ def _ledger_kinds(tmp_path: Path) -> list[str]:
         store.close()
 
 
+pytestmark = pytest.mark.usefixtures("roster_operator_grants")
+
+
 @pytest.fixture(autouse=True)
 def _03_07_clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip PUMPGROK_* and secret-shaped names so CLI tests set what they need."""

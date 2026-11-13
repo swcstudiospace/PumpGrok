@@ -29,6 +29,8 @@ from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.ledger.autonomy import autonomy_rows
 from pumpgrok.supervisor.health import build_status
 
+pytestmark = pytest.mark.usefixtures("roster_operator_grants")
+
 GROK_SECRET = "grok-secret-plant-7f3a9c2e1b"  # pragma: allowlist secret: planted no-echo value
 RPC_SECRET = "rpc-secret-plant-4d8b1f6a93"  # pragma: allowlist secret: planted no-echo value
 

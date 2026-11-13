@@ -42,7 +42,6 @@ import hmac
 import json
 import os
 import pwd
-import secrets
 import sqlite3
 import stat
 from collections.abc import Iterable, Mapping
@@ -52,6 +51,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from pumpgrok.core.binding_key import draw_key_material
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -317,7 +317,7 @@ def init_key(operator_dir: Path) -> None:
     except FileExistsError as exc:
         raise OperatorChoiceError("refused: an operator key already exists") from exc
     with os.fdopen(fd, "w", encoding="ascii") as handle:
-        handle.write(secrets.token_hex(32) + "\n")
+        handle.write(draw_key_material(32).hex() + "\n")
         handle.flush()
         os.fsync(handle.fileno())
 
@@ -358,7 +358,7 @@ def _commit(
     ledger_rows = _latest_scope_rows(store.read(types=["ConfigChanged"], limit=None))
     previous = _authority(stored, ledger_rows).get(scope)
     ts_utc = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    payload = {"v": 1, **body, "at": ts_utc, "nonce": secrets.token_hex(8)}
+    payload = {"v": 1, **body, "at": ts_utc, "nonce": draw_key_material(8).hex()}
     digest = _digest(payload)
     idempotency_key = f"operator-choice|{digest}"
     keys_changed = [f"{SCOPE_PREFIX}{scope}"]
