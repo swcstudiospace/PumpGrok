@@ -19,12 +19,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from replay_timeline import Tick, build_replay_adapter
 
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -39,28 +39,14 @@ S0 = 42_000_000_000
 T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
-
-class Curves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot | None]) -> None:
-        self.reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self.reads) > 1:
-            return self.reads.pop(0)
-        return self.reads[0]
-
-
-def snap(s: int, t: int) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t)
+#: The curve is one open tick at START: every read prices at (S0, T0).
+CURVE: tuple[Tick, ...] = ((0.0, S0, T0, False),)
 
 
 class Harness:
     def __init__(
         self,
         root: Path,
-        reads: list[CurveSnapshot | None],
         *,
         autonomy: str = "autonomous-paper",
         seed: int = 7,
@@ -68,9 +54,8 @@ class Harness:
         self.clock = FixtureClock(START)
         self.store = LedgerStore(str(root / "ledger.sqlite"))
         self.store.set_meta("initial_equity_lamports", str(EQUITY))
-        self.store.set_meta("source", "paper")
+        self.store.set_meta("source", "replay")
         self.ids = IdFactory(self.clock, make_rng(seed))
-        self.curves = Curves(reads)
         budget = RiskBudget()
         self.risk = RiskEngine(
             store=self.store,
@@ -80,14 +65,17 @@ class Harness:
             autonomy=autonomy,
             get_reserves=lambda _mint: (S0, T0),
         )
-        self.adapter = PaperAdapter(
-            store=self.store,
-            risk=self.risk,
-            ids=self.ids,
-            clock=self.clock,
-            rng=make_rng(seed),
-            budget=budget,
-            price_source=self.curves,
+        self.adapter = build_replay_adapter(
+            root,
+            self.clock,
+            self.store,
+            self.risk,
+            self.ids,
+            make_rng(seed),
+            budget,
+            mint=MINT,
+            start=START,
+            timeline=CURVE,
         )
 
     async def drive(self, *coros: Awaitable[Any]) -> list[Any]:
@@ -135,7 +123,6 @@ class Harness:
         )
 
     async def open_position(self) -> Fill:
-        self.curves.reads = [snap(S0, T0)]
         result = await self.drive(
             self.adapter.place(self.buy_request(), seat="bot-04-sniper", correlation_id="test")
         )
@@ -168,8 +155,7 @@ def digest(trace: dict[str, Any]) -> str:
 
 
 async def scn_buy_order_placed(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
-    h.curves.reads = [snap(S0, T0)]
+    h = Harness(root)
     buy = await h.drive(
         h.adapter.place(h.buy_request(), seat="bot-04-sniper", correlation_id="test")
     )
@@ -177,18 +163,16 @@ async def scn_buy_order_placed(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_rule_exit_consumes_approval(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units, exit_reason="stop_loss")
     sell = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
     return {"outcome": outcome(sell[0]), "rows": h.ledger()}
 
 
 async def scn_sell_wrong_seat_refused_then_replayed(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
     first = await h.drive(h.adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
     second = await h.drive(h.adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
@@ -197,7 +181,7 @@ async def scn_sell_wrong_seat_refused_then_replayed(root: Path) -> dict[str, Any
 
 async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
     """A batch write for a sell from the wrong seat is refused by the ACCEPTED re-check."""
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units)
     written = await h.drive(
@@ -208,7 +192,7 @@ async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
             out0=1_000_000,
             threshold=990_000,
             impact=Decimal("0.0125"),
-            ledger_source="paper",
+            ledger_source="replay",
             correlation_id="test",
             seat="bot-04-sniper",
             exit_reason=None,
@@ -219,9 +203,8 @@ async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
 
 
 async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     original = h.store.append_batch
 
     def collide(rows: Any) -> Any:
@@ -246,7 +229,7 @@ async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
 
 
 async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units, exit_reason="take_profit")
     order_id = h.ids.ulid()
@@ -259,7 +242,7 @@ async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
             out0=1_000_000,
             threshold=990_000,
             impact=Decimal("0.0125"),
-            ledger_source="paper",
+            ledger_source="replay",
             correlation_id="test",
             seat=SELL_SEAT,
             exit_reason="take_profit",
@@ -270,7 +253,7 @@ async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
 
 
 async def scn_direct_append_order_batch_duplicate(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units, exit_reason="take_profit")
     order_id = h.ids.ulid()
@@ -281,7 +264,7 @@ async def scn_direct_append_order_batch_duplicate(root: Path) -> dict[str, Any]:
         "out0": 1_000_000,
         "threshold": 990_000,
         "impact": Decimal("0.0125"),
-        "ledger_source": "paper",
+        "ledger_source": "replay",
         "correlation_id": "test",
         "seat": SELL_SEAT,
         "exit_reason": "take_profit",

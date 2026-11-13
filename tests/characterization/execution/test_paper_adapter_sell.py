@@ -18,12 +18,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from replay_timeline import Tick, build_replay_adapter
 
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -39,27 +39,22 @@ T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
 
-class Curves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot | None]) -> None:
-        self.reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self.reads) > 1:
-            return self.reads.pop(0)
-        return self.reads[0]
-
-
-def snap(s: int, t: int) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t)
+#: The curve is one open tick at START: every read prices at (S0, T0).
+CURVE: tuple[Tick, ...] = ((0.0, S0, T0, False),)
+#: Sell slippage: S falls 5% between the sell's ACCEPTED read (+4.0s) and its CONFIRMING
+#: read (+5.0s, one drive step later). The BUY reads (+1s, +3s) stay at (S0, T0).
+SLIPPAGE_AT_S = 4.5
+SLIPPAGE: tuple[Tick, ...] = (
+    (0.0, S0, T0, False),
+    (SLIPPAGE_AT_S, S0 - S0 // 20, T0, False),
+)
 
 
 class Harness:
     def __init__(
         self,
         root: Path,
-        reads: list[CurveSnapshot | None],
+        timeline: tuple[Tick, ...] = CURVE,
         *,
         autonomy: str = "autonomous-paper",
         seed: int = 7,
@@ -67,9 +62,8 @@ class Harness:
         self.clock = FixtureClock(START)
         self.store = LedgerStore(str(root / "ledger.sqlite"))
         self.store.set_meta("initial_equity_lamports", str(EQUITY))
-        self.store.set_meta("source", "paper")
+        self.store.set_meta("source", "replay")
         self.ids = IdFactory(self.clock, make_rng(seed))
-        self.curves = Curves(reads)
         budget = RiskBudget()
         self.risk = RiskEngine(
             store=self.store,
@@ -79,14 +73,17 @@ class Harness:
             autonomy=autonomy,
             get_reserves=lambda _mint: (S0, T0),
         )
-        self.adapter = PaperAdapter(
-            store=self.store,
-            risk=self.risk,
-            ids=self.ids,
-            clock=self.clock,
-            rng=make_rng(seed),
-            budget=budget,
-            price_source=self.curves,
+        self.adapter = build_replay_adapter(
+            root,
+            self.clock,
+            self.store,
+            self.risk,
+            self.ids,
+            make_rng(seed),
+            budget,
+            mint=MINT,
+            start=START,
+            timeline=timeline,
         )
 
     async def drive(self, *coros: Awaitable[Any]) -> list[Any]:
@@ -141,7 +138,6 @@ class Harness:
         )
 
     async def open_position(self) -> Fill:
-        self.curves.reads = [snap(S0, T0)]
         result = await self.drive(
             self.adapter.place(self.buy_request(), seat="bot-04-sniper", correlation_id="test")
         )
@@ -174,9 +170,8 @@ def digest(trace: dict[str, Any]) -> str:
 
 
 async def scn_sell_full_close(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units), seat=SELL_SEAT, correlation_id="test"
@@ -186,9 +181,8 @@ async def scn_sell_full_close(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_partial_over_holding(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units * 2), seat=SELL_SEAT, correlation_id="test"
@@ -198,9 +192,8 @@ async def scn_sell_partial_over_holding(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_size_based(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     sell = await h.drive(
         h.adapter.place(h.sell_request(size=SIZE // 2), seat=SELL_SEAT, correlation_id="test")
     )
@@ -208,7 +201,7 @@ async def scn_sell_size_based(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_no_position(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     sell = await h.drive(
         h.adapter.place(h.sell_request(units=1_000_000), seat=SELL_SEAT, correlation_id="test")
     )
@@ -216,9 +209,8 @@ async def scn_sell_no_position(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_below_liquidity_floor(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     sell = await h.drive(
         h.adapter.place(h.sell_request(units=T0 // 5), seat=SELL_SEAT, correlation_id="test")
     )
@@ -226,9 +218,9 @@ async def scn_sell_below_liquidity_floor(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_no_reserves_accepted(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    # Verified replay cannot remove a curve once a tick exists: the ACCEPTED read stays priced.
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [None]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units), seat=SELL_SEAT, correlation_id="test"
@@ -238,9 +230,8 @@ async def scn_sell_no_reserves_accepted(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_slippage_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root, SLIPPAGE)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0 - S0 // 20, T0)]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units), seat=SELL_SEAT, correlation_id="test"
@@ -250,9 +241,9 @@ async def scn_sell_slippage_confirming(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_no_reserves_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    # Verified replay cannot remove a curve once a tick exists: the CONFIRMING read stays priced.
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), None]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units), seat=SELL_SEAT, correlation_id="test"
@@ -262,9 +253,8 @@ async def scn_sell_no_reserves_confirming(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_concurrent_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     first = h.sell_request(units=buy.filled_units)
     second = h.sell_request(units=buy.filled_units)
     results = await h.drive(
@@ -275,9 +265,8 @@ async def scn_sell_concurrent_confirming(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_repeat_replays_fill(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
     first = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
     second = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
@@ -285,15 +274,16 @@ async def scn_sell_repeat_replays_fill(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_direct_place_sell(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
+    curve0 = await h.adapter._read_curve(MINT)
+    assert curve0 is not None
     result = await h.drive(
         h.adapter._place_sell(
             request,
-            curve0=snap(S0, T0),
-            ledger_source="paper",
+            curve0=curve0,
+            ledger_source="replay",
             correlation_id="test",
             seat=SELL_SEAT,
             exit_reason=None,
