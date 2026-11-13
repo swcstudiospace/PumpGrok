@@ -258,25 +258,33 @@ class GrokGateway:
     async def _call(self, request: GrokRequest, text: str, key: str) -> GrokOutcome:
         if not self._breaker.admits():
             return _fallback(request, "breaker_open")
+        started = False
         try:
-            charged = self._budget.try_charge(
-                reserve_priority=request.agent in RESERVE_AGENTS
-            )
-        except BudgetUnavailable:
-            return _fallback(request, "budget_unavailable")
-        if not charged:
-            return _fallback(request, "budget_exhausted")
-
-        self._breaker.start()
-        try:
-            async with self._slots, self._clock.timeout(TRANSPORT_DEADLINE_S):
+            # The deadline covers the wait for an in-flight slot: a queued call is
+            # bounded like any other and cannot reach the transport after its deadline.
+            async with self._clock.timeout(TRANSPORT_DEADLINE_S), self._slots:
+                # Re-check after the wait: the breaker may have opened, and the budget
+                # may have run out, while this call was queued.
+                if not self._breaker.admits():
+                    return _fallback(request, "breaker_open")
+                try:
+                    charged = self._budget.try_charge(
+                        reserve_priority=request.agent in RESERVE_AGENTS
+                    )
+                except BudgetUnavailable:
+                    return _fallback(request, "budget_unavailable")
+                if not charged:
+                    return _fallback(request, "budget_exhausted")
+                self._breaker.start()
+                started = True
                 response = await self._transport(request, text)
         except TimeoutError:
             return self._failed(request, key, "timeout")
         except Exception:
             return self._failed(request, key, "transport_error")
         except BaseException:
-            self._breaker.abandon()
+            if started:  # only the call that took the half-open probe may release it
+                self._breaker.abandon()
             raise
 
         if not isinstance(response, str):
