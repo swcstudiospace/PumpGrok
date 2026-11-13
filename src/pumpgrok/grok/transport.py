@@ -1,4 +1,4 @@
-"""x.ai transport behind the gateway (GRK-05, GRK-06).
+"""x.ai and replay transports behind the gateway (GRK-05, GRK-06, GRK-08).
 
 ``XaiTransport`` is the live ``GrokTransport``. It refuses to exist without a
 key, sends only prompts and schemas registered by digest, bounds the call

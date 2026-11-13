@@ -14,8 +14,6 @@ import asyncio
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
-
 from pumpgrok.core.budget import CallBudget
 from pumpgrok.core.llm import GrokOps
 from pumpgrok.core.ratelimit import RateLimiter

@@ -1,4 +1,4 @@
-"""Untrusted input stays data, model output parses strictly, and the x.ai transport fails closed (GRK-05).
+"""Untrusted input stays data, model output parses strictly, and x.ai fails closed (GRK-05).
 
 Harness: XaiTransport over httpx.MockTransport (no network), GrokGateway with a
 FixtureClock and sidecar SQLite files under tmp_path.
