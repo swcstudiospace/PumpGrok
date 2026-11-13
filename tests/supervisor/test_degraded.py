@@ -165,6 +165,8 @@ async def test_ten_seat_smoke_cycle_writes_ledger_and_exits_0(tmp_path: Path) ->
         assert rows[0]["type"] == "JournalNote"
         assert "engine decision=buy reason=ok" in str(rows[0]["payload"]["text"])
         assert [row["type"] for row in rows[2:]] == [
+            *["ConfigChanged"] * 143,
+            "DailyRollover",
             "OrderRejected",
             "OrderPlaced",
             "FillRecorded",
@@ -196,6 +198,7 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
         rows = store.read(limit=None)
         assert [row["type"] for row in rows] == [
             "JournalNote",
+            *["ConfigChanged"] * 144,
             "DailyRollover",
             "OrderRejected",
             "OrderPlaced",
