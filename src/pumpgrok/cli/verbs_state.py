@@ -151,7 +151,8 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
     refusal = _mode_refusal(args)
     if refusal is not None:
         return refusal
-    if resolve_wake_mode(args.wake_mode, settings.events.wake_mode) == "event":
+    wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
+    if wake_mode == "event":
         problems = event_mode_problems(installed_job_findings())
         if problems:
             _say(
@@ -160,12 +161,6 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 *(f"  - {problem}" for problem in problems),
             )
             return EXIT_CONFIG
-        _say(
-            sys.stderr,
-            "event mode refused: run --replay cannot wake seats from events yet; the replay "
-            "supervisor entry points do not take wake_mode (supervisor/scheduler/serve.py)",
-        )
-        return EXIT_NOT_IMPLEMENTED
     if settings.effective_mode == "paper":
         missing = _paper_start_gate(settings)
         if missing:
@@ -177,8 +172,8 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             )
             return EXIT_CONFIG
     if args.serve:
-        return _serve_replay_loop(Path(args.replay), settings)
-    return _skip_cycle(Path(args.replay), settings)
+        return _serve_replay_loop(Path(args.replay), settings, wake_mode)
+    return _skip_cycle(Path(args.replay), settings, wake_mode)
 
 
 def _mode_refusal(args: argparse.Namespace) -> int | None:
@@ -201,7 +196,7 @@ def _mode_refusal(args: argparse.Namespace) -> int | None:
     return None
 
 
-def _serve_replay_loop(source: Path, settings: Settings) -> int:
+def _serve_replay_loop(source: Path, settings: Settings, wake_mode: str) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics."""
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
@@ -233,11 +228,12 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             limits=settings.limits,
             active_set=operator_active_set(settings),
             promotion_check=promotion,
+            wake_mode=wake_mode,
         )
     )
 
 
-def _skip_cycle(source: Path, settings: Settings) -> int:
+def _skip_cycle(source: Path, settings: Settings, wake_mode: str) -> int:
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
@@ -250,6 +246,7 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
         budget=settings.risk,
         limits=settings.limits,
         active_set=operator_active_set(settings),
+        wake_mode=wake_mode,
     )
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     _say(sys.stdout, *(format_trade(trade) for trade in result.trades))

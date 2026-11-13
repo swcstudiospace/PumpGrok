@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from pumpgrok.cli import EXIT_CONFIG, EXIT_NOT_IMPLEMENTED, EXIT_OK, main
+from pumpgrok.cli import EXIT_CONFIG, EXIT_OK, main
 from pumpgrok.config import settings as settings_mod
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.ledger import operator_choices as oc
@@ -165,28 +165,13 @@ def test_run_settings_event_mode_refuses_superseded_job(
     assert supervisor_calls == []
 
 
-def test_run_event_flag_is_refused_until_replay_supervisor_takes_wake_mode(
-    hermes_home: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    supervisor_calls: list[dict[str, Any]],
-) -> None:
-    """Event mode must not silently run cadence; the replay entry points lack wake_mode."""
-    monkeypatch.chdir(tmp_path)
-    code = main(["run", "--mode", "paper", "--once", "--replay", SMOKE, "--wake-mode", "event"])
-    assert code == EXIT_NOT_IMPLEMENTED
-    assert "wake_mode" in capsys.readouterr().err
-    assert supervisor_calls == []
-
-
 def test_run_event_path_builds_event_supervisor(
     hermes_home: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     supervisor_calls: list[dict[str, Any]],
 ) -> None:
-    """RED until run_once_replay / serve_replay pass wake_mode into Supervisor (serve.py)."""
+    """Event mode builds the Supervisor with wake_mode event."""
     monkeypatch.chdir(tmp_path)
     _record_paper_authority()
     assert (
