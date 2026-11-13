@@ -1,4 +1,4 @@
-"""Event-mode metric families on the one registry and the one GET /metrics endpoint (EVT-12, GRK-10).
+"""Event-mode metric families on one registry and one GET /metrics endpoint (EVT-12, GRK-10).
 
 Cadence mode registers the nine OBS-003 families and nothing else, so its exposition bytes are
 pinned. Event mode adds the event families after the nine on the same registry. The nine blocks
