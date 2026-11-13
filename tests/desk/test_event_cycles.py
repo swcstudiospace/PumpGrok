@@ -186,7 +186,9 @@ def _rows(h: Harness, *types: str) -> list[dict[str, Any]]:
 
 
 @pytest.mark.parametrize("kind", list(EventKind), ids=lambda kind: kind.value)
-async def test_each_event_wakes_its_seats_once_with_that_event(tmp_path: Path, kind: EventKind) -> None:
+async def test_each_event_wakes_its_seats_once_with_that_event(
+    tmp_path: Path, kind: EventKind
+) -> None:
     h = await _open(tmp_path)
     try:
         before = {seat: h.supervisor.tasks[seat].cycles for seat in ROSTER}
@@ -233,7 +235,12 @@ async def test_intent_places_one_buy_through_risk_and_the_granted_tool(tmp_path:
     try:
         seen = await _publish(h, EventKind.strategy_intent, MINT_A)
         sniper = _result(seen, SNIPER)
-        assert sniper == {"orders": 1, "status": "filled", "reason": "ok", "trigger": "strategy_intent"}
+        assert sniper == {
+            "orders": 1,
+            "status": "filled",
+            "reason": "ok",
+            "trigger": "strategy_intent",
+        }
         assert [t.mint for t in h.trading.attempts] == [MINT_A]
         assert len(_rows(h, "PositionOpened")) == 1
         assert len(_rows(h, "FillRecorded")) == 1
@@ -245,7 +252,11 @@ async def test_risk_veto_withholds_every_order(tmp_path: Path) -> None:
     h = await _open(tmp_path)
     try:
         seen = await _publish(h, EventKind.risk_veto, MINT_A)
-        assert _result(seen, SNIPER) == {"orders": 0, "withheld": "risk_veto", "trigger": "risk_veto"}
+        assert _result(seen, SNIPER) == {
+            "orders": 0,
+            "withheld": "risk_veto",
+            "trigger": "risk_veto",
+        }
         await _publish(h, EventKind.halt, MINT_A)
         assert _result(h.seen, SNIPER)["withheld"] == "halt"
         assert h.trading.attempts == []

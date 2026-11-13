@@ -132,7 +132,9 @@ async def _open(
     rpc: Any | None = None,
     degraded: DegradedState | None = None,
 ) -> Harness:
-    runtime = open_replay_runtime(dataset, FilterSettings(), seed=SEED, ledger_path=tmp_path / "l.db")
+    runtime = open_replay_runtime(
+        dataset, FilterSettings(), seed=SEED, ledger_path=tmp_path / "l.db"
+    )
     runtime.clock.advance_to(parse_ts_utc(TICK_A))
     trading = _replay_trading(runtime)
     degraded = degraded if degraded is not None else DegradedState()
@@ -432,11 +434,7 @@ def test_aux_cycles_never_import_the_grok_gateway() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.Import)
         for alias in node.names
-    } | {
-        node.module
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module
-    }
+    } | {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module}
     assert not [name for name in names if name.startswith("pumpgrok.grok")]
 
 
