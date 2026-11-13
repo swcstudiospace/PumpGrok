@@ -101,7 +101,12 @@ async def _scout(
         }
     )
     verdict = decide_token(token, filter_cfg, ctx.clock.now())
-    return {"mint": mint, "decision": verdict.decision, "reason": verdict.reason, "trigger": trigger}
+    return {
+        "mint": mint,
+        "decision": verdict.decision,
+        "reason": verdict.reason,
+        "trigger": trigger,
+    }
 
 
 async def _risk(ctx: SeatContext, *, risk: RiskEngine, trading: _ReplayTrading) -> dict[str, Any]:
@@ -158,8 +163,11 @@ async def _sniper(ctx: SeatContext, *, trading: _ReplayTrading) -> dict[str, Any
     return {"orders": 1, **placed, "trigger": trigger}
 
 
-async def _rug(ctx: SeatContext, *, degraded: DegradedState, curves: FixtureCurveSource) -> dict[str, Any]:
-    """Rug: BLIND when every RPC endpoint is down; UNREAD when the curve cannot be read; READABLE otherwise.
+async def _rug(
+    ctx: SeatContext, *, degraded: DegradedState, curves: FixtureCurveSource
+) -> dict[str, Any]:
+    """Rug: BLIND when every RPC endpoint is down; UNREAD when the curve cannot be read;
+    READABLE otherwise.
 
     READABLE is not a rug determination: no rug analysis service exists yet.
     """
@@ -175,7 +183,9 @@ async def _rug(ctx: SeatContext, *, degraded: DegradedState, curves: FixtureCurv
 
 
 async def _exit(ctx: SeatContext, *, store: LedgerStore, trading: _ReplayTrading) -> dict[str, Any]:
-    """Exit: one protective rule pass on the curve reads at this instant. No gateway in this path."""
+    """Exit: one protective rule pass on the curve reads at this instant.
+    No gateway in this path.
+    """
     opened = len(store.read(types=["PositionOpened"], limit=None))
     trigger = _trigger_name(TRIGGER_EVENT.get())
     if ctx.observe_only:

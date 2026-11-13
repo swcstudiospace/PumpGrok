@@ -30,17 +30,36 @@ once per fixture, each in its own process, so hash-seed randomisation is exercis
     .venv/bin/python -c "import sys, asyncio, pathlib, tempfile; sys.path.insert(0, 'tests/desk'); \
 import test_event_golden_hashes as g; n = sys.argv[1]; \
 r = asyncio.run(g.run_event_fixture(g.FIXTURES / n, pathlib.Path(tempfile.mkdtemp()))); \
-print(n, f'ledger={r.ledger_hash} trace={r.trace_hash} rows={r.rows} intents={r.intents} errors={r.errors} dlq={r.dlq}')" smoke-10m
+print(n, f'ledger={r.ledger_hash} trace={r.trace_hash} rows={r.rows} intents={r.intents} \
+errors={r.errors} dlq={r.dlq}')" smoke-10m
 
 Probe output (two independent processes per fixture, each with a fresh scratch directory; the two
 runs of every fixture agreed, and the values below were copied from this output):
 
-    smoke-10m first  ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6 rows=145 intents=0 errors=[] dlq=0
-    smoke-10m second ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4 trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6 rows=145 intents=0 errors=[] dlq=0
-    smoke first      ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02 rows=154 intents=2 errors=[] dlq=0
-    smoke second     ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02 rows=154 intents=2 errors=[] dlq=0
-    soak-3d first   ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95 trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338 rows=147 intents=0 errors=[] dlq=0
-    soak-3d second  ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95 trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338 rows=147 intents=0 errors=[] dlq=0
+    smoke-10m first
+        ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4
+        trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6
+        rows=145 intents=0 errors=[] dlq=0
+    smoke-10m second
+        ledger=1b28f985c8cef3eec296890821d07475ad8ab917e6c8fa8a2dcbabf610ccf9e4
+        trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6
+        rows=145 intents=0 errors=[] dlq=0
+    smoke first
+        ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747
+        trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
+        rows=154 intents=2 errors=[] dlq=0
+    smoke second
+        ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747
+        trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
+        rows=154 intents=2 errors=[] dlq=0
+    soak-3d first
+        ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95
+        trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338
+        rows=147 intents=0 errors=[] dlq=0
+    soak-3d second
+        ledger=6d43a59830679c72386d9eca426fb1dc4cd14d13a6cb495eb3e950a3433cfa95
+        trace=3778e472e3a4502c5eb112e9b54a2c5316ce709ab6602742e90f702d79689338
+        rows=147 intents=0 errors=[] dlq=0
 
 soak-3d admits no candidate: its rows carry no ``unique_buyers``, so the engine fails closed and
 the sniper path is not exercised there. Its golden pins the seat trace and the seeded ledger only.
@@ -199,7 +218,7 @@ def _tick_payload(row: Mapping[str, Any]) -> dict[str, Any]:
 
 async def run_event_fixture(dataset_dir: Path, scratch: Path) -> EventRun:
     """One deterministic event-mode run of a fixture dataset through the bus."""
-    scratch.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(scratch.mkdir, parents=True, exist_ok=True)
     runtime: ReplayRuntime = open_replay_runtime(
         dataset_dir, FilterSettings(), seed=SEED, ledger_path=scratch / "ledger.sqlite"
     )
@@ -323,9 +342,7 @@ def test_event_run_matches_its_pinned_golden(name: str, runs: dict[str, EventRun
 
 
 @pytest.mark.parametrize("name", FIXTURE_NAMES)
-def test_event_run_has_no_errors_and_no_dead_letters(
-    name: str, runs: dict[str, EventRun]
-) -> None:
+def test_event_run_has_no_errors_and_no_dead_letters(name: str, runs: dict[str, EventRun]) -> None:
     run = runs[name]
     assert run.errors == []
     assert run.dlq == 0

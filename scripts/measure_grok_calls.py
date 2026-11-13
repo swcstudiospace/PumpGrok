@@ -134,7 +134,7 @@ def narrative_agent(gateway: GrokGateway, clock: FixtureClock) -> NarrativeAgent
 
 async def measure(dataset_dir: Path) -> Measurement:
     """Replay every candidate row through the real gateway and count the calls it makes."""
-    if not dataset_dir.is_dir():
+    if not await asyncio.to_thread(dataset_dir.is_dir):
         raise MeasureError(f"dataset directory not found: {dataset_dir}")
     # Verifies the manifest, every listed digest and stray data files before any row is read.
     dataset = load_dataset(dataset_dir)

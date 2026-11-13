@@ -173,6 +173,7 @@ async def test_the_report_day_comes_from_the_injected_clock(tmp_path: Path) -> N
         h.clock.advance_to(parse_ts_utc("2026-03-04T12:00:00.000Z"))
         result = await _deliver(h, EventKind.position_closed)
         assert result["rollup"] == str(report_path_for(h.reports_dir, "daily", "2026-03-04"))
-        assert Path(str(result["rollup"])).is_file()
+        rollup_path = Path(str(result["rollup"]))
+        assert await asyncio.to_thread(rollup_path.is_file)
     finally:
         await _close(h)
