@@ -1014,9 +1014,12 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         run_all.main()
-        g7_argv = calls[-1][1]
+        argv_by_gate = {name.split()[0]: argv for name, argv in calls}
+        g7_argv = argv_by_gate["G-7"]
         assert "--bot" not in g7_argv
         assert "--repo" in g7_argv
+        # G-8 reads no arguments (check_idle_grok.py has no argparse): its argv is the script alone.
+        assert argv_by_gate["G-8"] == [str(GATES / "check_idle_grok.py")]
 
     @pytest.mark.parametrize("script", ALL_GATE_SCRIPTS)
     def test_gate_imports_stay_in_stdlib_and_pyyaml(self, script):
