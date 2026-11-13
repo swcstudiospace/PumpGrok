@@ -1,6 +1,7 @@
 {
   "fixture": "bonding_curve_probe",
-  "layout_status": "ASSUMED",
+  "layout_status": "VERIFIED",
+  "reviewed_by": "human:Ove",
   "endpoint": "https://api.mainnet-beta.solana.com",
   "account": null,
   "commitment": "confirmed",

@@ -19,12 +19,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from replay_timeline import Tick, build_replay_adapter
 
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -39,28 +39,14 @@ S0 = 42_000_000_000
 T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
-
-class Curves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot | None]) -> None:
-        self.reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self.reads) > 1:
-            return self.reads.pop(0)
-        return self.reads[0]
-
-
-def snap(s: int, t: int) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t)
+#: The curve is one open tick at START: every read prices at (S0, T0).
+CURVE: tuple[Tick, ...] = ((0.0, S0, T0, False),)
 
 
 class Harness:
     def __init__(
         self,
         root: Path,
-        reads: list[CurveSnapshot | None],
         *,
         autonomy: str = "autonomous-paper",
         seed: int = 7,
@@ -68,9 +54,8 @@ class Harness:
         self.clock = FixtureClock(START)
         self.store = LedgerStore(str(root / "ledger.sqlite"))
         self.store.set_meta("initial_equity_lamports", str(EQUITY))
-        self.store.set_meta("source", "paper")
+        self.store.set_meta("source", "replay")
         self.ids = IdFactory(self.clock, make_rng(seed))
-        self.curves = Curves(reads)
         budget = RiskBudget()
         self.risk = RiskEngine(
             store=self.store,
@@ -80,14 +65,17 @@ class Harness:
             autonomy=autonomy,
             get_reserves=lambda _mint: (S0, T0),
         )
-        self.adapter = PaperAdapter(
-            store=self.store,
-            risk=self.risk,
-            ids=self.ids,
-            clock=self.clock,
-            rng=make_rng(seed),
-            budget=budget,
-            price_source=self.curves,
+        self.adapter = build_replay_adapter(
+            root,
+            self.clock,
+            self.store,
+            self.risk,
+            self.ids,
+            make_rng(seed),
+            budget,
+            mint=MINT,
+            start=START,
+            timeline=CURVE,
         )
 
     async def drive(self, *coros: Awaitable[Any]) -> list[Any]:
@@ -135,7 +123,6 @@ class Harness:
         )
 
     async def open_position(self) -> Fill:
-        self.curves.reads = [snap(S0, T0)]
         result = await self.drive(
             self.adapter.place(self.buy_request(), seat="bot-04-sniper", correlation_id="test")
         )
@@ -168,8 +155,7 @@ def digest(trace: dict[str, Any]) -> str:
 
 
 async def scn_buy_order_placed(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
-    h.curves.reads = [snap(S0, T0)]
+    h = Harness(root)
     buy = await h.drive(
         h.adapter.place(h.buy_request(), seat="bot-04-sniper", correlation_id="test")
     )
@@ -177,18 +163,16 @@ async def scn_buy_order_placed(root: Path) -> dict[str, Any]:
 
 
 async def scn_sell_rule_exit_consumes_approval(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units, exit_reason="stop_loss")
     sell = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
     return {"outcome": outcome(sell[0]), "rows": h.ledger()}
 
 
 async def scn_sell_wrong_seat_refused_then_replayed(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
     first = await h.drive(h.adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
     second = await h.drive(h.adapter.place(request, seat="bot-04-sniper", correlation_id="test"))
@@ -197,7 +181,7 @@ async def scn_sell_wrong_seat_refused_then_replayed(root: Path) -> dict[str, Any
 
 async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
     """A batch write for a sell from the wrong seat is refused by the ACCEPTED re-check."""
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units)
     written = await h.drive(
@@ -208,7 +192,7 @@ async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
             out0=1_000_000,
             threshold=990_000,
             impact=Decimal("0.0125"),
-            ledger_source="paper",
+            ledger_source="replay",
             correlation_id="test",
             seat="bot-04-sniper",
             exit_reason=None,
@@ -219,9 +203,8 @@ async def scn_direct_batch_refused_at_accepted(root: Path) -> dict[str, Any]:
 
 
 async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     original = h.store.append_batch
 
     def collide(rows: Any) -> Any:
@@ -246,7 +229,7 @@ async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
 
 
 async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units, exit_reason="take_profit")
     order_id = h.ids.ulid()
@@ -259,7 +242,7 @@ async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
             out0=1_000_000,
             threshold=990_000,
             impact=Decimal("0.0125"),
-            ledger_source="paper",
+            ledger_source="replay",
             correlation_id="test",
             seat=SELL_SEAT,
             exit_reason="take_profit",
@@ -270,7 +253,7 @@ async def scn_direct_append_order_batch(root: Path) -> dict[str, Any]:
 
 
 async def scn_direct_append_order_batch_duplicate(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     request = h.sell_request(units=buy.filled_units, exit_reason="take_profit")
     order_id = h.ids.ulid()
@@ -281,7 +264,7 @@ async def scn_direct_append_order_batch_duplicate(root: Path) -> dict[str, Any]:
         "out0": 1_000_000,
         "threshold": 990_000,
         "impact": Decimal("0.0125"),
-        "ledger_source": "paper",
+        "ledger_source": "replay",
         "correlation_id": "test",
         "seat": SELL_SEAT,
         "exit_reason": "take_profit",
@@ -303,13 +286,13 @@ SCENARIOS: dict[str, Callable[[Path], Awaitable[dict[str, Any]]]] = {
 }
 
 _PIN_TABLE = """
-buy_order_placed 684fdc433a6141f8d4cc2177504fb684d568ce3214df9007dd748ca5e7c0c9bf
-sell_rule_exit_consumes 1ace216d40c7b7340a8bbe697564aaa278dd78212ccbd8f205005379b509b05f
-sell_wrong_seat_replayed 3500e284433e50b6d01098b05389a1d4dd25b671a82307f75c0ec32c1514e7e2
-consumed_approval_collision 35830f04d4344a52a1802a9369df433350f6919a7572e203783aca7934546df6
-direct_append_order_batch 3c81b0c6d469504494e929ab506067a68a444ffbd73cb27a036e5a5d267082d2
-direct_batch_duplicate 7b7e7581c42857ff15857e6d95a3c3edcbb9fbe622c1bf6fd077d15bc7d49e47
-direct_batch_refused_at_accepted c623616980d023388071556df21896060528624e6b324505ffe3fbecbd60d3d1
+buy_order_placed a0fa1398fb57f2671d68de1112effb55bae7423845193bd63ee766381e793472
+sell_rule_exit_consumes 1345752534dba821423ca33b5f89e25c9f3837619f0ed8ef8d98283fe029def1
+sell_wrong_seat_replayed 38a1181a713f356d9ceef73581b4bac90c4ff4e2677a482ccf7ea197927afcb0
+consumed_approval_collision 57c3bf3ff6d7e074add6992f7179dfa8422800f3471e6f344252b5e236cbc95f
+direct_append_order_batch 42c2fe2aae3399be34955f0e51047a60e1be53eca2dd0d2f215467bd276fe136
+direct_batch_duplicate f5a65c9ab86d8d634dcf49f18e3a9616370fbc8a63a0985d8eebb8aa399474ae
+direct_batch_refused_at_accepted f32204a7d695869a0dddba4ce2511c97fcd39426344cf2b0a1de7aead7d08847
 """
 PINS: dict[str, str] = dict(line.split() for line in _PIN_TABLE.strip().splitlines())
 

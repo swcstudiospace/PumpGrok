@@ -13,6 +13,7 @@ import random
 import sys
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -21,13 +22,16 @@ from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.curve_math import buy_out, sell_out
 from pumpgrok.execution.fees import FeeModel
-from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
+from pumpgrok.execution.paper_adapter import OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine, order_hash_for
+
+from .replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 EQUITY = 10_000_000_000
@@ -38,26 +42,10 @@ T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
 
-class ScriptedCurves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
-def _snap(s: int, t: int, *, complete: bool = False) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t, complete=complete)
-
-
 def _harness(
     tmp_path: Path,
-    reads: list[CurveSnapshot],
     *,
+    curve_ticks: list[dict[str, Any]] | None = None,
     seed: int = 7,
     autonomy: str = "autonomous-paper",
     budget: RiskBudget | None = None,
@@ -65,10 +53,11 @@ def _harness(
     size: int = SIZE,
     side: Side = Side.BUY,
 ) -> tuple[PaperAdapter, FixtureClock, OrderRequest]:
+    """Replay-bound adapter: the curve reads come from a verified dataset of ``curve_ticks``."""
     clock = FixtureClock(START)
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     ids = IdFactory(clock, make_rng(seed))
     engine = RiskEngine(
         store=store,
@@ -78,14 +67,17 @@ def _harness(
         autonomy=autonomy,  # type: ignore[arg-type]
         get_reserves=lambda _mint: (S0, T0),
     )
-    adapter = PaperAdapter(
+    ticks = curve_ticks if curve_ticks is not None else [tick(START, MINT, S0, T0)]
+    replay = replay_authority(tmp_path, clock, ticks)
+    adapter = build_paper_adapter(
+        SimpleNamespace(risk=budget),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(seed),
-        budget=budget if budget is not None else RiskBudget(),
-        price_source=ScriptedCurves(reads),
+        replay=replay,
+        source="replay",
         p_drop=p_drop,
     )
     request = OrderRequest(
@@ -119,7 +111,7 @@ async def _place(
 
 
 async def test_one_buy_flows_to_curve_priced_fill(tmp_path: Path) -> None:
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock, request = _harness(tmp_path)
     fees = FeeModel()
     venue_fee = fees.venue_fee(SIZE)
     x_net = SIZE - venue_fee
@@ -151,7 +143,7 @@ async def test_one_buy_flows_to_curve_priced_fill(tmp_path: Path) -> None:
 
 
 async def test_repeated_decision_returns_first_fill(tmp_path: Path) -> None:
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock, request = _harness(tmp_path)
     first = await _place(adapter, clock, request)
     second = await adapter.place(request, seat="bot-04-sniper", correlation_id="test")
     assert second.order_id == first.order_id
@@ -160,7 +152,7 @@ async def test_repeated_decision_returns_first_fill(tmp_path: Path) -> None:
 
 
 async def test_no_fill_without_passing_risk_decision(tmp_path: Path) -> None:
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0)], autonomy="manual-ticket")
+    adapter, clock, request = _harness(tmp_path, autonomy="manual-ticket")
     try:
         await _place(adapter, clock, request)
     except OrderRejectedError as exc:
@@ -173,7 +165,7 @@ async def test_no_fill_without_passing_risk_decision(tmp_path: Path) -> None:
 
 
 async def test_quote_is_curve_sourced(tmp_path: Path) -> None:
-    adapter, _clock, _request = _harness(tmp_path, [_snap(S0, T0)])
+    adapter, _clock, _request = _harness(tmp_path)
     quote = await adapter.quote("So11111111111111111111111111111111111111112", MINT, SIZE, 100)
     assert quote.source == "curve"
     assert quote.out_amount == buy_out(S0, T0, SIZE)
@@ -193,9 +185,7 @@ BIG = RiskBudget(
 
 async def test_full_fill_at_l_over_50(tmp_path: Path) -> None:
     size = S0 * 2 // 100
-    adapter, clock, request = _harness(
-        tmp_path, [_snap(S0, T0), _snap(S0, T0)], budget=BIG, size=size
-    )
+    adapter, clock, request = _harness(tmp_path, budget=BIG, size=size)
     fill = await _place(adapter, clock, request)
     assert fill.status.value == "filled"
     assert fill.filled_lamports == size
@@ -205,9 +195,7 @@ async def test_full_fill_at_l_over_50(tmp_path: Path) -> None:
 async def test_partial_fill_between_l_over_50_and_l_over_10(tmp_path: Path) -> None:
     size = S0 * 2 // 100 + 660_000_000
     assert S0 // 50 < size <= S0 // 10
-    adapter, clock, request = _harness(
-        tmp_path, [_snap(S0, T0), _snap(S0, T0)], budget=BIG, size=size
-    )
+    adapter, clock, request = _harness(tmp_path, budget=BIG, size=size)
     fill = await _place(adapter, clock, request)
     cap = S0 * 2 // 100
     assert fill.status.value == "partial"
@@ -219,7 +207,7 @@ async def test_partial_fill_between_l_over_50_and_l_over_10(tmp_path: Path) -> N
 
 async def test_below_liquidity_floor_rejects(tmp_path: Path) -> None:
     size = S0 // 10 + 1
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0)], budget=BIG, size=size)
+    adapter, clock, request = _harness(tmp_path, budget=BIG, size=size)
     try:
         await _place(adapter, clock, request)
     except OrderRejectedError as exc:
@@ -236,7 +224,10 @@ async def test_slippage_exceeded_charges_only_network_cost(tmp_path: Path) -> No
     big_s1 = S0 + S0 // 20
     k = S0 * T0
     t1 = k // big_s1
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0), _snap(big_s1, t1)])
+    # The ACCEPTED read sees START; the moved curve is visible only to the CONFIRMING read,
+    # which runs at least 0.4s after the ACCEPTED read at START+1.
+    moved = [tick(START, MINT, S0, T0), tick(START + 1.2, MINT, big_s1, t1)]
+    adapter, clock, request = _harness(tmp_path, curve_ticks=moved)
     try:
         await _place(adapter, clock, request)
     except OrderRejectedError as exc:
@@ -256,7 +247,7 @@ async def test_slippage_exceeded_charges_only_network_cost(tmp_path: Path) -> No
 
 
 async def test_tx_dropped_changes_no_balances(tmp_path: Path) -> None:
-    adapter, clock, request = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)], p_drop=1.0)
+    adapter, clock, request = _harness(tmp_path, p_drop=1.0)
     try:
         await _place(adapter, clock, request)
     except OrderRejectedError as exc:
@@ -271,8 +262,8 @@ async def test_tx_dropped_changes_no_balances(tmp_path: Path) -> None:
 
 async def test_same_seed_replays_identically(tmp_path: Path, tmp_path_factory: Any) -> None:
     other = tmp_path_factory.mktemp("replay")
-    first_adapter, first_clock, first_request = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
-    second_adapter, second_clock, second_request = _harness(other, [_snap(S0, T0), _snap(S0, T0)])
+    first_adapter, first_clock, first_request = _harness(tmp_path)
+    second_adapter, second_clock, second_request = _harness(other)
     first = await _place(first_adapter, first_clock, first_request)
     second = await _place(second_adapter, second_clock, second_request)
     assert first == second
@@ -284,7 +275,6 @@ async def test_same_seed_replays_identically(tmp_path: Path, tmp_path_factory: A
 async def test_sell_mirrors_buy_through_sell_out(tmp_path: Path) -> None:
     adapter, clock, buy_request = _harness(
         tmp_path,
-        [_snap(S0, T0), _snap(S0, T0), _snap(S0, T0), _snap(S0, T0), _snap(S0, T0)],
     )
     buy = await _place(adapter, clock, buy_request)
     assert await adapter.mark_to_market(MINT, correlation_id="test") is not None
@@ -309,7 +299,7 @@ async def test_sell_mirrors_buy_through_sell_out(tmp_path: Path) -> None:
 
 
 async def test_simulate_previews_full_without_writes(tmp_path: Path) -> None:
-    adapter, _clock, request = _harness(tmp_path, [_snap(S0, T0)])
+    adapter, _clock, request = _harness(tmp_path)
     sim = await adapter.simulate(
         mint=request.mint,
         side=request.side,
@@ -329,7 +319,7 @@ async def test_repeated_risk_refusal_replays_first_refusal(tmp_path: Path) -> No
     same ``OrderRejectedError`` (never a raw ``sqlite3.IntegrityError``) and
     must not append a second ``OrderRejected`` row.
     """
-    adapter, _clock, request = _harness(tmp_path, [_snap(S0, T0)], autonomy="manual-ticket")
+    adapter, _clock, request = _harness(tmp_path, autonomy="manual-ticket")
     try:
         await adapter.place(request, seat="bot-04-sniper", correlation_id="test")
     except OrderRejectedError as exc:

@@ -1,0 +1,27 @@
+{
+  "task_id": "v4-p13-01-tracer",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/phase-13-observation",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-01 Tasks 1 and 2: read-only observation bridge, replay recorder and transport boundary",
+  "status": "Approved by owner SomeRandmGuyy (human:SomeRandmGuyy) on 2026-11-12 for the checks recorded here. Phase integration and the canonical suite remain unverified and are not covered by this approval.",
+  "approved_by": "human:SomeRandmGuyy",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/datafeed/test_bridge.py tests/datafeed/test_readonly.py tests/replay/test_live_recorder.py tests/test_network_block.py --junitxml=phase13-reviewed-final.xml", "exit_code": 0, "output_tail": "JUnit: 78 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run mypy src/pumpgrok/datafeed/events.py src/pumpgrok/datafeed/bridge.py src/pumpgrok/datafeed/readonly.py src/pumpgrok/replay/live_recorder.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff check src/pumpgrok/datafeed/events.py src/pumpgrok/datafeed/bridge.py src/pumpgrok/datafeed/readonly.py src/pumpgrok/replay/live_recorder.py tests/datafeed/test_bridge.py tests/datafeed/test_readonly.py tests/replay/test_live_recorder.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check src/pumpgrok/datafeed/events.py src/pumpgrok/datafeed/bridge.py src/pumpgrok/datafeed/readonly.py src/pumpgrok/replay/live_recorder.py tests/datafeed/test_bridge.py tests/datafeed/test_readonly.py tests/replay/test_live_recorder.py", "exit_code": 0, "output_tail": "7 files already formatted."}
+  ],
+  "claims": [
+    {"claim": "The focused offline tracer, transport, recorder and network-block tests passed.", "evidence_command_index": 0},
+    {"claim": "The four changed runtime modules passed focused mypy.", "evidence_command_index": 1},
+    {"claim": "The changed source and test files passed focused ruff lint and format checks.", "evidence_command_index": 2}
+  ],
+  "unverified": [
+    "Independent human receipt approval is absent; no seat self-approval.",
+    "The full canonical suite, phase integration, live-provider compatibility and real provider frames were not verified.",
+    "Phase 12 verification remains stale and its TDD review unresolved.",
+    "No human curve or event status review was performed; no live trading capability is enabled."
+  ],
+  "rollback_plan": "Revert the tracer branch commits with git revert in a reviewed pull request. Recovery takes under five minutes; remove only the new source and test files, leaving existing ledger and operator data untouched."
+}

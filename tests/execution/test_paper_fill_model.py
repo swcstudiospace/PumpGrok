@@ -11,13 +11,15 @@ from pathlib import Path
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.curve_math import buy_out
 from pumpgrok.execution.fees import FeeModel
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
+
+from .replay_support import replay_authority, tick
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 EQUITY = 10_000_000_000
@@ -33,18 +35,8 @@ def _store(tmp_path: Path) -> LedgerStore:
     recreate_ledger_db(path)
     store = LedgerStore(str(path))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     return store
-
-
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
 
 
 async def test_paper_fill_prices_from_curve_math(tmp_path: Path) -> None:
@@ -63,16 +55,16 @@ async def test_paper_fill_prices_from_curve_math(tmp_path: Path) -> None:
             env={},
         )
         fees = FeeModel()
-        snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
-        adapter = PaperAdapter(
+        replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+        adapter = build_paper_adapter(
+            object(),
             store=store,
             risk=engine,
             ids=ids,
             clock=clock,
             rng=make_rng(51),
-            budget=RiskBudget(),
-            fees=fees,
-            price_source=_ScriptedCurves([snap, snap]),
+            replay=replay,
+            source="replay",
             p_drop=0.0,
         )
         order = OrderRequest(

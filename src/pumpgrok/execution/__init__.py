@@ -3,17 +3,29 @@
 from __future__ import annotations
 
 import random
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pumpgrok.core.ids import Clock, IdFactory
-from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter import PaperAdapter, PriceSource
+from pumpgrok.execution.paper_factory import VerifiedReplay, build_paper_adapter, verify_replay
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.limits import EngineLimits
 
-__all__ = ["PaperAdapter", "PriceSource", "build_adapter"]
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pumpgrok.datafeed.price import LivePriceSource
+    from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+__all__ = [
+    "PaperAdapter",
+    "PriceSource",
+    "VerifiedReplay",
+    "build_adapter",
+    "build_paper_adapter",
+    "verify_replay",
+]
 
 
 def build_adapter(
@@ -25,31 +37,29 @@ def build_adapter(
     clock: Clock,
     rng: random.Random,
     price_source: PriceSource | None = None,
+    replay: VerifiedReplay | None = None,
+    live_source: LivePriceSource | None = None,
+    reserves_observer: Callable[[CurveSnapshot], None] | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
-    """Build the PaperAdapter for live-paper and replay runs.
+    """Delegate to :func:`build_paper_adapter`; kept for existing callers.
 
-    Tests construct the adapter through this factory with scripted curves
-    and ``p_drop=0.0``. The operator risk budget and engine limits come
-    from ``settings`` (``[risk]`` / ``[limits]``); objects without those
-    attributes fall back to defaults.
+    Entries need ``replay`` (from :func:`verify_replay`). Without it every BUY is
+    refused, including reads from injected or scripted curve sources; sells and
+    exits still read ``price_source``.
     """
-    budget = getattr(settings, "risk", None)
-    if budget is None:
-        budget = RiskBudget()
-    limits = getattr(settings, "limits", None)
-    if limits is None:
-        limits = EngineLimits()
-    return PaperAdapter(
+    return build_paper_adapter(
+        settings,
         store=store,
         risk=risk,
         ids=ids,
         clock=clock,
         rng=rng,
-        budget=budget,
-        limits=limits,
         price_source=price_source,
+        replay=replay,
+        live_source=live_source,
+        reserves_observer=reserves_observer,
         source=source,
         p_drop=p_drop,
     )

@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pumpgrok.core.adapter import ExecutionAdapter, ExecutionMode, OrderRequest, Position
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.entry_hook import EntryDenied, EntryPolicy
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter.batch import _BatchMixin
@@ -54,6 +55,7 @@ class PaperAdapter(
         limits: EngineLimits | None = None,
         fees: FeeModel | None = None,
         price_source: PriceSource | None = None,
+        entry_policy: EntryPolicy | None = None,
         source: Literal["paper", "replay", "manual"] = "paper",
         p_drop: float = P_DROP,
     ) -> None:
@@ -68,6 +70,7 @@ class PaperAdapter(
         self._price = price_source
         self._source = source
         self._p_drop = p_drop
+        self._entry_policy = entry_policy
         self._inflight = _InflightOrders()
         self._cancelled: set[str] = set()
         self._last_price_ts: dict[str, float] = {}
@@ -153,6 +156,36 @@ class PaperAdapter(
         if self._price is None:
             return None
         return await self._price.curve(mint)
+
+    async def _read_entry_curve(self, mint: str) -> CurveSnapshot | None:
+        """BUY read under the entry policy, bound to one source object.
+
+        Without a policy this is the plain read. With one, the source identity is
+        checked before and after the await, the bound class's own ``curve`` runs
+        (never an instance attribute), and the snapshot must pass the policy.
+        Any refusal, mismatch or read error raises ``EntryDenied``.
+        """
+        policy = self._entry_policy
+        if policy is None:
+            return await self._read_curve(mint)
+        source = self._price
+        if source is None:
+            raise EntryDenied("entry source absent")
+        refusal = policy.check_source(source)
+        if refusal is not None:
+            raise EntryDenied(refusal)
+        try:
+            snapshot = await type(source).curve(source, mint)
+        except Exception as exc:
+            raise EntryDenied(f"entry read failed: {type(exc).__name__}") from exc
+        refusal = policy.check_source(self._price)
+        if refusal is not None:
+            raise EntryDenied(refusal)
+        if snapshot is not None:
+            refusal = policy.check_snapshot(snapshot)
+            if refusal is not None:
+                raise EntryDenied(refusal)
+        return snapshot
 
     # -- ExecutionAdapter: cancel / positions -------------------------------
 

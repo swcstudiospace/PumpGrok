@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.202" timestamp="2026-11-10T14:59:33.562088+00:00" hostname="vps"><testcase classname="tests.datafeed.test_readonly" name="test_allowed_rpc_reads_reach_injected_transport[logsSubscribe-params0]" time="0.006"><failure message="AssertionError: assert [] == [('https://rp...onfirmed'}]})]&#10;  &#10;  Right contains one more item: ('https://rpc.example.invalid', {'method': 'logsSubscribe', 'params': [{'mentions': ['Program111']}, {'commitment': 'confirmed'}]})&#10;  Use -v to get more diff">method = 'logsSubscribe'
+params = [{'mentions': ['Program111']}, {'commitment': 'confirmed'}]
+
+    @pytest.mark.parametrize(
+        ("method", "params"),
+        [
+            ("logsSubscribe", [{"mentions": ["Program111"]}, {"commitment": "confirmed"}]),
+            ("getAccountInfo", ["Account111", {"encoding": "base64"}]),
+            (
+                "getTransaction",
+                ["Signature111", {"encoding": "json", "maxSupportedTransactionVersion": 0}],
+            ),
+        ],
+    )
+    async def test_allowed_rpc_reads_reach_injected_transport(
+        method: str, params: list[object]
+    ) -&gt; None:
+        transport = CaptureTransport()
+        endpoint = "https://rpc.example.invalid"
+        boundary = ReadOnlyBoundary(endpoint=endpoint, transport=transport)
+    
+        result = await boundary.rpc(method, params)
+    
+&gt;       assert transport.frames == [(endpoint, {"method": method, "params": params})]
+E       AssertionError: assert [] == [('https://rp...onfirmed'}]})]
+E         
+E         Right contains one more item: ('https://rpc.example.invalid', {'method': 'logsSubscribe', 'params': [{'mentions': ['Program111']}, {'commitment': 'confirmed'}]})
+E         Use -v to get more diff
+
+tests/datafeed/test_readonly.py:40: AssertionError</failure></testcase></testsuite></testsuites>

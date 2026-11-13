@@ -18,6 +18,7 @@ import random
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -28,6 +29,7 @@ from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import VerifiedReplay, build_paper_adapter
 from pumpgrok.execution.curve_math import sell_out
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
@@ -35,8 +37,11 @@ from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.risk.kill_switch import FlattenIntent, execute_flatten
+
+from .replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 EQUITY = 10_000_000_000
@@ -119,13 +124,21 @@ def _engine(store: LedgerStore, clock: FixtureClock) -> RiskEngine:
     )
 
 
+def _replay(
+    root: Path, clock: FixtureClock, events: list[dict[str, Any]] | None = None
+) -> VerifiedReplay:
+    """Verified replay authority over one S0/T0 tick at START, unless ``events`` is given."""
+    return replay_authority(root, clock, events or [tick(START, MINT, S0, T0)])
+
+
 def _adapter(
     store: LedgerStore,
     clock: FixtureClock,
     *,
-    price_source: Any,
+    replay: VerifiedReplay | None = None,
     autonomy: str = "autonomous-paper",
 ) -> PaperAdapter:
+    """Replay-bound adapter, or (without ``replay``) an adapter with no price source."""
     engine = RiskEngine(
         store=store,
         budget=RiskBudget(),
@@ -135,41 +148,59 @@ def _adapter(
         get_reserves=lambda _mint: (S0, T0),
         env={},
     )
-    return PaperAdapter(
+    if replay is None:
+        return PaperAdapter(
+            store=store,
+            risk=engine,
+            ids=IdFactory(clock, make_rng(52)),
+            clock=clock,
+            rng=make_rng(52),
+            budget=RiskBudget(),
+            p_drop=0.0,
+        )
+    return build_paper_adapter(
+        SimpleNamespace(),
         store=store,
         risk=engine,
         ids=IdFactory(clock, make_rng(52)),
         clock=clock,
         rng=make_rng(52),
-        budget=RiskBudget(),
-        price_source=price_source,
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
 
 
-class _Fixed:
-    """Curve source that answers immediately with one snapshot."""
+class _ReadGate:
+    """Gates the bound replay source's curve reads; reads are 1-based and counted per test.
 
-    def __init__(self, snap: CurveSnapshot) -> None:
-        self._snap = snap
+    ``block_on`` reads wait on ``gate``; reads after ``fail_after`` raise; every read can
+    first yield to the loop (``yield_first``), the shape of a live RPC read.
+    """
 
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        return self._snap
+    def __init__(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        block_on: frozenset[int] = frozenset(),
+        fail_after: int | None = None,
+        yield_first: bool = False,
+    ) -> None:
+        self.reads = 0
+        self.gate = asyncio.Event()
+        real = FixtureCurveSource.curve
 
+        async def curve(source: FixtureCurveSource, mint: str) -> CurveSnapshot | None:
+            self.reads += 1
+            if yield_first:
+                await asyncio.sleep(0)
+            if fail_after is not None and self.reads > fail_after:
+                raise RuntimeError("curve feed failed during confirmation")
+            if self.reads in block_on:
+                await self.gate.wait()
+            return await real(source, mint)
 
-class _Yielding:
-    """Curve source that yields to the loop before answering (live RPC shape)."""
-
-    def __init__(self, snap: CurveSnapshot) -> None:
-        self._snap = snap
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        await asyncio.sleep(0)
-        return self._snap
-
-
-def _snap() -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
+        monkeypatch.setattr(FixtureCurveSource, "curve", curve)
 
 
 def _order(ids: IdFactory, mint: str, size: int = SIZE) -> OrderRequest:
@@ -214,13 +245,16 @@ def _tripped_engine(store: LedgerStore, clock: FixtureClock) -> RiskEngine:
 # -- round 2, finding 8: one approval, one order -------------------------
 
 
-async def test_overlapping_orders_consume_one_approval_once(tmp_path: Path) -> None:
+async def test_overlapping_orders_consume_one_approval_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Two orders racing on one approval: the loser is refused, one OrderPlaced."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
         ids = IdFactory(clock, make_rng(7))
-        adapter = _adapter(store, clock, price_source=_Yielding(_snap()), autonomy="manual-ticket")
+        _ReadGate(monkeypatch, yield_first=True)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock), autonomy="manual-ticket")
         approval_id = f"apr-{ids.ulid()}"
         record = parse_human_phrase(
             f"approve {TICKET} {MINT} 0.2 100",
@@ -275,7 +309,7 @@ async def test_graduation_close_credits_proceeds_to_cash(tmp_path: Path) -> None
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=None)
+        adapter = _adapter(store, clock)
         closed = await adapter.close_on_graduation(MINT, last_s=S0, last_t=T0, correlation_id="t")
         assert closed is not None
         gross = sell_out(S0, T0, UNITS)
@@ -299,7 +333,7 @@ async def test_blind_close_credits_last_good_to_cash(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         marked = await adapter.mark_to_market(MINT, correlation_id="t")
         assert marked is not None
         last_good = int(json.loads(str(marked["payload_json"]))["equity_lamports"]) - EQUITY
@@ -323,7 +357,7 @@ async def test_mark_values_other_open_positions(tmp_path: Path) -> None:
         _seed_position(store, clock, OTHER, OTHER_UNITS, OTHER_BASIS)
         _mark(store, clock, OTHER, OTHER_MTM, "mtm-other")
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         row = await adapter.mark_to_market(MINT, correlation_id="t")
         assert row is not None
         body = json.loads(str(row["payload_json"]))
@@ -344,11 +378,11 @@ async def test_restarted_adapter_blind_closes_at_deadline(tmp_path: Path) -> Non
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        first = _adapter(store, clock, price_source=_Fixed(_snap()))
+        first = _adapter(store, clock, replay=_replay(tmp_path, clock))
         marked = await first.mark_to_market(MINT, correlation_id="t")
         assert marked is not None
         last_good = int(json.loads(str(marked["payload_json"]))["equity_lamports"]) - EQUITY
-        restarted = _adapter(store, clock, price_source=None)
+        restarted = _adapter(store, clock)
         clock.advance_to(clock.now() + 299.0)
         assert await restarted.check_blind(MINT, correlation_id="t") is None
         clock.advance_to(clock.now() + 2.0)
@@ -370,14 +404,15 @@ async def test_concurrent_repeat_does_not_release_owner_probe(tmp_path: Path) ->
     store = _store(tmp_path)
     try:
         engine = _tripped_engine(store, clock)
-        adapter = PaperAdapter(
+        adapter = build_paper_adapter(
+            SimpleNamespace(),
             store=store,
             risk=engine,
             ids=IdFactory(clock, make_rng(41)),
             clock=clock,
             rng=make_rng(41),
-            budget=RiskBudget(),
-            price_source=_Fixed(_snap()),
+            replay=_replay(tmp_path, clock),
+            source="replay",
             p_drop=0.0,
         )
         request = _order(IdFactory(clock, random.Random(3)), MINT)
@@ -401,14 +436,17 @@ async def test_probe_released_after_order_outcome(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         engine = _tripped_engine(store, clock)
-        adapter = PaperAdapter(
+        adapter = build_paper_adapter(
+            SimpleNamespace(),
             store=store,
             risk=engine,
             ids=IdFactory(clock, make_rng(41)),
             clock=clock,
             rng=make_rng(41),
-            budget=RiskBudget(),
-            price_source=_Fixed(_snap()),
+            replay=_replay(
+                tmp_path, clock, [tick(START, MINT, S0, T0), tick(START, OTHER, S0, T0)]
+            ),
+            source="replay",
             p_drop=0.0,
         )
         ids = IdFactory(clock, random.Random(2))
@@ -442,7 +480,7 @@ async def test_flatten_refuses_a_damaged_ledger(tmp_path: Path) -> None:
     raw.close()
     reopened = LedgerStore(str(path))
     try:
-        adapter = _adapter(reopened, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(reopened, clock, replay=_replay(tmp_path, clock))
         before = reopened.count()
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result == {"status": "ledger_inconsistent", "mint": MINT}
@@ -459,7 +497,7 @@ async def test_kill_flatten_books_venue_and_network_fees(tmp_path: Path) -> None
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         fees = FeeModel()
         gross = sell_out(S0, T0, UNITS)
         venue = fees.venue_fee(gross)
@@ -490,7 +528,7 @@ async def test_buy_fill_is_clipped_to_confirming_cap(tmp_path: Path) -> None:
     try:
         _seed_position(store, clock, OTHER, OTHER_UNITS, OTHER_BASIS)
         _mark(store, clock, OTHER, 100_000_000, "mtm-other-high")
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         request = _order(IdFactory(clock, random.Random(4)), MINT, size=201_000_000)
         placed_key = exec_place_key(TICKET, "buy", request.decision_id)
         task = asyncio.create_task(adapter.place(request, seat="bot-04-sniper", correlation_id="t"))
@@ -521,7 +559,7 @@ async def test_close_position_kill_flatten_writes_one_sell_and_one_close(
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         gross = sell_out(S0, T0, UNITS)
         fees = FeeModel()
@@ -548,7 +586,7 @@ async def test_close_position_without_position_returns_no_position_and_writes_no
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         before = store.count()
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result == {"status": "no_position", "mint": MINT}
@@ -564,7 +602,7 @@ async def test_close_position_without_any_value_refuses_without_writes(
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=None)
+        adapter = _adapter(store, clock)
         before = store.count()
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result == {"status": "no_mark", "mint": MINT}
@@ -594,7 +632,7 @@ async def test_inflight_barrier_tracks_order_until_settled(tmp_path: Path) -> No
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         barrier = adapter.inflight_barrier
         assert len(barrier) == 0
         ids = IdFactory(clock, make_rng(11))
@@ -615,14 +653,17 @@ async def test_inflight_barrier_tracks_order_until_settled(tmp_path: Path) -> No
         store.close()
 
 
-async def test_overlapping_exit_sells_cannot_oversell_holding(tmp_path: Path) -> None:
+async def test_overlapping_exit_sells_cannot_oversell_holding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Two exits sized from the same holding: the second is refused, no second fill."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
         _mark(store, clock, MINT, BASIS, "mtm-seed-exit")
-        adapter = _adapter(store, clock, price_source=_Yielding(_snap()))
+        _ReadGate(monkeypatch, yield_first=True)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         ids = IdFactory(clock, make_rng(12))
         part = UNITS * 3 // 4
         results = await _drive(
@@ -645,7 +686,7 @@ async def test_overlapping_exit_sells_cannot_oversell_holding(tmp_path: Path) ->
 
 
 async def test_sell_refused_when_flatten_closed_holding_during_confirmation(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A flatten that closes the holding while an exit sell sleeps leaves one fill."""
     clock = FixtureClock(start=START)
@@ -653,7 +694,8 @@ async def test_sell_refused_when_flatten_closed_holding_during_confirmation(
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
         _mark(store, clock, MINT, BASIS, "mtm-seed-flatten")
-        adapter = _adapter(store, clock, price_source=_Yielding(_snap()))
+        _ReadGate(monkeypatch, yield_first=True)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         ids = IdFactory(clock, make_rng(13))
         request = _sell(ids, UNITS)
         placed_key = exec_place_key(TICKET, "sell", request.decision_id)
@@ -686,7 +728,7 @@ async def test_flatten_waits_for_in_flight_order_before_closing(tmp_path: Path) 
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         ids = IdFactory(clock, make_rng(14))
         fills_seen: list[int] = []
 
@@ -723,24 +765,8 @@ async def test_flatten_waits_for_in_flight_order_before_closing(tmp_path: Path) 
 # -- PR6 round 5: barrier ownership is per call, cleanup on every exit path --
 
 
-class _BlockOnReads:
-    """Answers each curve read at once unless its 1-based number is in ``block_on``."""
-
-    def __init__(self, snap: CurveSnapshot, block_on: set[int]) -> None:
-        self._snap = snap
-        self._block_on = block_on
-        self.reads = 0
-        self.gate = asyncio.Event()
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        self.reads += 1
-        if self.reads in self._block_on:
-            await self.gate.wait()
-        return self._snap
-
-
 async def _pair_at_confirmation(
-    adapter: PaperAdapter, clock: FixtureClock, source: _BlockOnReads, request: OrderRequest
+    adapter: PaperAdapter, clock: FixtureClock, source: _ReadGate, request: OrderRequest
 ) -> tuple[asyncio.Task[Fill], asyncio.Task[Fill]]:
     """Start an owner call (blocked on its decision read), then a same-key retry
     that reaches its own confirmation read (read 3) and blocks there."""
@@ -757,13 +783,15 @@ async def _pair_at_confirmation(
     return first, retry
 
 
-async def test_cancelled_place_during_confirmation_read_clears_barrier(tmp_path: Path) -> None:
+async def test_cancelled_place_during_confirmation_read_clears_barrier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """(a) Cancel a place() waiting on its confirmation curve read: flatten must not wait on it."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        source = _BlockOnReads(_snap(), block_on={2})
-        adapter = _adapter(store, clock, price_source=source)
+        source = _ReadGate(monkeypatch, block_on=frozenset({2}))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         ids = IdFactory(clock, make_rng(16))
         task = asyncio.create_task(
             adapter.place(_order(ids, MINT), seat="bot-04-sniper", correlation_id="test")
@@ -783,13 +811,15 @@ async def test_cancelled_place_during_confirmation_read_clears_barrier(tmp_path:
         store.close()
 
 
-async def test_cancelled_retry_clears_only_its_own_barrier_entry(tmp_path: Path) -> None:
+async def test_cancelled_retry_clears_only_its_own_barrier_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """(c) A cancelled same-key retry removes its own order and leaves nothing behind."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        source = _BlockOnReads(_snap(), block_on={1, 3})
-        adapter = _adapter(store, clock, price_source=source)
+        source = _ReadGate(monkeypatch, block_on=frozenset({1, 3}))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         request = _order(IdFactory(clock, make_rng(17)), MINT)
         first, retry = await _pair_at_confirmation(adapter, clock, source, request)
         assert len(adapter.inflight_barrier) == 1
@@ -805,7 +835,9 @@ async def test_cancelled_retry_clears_only_its_own_barrier_entry(tmp_path: Path)
         store.close()
 
 
-async def test_cancelled_owner_does_not_remove_retry_order(tmp_path: Path) -> None:
+async def test_cancelled_owner_does_not_remove_retry_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """(b) Start a same-key retry, cancel the first call: the retry stays registered.
 
     The retry keeps its own barrier entry, and flatten waits for it.
@@ -813,8 +845,8 @@ async def test_cancelled_owner_does_not_remove_retry_order(tmp_path: Path) -> No
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        source = _BlockOnReads(_snap(), block_on={1, 3})
-        adapter = _adapter(store, clock, price_source=source)
+        source = _ReadGate(monkeypatch, block_on=frozenset({1, 3}))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         request = _order(IdFactory(clock, make_rng(18)), MINT)
         first, retry = await _pair_at_confirmation(adapter, clock, source, request)
         first.cancel()
@@ -837,32 +869,23 @@ async def test_cancelled_owner_does_not_remove_retry_order(tmp_path: Path) -> No
 # -- PR6 round 4 finding 2: an aborted order must not block flatten -------
 
 
-class _AbortsOnConfirm:
-    """Answers the decision-time read, then fails the CONFIRMING re-read."""
-
-    def __init__(self, snap: CurveSnapshot) -> None:
-        self._snap = snap
-        self._reads = 0
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        self._reads += 1
-        if self._reads > 1:
-            raise RuntimeError("curve feed failed during confirmation")
-        return self._snap
-
-
-async def test_aborted_order_clears_barrier_so_flatten_does_not_wait(tmp_path: Path) -> None:
+async def test_aborted_order_clears_barrier_so_flatten_does_not_wait(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """An order that dies between ACCEPTED and settlement leaves no barrier entry."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
-        adapter = _adapter(store, clock, price_source=_AbortsOnConfirm(_snap()))
+        _ReadGate(monkeypatch, fail_after=1)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         ids = IdFactory(clock, make_rng(15))
         results = await _drive(
             clock,
             adapter.place(_order(ids, MINT), seat="bot-04-sniper", correlation_id="test"),
         )
-        assert isinstance(results[0], RuntimeError), results[0]
+        assert isinstance(results[0], OrderRejectedError), results[0]
+        assert results[0].reason == "data_unavailable"
+        assert results[0].stage == "CONFIRMING"
         assert len(adapter.inflight_barrier) == 0
         assert adapter.inflight_barrier.wait_empty(timeout_s=0.01) is True
     finally:
@@ -872,7 +895,9 @@ async def test_aborted_order_clears_barrier_so_flatten_does_not_wait(tmp_path: P
 # -- PR6 round 5 follow-up: a failed owner must not release the retry's probe --
 
 
-async def test_owner_failure_after_retry_keeps_retry_probe(tmp_path: Path) -> None:
+async def test_owner_failure_after_retry_keeps_retry_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Owner stalls before its batch write; a same-key retry places the order and holds
     the admitted probe; the owner then fails with in_flight. The retry's probe must stay
     held, so the retry fills and a third order is still refused by the probe."""
@@ -880,15 +905,16 @@ async def test_owner_failure_after_retry_keeps_retry_probe(tmp_path: Path) -> No
     store = _store(tmp_path)
     try:
         engine = _tripped_engine(store, clock)
-        source = _BlockOnReads(_snap(), block_on={1})
-        adapter = PaperAdapter(
+        source = _ReadGate(monkeypatch, block_on=frozenset({1}))
+        adapter = build_paper_adapter(
+            SimpleNamespace(),
             store=store,
             risk=engine,
             ids=IdFactory(clock, make_rng(41)),
             clock=clock,
             rng=make_rng(41),
-            budget=RiskBudget(),
-            price_source=source,
+            replay=_replay(tmp_path, clock),
+            source="replay",
             p_drop=0.0,
         )
         request = _order(IdFactory(clock, random.Random(19)), MINT)
@@ -962,7 +988,7 @@ async def test_mark_row_carries_venue_fee_per_mint(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=_Fixed(_snap()))
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         row = await adapter.mark_to_market(MINT, correlation_id="t")
         assert row is not None
         prices = json.loads(json.loads(str(row["payload_json"]))["prices_json"])
@@ -1024,10 +1050,10 @@ async def test_kill_flatten_on_complete_curve_books_stored_venue(tmp_path: Path)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        marker = _adapter(store, clock, price_source=_Fixed(_snap()))
+        marker = _adapter(store, clock, replay=_replay(tmp_path, clock))
         assert await marker.mark_to_market(MINT, correlation_id="t") is not None
-        complete = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0, complete=True)
-        adapter = _adapter(store, clock, price_source=_Fixed(complete))
+        graduated = [tick(START, MINT, S0, T0, complete=True)]
+        adapter = _adapter(store, clock, replay=_replay(tmp_path / "graduated", clock, graduated))
         gross = sell_out(S0, T0, UNITS)
         fees = FeeModel()
         venue, network = fees.venue_fee(gross), fees.network_cost()
@@ -1051,12 +1077,12 @@ async def test_blind_flatten_books_stored_venue(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        marker = _adapter(store, clock, price_source=_Fixed(_snap()))
+        marker = _adapter(store, clock, replay=_replay(tmp_path, clock))
         assert await marker.mark_to_market(MINT, correlation_id="t") is not None
         gross = sell_out(S0, T0, UNITS)
         venue = FeeModel().venue_fee(gross)
         clock.advance_to(clock.now() + 301.0)
-        adapter = _adapter(store, clock, price_source=None)
+        adapter = _adapter(store, clock)
         closed = await adapter.check_blind(MINT, correlation_id="t")
         assert closed is not None
         fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
@@ -1073,7 +1099,7 @@ async def test_legacy_mark_closes_with_zero_venue_and_same_cash(tmp_path: Path) 
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
         _mark(store, clock, MINT, 163_000_000, "mtm-legacy")
-        adapter = _adapter(store, clock, price_source=None)
+        adapter = _adapter(store, clock)
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result["status"] == "closed"
         network = FeeModel().network_cost()
@@ -1092,7 +1118,7 @@ async def test_thread_case_mark_9900_reports_venue_100(tmp_path: Path) -> None:
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
         _mark_with_venue(store, clock, MINT, 9900, 100, "mtm-thread")
-        adapter = _adapter(store, clock, price_source=None)
+        adapter = _adapter(store, clock)
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result["status"] == "closed"
         network = FeeModel().network_cost()

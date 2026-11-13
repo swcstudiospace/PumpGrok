@@ -2,6 +2,30 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
+
+### Added
+
+- Token-first 49-byte curve layout decoded as VERIFIED with reviewed_by human:Ove (`LAYOUT_STATUS`). The 166-byte extended layout stays ASSUMED and fails closed; no offsets were invented. Pump event decoder `EVENT_DECODE_STATUS` VERIFIED with reviewed_by human:Ove.
+- Read-only, rate-limited live feed (`datafeed/portal.py`, `datafeed/logs.py`) with a bounded watch set, mint book, resync and recovery, bridged onto the Phase 12 bus. Portal frame field names remain ASSUMED until a live probe confirms them.
+- Recorder seals self-verifying datasets with `gaps.jsonl` in the sealed manifest, recovers a torn final line on startup, and closes open gaps at seal time (REC-01, REC-02).
+- Paper factory (`execution/paper_factory.py`) is the only paper-adapter construction path. Fee model v2 is selectable with v1 still the default. Live composition takes an exact `LivePriceSource`; BUY entries remain refused.
+
+### Changed
+
+- Strict price provenance gate: `rpc_curve_price_allowed` admits only verified replay provenance. Live RPC prices never admit entry; supplied marks without provenance degrade to gaps. Owner decision (accept-degrade); no live-feed provenance was added.
+- Characterization and risk tests moved to verified replay setup. Ledger source label is now `replay` for those harnesses, forcing 26 digest re-pins. Four scenarios changed outcome from refusal to fill under verified replay; two refusal tests were retired by owner approval (refusal coverage remains in the gate tests).
+- Phase 13 replay hashes: the smoke-10m event stream is unchanged.
+
+### Verification
+
+- Full `make test`, `make lint`, `make typecheck`, `./scripts/check.sh`, the smoke replay, and `run --mode live --once` (exit 3) pass on the Phase 13 integration head.
+
+- Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+
 ## [Unreleased] - v4 Phase 12: event runtime core
 
 ### Added

@@ -1,10 +1,10 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-[ASSUMED] Anchor-style layout: an 8-byte discriminator, five little-endian
-u64 reserve counters, then a one-byte completion flag (0/1). The layout is
-NOT verified against a mainnet account: every test fixture built with
-:func:`encode_curve_fixture` is marked ASSUMED, and user confirmation of
-the layout is pending. Shared by ``market.price`` and ``onchain.lp_status``.
+[VERIFIED] The Pump IDL describes an 8-byte discriminator, five token-first
+little-endian u64 counters, and a one-byte completion flag. The 49-byte
+token-first layout was approved by human review (``LAYOUT_REVIEWED_BY``).
+The 166-byte extended layout has no reviewed source and is refused (fail closed).
+Shared by ``market.price`` and ``onchain.lp_status``.
 
 RPC only: this module performs no HTTP reads outside the injected RPC
 client and references no quote endpoint (R44, R46, R47).
@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import struct
 from decimal import Decimal
+from enum import Enum
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict
@@ -24,13 +25,16 @@ from pumpgrok.tools._common import UNITS_PER_TOKEN
 
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
+_EXTENDED_CURVE_ACCOUNT_SIZE = 166
+_BONDING_CURVE_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 
-#: Bonding-curve layout verification state (R65). ASSUMED until a live probe
-#: against mainnet bonding-curve accounts decodes under this layout and a
-#: human reviews the probe record in tests/fixtures/rpc/bonding_curve/.
-#: While ASSUMED, no paper entry may consume an RPC-derived price: the
-#: PaperAdapter refuses with data_unavailable (fail closed).
-LAYOUT_STATUS: Final[str] = "ASSUMED"
+#: Bonding-curve layout verification state (R65). VERIFIED for the 49-byte
+#: token-first account only, set by the human reviewer named in
+#: ``LAYOUT_REVIEWED_BY``. The 166-byte extended layout stays ASSUMED and is
+#: refused by :func:`decode_curve_account`. Price admission does not read this
+#: status; it is gated by :func:`rpc_curve_price_allowed` provenance.
+LAYOUT_STATUS: Final[str] = "VERIFIED"
+LAYOUT_REVIEWED_BY: Final[str] = "human:Ove"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
 #: 85 SOL, the retired oracle ``src/monitor.py:30``). [ASSUMED] threshold.
@@ -38,7 +42,7 @@ COMPLETION_SOL_LAMPORTS = sol_to_lamports(Decimal(85))
 
 
 class CurveDecodeError(ValueError):
-    """The account bytes do not match the ASSUMED curve layout."""
+    """The account bytes do not match the verified curve layout."""
 
 
 class CurveState(BaseModel):
@@ -55,17 +59,21 @@ class CurveState(BaseModel):
 
 
 def decode_curve_account(data: bytes) -> CurveState:
-    """Decode raw account bytes with the ASSUMED layout.
+    """Decode raw account bytes with the VERIFIED 49-byte token-first layout.
 
-    Raises :class:`CurveDecodeError` on any shape mismatch (wrong length,
-    completion flag outside ``{0, 1}``); callers map it to ``DataStale``.
+    Raises :class:`CurveDecodeError` for the 166-byte extended layout (ASSUMED,
+    refused fail closed), an unsupported size, a discriminator, or a completion
+    flag; callers map it to ``DataStale``.
     """
+    if len(data) == _EXTENDED_CURVE_ACCOUNT_SIZE:
+        raise CurveDecodeError(
+            f"{_EXTENDED_CURVE_ACCOUNT_SIZE}-byte extended curve layout is ASSUMED; refused"
+        )
     if len(data) != CURVE_ACCOUNT_SIZE:
-        raise CurveDecodeError(f"curve account size {len(data)} != ASSUMED {CURVE_ACCOUNT_SIZE}")
-    try:
-        (_, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(data)
-    except struct.error as exc:
-        raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
+        raise CurveDecodeError(f"unsupported curve account size {len(data)}")
+    discriminator, vtok, vsol, rtok, rsol, supply, complete = _CURVE_STRUCT.unpack_from(data)
+    if discriminator != _BONDING_CURVE_DISCRIMINATOR:
+        raise CurveDecodeError("invalid bonding curve discriminator")
     if complete not in (0, 1):
         raise CurveDecodeError(f"curve completion flag not boolean: {complete!r}")
     for name, value in (
@@ -113,11 +121,11 @@ def encode_curve_fixture(
 ) -> bytes:
     """Build [ASSUMED]-layout account bytes for tests. Never used in production."""
     return _CURVE_STRUCT.pack(
-        b"ASSUMED\x00",
-        virtual_sol_reserves_lamports,
+        _BONDING_CURVE_DISCRIMINATOR,
         virtual_token_reserves_units,
-        real_sol_reserves_lamports,
+        virtual_sol_reserves_lamports,
         real_token_reserves_units,
+        real_sol_reserves_lamports,
         total_supply_units,
         1 if complete else 0,
     )
@@ -150,12 +158,24 @@ def curve_market_cap_lamports(state: CurveState) -> int:
     ) // state.virtual_token_reserves_units
 
 
-def rpc_curve_price_allowed(*, curve_source: str) -> bool:
-    """True when a price from ``curve_source`` may price a paper entry.
+class CurveProvenance(Enum):
+    """Where a bonding-curve snapshot came from. Only replay provenance may admit entry."""
 
-    RPC-derived reserves are untrusted bytes until the layout is VERIFIED
-    (T-04-08): while ``LAYOUT_STATUS`` is ASSUMED they fail closed with
-    ``data_unavailable`` at the entry gate. Fixture, rest and pumpportal
-    integer ticks never pass through this layout, so replay is unaffected.
+    VERIFIED_REPLAY = "verified_replay"
+    UNVERIFIED_FIXTURE = "unverified_fixture"
+    LIVE_RPC = "live_rpc"
+    UNKNOWN = "unknown"
+
+
+#: The curve source label a verified replay read carries (replay/sources.py).
+VERIFIED_REPLAY_SOURCE: Final[str] = "fixture"
+
+
+def rpc_curve_price_allowed(*, curve_source: str, provenance: CurveProvenance) -> bool:
+    """Admit an entry price only from verified replay provenance (fail closed).
+
+    Every provenance other than ``VERIFIED_REPLAY`` is refused, including a
+    non-replay snapshot whose source label reads ``fixture``. ``LAYOUT_STATUS``
+    does not widen admission: no live RPC provenance is admitted yet.
     """
-    return not (curve_source == "rpc" and LAYOUT_STATUS != "VERIFIED")
+    return provenance is CurveProvenance.VERIFIED_REPLAY and curve_source == VERIFIED_REPLAY_SOURCE

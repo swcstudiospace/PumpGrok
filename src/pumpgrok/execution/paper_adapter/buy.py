@@ -10,12 +10,14 @@ from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.execution.curve_math import buy_out, impact_buy
+from pumpgrok.execution.entry_hook import EntryDenied, entry_provenance
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _BuyConfirmed, _BuyQuote
 from pumpgrok.risk.engine import RiskDecision, order_hash_for
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.entry_hook import EntryPolicy
     from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter.models import _InflightOrders
     from pumpgrok.ledger.store import LedgerStore
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 
 class _BuyMixin:
     if TYPE_CHECKING:
+        _entry_policy: EntryPolicy | None
         _active_places: set[str]
         _clock: Clock
         _fees: FeeModel
@@ -47,6 +50,7 @@ class _BuyMixin:
         def _slippage_bps(self, request: OrderRequest) -> int: ...
 
         async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+        async def _read_entry_curve(self, mint: str) -> CurveSnapshot | None: ...
 
         async def _append_order_batch(
             self,
@@ -235,7 +239,21 @@ class _BuyMixin:
         correlation_id: str,
     ) -> CurveSnapshot:
         """Decision reserves with the ACCEPTED entry gates; refusals raise here."""
-        curve0 = await self._read_curve(request.mint)
+        if request.side is Side.BUY:
+            try:
+                curve0 = await self._read_entry_curve(request.mint)
+            except EntryDenied as denied:
+                raise await self._reject(
+                    request,
+                    request.decision_id,
+                    "data_unavailable",
+                    denied.detail,
+                    stage="ACCEPTED",
+                    source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
+        else:
+            curve0 = await self._read_curve(request.mint)
         if curve0 is None:
             raise await self._reject(
                 request,
@@ -247,7 +265,10 @@ class _BuyMixin:
                 correlation_id=correlation_id,
             )
         # The source gate prices entries only: a stop-loss sell must still fill (INV-R-16).
-        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve0.source):
+        if request.side is Side.BUY and not rpc_curve_price_allowed(
+            curve_source=curve0.source,
+            provenance=entry_provenance(self._entry_policy, curve0),
+        ):
             raise await self._reject(
                 request,
                 request.decision_id,
@@ -660,7 +681,9 @@ class _BuyMixin:
         )
         stored = self._store.append_batch(rows)
         self._inflight.discard(order_id)
-        self._last_price_ts[request.mint] = self._clock.now()
+        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
+        observed = confirmed.curve1.ts
+        self._last_price_ts[request.mint] = observed if observed is not None else self._clock.now()
         self._last_reserves[request.mint] = (
             confirmed.curve1.s_lamports,
             confirmed.curve1.t_units,

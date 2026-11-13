@@ -6,6 +6,9 @@ sell_out with reason graduated, a frozen mark, and an Escalation. A 300
 virtual-second silence without a price force-closes at last_good with
 reason blind_flatten and an Escalation. While the bonding-curve layout
 fixture is ASSUMED, RPC-derived entries refuse with data_unavailable.
+
+Every BUY here fills (or refuses) through a verify_replay token: the curve
+source is the verified dataset's, composed by build_paper_adapter.
 """
 
 from __future__ import annotations
@@ -23,18 +26,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.curve_math import sell_out
 from pumpgrok.execution.fees import FeeModel
-from pumpgrok.execution.paper_adapter import (
-    CurveSnapshot,
-    OrderRejectedError,
-    PaperAdapter,
-)
+from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.tools.onchain.curve_layout import LAYOUT_STATUS, rpc_curve_price_allowed
+from pumpgrok.tools.onchain.curve_layout import (
+    LAYOUT_STATUS,
+    CurveProvenance,
+    rpc_curve_price_allowed,
+)
+
+from .replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 EQUITY = 10_000_000_000
@@ -44,25 +50,12 @@ T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
 
-def _snap(s: int, t: int, *, complete: bool = False) -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t, complete=complete)
-
-
-class _Scripted:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
-def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, FixtureClock]:
+def _harness(tmp_path: Path, *, complete: bool = False) -> tuple[PaperAdapter, FixtureClock]:
+    """Replay-bound adapter over one verified tick of S0/T0 at START."""
     clock = FixtureClock(START)
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     ids = IdFactory(clock, make_rng(9))
     engine = RiskEngine(
         store=store,
@@ -72,13 +65,16 @@ def _harness(tmp_path: Path, reads: list[CurveSnapshot]) -> tuple[PaperAdapter, 
         autonomy="autonomous-paper",  # type: ignore[arg-type]
         get_reserves=lambda _mint: (S0, T0),
     )
-    adapter = PaperAdapter(
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0, complete=complete)])
+    adapter = build_paper_adapter(
+        object(),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(9),
-        price_source=_Scripted(reads),
+        replay=replay,
+        source="replay",
     )
     return adapter, clock
 
@@ -104,7 +100,7 @@ async def _buy(adapter: PaperAdapter, clock: FixtureClock, ticket: str) -> Fill:
 
 
 async def test_graduated_buy_is_rejected(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0, complete=True)])
+    adapter, clock = _harness(tmp_path, complete=True)
     request = OrderRequest(
         ticket_id="SOL-20260201-010",
         mint=MINT,
@@ -130,7 +126,7 @@ async def test_graduated_buy_is_rejected(tmp_path: Path) -> None:
 
 
 async def test_graduation_close_uses_last_pre_graduation_sell_out(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock = _harness(tmp_path)
     fill = await _buy(adapter, clock, "SOL-20260201-011")
     units = fill.filled_units
     closed = await adapter.close_on_graduation(MINT, last_s=S0, last_t=T0)
@@ -152,13 +148,13 @@ async def test_graduation_close_uses_last_pre_graduation_sell_out(tmp_path: Path
 
 
 async def test_graduation_close_without_position_is_noop(tmp_path: Path) -> None:
-    adapter, _clock = _harness(tmp_path, [_snap(S0, T0)])
+    adapter, _clock = _harness(tmp_path)
     assert await adapter.close_on_graduation(MINT, last_s=S0, last_t=T0) is None
     assert adapter._store.read(limit=None) == []
 
 
 async def test_blind_timeout_closes_at_last_good(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock = _harness(tmp_path)
     fill = await _buy(adapter, clock, "SOL-20260201-012")
     assert fill.filled_units > 0
     marked = await adapter.mark_to_market(MINT, correlation_id="test")
@@ -177,14 +173,15 @@ async def test_blind_timeout_closes_at_last_good(tmp_path: Path) -> None:
 
 
 async def test_blind_before_timeout_keeps_position(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock = _harness(tmp_path)
     await _buy(adapter, clock, "SOL-20260201-013")
-    clock.advance_to(clock.now() + 299.0)
+    # The blind window runs from the last recorded price: the tick at START, not the fill.
+    clock.advance_to(START + 299.0)
     assert await adapter.check_blind(MINT, correlation_id="test") is None
 
 
 async def test_mark_to_market_values_liquidation_every_60s(tmp_path: Path) -> None:
-    adapter, clock = _harness(tmp_path, [_snap(S0, T0), _snap(S0, T0)])
+    adapter, clock = _harness(tmp_path)
     fill = await _buy(adapter, clock, "SOL-20260201-014")
     clock.advance_to(clock.now() + 60.0)
     row = await adapter.mark_to_market(MINT, correlation_id="test")
@@ -197,12 +194,46 @@ async def test_mark_to_market_values_liquidation_every_60s(tmp_path: Path) -> No
     assert marks[MINT]["source"] == "curve"
 
 
+class _RpcSource:
+    """Unbound injected source whose reads are labelled rpc: no replay authority."""
+
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        return CurveSnapshot(mint=mint, s_lamports=S0, t_units=T0, source="rpc")
+
+
 async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
-    assert LAYOUT_STATUS == "ASSUMED"
-    assert rpc_curve_price_allowed(curve_source="rpc") is False
-    assert rpc_curve_price_allowed(curve_source="fixture") is True
-    rpc_snap = _snap(S0, T0).model_copy(update={"source": "rpc"})
-    adapter, clock = _harness(tmp_path, [rpc_snap, rpc_snap])
+    assert LAYOUT_STATUS == "VERIFIED"
+    assert rpc_curve_price_allowed(curve_source="rpc", provenance=CurveProvenance.LIVE_RPC) is False
+    assert (
+        rpc_curve_price_allowed(
+            curve_source="fixture", provenance=CurveProvenance.UNVERIFIED_FIXTURE
+        )
+        is False
+    )
+    assert (
+        rpc_curve_price_allowed(curve_source="fixture", provenance=CurveProvenance.VERIFIED_REPLAY)
+        is True
+    )
+    clock = FixtureClock(START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", str(EQUITY))
+    store.set_meta("source", "paper")
+    engine = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=IdFactory(clock, random.Random(9)),
+        clock=clock,
+        autonomy="autonomous-paper",  # type: ignore[arg-type]
+        get_reserves=lambda _mint: (S0, T0),
+    )
+    adapter = PaperAdapter(
+        store=store,
+        risk=engine,
+        ids=IdFactory(clock, make_rng(9)),
+        clock=clock,
+        rng=make_rng(9),
+        price_source=_RpcSource(),
+    )
     request = OrderRequest(
         ticket_id="SOL-20260201-015",
         mint=MINT,
@@ -230,6 +261,8 @@ async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
 def test_layout_fixture_matches_code_status() -> None:
     fixture = Path("tests/fixtures/rpc/bonding_curve/layout.json")
     record = json.loads(fixture.read_text(encoding="utf-8"))
-    assert record["layout_status"] == LAYOUT_STATUS == "ASSUMED"
-    assert record["layout_status"] != "VERIFIED"
+    # The probe record was reviewed and promoted to VERIFIED by human:Ove (f4e09a0);
+    # it must track LAYOUT_STATUS.
+    assert record["layout_status"] == "VERIFIED"
+    assert LAYOUT_STATUS == "VERIFIED"
     assert "probe_error" in record
