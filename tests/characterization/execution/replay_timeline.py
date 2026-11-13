@@ -14,8 +14,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from tests.execution.replay_support import replay_authority, tick
-
+from execution.replay_support import replay_authority, tick
 from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.latency import P_DROP
 
