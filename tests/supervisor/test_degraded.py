@@ -15,6 +15,7 @@ and paper adapter writes the replay ledger and exits 0 with no network.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,11 @@ from typing import Any
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import FilterSettings
+from pumpgrok.config.settings import FilterSettings, load_settings
 from pumpgrok.core.errors import ReplayMissingRecord
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.recorder import ReplayLlm
@@ -35,8 +39,36 @@ from pumpgrok.supervisor.scheduler import (
     run_once_replay,
 )
 from pumpgrok.supervisor.seat_relay import CLOCK_SKEW_S, ClockSkew, append_escalation
+from pumpgrok.tools import ensure_paper_genesis
 
 SMOKE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, as the onboarding verbs record it.
+
+    The paper genesis is written first, then the operator key and an HMAC-authenticated
+    allow per roster tool, so the paper startup gate reads complete authority inputs.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 def _store(tmp_path: Path) -> LedgerStore:
@@ -189,6 +221,7 @@ def test_smoke_cycle_cli_exits_0_with_no_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
     ledger = tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite"
     assert ledger.is_file()
