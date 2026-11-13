@@ -14,15 +14,50 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from pumpgrok.cli import main
+from pumpgrok.config.settings import load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import CorruptFixture, load_dataset, verify_manifest
+from pumpgrok.tools import ensure_paper_genesis
 
 SMOKE10M = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke-10m"
 SOAK3D = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "soak-3d"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, recorded as the onboarding verbs record it.
+
+    The paper genesis is written first, as ``_record_tool`` does, then the operator key and an
+    allow per roster tool. Each allow is an HMAC-authenticated protected record bound to a
+    ConfigChanged row in the paper ledger, the same records the startup gate reads.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 def _write_dataset(root: Path, name: str, files: dict[str, str]) -> Path:
@@ -68,6 +103,7 @@ def _events(n: int = 2) -> str:
 def test_corrupt_fixture_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """INV-R-30: digest mismatch and malformed lines exit 4 with no ledger."""
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     good = _write_dataset(tmp_path, "good", {"events.jsonl": _events()})
     assert verify_manifest(good).dataset == "good"
     assert len(load_dataset(good).events) == 2
