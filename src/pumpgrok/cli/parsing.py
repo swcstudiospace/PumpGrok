@@ -164,6 +164,37 @@ def _add_events(verbs: _VerbsAction, mode_option: _Parser) -> None:
     purge.add_argument("name", help="dlq row name")
 
 
+def _add_seat_tool(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--seat", required=True, help="roster seat id, e.g. bot-04-sniper")
+    parser.add_argument("--tool", required=True, help="a tool named in that seat's roster")
+
+
+def _add_onboarding(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    onboarding = verbs.add_parser(
+        "onboarding",
+        parents=[mode_option],
+        help="operator choices: seat tool access and the RPC endpoint",
+    )
+    onboarding_cmd = onboarding.add_subparsers(dest="cmd", required=True, metavar="ONBOARDING")
+    onboarding_cmd.add_parser(
+        "init-key", help="create the operator key (interactive terminal, operator account)"
+    )
+    onboarding_cmd.add_parser("list", help="roster-derived tool choices and the RPC choice")
+    access = onboarding_cmd.add_parser("access", help="explicitly allow or deny a seat tool")
+    _add_seat_tool(access)
+    decision = access.add_mutually_exclusive_group(required=True)
+    decision.add_argument("--allow", dest="decision", action="store_const", const="allow")
+    decision.add_argument("--deny", dest="decision", action="store_const", const="deny")
+    revoke = onboarding_cmd.add_parser("revoke", help="revoke a seat tool grant")
+    _add_seat_tool(revoke)
+    rpc = onboarding_cmd.add_parser("rpc", help="show, or choose, a configured RPC endpoint")
+    rpc.add_argument(
+        "--endpoint",
+        default=None,
+        help="a configured endpoint URL; only its scheme, host and port are recorded",
+    )
+
+
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
@@ -222,4 +253,5 @@ def build_parser() -> argparse.ArgumentParser:
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
     _add_tail(verbs, mode_option)
+    _add_onboarding(verbs, mode_option)
     return parser

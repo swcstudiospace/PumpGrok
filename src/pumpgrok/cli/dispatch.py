@@ -11,6 +11,7 @@ from pumpgrok.cli.backtest import _backtest_verb
 from pumpgrok.cli.codes import _FIND_ONLY_ROUTES, EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
+from pumpgrok.cli.onboarding import onboarding_verb
 from pumpgrok.cli.parsing import build_parser
 from pumpgrok.cli.verbs_ops import _doctor_verb, _live_verb, _report_verb, _verify_verb
 from pumpgrok.cli.verbs_state import _killswitch, _paper, _run, _state, _ticket_verb
@@ -51,6 +52,7 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "report": _report_verb,
     "backtest": _backtest_verb,
     "events": _events_handler,
+    "onboarding": onboarding_verb,
 }
 
 

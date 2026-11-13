@@ -68,8 +68,10 @@ __all__ = [
     "OperatorChoiceError",
     "OperatorGrants",
     "canonical_endpoint",
+    "endpoint_choice",
     "init_key",
     "operator_label",
+    "writer_identity",
     "read_authority",
     "record_rpc_choice",
     "record_tool_choice",
@@ -131,6 +133,17 @@ class Decision:
 
 def tool_scope(seat: str, tool: str) -> str:
     return f"tool:{seat}:{tool}"
+
+
+def endpoint_choice(url: str, configured_urls: Iterable[str]) -> Endpoint:
+    """The canonical endpoint, which must be one already configured. No new provider is added."""
+    chosen = canonical_endpoint(url)
+    configured = {canonical_endpoint(item) for item in configured_urls}
+    if chosen not in configured:
+        raise OperatorChoiceError(
+            f"refused: {chosen.label()} is not a configured endpoint; no new provider is added"
+        )
+    return chosen
 
 
 def canonical_endpoint(url: str) -> Endpoint:
@@ -319,6 +332,11 @@ def _writer_key(operator_dir: Path) -> tuple[bytes, str]:
     return key, operator_label(owner)
 
 
+def writer_identity(operator_dir: Path | None = None) -> str:
+    """The ``human:`` label of the operator account, or OperatorChoiceError. Records nothing."""
+    return _writer_key(operator_dir or OPERATOR_DIR)[1]
+
+
 def _append_protected(path: Path, line: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as handle:
@@ -408,12 +426,7 @@ def record_rpc_choice(
     operator_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Record an explicit choice of one configured RPC endpoint (scheme, host, port only)."""
-    chosen = canonical_endpoint(url)
-    configured = {canonical_endpoint(item) for item in configured_urls}
-    if chosen not in configured:
-        raise OperatorChoiceError(
-            f"refused: {chosen.label()} is not a configured endpoint; no new provider is added"
-        )
+    chosen = endpoint_choice(url, configured_urls)
     return _commit(
         store,
         operator_dir=operator_dir or OPERATOR_DIR,
