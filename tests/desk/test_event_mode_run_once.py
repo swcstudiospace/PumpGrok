@@ -13,7 +13,7 @@ from typing import Any
 
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.constants import P2_DEBOUNCE_S
-from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -44,7 +44,7 @@ def _event(kind: EventKind, entity_id: str, n: int) -> Event:
     return Event(
         kind=kind,
         entity_id=entity_id,
-        payload={"n": n},
+        payload=FrozenPayload({"n": n}),
         occurred_at=f"2026-01-01T00:00:{n:02d}.000+00:00",
     )
 
@@ -84,7 +84,12 @@ async def test_each_bus_event_wakes_its_row_seats_once(tmp_path: Path) -> None:
             # Mark is debounced on the clock: let its timer be scheduled, then fire it.
             await _yield()
             clock.advance_to(clock.now() + P2_DEBOUNCE_S)
-            await _settle(lambda: len(log) - before >= len(expected))
+            want = len(expected)
+
+            def _delivered(start: int = before, need: int = want) -> bool:
+                return len(log) - start >= need
+
+            await _settle(_delivered)
             await _yield()
             assert log[before:] == list(expected), kind
         assert dlq == []

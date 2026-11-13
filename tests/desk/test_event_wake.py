@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -80,7 +80,7 @@ def _event(kind: EventKind, entity_id: str = "mint-a", n: int = 1) -> Event:
     return Event(
         kind=kind,
         entity_id=entity_id,
-        payload={"n": n},
+        payload=FrozenPayload({"n": n}),
         occurred_at="2026-01-01T00:00:00.000+00:00",
     )
 
