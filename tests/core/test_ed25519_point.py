@@ -39,6 +39,29 @@ OFF_CURVE_Y2 = bytes.fromhex("02" + "00" * 31)  # y = 2: u/v is a non-square
 OFF_CURVE_Y2_SIGNED = bytes.fromhex("02" + "00" * 30 + "80")
 OFF_CURVE_Y7 = bytes.fromhex("07" + "00" * 31)  # y = 7: u/v is a non-square
 
+# Small-order (torsion) encodings: the 8 points whose order divides 8. Their orders are asserted
+# in test_torsion_vectors_have_the_stated_order from the curve equation and the group law.
+# ZERO_Y and ZERO_Y_SIGNED have order 4 (they double to MINUS_ONE); MINUS_ONE has order 2.
+ORDER_8_A = bytes.fromhex("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a")
+ORDER_8_A_SIGNED = bytes.fromhex(
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"
+)
+ORDER_8_B = bytes.fromhex("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05")
+ORDER_8_B_SIGNED = bytes.fromhex(
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85"
+)
+TORSION_ENCODINGS = [
+    (IDENTITY, 1),
+    (MINUS_ONE, 2),
+    (ZERO_Y, 4),
+    (ZERO_Y_SIGNED, 4),
+    (ORDER_8_A, 8),
+    (ORDER_8_A_SIGNED, 8),
+    (ORDER_8_B, 8),
+    (ORDER_8_B_SIGNED, 8),
+]
+SQRT_M1 = pow(2, (P - 1) // 4, P)
+
 
 def _euler_on_curve(y: int) -> bool:
     """Independent curve-membership test: u/v is a square (or zero) mod p."""
@@ -64,16 +87,6 @@ def test_sign_flip_of_valid_point_is_accepted() -> None:
     raw = bytes.fromhex(RFC8032_PUBLIC_KEYS["TEST 1"])
     flipped = raw[:31] + bytes([raw[31] ^ 0x80])
     assert decode_public_point(flipped) == flipped
-
-
-def test_small_order_points_are_accepted_because_only_curve_membership_is_checked() -> None:
-    assert decode_public_point(IDENTITY) == IDENTITY
-    assert decode_public_point(MINUS_ONE) == MINUS_ONE
-
-
-def test_y_zero_uses_sqrt_minus_one_branch_for_both_signs() -> None:
-    assert decode_public_point(ZERO_Y) == ZERO_Y
-    assert decode_public_point(ZERO_Y_SIGNED) == ZERO_Y_SIGNED
 
 
 @pytest.mark.parametrize("raw", [IDENTITY_SIGNED, MINUS_ONE_SIGNED])
@@ -132,7 +145,7 @@ def test_small_y_grid_matches_independent_curve_test() -> None:
     for y in range(256):
         for sign in (0, 1):
             raw = (y | (sign << 255)).to_bytes(32, "little")
-            expect_ok = _euler_on_curve(y) and not (y == 1 and sign == 1)
+            expect_ok = _euler_on_curve(y) and y not in (0, 1)
             if expect_ok:
                 assert decode_public_point(raw) == raw, raw.hex()
                 accepted += 1
@@ -142,3 +155,60 @@ def test_small_y_grid_matches_independent_curve_test() -> None:
                 refused += 1
     assert accepted > 0
     assert refused > 0
+
+
+def _affine_add(p: tuple[int, int], q: tuple[int, int]) -> tuple[int, int]:
+    """Edwards addition for a = -1 (RFC 8032 section 5.1.4), test-side group law."""
+    x1, y1 = p
+    x2, y2 = q
+    t = D * x1 * x2 * y1 * y2 % P
+    x3 = (x1 * y2 + y1 * x2) * pow(1 + t, P - 2, P) % P
+    y3 = (y1 * y2 + x1 * x2) * pow(1 - t, P - 2, P) % P
+    return x3, y3
+
+
+def _multiply(n: int, p: tuple[int, int]) -> tuple[int, int]:
+    result = (0, 1)
+    addend = p
+    while n:
+        if n & 1:
+            result = _affine_add(result, addend)
+        addend = _affine_add(addend, addend)
+        n >>= 1
+    return result
+
+
+def _point_from_encoding(raw: bytes) -> tuple[int, int]:
+    """Affine (x, y) of a canonical encoding, with the curve equation asserted."""
+    value = int.from_bytes(raw, "little")
+    y = value & ((1 << 255) - 1)
+    x_sign = value >> 255
+    x_squared = (y * y - 1) * pow(D * y * y + 1, P - 2, P) % P
+    x = pow(x_squared, (P + 3) // 8, P)
+    if x * x % P != x_squared:
+        x = x * SQRT_M1 % P
+    assert x * x % P == x_squared, "encoding is not on the curve"
+    if (x & 1) != x_sign:
+        x = (P - x) % P
+    assert (y * y - x * x - 1 - D * x * x * y * y) % P == 0
+    return x, y
+
+
+@pytest.mark.parametrize(("raw", "order"), TORSION_ENCODINGS)
+def test_torsion_vectors_have_the_stated_order(raw: bytes, order: int) -> None:
+    point = _point_from_encoding(raw)
+    assert _multiply(order, point) == (0, 1)
+    if order > 1:
+        assert _multiply(order // 2, point) != (0, 1)
+
+
+def test_rfc8032_public_keys_are_not_small_order() -> None:
+    for hex_key in RFC8032_PUBLIC_KEYS.values():
+        assert _multiply(8, _point_from_encoding(bytes.fromhex(hex_key))) != (0, 1)
+
+
+@pytest.mark.parametrize("raw", [raw for raw, _order in TORSION_ENCODINGS])
+def test_small_order_points_are_refused(raw: bytes) -> None:
+    with pytest.raises(ValueError) as excinfo:
+        decode_public_point(raw)
+    assert raw.hex() not in str(excinfo.value)

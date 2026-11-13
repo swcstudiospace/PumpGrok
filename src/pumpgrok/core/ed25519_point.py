@@ -2,9 +2,11 @@
 
 Decode-only. It checks that a 32-octet compressed point is well formed and on
 the curve: exact length, canonical y (y < p), curve membership (x recovered or
-rejected), and the sign-bit rule (x = 0 with the sign bit set is rejected).
-It does not sign, does not multiply scalars, does not generate keys and does
-not check small order or subgroup membership; those are outside ONB-06.
+rejected), the sign-bit rule (x = 0 with the sign bit set is rejected), and small order:
+a point with 8P equal to the identity (the eight torsion points, identity included) is
+refused by a cofactor-8 check. It does not sign, does not generate keys, does not multiply
+scalars beyond that cofactor check, and does not check prime-order subgroup membership;
+those are outside ONB-06.
 
 INV-S-01 allows this module, and only this module, to refer to ``ed25519``.
 """
@@ -21,6 +23,27 @@ _Y_MASK = (1 << 255) - 1
 def _encode(x: int, y: int) -> bytes:
     """Canonical RFC 8032 section 5.1.2 encoding of an affine point."""
     return ((y & _Y_MASK) | ((x & 1) << 255)).to_bytes(_POINT_BYTES, "little")
+
+
+def _add(p: tuple[int, int], q: tuple[int, int]) -> tuple[int, int]:
+    """Affine twisted Edwards addition for a = -1 (RFC 8032 section 5.1.4).
+
+    The formulas are complete on Ed25519 (d is a non-square), so no case is special.
+    """
+    x1, y1 = p
+    x2, y2 = q
+    t = _D * x1 * x2 % _P * y1 % _P * y2 % _P
+    x3 = (x1 * y2 + y1 * x2) * pow((1 + t) % _P, _P - 2, _P) % _P
+    y3 = (y1 * y2 + x1 * x2) * pow((1 - t) % _P, _P - 2, _P) % _P
+    return x3, y3
+
+
+def _has_small_order(x: int, y: int) -> bool:
+    """True when 8 * (x, y) is the identity, i.e. the point has order dividing 8."""
+    point = (x, y)
+    for _ in range(3):
+        point = _add(point, point)
+    return point == (0, 1)
 
 
 def decode_public_point(raw: bytes) -> bytes:
@@ -54,4 +77,6 @@ def decode_public_point(raw: bytes) -> bytes:
         raise ValueError("Ed25519 point has sign bit set with x = 0")
     if (x & 1) != x_sign:
         x = (_P - x) % _P
+    if _has_small_order(x, y):
+        raise ValueError("Ed25519 point has small order")
     return _encode(x, y)

@@ -53,6 +53,8 @@ VALID_ENTRY = _b58encode(RFC8032_TEST1_PUBLIC)
 OFF_CURVE_ENTRY = _b58encode(_off_curve_key())
 # y = 2**255 - 1 is at least p: a non-canonical encoding of the point decoder refuses.
 NON_CANONICAL_ENTRY = _b58encode(b"\xff" * 31 + b"\x7f")
+# 32 zero bytes, base58 "1" x 32: the all-zero system program address (y = 0, order 4).
+ALL_ZERO_ENTRY = _b58encode(bytes(32))
 
 
 @pytest.fixture
@@ -111,6 +113,21 @@ def test_live_load_refusal_names_the_field_and_not_the_value(
     assert OFF_CURVE_ENTRY not in text
     out, err = capsys.readouterr()
     assert OFF_CURVE_ENTRY not in out + err
+
+
+def test_all_zero_address_is_refused_in_live_mode(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    # 32 zero bytes (the system program address) decode to y = 0, a point of order 4.
+    monkeypatch.setenv("PUMPGROK_MODE", "live")
+    monkeypatch.setenv("PUMPGROK_WALLET__ALLOWLIST", f'["{ALL_ZERO_ENTRY}"]')
+    with pytest.raises(settings_mod.ConfigError) as excinfo:
+        settings_mod.load_settings()
+    text = str(excinfo.value) + "".join(excinfo.value.problems)
+    assert "wallet" in text
+    assert ALL_ZERO_ENTRY not in text
+    out, err = capsys.readouterr()
+    assert ALL_ZERO_ENTRY not in out + err
 
 
 def test_empty_allowlist_needs_no_confirmation() -> None:
