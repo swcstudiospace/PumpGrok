@@ -21,6 +21,7 @@ from pumpgrok.core.tool import Tool
 from pumpgrok.engine.pipeline import CandidateVerdict, evaluate_candidates
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.execution.paper_factory import build_paper_adapter, verify_replay
+from pumpgrok.ledger.operator_choices import OperatorGrants
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import FixtureDataset, event_epoch
@@ -252,7 +253,9 @@ def open_replay_runtime(
             # The fixture is the venue: no random tx drop, so a recorded buy fills.
             p_drop=0.0,
         )
-        registry, _audits = build_registry(clock=clock, rng=make_rng(seed))
+        registry, _audits = build_registry(
+            clock=clock, rng=make_rng(seed), operator_gate=OperatorGrants().allows
+        )
         registry.register(build_place_tool(adapter, lambda: budget, clock))
         registry.register(
             build_kill_switch_tool(
