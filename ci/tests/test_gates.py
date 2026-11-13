@@ -34,6 +34,7 @@ ALL_GATE_SCRIPTS = [
     "check_contracts.py",
     "check_rollback.py",
     "check_desk_integrity.py",
+    "check_idle_grok.py",
     "run_all.py",
 ]
 
@@ -980,7 +981,7 @@ def _fixture_path(tmp_path: Path, doc: dict) -> Path:
 
 
 class TestEveryGateIsWired:
-    def test_run_all_runs_g1_to_g7_in_order(self, monkeypatch):
+    def test_run_all_runs_g1_to_g8_in_order(self, monkeypatch):
         run_all = _load("run_all")
         calls: list[tuple[str, list[str]]] = []
 
@@ -1000,6 +1001,7 @@ class TestEveryGateIsWired:
             "G-4",
             "G-5/G-6",
             "G-7",
+            "G-8",
         ]
 
     def test_g7_takes_no_bot_argument(self, monkeypatch):
