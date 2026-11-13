@@ -56,6 +56,7 @@ def run_once_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> ReplayResult:
     """AUTO-006: replay verdict, then one full recorded timeline, offline.
 
@@ -114,6 +115,7 @@ def run_once_replay(
             risk=runtime.risk,
             budget=budget,
             seat_cadences=FIXTURE_SEAT_CADENCES,
+            wake_mode=wake_mode,
         )
         before = runtime.store.count()
         ticks = asyncio.run(
@@ -290,6 +292,7 @@ def _build_serve(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> _ServeParts:
     """Build the serve parts over a replayed ledger; see :func:`build_serve_replay`."""
     run_replay(
@@ -374,6 +377,7 @@ def _build_serve(
             budget=budget,
             cycle_observer=metrics.observe,
             seat_cadences=FIXTURE_SEAT_CADENCES,
+            wake_mode=wake_mode,
         )
         rules = _ServeRules(
             events=runtime.dataset.events,
@@ -405,6 +409,7 @@ def build_serve_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
@@ -427,6 +432,7 @@ def build_serve_replay(
         budget=budget,
         limits=limits,
         active_set=active_set,
+        wake_mode=wake_mode,
     )
     return parts.supervisor, parts.metrics, parts.store
 
@@ -476,6 +482,7 @@ async def serve_replay(
     limits: EngineLimits | None = None,
     pace_s: float = SERVE_PACE_S,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
     promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
@@ -505,6 +512,7 @@ async def serve_replay(
         budget=budget,
         limits=limits,
         active_set=active_set,
+        wake_mode=wake_mode,
     )
     supervisor, metrics, store = parts.supervisor, parts.metrics, parts.store
     server = HealthServer(
