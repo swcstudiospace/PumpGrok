@@ -17,13 +17,12 @@ reports them as info. A missing job store is a pass, never a skip.
 
 from __future__ import annotations
 
+import ctypes
 import http.client
 import importlib.util
 import json
 import os
-import shutil
 import sqlite3
-import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -169,7 +168,7 @@ def _job_stores(home: Path) -> list[tuple[str, Path]]:
     return [(label, path) for label, path in candidates if path.is_file()]
 
 
-def _read_store(path: Path) -> list[dict] | None:
+def _read_store(path: Path) -> list[dict[str, object]] | None:
     """Jobs in one store, or None when the store cannot be read (fail closed)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -187,7 +186,7 @@ def _read_store(path: Path) -> list[dict] | None:
     return jobs
 
 
-def _superseded_id(job: dict) -> str | None:
+def _superseded_id(job: dict[str, object]) -> str | None:
     job_id = str(job.get("id") or "").strip()
     name = str(job.get("name") or "").strip()
     for stable_id, installed_name in SUPERSEDED_HERMES_JOBS:
@@ -196,7 +195,7 @@ def _superseded_id(job: dict) -> str | None:
     return None
 
 
-def _is_active(job: dict) -> bool:
+def _is_active(job: dict[str, object]) -> bool:
     """Hermes is_job_runnable: enabled (default true) and carrying no pause marker."""
     paused = str(job.get("state") or "").strip() == "paused" or bool(job.get("paused_at"))
     return bool(job.get("enabled", True)) and not paused
@@ -255,24 +254,63 @@ def hermes_jobs_line(findings: InstalledJobFindings) -> str:
     return f"ok    hermes-jobs: {findings.jobs} installed, no superseded job enabled"
 
 
+#: Linux `STA_UNSYNC` (linux/timex.h): set while the kernel clock is not NTP-synchronized.
+_STA_UNSYNC = 0x0040
+
+
+class _Timeval(ctypes.Structure):
+    _fields_ = [("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_long)]
+
+
+class _Timex(ctypes.Structure):
+    """`struct timex` (linux/timex.h), 64-bit layout. Only `status` is read."""
+
+    _fields_ = [
+        ("modes", ctypes.c_uint),
+        ("offset", ctypes.c_long),
+        ("freq", ctypes.c_long),
+        ("maxerror", ctypes.c_long),
+        ("esterror", ctypes.c_long),
+        ("status", ctypes.c_int),
+        ("constant", ctypes.c_long),
+        ("precision", ctypes.c_long),
+        ("tolerance", ctypes.c_long),
+        ("time", _Timeval),
+        ("tick", ctypes.c_long),
+        ("ppsfreq", ctypes.c_long),
+        ("jitter", ctypes.c_long),
+        ("shift", ctypes.c_int),
+        ("stabil", ctypes.c_long),
+        ("jitcnt", ctypes.c_long),
+        ("calcnt", ctypes.c_long),
+        ("errcnt", ctypes.c_long),
+        ("stbcnt", ctypes.c_long),
+        ("tai", ctypes.c_int),
+        ("_reserved", ctypes.c_int * 11),
+    ]
+
+
+def _kernel_ntp_state() -> tuple[int, int]:
+    """(return code, status bits) from adjtimex(2) with modes=0: a read-only query, no process."""
+    libc = ctypes.CDLL(None)
+    adjtimex = libc.adjtimex
+    adjtimex.argtypes = [ctypes.POINTER(_Timex)]
+    adjtimex.restype = ctypes.c_int
+    state = _Timex()  # zeroed: modes == 0 asks for a read only
+    rc: int = adjtimex(ctypes.byref(state))
+    status: int = state.status
+    return rc, status
+
+
 def timedatectl_synchronized() -> bool | None:
-    """NTP sync state from systemd `timedatectl`: True, False, or None when unreadable."""
-    exe = shutil.which("timedatectl")
-    if exe is None:
-        return None
+    """NTP sync state as timedatectl reports it (kernel STA_UNSYNC): True, False, or None."""
     try:
-        proc = subprocess.run(
-            [exe, "show", "--property=NTPSynchronized", "--value"],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
+        rc, status = _kernel_ntp_state()
+    except (OSError, AttributeError):
         return None
-    if proc.returncode != 0:
+    if rc == -1:
         return None
-    return {"yes": True, "no": False}.get(proc.stdout.strip().lower())
+    return (status & _STA_UNSYNC) == 0
 
 
 def clock_sync_line(probe: Callable[[], bool | None] | None = None) -> str:
