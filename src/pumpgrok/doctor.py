@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import http.client
 import importlib.util
+import sqlite3
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 from pumpgrok.config.settings import Settings, current_profile
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 
 SUBSYSTEMS: tuple[tuple[str, str], ...] = (
     ("settings", "pumpgrok.config.settings"),
@@ -89,13 +93,34 @@ def subsystem_statuses() -> list[SubsystemStatus]:
     ]
 
 
+def onb08_rpc_line(
+    operator_dir: Path = oc.OPERATOR_DIR, ledger_path: Path = PAPER_LEDGER_PATH
+) -> str:
+    """ONB-08: the default RPC, or an explicit operator-authenticated endpoint choice."""
+    try:
+        status, endpoint = oc.rpc_status(operator_dir, ledger_path)
+    except (oc.OperatorChoiceError, OSError, ValueError, sqlite3.Error) as exc:
+        no_key = not (operator_dir / oc.KEY_NAME).exists()
+        no_choices = not (operator_dir / oc.CHOICES_NAME).exists()
+        if no_key and no_choices:
+            # No key and no choices file: no operator choice can exist, so the default stands.
+            return "ok    ONB-08 rpc=default (no operator key; no endpoint choice recorded)"
+        return f"warn  ONB-08 rpc=unavailable: {exc}"
+    if status == "explicit" and endpoint is not None:
+        return f"ok    ONB-08 rpc=explicit endpoint={endpoint.label()} (operator-authenticated)"
+    if status == "unbound":
+        return "warn  ONB-08 rpc=unbound (choice not authenticated by the ledger; none in effect)"
+    return "ok    ONB-08 rpc=default (no operator endpoint choice recorded)"
+
+
 def doctor_report(settings: Settings) -> list[str]:
-    """Lines for stdout: effective mode, one status line per subsystem, endpoint probes, summary."""
+    """Lines for stdout: mode, subsystem lines, the ONB-08 RPC line, endpoint probes, summary."""
     statuses = subsystem_statuses()
     present = sum(1 for status in statuses if status.present)
     absent = len(statuses) - present
     lines = [f"info  mode={settings.effective_mode} profile={current_profile()}"]
     lines.extend(status.line() for status in statuses)
+    lines.append(onb08_rpc_line())
     port = settings.health.port
     if port <= 0:
         lines.append("warn  /healthz (not served: health.port=0, only `run --serve` binds a port)")
