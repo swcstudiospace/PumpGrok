@@ -11,6 +11,8 @@ Invariants (I1-I5):
   I5 Seats may only write ledger events through journal.append and desk.event_emit
      with kind in {journal_note, escalation}; every other event type is appended
      by library code only.
+  I6 With an operator gate (ONB-04), a roster grant resolves only when the gate allows that
+     seat and tool; otherwise the refusal reason is not_operator_approved.
 """
 
 import logging
@@ -93,6 +95,7 @@ class ToolRegistry:
         audit_sink: Callable[[GrantAudit], None],
         limits_checker: Callable[[OrderRequest, str], Awaitable[bool]],
         rng: random.Random | None = None,
+        operator_gate: Callable[[str, str], bool] | None = None,
     ) -> None:
         self._clock = clock
         self._tools: dict[str, Tool] = {}
@@ -102,6 +105,7 @@ class ToolRegistry:
         # from the composition-root seed; the default below is test-only.
         self._rng = rng if rng is not None else make_rng()
         self._limiters: dict[str, RateLimiter] = {}
+        self._operator_gate = operator_gate
 
     def _limiter_for(self, key: str) -> RateLimiter:
         """One limiter per rate_limit_key; created lazily so keys stay in code."""
@@ -180,6 +184,12 @@ class ToolRegistry:
                 if capability == spec.name:
                     self._refuse(
                         bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid)
+                    )
+                continue
+            if self._operator_gate is not None and not self._operator_gate(bot.id, spec.name):
+                if capability == spec.name:
+                    self._refuse(
+                        bot, spec.name, spec.side_effect, "not_operator_approved", str(cid)
                     )
                 continue
             self._audit(

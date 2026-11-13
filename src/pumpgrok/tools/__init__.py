@@ -7,6 +7,9 @@ checker (the PaperAdapter enforces approvals itself through its RiskEngine),
 and one ``RateLimiter`` per ``rate_limit_key`` held inside the
 registry. ``build_operator_registry()`` composes the full 37-tool Phase 4
 catalog over the same root for operator verbs (TOOL-011).
+The operator gate (ONB-04) is opt-in on both builders. ``build_production_operator_registry()``
+is the production entry: it passes ``OperatorGrants().allows``, so every roster tool needs an
+authenticated operator grant.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import logging
 import random
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -30,6 +33,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.price import ReservesCache
 from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.operator_choices import OperatorGrants
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
@@ -80,6 +84,7 @@ from pumpgrok.tools.risk.kill_switch import ClosePosition, build_kill_switch_too
 from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pumpgrok.config.settings import SafetyThresholds, Settings
     from pumpgrok.core.bot import BotManifest
     from pumpgrok.datafeed.price import LivePriceSource
@@ -89,6 +94,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "build_operator_registry",
+    "build_production_operator_registry",
     "build_registry",
     "ensure_paper_genesis",
     "register_read_tools",
@@ -133,11 +139,16 @@ async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
 def build_registry(
     clock: Clock | None = None,
     rng: random.Random | None = None,
+    *,
+    operator_gate: Callable[[str, str], bool] | None = None,
 ) -> tuple[ToolRegistry, list[GrantAudit]]:
     """Build an empty registry with replay-safe defaults.
 
     Returns the registry plus the audit list backing its sink, so tests and
     the gateway can assert one row per resolution attempt (I4).
+
+    ``operator_gate`` is opt-in: ``None`` skips the operator grant check, as replay and the
+    test harness require. Production composition uses ``build_production_operator_registry``.
     """
     audits: list[GrantAudit] = []
     registry = ToolRegistry(
@@ -145,6 +156,7 @@ def build_registry(
         audit_sink=audits.append,
         limits_checker=_permit_exec,
         rng=rng,
+        operator_gate=operator_gate,
     )
     return registry, audits
 
@@ -323,6 +335,7 @@ def build_operator_registry(
     live_source: LivePriceSource | None = None,
     p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
     seed: int | None = None,  # composition-root seed (INT-05); defaults to settings.replay.seed
+    operator_gate: Callable[[str, str], bool] | None = None,  # ONB-04 gate; opt-in
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
@@ -344,13 +357,17 @@ def build_operator_registry(
     from the replay-module default seed.
     Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
+    ``operator_gate`` is opt-in: ``None`` skips the operator grant check, as replay and the
+    test harness require. Production callers use :func:`build_production_operator_registry`.
     """
     active_clock = clock if clock is not None else WallClock()
     active_seed = seed if seed is not None else settings.replay.seed
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     repo_root = Path(repo_root)
-    reg, _audits = build_registry(clock=active_clock, rng=make_rng(active_seed))
+    reg, _audits = build_registry(
+        clock=active_clock, rng=make_rng(active_seed), operator_gate=operator_gate
+    )
     client = httpx.AsyncClient()
     rpc = RpcClient(
         list(settings.rpc.endpoints),
@@ -445,3 +462,15 @@ def build_operator_registry(
     )
     manifests = load_bot_manifests(repo_root / "contracts" / "tool-rosters")
     return reg, manifests, client
+
+
+def build_production_operator_registry(
+    **kwargs: Any,
+) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
+    """Build the operator registry with the production operator gate (ONB-04).
+
+    Every roster tool resolves only after an authenticated operator ``allow`` for that
+    seat and tool. ``OperatorGrants`` reads the decision at each check, so a revoke takes
+    effect at once. Takes the keyword arguments of :func:`build_operator_registry`.
+    """
+    return build_operator_registry(operator_gate=OperatorGrants().allows, **kwargs)

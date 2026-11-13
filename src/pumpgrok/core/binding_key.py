@@ -21,11 +21,25 @@ import stat
 import tempfile
 from pathlib import Path
 
-__all__ = ["BINDING_KEY_FILENAME", "BindingKeyError", "load_or_create_binding_key"]
+__all__ = [
+    "BINDING_KEY_FILENAME",
+    "BindingKeyError",
+    "draw_key_material",
+    "load_or_create_binding_key",
+]
 
 BINDING_KEY_FILENAME = "binding.key"
 _KEY_BYTES = 32
 _LOOSE_MODE_BITS = 0o077
+
+
+def draw_key_material(nbytes: int) -> bytes:
+    """Return ``nbytes`` of OS entropy for operator key and record-nonce material.
+
+    One of the two allowed ``os.urandom`` roots (with ``core/ids.py``): callers outside
+    those modules MUST NOT draw OS entropy directly.
+    """
+    return os.urandom(nbytes)
 
 
 class BindingKeyError(RuntimeError):
@@ -47,7 +61,7 @@ def _create_key(path: Path) -> None:
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="ascii") as fh:
-            fh.write(os.urandom(_KEY_BYTES).hex() + "\n")
+            fh.write(draw_key_material(_KEY_BYTES).hex() + "\n")
             fh.flush()
             os.fsync(fh.fileno())
         with contextlib.suppress(FileExistsError):

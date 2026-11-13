@@ -62,6 +62,8 @@ EXEC_BACKENDS = {
     "exec.positions": "pumpgrok.execution.paper_adapter.PaperAdapter.positions",
 }
 
+pytestmark = pytest.mark.usefixtures("roster_operator_grants")
+
 
 @pytest.fixture(autouse=True)
 def _04_07_clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
