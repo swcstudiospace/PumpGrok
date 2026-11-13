@@ -41,6 +41,10 @@ SEAT_WAKES: Mapping[EventKind, tuple[str, ...]] = MappingProxyType(
     }
 )
 
+#: Seats whose event-mode body is the event-driven cycle in ``event_cycles`` (14-04 slice A).
+#: Every other seat keeps its replay body until its own slice binds it.
+EVENT_CYCLE_SEATS: frozenset[str] = frozenset({_CHIEF, _SCOUT, _RISK, _SNIPER, _RUG, _EXIT})
+
 #: The only seats that may start on a timer in event mode, with their period in seconds.
 #: 02-risk: 5 s staleness. 06-exit: 15 s watchdog. 09-journal: 300 s flush.
 EVENT_TIMERS: Mapping[str, float] = MappingProxyType(

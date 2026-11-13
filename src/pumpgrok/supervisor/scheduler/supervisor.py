@@ -9,6 +9,7 @@ import logging
 import math
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +38,9 @@ if TYPE_CHECKING:
     from pumpgrok.tools.notify.notifier import Notifier
 
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
+
+#: The bus event that woke the running cycle in event mode; None for a timer or cadence start.
+TRIGGER_EVENT: ContextVar[Event | None] = ContextVar("pumpgrok_trigger_event", default=None)
 
 #: Supervisor tick: due seats are started once per tick, in roster order.
 TICK_S = 1.0
@@ -238,20 +242,28 @@ class Supervisor:
             return tuple(seat for seat in ROSTER if seat in EVENT_TIMERS)
         return ROSTER
 
-    def _spawn_cycle(self, seat: str) -> asyncio.Task[str]:
+    def _spawn_cycle(self, seat: str, event: Event | None = None) -> asyncio.Task[str]:
         """Start one seat cycle as a task. Event mode serializes each seat behind its own lock."""
         if self._event_mode:
-            return asyncio.ensure_future(self._serial_cycle(seat))
+            return asyncio.ensure_future(self._serial_cycle(seat, event))
         return asyncio.ensure_future(self.tasks[seat].run_guarded(self._seat_context(seat)))
 
-    async def _serial_cycle(self, seat: str) -> str:
-        """Event mode: a seat never overlaps itself, whether woken by an event or its timer."""
-        async with self._seat_locks[seat]:
-            return await self.tasks[seat].run_guarded(self._seat_context(seat))
+    async def _serial_cycle(self, seat: str, event: Event | None) -> str:
+        """Event mode: a seat never overlaps itself, whether woken by an event or its timer.
 
-    async def _await_cycle(self, seat: str) -> str:
+        The triggering event is visible to the cycle through ``TRIGGER_EVENT``. The task owns
+        its context, so a timer start (``event=None``) never sees another wake's event.
+        """
+        async with self._seat_locks[seat]:
+            token = TRIGGER_EVENT.set(event)
+            try:
+                return await self.tasks[seat].run_guarded(self._seat_context(seat))
+            finally:
+                TRIGGER_EVENT.reset(token)
+
+    async def _await_cycle(self, seat: str, event: Event | None = None) -> str:
         """Run one seat cycle to completion and return its outcome."""
-        child = self._spawn_cycle(seat)
+        child = self._spawn_cycle(seat, event)
         self._inflight[seat] = child
         try:
             return await child
@@ -330,7 +342,7 @@ class Supervisor:
         self._emit_rollover(self._clock.now())
         outcomes: dict[str, str] = {}
         for seat in wake_order(event.kind):
-            outcomes[seat] = await self._await_cycle(seat)
+            outcomes[seat] = await self._await_cycle(seat, event)
         await self._end_of_tick(heartbeats=False)
         return outcomes
 
