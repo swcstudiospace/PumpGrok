@@ -180,11 +180,6 @@ def test_run_event_flag_is_refused_until_replay_supervisor_takes_wake_mode(
     assert supervisor_calls == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="blocked: run_once_replay/serve_replay (supervisor/scheduler/serve.py, CHIEF-owned) "
-    "do not accept wake_mode; remove this marker and the run refusal in verbs_state._run",
-)
 def test_run_event_path_builds_event_supervisor(
     hermes_home: Path,
     tmp_path: Path,
