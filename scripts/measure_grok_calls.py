@@ -7,6 +7,7 @@ Two counts over the same dataset, both from the real stack:
 - after_calls: Grok transport calls ``pumpgrok.grok.gateway.GrokGateway`` actually makes when
   the rows are replayed from ``llm.jsonl`` through ``admit_replay``. Prefilter skips, cache
   hits and coalesced answers cost no call.
+  Each mint's cooldown starts at its last admitted candidate, as in the live flow.
 
 ratio = after_calls / before_calls. The gate passes only when ratio <= max-ratio and the
 number of prefilter-admitted candidates >= min-candidates.
@@ -87,11 +88,17 @@ class _CountingTransport:
 
 
 def request_for_row(
-    number: int, row: dict[str, Any], *, agent: NarrativeAgent, clock: FixtureClock
+    number: int,
+    row: dict[str, Any],
+    *,
+    agent: NarrativeAgent,
+    clock: FixtureClock,
+    last_admitted: dict[str, float],
 ) -> GrokRequest:
     """Advance the clock to the row, then rebuild the request ``GrokAgent.run`` would build.
 
     ``number`` is the 1-based line number of the row in events.jsonl, for error messages.
+    ``last_admitted`` maps each mint to the decision time of its last admitted candidate.
     """
     try:
         clock.advance_to(parse_ts_utc(row["ts_utc"]))
@@ -106,7 +113,7 @@ def request_for_row(
             token,
             prerank=Decimal(str(row["prerank"])),
             first_trade_at=parse_ts_utc(row["first_trade_ts_utc"]),
-            last_decision_at=None,
+            last_decision_at=last_admitted.get(row["mint"]),
         )
         text = agent.build_user_message(token)
     except KeyError as exc:
@@ -161,8 +168,11 @@ async def measure(dataset_dir: Path) -> Measurement:
             budget=LayeredBudget(Path(scratch) / "budget.sqlite", clock),
         )
         agent = narrative_agent(gateway, clock)
+        last_admitted: dict[str, float] = {}
         for number, row in rows:
-            request = request_for_row(number, row, agent=agent, clock=clock)
+            request = request_for_row(
+                number, row, agent=agent, clock=clock, last_admitted=last_admitted
+            )
             try:
                 outcome = await admit_replay(gateway, replay, request, clock=clock)
             except PumpgrokError as exc:
@@ -174,6 +184,8 @@ async def measure(dataset_dir: Path) -> Measurement:
                     f"candidate row {number} was admitted but not answered: "
                     f"{outcome.status} ({outcome.reason})"
                 )
+            # The gateway admitted this candidate: its mint's cooldown starts at this decision.
+            last_admitted[row["mint"]] = clock.now()
             admitted += 1
 
     return Measurement(
