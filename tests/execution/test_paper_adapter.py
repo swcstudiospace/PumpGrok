@@ -185,9 +185,7 @@ BIG = RiskBudget(
 
 async def test_full_fill_at_l_over_50(tmp_path: Path) -> None:
     size = S0 * 2 // 100
-    adapter, clock, request = _harness(
-        tmp_path, budget=BIG, size=size
-    )
+    adapter, clock, request = _harness(tmp_path, budget=BIG, size=size)
     fill = await _place(adapter, clock, request)
     assert fill.status.value == "filled"
     assert fill.filled_lamports == size
@@ -197,9 +195,7 @@ async def test_full_fill_at_l_over_50(tmp_path: Path) -> None:
 async def test_partial_fill_between_l_over_50_and_l_over_10(tmp_path: Path) -> None:
     size = S0 * 2 // 100 + 660_000_000
     assert S0 // 50 < size <= S0 // 10
-    adapter, clock, request = _harness(
-        tmp_path, budget=BIG, size=size
-    )
+    adapter, clock, request = _harness(tmp_path, budget=BIG, size=size)
     fill = await _place(adapter, clock, request)
     cap = S0 * 2 // 100
     assert fill.status.value == "partial"

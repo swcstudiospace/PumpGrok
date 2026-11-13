@@ -211,9 +211,7 @@ async def test_assumed_layout_refuses_rpc_entries(tmp_path: Path) -> None:
         is False
     )
     assert (
-        rpc_curve_price_allowed(
-            curve_source="fixture", provenance=CurveProvenance.VERIFIED_REPLAY
-        )
+        rpc_curve_price_allowed(curve_source="fixture", provenance=CurveProvenance.VERIFIED_REPLAY)
         is True
     )
     clock = FixtureClock(START)

@@ -31,6 +31,7 @@ from pumpgrok.risk.limits import EngineLimits
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from pumpgrok.datafeed.price import LivePriceSource
     from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter import CurveSnapshot
@@ -96,11 +97,35 @@ def verify_replay(dataset_dir: str | Path, clock: Clock) -> VerifiedReplay:
     """
     # Lazy: replay.sources imports pumpgrok.execution.paper_adapter, so a
     # module-level import here would cycle through pumpgrok.execution.
-    from pumpgrok.replay.sources import FixtureCurveSource
+    from pumpgrok.replay.sources import FixtureCurveSource  # noqa: PLC0415 - circular import
 
     dataset = load_dataset(Path(dataset_dir))
     curves = FixtureCurveSource(dataset, clock)
     return VerifiedReplay(dataset=dataset, curves=curves, _mint=_MINT)
+
+
+def _compose_live(
+    live_source: LivePriceSource,
+    *,
+    replay: VerifiedReplay | None,
+    price_source: PriceSource | None,
+    source: Literal["paper", "replay", "manual"],
+    reserves_observer: Callable[[CurveSnapshot], None] | None,
+) -> tuple[EntryPolicy, PriceSource]:
+    """Compose the exact live source: entry policy and the price source it serves."""
+    # Lazy: datafeed.price imports pumpgrok.execution.paper_adapter.models, so a
+    # module-level import here would cycle through pumpgrok.execution.
+    from pumpgrok.datafeed.price import LivePriceSource  # noqa: PLC0415 - circular import
+
+    if replay is not None or price_source is not None:
+        raise ValueError("live composition takes the live source alone")
+    if source != "paper":
+        raise ValueError("live composition composes only the paper ledger source")
+    if type(live_source) is not LivePriceSource:
+        raise ValueError("live source must be the exact LivePriceSource")
+    policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,))
+    live_source.set_observer(reserves_observer)
+    return policy, live_source
 
 
 def build_paper_adapter(
@@ -139,17 +164,13 @@ def build_paper_adapter(
         raise ValueError("reserves observer needs the exact live source")
     policy: EntryPolicy
     if live_source is not None:
-        from pumpgrok.datafeed.price import LivePriceSource
-
-        if replay is not None or price_source is not None:
-            raise ValueError("live composition takes the live source alone")
-        if source != "paper":
-            raise ValueError("live composition composes only the paper ledger source")
-        if type(live_source) is not LivePriceSource:
-            raise ValueError("live source must be the exact LivePriceSource")
-        policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,))
-        live_source.set_observer(reserves_observer)
-        price_source = live_source
+        policy, price_source = _compose_live(
+            live_source,
+            replay=replay,
+            price_source=price_source,
+            source=source,
+            reserves_observer=reserves_observer,
+        )
     elif replay is None:
         policy = _NoReplayEntries()
     else:
@@ -157,7 +178,7 @@ def build_paper_adapter(
             raise ValueError("verified replay composes only the replay ledger source")
         if price_source is not None and price_source is not replay.curves:
             raise ValueError("price source is not the verified replay curve source")
-        from pumpgrok.replay.sources import FixtureCurveSource
+        from pumpgrok.replay.sources import FixtureCurveSource  # noqa: PLC0415 - circular import
 
         policy = BoundEntryPolicy(replay.curves, supported=(FixtureCurveSource,), replay=replay)
         price_source = replay.curves
