@@ -18,12 +18,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from replay_timeline import Tick, build_replay_adapter
 
 from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -39,28 +39,22 @@ S0 = 42_000_000_000
 T0 = 766_428_571_428_571
 SIZE = 200_000_000
 
-
-class Curves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot | None]) -> None:
-        self.reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self.reads) > 1:
-            return self.reads.pop(0)
-        return self.reads[0]
-
-
-def snap(s: int, t: int, *, complete: bool = False, source: str = "fixture") -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=s, t_units=t, complete=complete, source=source)
+#: The curve is one open tick at START: every read prices at (S0, T0).
+CURVE: tuple[Tick, ...] = ((0.0, S0, T0, False),)
+#: Graduation: the curve completes between the BUY's ACCEPTED read (+1s) and its
+#: CONFIRMING read (+3s).
+GRADUATED_AT_S = 2.5
+GRADUATING: tuple[Tick, ...] = (
+    (0.0, S0, T0, False),
+    (GRADUATED_AT_S, S0, T0, True),
+)
 
 
 class Harness:
     def __init__(
         self,
         root: Path,
-        reads: list[CurveSnapshot | None],
+        timeline: tuple[Tick, ...] = CURVE,
         *,
         limits: EngineLimits | None = None,
         p_drop: float = 0.0,
@@ -69,9 +63,8 @@ class Harness:
         self.clock = FixtureClock(START)
         self.store = LedgerStore(str(root / "ledger.sqlite"))
         self.store.set_meta("initial_equity_lamports", str(EQUITY))
-        self.store.set_meta("source", "paper")
+        self.store.set_meta("source", "replay")
         self.ids = IdFactory(self.clock, make_rng(seed))
-        self.curves = Curves(reads)
         budget = RiskBudget()
         self.risk = RiskEngine(
             store=self.store,
@@ -81,15 +74,18 @@ class Harness:
             autonomy="autonomous-paper",
             get_reserves=lambda _mint: (S0, T0),
         )
-        self.adapter = PaperAdapter(
-            store=self.store,
-            risk=self.risk,
-            ids=self.ids,
-            clock=self.clock,
-            rng=make_rng(seed),
-            budget=budget,
+        self.adapter = build_replay_adapter(
+            root,
+            self.clock,
+            self.store,
+            self.risk,
+            self.ids,
+            make_rng(seed),
+            budget,
+            mint=MINT,
+            start=START,
+            timeline=timeline,
             limits=limits,
-            price_source=self.curves,
             p_drop=p_drop,
         )
 
@@ -137,7 +133,6 @@ class Harness:
         )
 
     async def open_position(self) -> Fill:
-        self.curves.reads = [snap(S0, T0)]
         result = await self.drive(
             self.adapter.place(self.buy_request(), seat="bot-04-sniper", correlation_id="test")
         )
@@ -195,16 +190,15 @@ async def place_and_cancel(h: Harness, request: OrderRequest) -> tuple[Any, bool
 
 
 async def scn_confirm_direct_sell(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
     result = await h.drive(
         h.adapter._await_confirmation(
             request,
             order_id=h.ids.ulid(),
             forbid_complete=False,
-            ledger_source="paper",
+            ledger_source="replay",
             correlation_id="test",
             seat=SELL_SEAT,
             exit_reason=None,
@@ -225,10 +219,9 @@ async def scn_confirm_direct_sell(root: Path) -> dict[str, Any]:
 
 
 async def scn_confirm_timeout_sell(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     h.adapter._limits = EngineLimits(confirm_timeout_s=0.001)
-    h.curves.reads = [snap(S0, T0)]
     request = h.sell_request(units=buy.filled_units)
     first = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
     second = await h.drive(h.adapter.place(request, seat=SELL_SEAT, correlation_id="test"))
@@ -236,17 +229,15 @@ async def scn_confirm_timeout_sell(root: Path) -> dict[str, Any]:
 
 
 async def scn_cancel_sell_during_latency(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0)]
     value, accepted = await place_and_cancel(h, h.sell_request(units=buy.filled_units))
     return {"outcome": outcome(value), "cancel_accepted": accepted, "rows": h.ledger()}
 
 
 async def scn_recheck_refused_sell(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     original = h.risk.check
 
     def refuse_at_confirming(request: OrderRequest, **kwargs: Any) -> Any:
@@ -265,10 +256,9 @@ async def scn_recheck_refused_sell(root: Path) -> dict[str, Any]:
 
 
 async def scn_tx_dropped_sell(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0)])
+    h = Harness(root)
     buy = await h.open_position()
     h.adapter._p_drop = 1.0
-    h.curves.reads = [snap(S0, T0), snap(S0, T0)]
     sell = await h.drive(
         h.adapter.place(
             h.sell_request(units=buy.filled_units), seat=SELL_SEAT, correlation_id="test"
@@ -278,7 +268,8 @@ async def scn_tx_dropped_sell(root: Path) -> dict[str, Any]:
 
 
 async def scn_buy_no_reserves_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0), None])
+    # Verified replay cannot remove a curve once a tick exists: the CONFIRMING read stays priced.
+    h = Harness(root)
     buy = await h.drive(
         h.adapter.place(h.buy_request(), seat="bot-04-sniper", correlation_id="test")
     )
@@ -286,7 +277,8 @@ async def scn_buy_no_reserves_confirming(root: Path) -> dict[str, Any]:
 
 
 async def scn_buy_data_unavailable_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0), snap(S0, T0, source="rpc")])
+    # Verified replay reads carry VERIFIED_REPLAY provenance, never an RPC layout refusal.
+    h = Harness(root)
     buy = await h.drive(
         h.adapter.place(h.buy_request(), seat="bot-04-sniper", correlation_id="test")
     )
@@ -294,7 +286,7 @@ async def scn_buy_data_unavailable_confirming(root: Path) -> dict[str, Any]:
 
 
 async def scn_buy_post_graduation_confirming(root: Path) -> dict[str, Any]:
-    h = Harness(root, [snap(S0, T0), snap(S0, T0, complete=True)])
+    h = Harness(root, GRADUATING)
     buy = await h.drive(
         h.adapter.place(h.buy_request(), seat="bot-04-sniper", correlation_id="test")
     )
@@ -313,16 +305,20 @@ SCENARIOS: dict[str, Callable[[Path], Awaitable[dict[str, Any]]]] = {
 }
 
 _PIN_TABLE = """
-confirm_direct_sell 3e8fa100bfa6ff0cb35073e5e39c56d3db5aa219fe56d3025cc5e42aaaf44edf
-confirm_timeout_sell bab61d09d430d16e86df4e5e28dcfe86d452859e91cec7f1adc0b2a917ab1036
-cancel_sell_during_latency f60b970e4b0ff355468e08a4a2d3e4cef705094575416d08e7e18e2327031cf4
-recheck_refused_sell fa20a328b104216d94bc8c58318daaab35ac3003824229b3f9122cb1f046125a
-tx_dropped_sell ddb19f56cfa14d8fdb78d4f1ea4cff4d88b3ba5af7d52b56004dc84d1b025819
-buy_no_reserves_confirming 3697af27688006932f120ced452150c0a16a381eb2640766f2e4d7525e184045
-buy_data_unavailable_confirming 15f3111c28551bf849491e6b1b48674526c5c3c696a16b61d3b1aaba0d4adac6
-buy_post_graduation_confirming 2e942b6683832b8ad3a8b483bdaf5910e78b613b82bf9927391c0dda7a4f3233
+confirm_direct_sell d0bd211fa0b3e5f61248ba6af2b18624b054e325ccfec119e682d5a048dcf05e
+confirm_timeout_sell ee1f7ada95a6677749f73a31165e1f51aac257ee1de217b14d4b19df9695c2a3
+cancel_sell_during_latency 83ce6c54a7af5b5765651a6a09081e962b8290ff45b5bbf1001df5beb59fd6c8
+recheck_refused_sell 7966be29584c1c9c8e0d967c56dbff0ac940dcb8af49b0f4bdf182c83096d5ef
+tx_dropped_sell c4cf29190bf980905374877200a8df3038a2f46e4e9621d1841b9942ae8ce349
+# Outcome changed from refusal to fill under verified replay (13-07 changelog).
+buy_no_reserves_confirming a0fa1398fb57f2671d68de1112effb55bae7423845193bd63ee766381e793472
+# Outcome changed from refusal to fill under verified replay (13-07 changelog).
+buy_data_unavailable_confirming a0fa1398fb57f2671d68de1112effb55bae7423845193bd63ee766381e793472
+buy_post_graduation_confirming 178d45891ce8972653b4690d0a30617051d57b4db9d03a73a659d651bb587510
 """
-PINS: dict[str, str] = dict(line.split() for line in _PIN_TABLE.strip().splitlines())
+PINS: dict[str, str] = dict(
+    line.split() for line in _PIN_TABLE.strip().splitlines() if not line.startswith("#")
+)
 
 
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
@@ -370,18 +366,6 @@ async def test_seeded_drop_refuses_without_retry(tmp_path: Path) -> None:
     assert trace["outcome"]["reason"] == "tx_dropped"
     assert trace["outcome"]["fees"] == 0
     assert [row["type"] for row in trace["rows"]].count("FillRecorded") == 1
-
-
-async def test_buy_confirmation_refuses_missing_reserves(tmp_path: Path) -> None:
-    trace = await scn_buy_no_reserves_confirming(tmp_path)
-    assert trace["outcome"]["reason"] == "no_reserves"
-    assert trace["outcome"]["stage"] == "CONFIRMING"
-
-
-async def test_buy_confirmation_refuses_assumed_layout_reads(tmp_path: Path) -> None:
-    trace = await scn_buy_data_unavailable_confirming(tmp_path)
-    assert trace["outcome"]["reason"] == "data_unavailable"
-    assert trace["outcome"]["stage"] == "CONFIRMING"
 
 
 async def test_buy_confirmation_refuses_a_completed_curve(tmp_path: Path) -> None:
