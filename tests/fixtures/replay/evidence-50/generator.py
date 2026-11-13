@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -43,8 +44,9 @@ SMOKE10M_DIR = DIR.parent / "smoke-10m"
 COMMAND = ".venv/bin/python tests/fixtures/replay/evidence-50/generator.py"
 SEED_HINT = 20260101
 CADENCE_S = 90
-CANDIDATES = 60
-DECOY_EVERY = 6  # rows at index % 6 == 5 are prefilter rejections, one reason each
+CANDIDATES = 300
+ADMITTED = 50
+ADMITTED_EVERY = 6  # rows at index % 6 == 0 are admitted; every other row is a planned rejection
 DECOY_REASONS = (
     "too_young",
     "too_old",
@@ -108,17 +110,21 @@ def _smoke_sources() -> tuple[list[dict[str, Any]], float, dict[str, str]]:
 
 def _intended(index: int) -> str:
     """The reason row ``index`` must get from the prefilter: admitted, or its planned rejection."""
-    if index % DECOY_EVERY == DECOY_EVERY - 1:
-        return DECOY_REASONS[(index // DECOY_EVERY) % len(DECOY_REASONS)]
-    return "admitted"
+    if index % ADMITTED_EVERY == 0:
+        return "admitted"
+    # Rejected rows are numbered 0..249 in order and cycle the five reasons: 50 each.
+    ordinal = index - index // ADMITTED_EVERY - 1
+    return DECOY_REASONS[ordinal % len(DECOY_REASONS)]
 
 
 def _row(index: int, template: dict[str, Any], start: float) -> dict[str, Any]:
     now = start + CADENCE_S * index
     reason = _intended(index)
-    # Admitted rows: age 300..2483 s, first trade 60..698 s ago, prerank 0.50..1.00.
-    age = 300 + 37 * index
-    first_trade_age = 60 + 11 * index
+    # Admitted rows: age 300..3240 s, first trade 60..599 s ago, prerank 0.50..1.00. The base
+    # values come from the row's slot (index // ADMITTED_EVERY), so every row stays in range.
+    slot = index // ADMITTED_EVERY
+    age = 300 + 60 * slot
+    first_trade_age = 60 + 11 * slot
     buyers = template["unique_buyers"]
     prerank = _prerank_text(50 + (7 * index) % 51)
     if reason == "too_young":
@@ -134,8 +140,8 @@ def _row(index: int, template: dict[str, Any], start: float) -> dict[str, Any]:
     return {
         "ts_utc": _iso(now),
         "kind": "tick",
-        "mint": _derive_mint(f"candidate-{index:02d}"),
-        "name": f"{template['name']} {index:02d}",
+        "mint": _derive_mint(f"candidate-{index:03d}"),
+        "name": f"{template['name']} {index:03d}",
         "image_uri": template["image_uri"],
         "created_ts_utc": _iso(now - age),
         "first_trade_ts_utc": _iso(now - first_trade_age),
@@ -223,6 +229,7 @@ def build_files() -> dict[str, bytes]:
     observations = observe([json.loads(line) for line in events_bytes.decode("utf-8").splitlines()])
 
     admitted: list[Observation] = []
+    rejections: Counter[str] = Counter()
     for index, observation in enumerate(observations):
         verdict = prefilter(observation.request.candidate, now=observation.now)
         if verdict.reason != _intended(index):
@@ -231,8 +238,10 @@ def build_files() -> dict[str, bytes]:
             )
         if verdict.admit:
             admitted.append(observation)
-    if len(admitted) < 50:
-        raise RuntimeError(f"only {len(admitted)} candidates admitted; evidence-50 needs 50")
+        else:
+            rejections[verdict.reason] += 1
+    if len(admitted) != ADMITTED:
+        raise RuntimeError(f"only {len(admitted)} candidates admitted; evidence-50 needs {ADMITTED}")
 
     llm_bytes = _jsonl(
         [
@@ -249,13 +258,14 @@ def build_files() -> dict[str, bytes]:
         ]
     )
     rejected = len(observations) - len(admitted)
+    mix = ", ".join(f"{reason} {rejections[reason]}" for reason in DECOY_REASONS)
     notes = (
         "SYNTHETIC. Not market evidence. Regenerate with "
         f"`{COMMAND}` from the repository root. Built from tests/fixtures/replay/smoke "
         f"(events.jsonl sha256 {pins['smoke']}) and tests/fixtures/replay/smoke-10m "
         f"(events.jsonl sha256 {pins['smoke-10m']}). {len(observations)} candidate rows: "
-        f"{len(admitted)} admitted by pumpgrok.grok.gateway.prefilter and {rejected} planned "
-        f"rejections cycling {', '.join(DECOY_REASONS)}. Arrivals every {CADENCE_S} s from the "
+        f"{len(admitted)} admitted by pumpgrok.grok.gateway.prefilter, one row in {ADMITTED_EVERY}, "
+        f"and {rejected} rejected by it ({mix}). Arrivals every {CADENCE_S} s from the "
         "smoke-10m start. Token facts come from smoke token rows; prerank, first trade and "
         "answers are deterministic synthetic values. Each admitted request has one llm.jsonl "
         "record keyed by the gateway request key; llm answers are synthetic, not model output."
