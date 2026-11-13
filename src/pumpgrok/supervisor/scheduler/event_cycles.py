@@ -31,6 +31,7 @@ from pumpgrok.supervisor.scheduler.replay_runtime import (
     _ReplayTrading,
 )
 from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
+from pumpgrok.supervisor.scheduler.wake import AUX_EVENT_CYCLE_SEATS, EVENT_CYCLE_SEATS
 from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
 
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
     from pumpgrok.replay.sources import FixtureCurveSource
     from pumpgrok.risk.engine import RiskEngine
 
-__all__ = ["build_event_cycles"]
+__all__ = ["build_event_cycles", "merge_event_cycles"]
 
 CHIEF = "bot-00-chief"
 SCOUT = "bot-01-scout"
@@ -195,7 +196,7 @@ def build_event_cycles(
     """Event-driven bodies for the six trading and safety seats, keyed by seat id.
 
     ``trading`` must be the runtime's granted wiring (``_replay_trading``): the sniper and the
-    exit seat place only through it. Merge over the replay cycles for the other four seats.
+    exit seat place only through it. Pass the result to ``merge_event_cycles`` over the replay map.
     """
     return {
         CHIEF: functools.partial(_chief, store=store),
@@ -206,3 +207,21 @@ def build_event_cycles(
         EXIT: functools.partial(_exit, store=store, trading=trading),
     }
 
+
+def merge_event_cycles(
+    replay: Mapping[str, CycleFn], *bound: Mapping[str, CycleFn]
+) -> dict[str, CycleFn]:
+    """Event-mode seat map: the replay bodies, each replaced by its event-driven body.
+
+    A body may bind only a seat that some event wakes (``EVENT_CYCLE_SEATS`` or
+    ``AUX_EVENT_CYCLE_SEATS``). A seat with no event row keeps its replay body, so shill
+    never runs from an event.
+    """
+    allowed = EVENT_CYCLE_SEATS | AUX_EVENT_CYCLE_SEATS
+    merged: dict[str, CycleFn] = dict(replay)
+    for bodies in bound:
+        refused = sorted(set(bodies) - allowed)
+        if refused:
+            raise ValueError(f"event body bound to a seat no event wakes: {refused}")
+        merged.update(bodies)
+    return merged
