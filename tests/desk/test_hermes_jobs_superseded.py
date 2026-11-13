@@ -35,7 +35,9 @@ SUPERSEDED: frozenset[str] = frozenset(job for job, _, _, _ in COVERAGE)
 # Kept with the reason the reviewed wake table does not cover the job's core work.
 KEPT: dict[str, str] = {
     "scout-discover": "lead files feed the cron-driven risk audit; event scout writes no leads",
-    "risk-audit-open-leads": "brief verdicts CLEAR/CONDITIONAL/KILL/BLIND are not produced in event risk",
+    "risk-audit-open-leads": (
+        "brief verdicts CLEAR/CONDITIONAL/KILL/BLIND are not produced in event risk"
+    ),
     "chief-pickup": "brief-to-ticket routing and ticket Telegram path have no event row",
     "rug-watch-paper": "red-flag and incident duties; event rug body is not a rug determination",
     "scout-pipeline": "reads recorded pipeline evidence; no wake row or timer consumes recordings",

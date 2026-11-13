@@ -1,4 +1,5 @@
-"""Every documented `pumpgrok` command is a real parser path, and the onboarding docs state the rules.
+"""Every documented `pumpgrok` command is a real parser path, and the onboarding docs
+state the rules.
 
 Commands are read from code spans and fenced blocks in the onboarding skills, the CHIEF prompt, its
 generated agent file and the event runbook. Prose that mentions the program name is not a command.
@@ -126,7 +127,8 @@ def _command_text(candidate: str) -> str | None:
 
 
 def _extract_commands(text: str) -> list[str]:
-    """Every documented command: code spans anywhere, and fenced-block lines that begin a command."""
+    """Every documented command: code spans anywhere, and fenced-block lines that
+    begin a command."""
     found: list[str] = []
     in_fence = False
     for line in text.splitlines():
