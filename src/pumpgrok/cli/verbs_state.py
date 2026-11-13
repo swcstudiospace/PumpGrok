@@ -94,8 +94,9 @@ def _declared_space() -> tuple[dict[str, Any], ...]:
 
 
 def _tool_authenticated(decisions: dict[str, oc.Decision], seat: str, tool: str) -> bool:
+    """True only when the latest decision for the tool is a bound allow; a revoke never counts."""
     decision = decisions.get(oc.tool_scope(seat, tool))
-    return decision is not None and decision.bound
+    return decision is not None and decision.allowed
 
 
 def _unauthenticated_seat_lines() -> list[str]:

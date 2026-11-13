@@ -439,7 +439,7 @@ def _seat_record(mode: str) -> InputRecord:
         decisions = oc.read_authority(oc.OPERATOR_DIR, PAPER_LEDGER_PATH)
     except (oc.OperatorChoiceError, OSError, ValueError, sqlite3.Error):
         return InputRecord("seat_tool_access", required, MISSING, "none")
-    decided = [scope for scope in scopes if scope in decisions and decisions[scope].bound]
+    decided = [scope for scope in scopes if scope in decisions and decisions[scope].allowed]
     complete = bool(scopes) and len(decided) == len(scopes)
     source = "ledger" if decided else "none"
     return InputRecord("seat_tool_access", required, _status(required, complete), source)
