@@ -39,6 +39,15 @@ class GrokOps:
             return f"daily call budget exhausted ({self.budget.max_per_day})"
         return None
 
+    def gateway_call(self, agent: str, usage: dict[str, Any] | None = None) -> None:
+        """Count one successful call the Grok gateway already charged.
+
+        The gateway's layered budget is the single spend for gateway calls, so
+        CallBudget is not touched here: spending it too would charge one call twice.
+        """
+        self.calls[agent] = self.calls.get(agent, 0) + 1
+        self.record_success(agent, usage)
+
     @asynccontextmanager
     async def slot(self, agent: str) -> AsyncIterator[None]:
         """One guarded call position: concurrency plus call rate."""
