@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -21,10 +22,10 @@ from pumpgrok.core.tool import Tool
 from pumpgrok.engine.pipeline import CandidateVerdict, evaluate_candidates
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.execution.paper_factory import build_paper_adapter, verify_replay
-from pumpgrok.ledger.operator_choices import OperatorGrants
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import FixtureDataset, event_epoch
+from pumpgrok.replay.grants import ReplayGrants, seed_replay_grants
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import REPLAY_ROOT, ReplayTrade
 from pumpgrok.replay.sources import FixtureCurveSource
@@ -74,6 +75,13 @@ def dataset_events_start(dataset: Any) -> float:
     """First fixture stamp for the replay clock."""
     stamps = [event_epoch(event) for event in dataset.events]
     return min(stamps) if stamps else 0.0
+
+
+def _seed_stamp(dataset: FixtureDataset) -> str:
+    """The deterministic ``ts_utc`` for replay grant rows: the fixture's first stamp."""
+    return datetime.fromtimestamp(dataset_events_start(dataset), tz=UTC).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def dataset_stamps(dataset: Any) -> list[float]:
@@ -225,9 +233,11 @@ def open_replay_runtime(
     ids = IdFactory(clock, rng)
     budget = budget if budget is not None else RiskBudget()
     limits = limits if limits is not None else EngineLimits()
+    roster = Path(roster_dir) if roster_dir is not None else DEFAULT_ROSTER_DIR
     store = LedgerStore(str(target))
     try:
         store.set_meta("initial_equity_lamports", str(budget.paper_equity_lamports))
+        seed_replay_grants(store, ts_utc=_seed_stamp(dataset), contracts_dir=roster)
         curves = verified.curves
         risk = RiskEngine(
             store=store,
@@ -254,7 +264,7 @@ def open_replay_runtime(
             p_drop=0.0,
         )
         registry, _audits = build_registry(
-            clock=clock, rng=make_rng(seed), operator_gate=OperatorGrants().allows
+            clock=clock, rng=make_rng(seed), operator_gate=ReplayGrants(store).allows
         )
         registry.register(build_place_tool(adapter, lambda: budget, clock))
         registry.register(
@@ -266,7 +276,6 @@ def open_replay_runtime(
                 barrier=adapter.inflight_barrier,
             )
         )
-        roster = Path(roster_dir) if roster_dir is not None else DEFAULT_ROSTER_DIR
         candidates = evaluate_candidates(dataset.events, filter_cfg)
     except BaseException:
         store.close()

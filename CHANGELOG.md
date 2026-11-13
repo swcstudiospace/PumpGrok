@@ -2,6 +2,20 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 14: replay operator grants
+
+### Changed
+
+- Replay builds its registry with the operator gate (commit `e2dca99`). The replay ledger held no operator grants, so every roster tool was denied and the replay pins measured that denial.
+- `open_replay_runtime` seeds one replay-scoped `ConfigChanged` row per (seat, roster tool) into the replay ledger (`src/pumpgrok/replay/grants.py`). Each row is labelled `by=replay:seed`, is stamped at the fixture's first event, and carries a fixed idempotency key. `ReplayGrants` admits a (seat, tool) only when the replay ledger holds its seeded row. Seeding never reads or writes `var/operator` or the live ledger, and it writes no `human:` label.
+- Re-pinned replay hashes. The seeded rows are new ledger events, so the event hash and chain length move. The fixture events read (41 and 5) are unchanged, and every pre-existing trading row is unchanged apart from its seq.
+- Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 14: smoke-10m seq before: 2, after: 146 (events read 41 in both)
+- Phase 14: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: trading-smoke events.hash after: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 14: trading-smoke seq and row count before: 11, after: 155 (events read 5 in both)
+
 ## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
 
 ### Added
