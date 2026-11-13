@@ -12,15 +12,12 @@ for the whole window.
 from __future__ import annotations
 
 import json
-from random import Random
 from typing import Any, ClassVar
 
-import httpx
-
 from pumpgrok.config.settings import GrokSettings
-from pumpgrok.core.llm import GrokOps
 from pumpgrok.engine.agents.base import JSON_ONLY, GrokAgent
 from pumpgrok.engine.models import TimingResult
+from pumpgrok.grok.gateway import Candidate, GrokGateway
 from pumpgrok.replay.clock import Clock
 
 TIMING_PROMPT = f"""You are a market-regime analyst for Solana memecoins.
@@ -62,13 +59,11 @@ class TimingAgent(GrokAgent):
         self,
         grok: GrokSettings,
         *,
+        gateway: GrokGateway,
         clock: Clock,
-        rng: Random,
         cache_seconds: float,
-        client: httpx.AsyncClient | None = None,
-        ops: GrokOps | None = None,
     ) -> None:
-        super().__init__(grok, clock=clock, rng=rng, client=client, ops=ops)
+        super().__init__(grok, gateway=gateway, clock=clock)
         self.cache_seconds = cache_seconds
         self._cached: TimingResult | None = None
 
@@ -89,7 +84,12 @@ class TimingAgent(GrokAgent):
         return (now - self._cached.fetched_at) < self.cache_seconds
 
     async def get(
-        self, market_snapshot: dict[str, Any] | None = None, *, now: float
+        self,
+        market_snapshot: dict[str, Any] | None = None,
+        *,
+        now: float,
+        event_id: str,
+        candidate: Candidate,
     ) -> TimingResult:
         """A fresh market verdict: from cache or from a new call.
 
@@ -101,7 +101,9 @@ class TimingAgent(GrokAgent):
             cached = self._cached
             assert cached is not None
             return cached
-        result: TimingResult = await self.run(market_snapshot)
+        result: TimingResult = await self.run(
+            market_snapshot, event_id=event_id, candidate=candidate
+        )
         result.fetched_at = now
         # A pessimistic fallback is never cached: a failure must not block
         # the market verdict for the whole window.
