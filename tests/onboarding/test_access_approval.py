@@ -174,9 +174,7 @@ def test_ledger_truncation_past_a_deny_is_denied(operator_home: Path) -> None:
     name = _tool_names()[0]
     _record("allow")
     _record("deny")
-    deny_key = json.loads(CHOICES.read_text(encoding="utf-8").splitlines()[-1])[
-        "idempotency_key"
-    ]
+    deny_key = json.loads(CHOICES.read_text(encoding="utf-8").splitlines()[-1])["idempotency_key"]
     db = sqlite3.connect(str(LEDGER))
     try:
         # A file-level edit: the append-only trigger is removed, then the row is cut.

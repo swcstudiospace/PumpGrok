@@ -39,7 +39,6 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pumpgrok.engine.monitor, "connect", _blocked_sync)
 
 
-
 @pytest.fixture
 def roster_operator_grants(monkeypatch: pytest.MonkeyPatch) -> None:
     """Grant each seat every tool its own roster lists, without writing ledger rows.

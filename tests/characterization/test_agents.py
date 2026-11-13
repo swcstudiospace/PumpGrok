@@ -47,6 +47,8 @@ FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "http" / "xai_ch
 
 CHAT_PATH = "/v1/chat/completions"
 NOW = 1_767_225_600.0
+
+
 class ImmediateClock:
     """Virtual time for agent tests: fixed now, sleeps resolve at once."""
 
@@ -75,8 +77,12 @@ class ImmediateClock:
             yield
 
         return _scope()
+
+
 def _grok() -> GrokSettings:
     return GrokSettings(api_key=SecretStr("test-key"))
+
+
 def _chat_envelope(content: object, model: str = "grok-4.20-0309-non-reasoning") -> dict[str, Any]:
     return {
         "id": "chatcmpl-test-001",
@@ -92,6 +98,8 @@ def _chat_envelope(content: object, model: str = "grok-4.20-0309-non-reasoning")
         ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
+
+
 def _client(
     handler: Callable[[httpx.Request], httpx.Response], seen: list[httpx.Request]
 ) -> httpx.AsyncClient:
@@ -100,6 +108,8 @@ def _client(
         return handler(request)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(_wrapped))
+
+
 def _ok(content: object) -> Callable[[httpx.Request], httpx.Response]:
     def _handle(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "api.x.ai"
@@ -107,6 +117,8 @@ def _ok(content: object) -> Callable[[httpx.Request], httpx.Response]:
         return httpx.Response(200, json=_chat_envelope(content))
 
     return _handle
+
+
 def _candidate(now: float) -> Candidate:
     """Facts that pass every prefilter rule for a token created five minutes before ``now``."""
     return Candidate(
@@ -117,13 +129,19 @@ def _candidate(now: float) -> Candidate:
         prerank=Decimal("0.8"),
         last_decision_at=None,
     )
+
+
 def _admit(now: float = NOW) -> dict[str, Any]:
     """Gateway admission arguments for one agent call at ``now``."""
     return {"event_id": "EV-TEST", "candidate": _candidate(now)}
+
+
 def _at(clock: ImmediateClock, now: float) -> dict[str, Any]:
     """Move the test clock to ``now`` and return admission arguments for that instant."""
     clock.set_now(now)
     return _admit(now)
+
+
 def _gateway(tmp_path: Path, clock: ImmediateClock, client: httpx.AsyncClient) -> GrokGateway:
     grok = _grok()
     transport = XaiTransport(
@@ -139,6 +157,8 @@ def _gateway(tmp_path: Path, clock: ImmediateClock, client: httpx.AsyncClient) -
         cache=ResponseCache(tmp_path / "cache.sqlite", clock),
         budget=LayeredBudget(tmp_path / "budget.sqlite", clock),
     )
+
+
 def _agents(
     tmp_path: Path,
     seen: list[httpx.Request],
@@ -153,6 +173,8 @@ def _agents(
     timing = TimingAgent(_grok(), cache_seconds=900.0, **kwargs)
     auditor = AuditorAgent(_grok(), **kwargs)
     return narrative, checker, timing, auditor
+
+
 def _analysis(token: Token) -> Analysis:
     return Analysis(token=token, metrics=TokenMetrics(risk_score=2.0))
 

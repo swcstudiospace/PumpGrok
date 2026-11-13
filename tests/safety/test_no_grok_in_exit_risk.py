@@ -123,8 +123,7 @@ def _forbidden_edges(root: Path, roots: Iterable[str]) -> list[tuple[str, str]]:
             if _module_path(root, target) is None:
                 continue
             if any(
-                target == prefix or target.startswith(prefix + ".")
-                for prefix in FORBIDDEN_PREFIXES
+                target == prefix or target.startswith(prefix + ".") for prefix in FORBIDDEN_PREFIXES
             ):
                 edges.append((module, target))
     return sorted(edges)

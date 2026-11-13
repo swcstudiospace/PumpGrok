@@ -170,8 +170,7 @@ async def test_stop_loss_sells_when_every_grok_slot_is_held_by_a_hung_call(
         transport = HungTransport()
         gateway = _gateway(tmp_path, clock, transport)
         pending = [
-            asyncio.create_task(gateway.admit(_request(index)))
-            for index in range(MAX_INFLIGHT + 2)
+            asyncio.create_task(gateway.admit(_request(index))) for index in range(MAX_INFLIGHT + 2)
         ]
         await _settle()
         assert transport.started == MAX_INFLIGHT

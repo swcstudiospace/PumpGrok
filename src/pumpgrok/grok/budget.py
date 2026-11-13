@@ -121,9 +121,7 @@ class LayeredBudget:
         now = self._clock.now()
         con = self._open()
         try:
-            return {
-                name: _spent(con, name, window_of(now)) for name, _limit, window_of in LAYERS
-            }
+            return {name: _spent(con, name, window_of(now)) for name, _limit, window_of in LAYERS}
         except sqlite3.Error as exc:
             raise BudgetUnavailable(f"grok budget read failed: {exc}") from exc
         finally:
@@ -131,9 +129,7 @@ class LayeredBudget:
 
 
 def _spent(con: sqlite3.Connection, layer: str, window: str) -> int:
-    row = con.execute(
-        "SELECT window, spent FROM grok_budget WHERE layer = ?", (layer,)
-    ).fetchone()
+    row = con.execute("SELECT window, spent FROM grok_budget WHERE layer = ?", (layer,)).fetchone()
     if row is None or row[0] != window:
         return 0
     return int(row[1])

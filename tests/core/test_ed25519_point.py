@@ -43,13 +43,9 @@ OFF_CURVE_Y7 = bytes.fromhex("07" + "00" * 31)  # y = 7: u/v is a non-square
 # in test_torsion_vectors_have_the_stated_order from the curve equation and the group law.
 # ZERO_Y and ZERO_Y_SIGNED have order 4 (they double to MINUS_ONE); MINUS_ONE has order 2.
 ORDER_8_A = bytes.fromhex("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a")
-ORDER_8_A_SIGNED = bytes.fromhex(
-    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"
-)
+ORDER_8_A_SIGNED = bytes.fromhex("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa")
 ORDER_8_B = bytes.fromhex("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05")
-ORDER_8_B_SIGNED = bytes.fromhex(
-    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85"
-)
+ORDER_8_B_SIGNED = bytes.fromhex("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85")
 TORSION_ENCODINGS = [
     (IDENTITY, 1),
     (MINUS_ONE, 2),

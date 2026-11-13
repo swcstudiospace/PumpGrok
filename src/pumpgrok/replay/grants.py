@@ -56,8 +56,7 @@ def seed_replay_grants(store: LedgerStore, *, ts_utc: str, contracts_dir: Path) 
     seeded rows appends nothing, so the seeded chain stays the same.
     """
     existing = {
-        row.get("idempotency_key")
-        for row in store.read(types=["ConfigChanged"], limit=None)
+        row.get("idempotency_key") for row in store.read(types=["ConfigChanged"], limit=None)
     }
     rows: list[dict[str, Any]] = []
     for seat in sorted(EXPECTED_SEAT_IDS):

@@ -154,9 +154,7 @@ class ResponseCache:
         """Store a transport-error negative entry for ``NEGATIVE_TTL_S``."""
         self._put(key, agent=agent, status="error", response=None, ttl_s=NEGATIVE_TTL_S)
 
-    def _put(
-        self, key: str, *, agent: str, status: str, response: str | None, ttl_s: int
-    ) -> None:
+    def _put(self, key: str, *, agent: str, status: str, response: str | None, ttl_s: int) -> None:
         now = self._clock.now()
         con = self._open()
         try:

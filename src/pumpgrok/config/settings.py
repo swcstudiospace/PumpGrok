@@ -262,7 +262,6 @@ def confirm_wallet_allowlist(allowlist: Sequence[str], read_line: Callable[[str]
             raise ConfigError([f"allowlist entry {index} was not confirmed by retyping it"])
 
 
-
 class Settings(BaseSettings):
     """Merged application settings. Build via load_settings(), not directly."""
 

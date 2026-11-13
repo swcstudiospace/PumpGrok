@@ -162,9 +162,7 @@ async def test_prefilter_skip_needs_no_record(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     gateway, replay, _ = _stack(tmp_path, clock, [])
 
-    outcome = await admit_replay(
-        gateway, replay, _request("low-rank", prerank="0.1"), clock=clock
-    )
+    outcome = await admit_replay(gateway, replay, _request("low-rank", prerank="0.1"), clock=clock)
 
     assert outcome.status == "prefilter_skip"
 

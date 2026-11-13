@@ -165,6 +165,6 @@ def test_planted_ed25519_import_in_scratch_copy_is_caught(tmp_path: Path) -> Non
     planted = "\nfrom cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey\n"
     ids.write_text(ids.read_text(encoding="utf-8") + planted)
     found = find_violations(package)
-    assert any(
-        entry.startswith("core/ids.py:") and "ed25519 import" in entry for entry in found
-    ), found
+    assert any(entry.startswith("core/ids.py:") and "ed25519 import" in entry for entry in found), (
+        found
+    )

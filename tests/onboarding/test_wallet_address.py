@@ -268,5 +268,3 @@ def test_confirmation_is_not_required_for_paper_or_read_only_verbs(
     monkeypatch.chdir(tmp_path)
     _record_complete_authority()
     assert dispatch_mod.main(["run", "--mode", "paper", "--once", "--replay", SMOKE]) == 0
-
-

@@ -440,9 +440,9 @@ def rpc_status(
     operator_dir: Path | None = None, ledger_path: Path | None = None
 ) -> tuple[str, Endpoint | None]:
     """Return ("default", None), ("unbound", None) or ("explicit", endpoint)."""
-    decision = read_authority(
-        operator_dir or OPERATOR_DIR, ledger_path or PAPER_LEDGER_PATH
-    ).get(RPC_SCOPE)
+    decision = read_authority(operator_dir or OPERATOR_DIR, ledger_path or PAPER_LEDGER_PATH).get(
+        RPC_SCOPE
+    )
     if decision is None:
         return ("default", None)
     if not decision.bound or decision.decision != RPC_DECISION:

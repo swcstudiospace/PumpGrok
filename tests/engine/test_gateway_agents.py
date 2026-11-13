@@ -68,9 +68,7 @@ TIMING_OK = json.dumps(
         "reasoning": "calm",
     }
 )
-CHECKER_OK = json.dumps(
-    {"approve": True, "reason": "no red flags", "flags": [], "confidence": 0.9}
-)
+CHECKER_OK = json.dumps({"approve": True, "reason": "no red flags", "flags": [], "confidence": 0.9})
 
 
 def token(

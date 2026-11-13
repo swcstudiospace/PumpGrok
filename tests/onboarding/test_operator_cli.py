@@ -125,9 +125,7 @@ def test_interactive_operator_grants_revokes_and_lists(
     assert before["rpc"]["status"] == "default"
 
     _terminal(monkeypatch, typed=f"allow {SEAT} {tool}")
-    assert (
-        main(["onboarding", "access", "--seat", SEAT, "--tool", tool, "--allow"]) == EXIT_OK
-    )
+    assert main(["onboarding", "access", "--seat", SEAT, "--tool", tool, "--allow"]) == EXIT_OK
     granted = {row["tool"]: row["state"] for row in _list(capsys)["seats"][SEAT]}
     assert granted[tool] == "granted"
 

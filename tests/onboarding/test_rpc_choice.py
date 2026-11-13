@@ -67,9 +67,7 @@ def test_default_port_is_filled_in_and_path_is_dropped() -> None:
     assert oc.canonical_endpoint("https://Example.org/x?y=1") == oc.Endpoint(
         "https", "example.org", 443
     )
-    assert oc.canonical_endpoint("http://127.0.0.1:8899/") == oc.Endpoint(
-        "http", "127.0.0.1", 8899
-    )
+    assert oc.canonical_endpoint("http://127.0.0.1:8899/") == oc.Endpoint("http", "127.0.0.1", 8899)
     with pytest.raises(ValueError, match="scheme"):
         oc.canonical_endpoint("ftp://example.org")
 

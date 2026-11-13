@@ -70,9 +70,7 @@ def complete_authority(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _every_file_bytes(root: Path) -> dict[str, bytes]:
     return {
-        str(path.relative_to(root)): path.read_bytes()
-        for path in root.rglob("*")
-        if path.is_file()
+        str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()
     }
 
 
