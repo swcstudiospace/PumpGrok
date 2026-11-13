@@ -126,19 +126,26 @@ class ReplayLlm:
     def __len__(self) -> int:
         return len(self._records)
 
+    def lookup(self, request_hash: str) -> LlmRecord:
+        """The recorded outcome for a canonical request hash, with no clock effect.
+
+        Raises :class:`ReplayMissingRecord` on a miss: replay never invents an answer.
+        """
+        record = self._records.get(request_hash)
+        if record is None:
+            raise ReplayMissingRecord(
+                "no recorded LLM outcome for request hash",
+                request_hash=request_hash,
+            )
+        return record
+
     def complete(self, request: Mapping[str, Any], clock: FixtureClock) -> LlmResult:
         """Return the recorded outcome, advancing virtual time by its latency.
 
         Raises :class:`ReplayMissingRecord` when the fixture holds no record
         for the request hash; the runner must fail instead of inventing one.
         """
-        wanted = canonical_request_hash(request)
-        record = self._records.get(wanted)
-        if record is None:
-            raise ReplayMissingRecord(
-                "no recorded LLM outcome for request hash",
-                request_hash=wanted,
-            )
+        record = self.lookup(canonical_request_hash(request))
         if record.latency_s > 0:
             clock.advance_to(clock.now() + record.latency_s)
         return LlmResult(

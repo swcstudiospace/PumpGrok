@@ -22,15 +22,27 @@ from pydantic import BaseModel
 
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.llm import GrokOps
-from pumpgrok.grok.gateway import TRANSPORT_DEADLINE_S, GrokRequest
+from pumpgrok.grok.gateway import (
+    TRANSPORT_DEADLINE_S,
+    GrokGateway,
+    GrokOutcome,
+    GrokRequest,
+    _request_key,
+    prefilter,
+    sanitize,
+)
 from pumpgrok.grok.sanitize import StrictParseError, parse_strict
+from pumpgrok.replay.clock import Clock
+from pumpgrok.replay.recorder import ReplayLlm
 
 __all__ = [
     "CHAT_COMPLETIONS_PATH",
     "MAX_RESPONSE_BYTES",
     "GrokTransportError",
     "MissingGrokKey",
+    "ReplayTransport",
     "XaiTransport",
+    "admit_replay",
 ]
 
 CHAT_COMPLETIONS_PATH = "/chat/completions"
@@ -141,3 +153,47 @@ class XaiTransport:
 def _usage(body: Any) -> dict[str, Any] | None:
     usage = body.get("usage") if isinstance(body, dict) else None
     return usage if isinstance(usage, dict) else None
+
+
+class ReplayTransport:
+    """Recorded model outcomes behind the gateway. It has no HTTP client, so no socket.
+
+    The request key is the gateway's own key, so a live recording and its replay
+    share one hash. A request that needs a call and has no record raises
+    ``ReplayMissingRecord``. Use ``admit_replay``: it checks the record before the
+    gateway, so a miss never reaches the breaker, the cache or the fallback ladder.
+    """
+
+    def __init__(self, llm: ReplayLlm) -> None:
+        self._llm = llm
+
+    def require(self, request: GrokRequest) -> None:
+        """Raise ``ReplayMissingRecord`` unless ``request`` has a recorded outcome."""
+        self._llm.lookup(_request_key(request, sanitize(request.text)))
+
+    async def __call__(self, request: GrokRequest, text: str) -> str:
+        record = self._llm.lookup(_request_key(request, text))
+        if record.outcome == "ok":
+            content = record.response.get("content")
+            if isinstance(content, str):
+                return content
+            raise GrokTransportError("recorded ok outcome carries no answer text")
+        if record.outcome == "timeout":
+            raise TimeoutError("recorded timeout outcome")
+        raise GrokTransportError("recorded error outcome")
+
+
+async def admit_replay(
+    gateway: GrokGateway,
+    replay: ReplayTransport,
+    request: GrokRequest,
+    *,
+    clock: Clock,
+) -> GrokOutcome:
+    """Admit one request on the replay path. A needed call with no record raises.
+
+    A prefilter skip spends nothing and needs no record, so it passes through.
+    """
+    if prefilter(request.candidate, now=clock.now()).admit:
+        replay.require(request)
+    return await gateway.admit(request)
