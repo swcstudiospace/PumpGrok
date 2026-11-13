@@ -17,6 +17,7 @@ from pumpgrok.grok import gateway as gateway_module
 from pumpgrok.grok.budget import LayeredBudget
 from pumpgrok.grok.cache import ResponseCache
 from pumpgrok.grok.gateway import (
+    BREAKER_FAILURES,
     TRANSPORT_DEADLINE_S,
     Candidate,
     GrokGateway,
@@ -139,3 +140,42 @@ async def test_call_queued_past_its_deadline_never_reaches_transport(
     assert outcomes[1].response is None
     assert "QUEUED" not in transport.calls
     assert budget.usage()["minute"] == 1  # only HOLD was admitted to the transport
+
+
+async def test_calls_timed_out_in_slot_queue_do_not_count_as_breaker_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gateway_module, "MAX_INFLIGHT", 1)
+    clock = FixtureClock(start=START)
+    transport = ScriptedTransport()
+    gateway, budget = make(tmp_path, clock, transport)
+
+    hold = asyncio.create_task(gateway.admit(request("HOLD", "hold")))
+    await transport.holding.wait()
+    # One more queued call than the breaker tolerates: if queued timeouts counted
+    # as failures, the breaker would be open after this test's advance.
+    queued = [
+        asyncio.create_task(gateway.admit(request(f"QUEUED-{i}", f"q{i}")))
+        for i in range(BREAKER_FAILURES + 1)
+    ]
+    await settle()
+
+    # HOLD reached the transport and is cancelled by its deadline. Each queued call
+    # is cancelled by the same deadline while still waiting for the slot.
+    clock.advance_to(START + TRANSPORT_DEADLINE_S + 1)
+    await settle()
+    outcomes: list[GrokOutcome] = await asyncio.gather(hold, *queued)
+
+    assert [o.reason for o in outcomes] == ["timeout"] * (1 + len(queued))
+    assert all(o.response is None for o in outcomes)
+    assert transport.calls == ["HOLD"]
+    assert budget.usage()["minute"] == 1  # only HOLD was charged
+
+    # Only HOLD's timeout is a breaker failure: the breaker is still closed.
+    assert gateway.llm_available is True
+    # Two transport failures more reach the threshold only if HOLD counted exactly once.
+    await gateway.admit(request("FAIL-1", "f1"))
+    assert gateway.llm_available is True
+    await gateway.admit(request("FAIL-2", "f2"))
+    assert gateway.llm_available is False
+    assert budget.usage()["minute"] == 3

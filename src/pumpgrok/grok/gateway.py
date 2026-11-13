@@ -279,6 +279,8 @@ class GrokGateway:
                 started = True
                 response = await self._transport(request, text)
         except TimeoutError:
+            if not started:  # timed out in the slot queue; the transport never ran
+                return _fallback(request, "timeout")
             return self._failed(request, key, "timeout")
         except Exception:
             return self._failed(request, key, "transport_error")
