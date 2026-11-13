@@ -1,12 +1,11 @@
 """Doctor reports host clock synchronization (report only, never fatal).
 
-The probe is `timedatectl show --property=NTPSynchronized --value`. `yes` is ok; `no` or an
-unknown reading is info, because the doctor's warn shape is fixed by the existing report tests.
+The probe reads the kernel NTP state (adjtimex STA_UNSYNC, the source timedatectl uses) and
+spawns no process. `yes` is ok; `no` or an unknown reading is info, because the doctor's warn
+shape is fixed by the existing report tests.
 """
 
 from __future__ import annotations
-
-import subprocess
 
 import pytest
 
@@ -28,41 +27,34 @@ def test_unknown_clock_state_is_info() -> None:
     assert line == "info  clock-sync (unknown: timedatectl unavailable)"
 
 
-class _Completed:
-    def __init__(self, returncode: int, stdout: str) -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-
-
-def test_timedatectl_yes_reads_synchronized(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/timedatectl")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Completed(0, "yes\n"))
+def test_ntp_synchronized_reads_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_kernel_ntp_state", lambda: (0, 0))
     assert doctor.timedatectl_synchronized() is True
 
 
-def test_timedatectl_no_reads_unsynchronized(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/timedatectl")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Completed(0, "no\n"))
+def test_ntp_unsynchronized_reads_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_kernel_ntp_state", lambda: (0, doctor._STA_UNSYNC))
     assert doctor.timedatectl_synchronized() is False
 
 
-def test_missing_timedatectl_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+def test_missing_clock_interface_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable() -> tuple[int, int]:
+        raise AttributeError("adjtimex")
+
+    monkeypatch.setattr(doctor, "_kernel_ntp_state", unavailable)
     assert doctor.timedatectl_synchronized() is None
 
 
-def test_timedatectl_failure_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/timedatectl")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Completed(1, ""))
+def test_adjtimex_failure_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_kernel_ntp_state", lambda: (-1, 0))
     assert doctor.timedatectl_synchronized() is None
 
 
-def test_timedatectl_timeout_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    def timed_out(*args: object, **kwargs: object) -> None:
-        raise subprocess.TimeoutExpired(cmd="timedatectl", timeout=2.0)
+def test_read_error_reads_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    def read_error() -> tuple[int, int]:
+        raise OSError("libc unavailable")
 
-    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/timedatectl")
-    monkeypatch.setattr(subprocess, "run", timed_out)
+    monkeypatch.setattr(doctor, "_kernel_ntp_state", read_error)
     assert doctor.timedatectl_synchronized() is None
 
 
