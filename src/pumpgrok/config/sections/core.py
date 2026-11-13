@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
+from pumpgrok.core.ed25519_point import decode_public_point
 from pumpgrok.core.units import LAMPORTS_PER_SOL
 
 Mode = Literal["paper", "live"]
@@ -120,13 +121,20 @@ def _base58_decode(text: str) -> bytes:
 
 
 def _is_public_key_text(text: str) -> bool:
-    """True when text is base58 and decodes to exactly 32 bytes; never raises."""
+    """True when text is base58, decodes to 32 bytes and is an Ed25519 point; never raises."""
     if len(text) > _PUBLIC_KEY_MAX_CHARS:
         return False
     try:
-        return len(_base58_decode(text)) == _PUBLIC_KEY_BYTES
+        raw = _base58_decode(text)
     except ValueError:
         return False
+    if len(raw) != _PUBLIC_KEY_BYTES:
+        return False
+    try:
+        decode_public_point(raw)
+    except ValueError:
+        return False
+    return True
 
 
 class PlatformSettings(BaseModel):
@@ -150,7 +158,7 @@ class WalletSettings(BaseModel):
     reported by its index alone; its value is never echoed.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     allowlist: tuple[str, ...] = ()
 
@@ -160,7 +168,9 @@ class WalletSettings(BaseModel):
         """Every entry must be a base58 string that decodes to exactly 32 bytes."""
         for index, entry in enumerate(v):
             if not _is_public_key_text(entry):
-                raise ValueError(f"allowlist entry {index} is not a 32-byte base58 public key")
+                raise ValueError(
+                    f"allowlist entry {index} is not a 32-byte base58 Ed25519 public key"
+                )
         return v
 
 

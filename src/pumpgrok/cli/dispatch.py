@@ -19,6 +19,7 @@ from pumpgrok.cli.wiring import _find_only, _tools_entry, _verb_label
 from pumpgrok.config.settings import (
     ConfigError,
     Settings,
+    confirm_wallet_allowlist,
     current_profile,
     load_settings,
     refuse_cli_secrets,
@@ -33,6 +34,31 @@ log = logging.getLogger("pumpgrok.cli")
 def _settings_kwargs(mode: str | None) -> dict[str, str]:
     # Passing mode=None would shadow PUMPGROK_MODE with a null init value; omit it instead.
     return {} if mode is None else {"mode": mode}
+
+
+# Verbs that start live work. A live start needs each allowlist address retyped by the operator.
+_WALLET_CONFIRM_VERBS = frozenset({"run", "live"})
+
+
+def _stdio_is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _confirm_live_wallet(args: argparse.Namespace, settings: Settings) -> None:
+    """Refuse a live start unless an interactive operator retypes every allowlist address.
+
+    Runs after settings load, which already resolved the effective mode without reading the
+    wallet on the paper path. Paper and read-only verbs are not affected.
+    """
+    if args.verb not in _WALLET_CONFIRM_VERBS:
+        return
+    if settings.effective_mode != "live" or not settings.wallet.allowlist:
+        return
+    if not _stdio_is_interactive():
+        raise ConfigError(
+            ["live start refused: retyping the wallet allowlist needs an interactive terminal"]
+        )
+    confirm_wallet_allowlist(settings.wallet.allowlist, input)
 
 
 def _events_handler(args: argparse.Namespace, settings: Settings) -> int:
@@ -73,6 +99,7 @@ def _dispatch(argv: Sequence[str]) -> int:
         return _tools_entry(list(argv[1:]))
     args = build_parser().parse_args(list(argv))
     settings = load_settings(**_settings_kwargs(args.mode))
+    _confirm_live_wallet(args, settings)
     setup_logging(mode=settings.effective_mode, profile=current_profile())
     return _route(args, settings)
 
