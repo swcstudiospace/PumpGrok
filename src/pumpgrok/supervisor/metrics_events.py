@@ -20,14 +20,10 @@ callables, and the gateway transport. A wrapper never changes a result or an exc
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Protocol, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Protocol, TypeVar
 
 from prometheus_client import CollectorRegistry, Counter
-
-if TYPE_CHECKING:
-    from pumpgrok.events.bus import Dlq, Handler
-    from pumpgrok.events.models import Event
 
 #: Verbatim family names.
 EVENTS_TOTAL = "pumpgrok_events_total"
@@ -35,6 +31,24 @@ EVENT_DLQ_TOTAL = "pumpgrok_event_dlq_total"
 GROK_CALLS_TOTAL = "pumpgrok_grok_calls_total"
 
 EVENT_FAMILIES: tuple[str, ...] = (EVENTS_TOTAL, EVENT_DLQ_TOTAL, GROK_CALLS_TOTAL)
+
+
+class _Kind(Protocol):
+    """The one field the observer reads from an event kind: its wire value."""
+
+    @property
+    def value(self) -> str: ...
+
+
+class _Event(Protocol):
+    """The one field the observer reads from a bus event: its kind."""
+
+    @property
+    def kind(self) -> _Kind: ...
+
+
+_Handler = Callable[[_Event], Awaitable[None]]
+_Dlq = Callable[[_Event], Awaitable[None] | None]
 
 
 class _Request(Protocol):
@@ -82,10 +96,10 @@ class EventCollectors:
         """The registry these families are bound to."""
         return self._registry
 
-    def observe_handler(self, handler: Handler) -> Handler:
+    def observe_handler(self, handler: _Handler) -> _Handler:
         """Wrap a bus handler: count each attempt as delivered, or failed then re-raise."""
 
-        async def observed(event: Event) -> None:
+        async def observed(event: _Event) -> None:
             try:
                 await handler(event)
             except Exception:
@@ -95,10 +109,10 @@ class EventCollectors:
 
         return observed
 
-    def observe_dlq(self, dlq: Dlq) -> Dlq:
+    def observe_dlq(self, dlq: _Dlq) -> _Dlq:
         """Wrap a bus DLQ callable: count an event once its handoff has returned."""
 
-        def observed(event: Event) -> Awaitable[None] | None:
+        def observed(event: _Event) -> Awaitable[None] | None:
             result = dlq(event)
             if result is None:
                 self._count_dlq(event)
@@ -107,11 +121,11 @@ class EventCollectors:
 
         return observed
 
-    async def _await_dlq(self, pending: Awaitable[None], event: Event) -> None:
+    async def _await_dlq(self, pending: Awaitable[None], event: _Event) -> None:
         await pending
         self._count_dlq(event)
 
-    def _count_dlq(self, event: Event) -> None:
+    def _count_dlq(self, event: _Event) -> None:
         self.event_dlq_total.labels(kind=event.kind.value).inc()
 
     def observe_transport[R: _Request](self, transport: _Transport[R]) -> _Transport[R]:
