@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pumpgrok.core.adapter import ExecutionAdapter, ExecutionMode, OrderRequest, Position
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.execution.entry_hook import EntryDenied, EntryPolicy
 from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel
 from pumpgrok.execution.latency import P_DROP
@@ -100,8 +101,9 @@ class PaperAdapter(
             initial_equity_lamports=initial,
             day_utc=format_ts_utc(self._clock.now())[:10],
         )
+        deposits = position_deposits_by_seq(self._store)
         for event in self._store.read(limit=None):
-            state = reduce(state, event)
+            state = reduce(state, event, deposits=deposits)
         return state
 
     def _fill_cap(self, s_lamports: int) -> int:
