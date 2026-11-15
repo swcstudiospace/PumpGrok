@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pumpgrok.core.ids import Clock
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
@@ -431,8 +432,9 @@ class Supervisor:
         else:
             source = self._source
         state = initial_state(source=source, initial_equity_lamports=initial, day_utc=utc_day(now))
+        deposits = position_deposits_by_seq(self._store)
         for event in events:
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
         return int(equity_lamports(state))
 
     def _sync_risk_latch(self) -> None:
