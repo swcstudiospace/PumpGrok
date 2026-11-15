@@ -12,8 +12,10 @@ A rejected-then-broadcast transaction still pays the network cost, so
 ``slippage_exceeded`` records ``network_cost`` while ``tx_dropped`` (never
 sent) records nothing.
 
-FEE-01 (fee model v2, :class:`FeeModelV2`) is the paper default. It adds the
-ATA rent term on the first buy of each mint, a PumpPortal term that applies only
+FEE-01 (fee model v2, :class:`FeeModelV2`) is the paper default. The ATA rent on the
+first buy of each mint is a refundable deposit: the cash leaves on that buy and the
+deposit is held as an asset in the position's mark until the position closes, when
+the rent is charged once. It also adds a PumpPortal term that applies only
 when the PumpPortal builder is selected, and a cap on the priority price. The ATA
 rent is read at runtime from RPC by :func:`read_ata_rent`. The pinned value is an
 offline replay fallback; it records its epoch and source and is never the stale
@@ -85,6 +87,11 @@ class FeeModel:
         del first_buy
         return self.network_cost()
 
+    def ata_deposit_term(self, *, first_buy: bool) -> int:
+        """Refundable ATA deposit held as an asset on this fill. v1 holds none."""
+        del first_buy
+        return 0
+
     def buy_net(self, filled_lamports: int) -> int:
         """Lamports that enter the curve for a buy fill."""
         return filled_lamports - self.venue_fee(filled_lamports)
@@ -123,6 +130,10 @@ class FeeModelV2(FeeModel):
     def ata_rent_term(self, first_buy: bool) -> int:
         """ATA rent for this fill: charged on the first buy of a mint only."""
         return self.ata_rent_lamports if first_buy else 0
+
+    def ata_deposit_term(self, *, first_buy: bool) -> int:
+        """Refundable ATA deposit held as an asset: the rent on a first buy, else zero."""
+        return self.ata_rent_term(first_buy)
 
     def pumpportal_fee(self, filled_lamports: int, *, pumpportal_builder: bool) -> int:
         """PumpPortal builder term: zero unless the builder is selected."""

@@ -10,6 +10,7 @@ from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.execution.curve_math import buy_out, impact_buy
+from pumpgrok.execution.deposits import opening_deposit_writer
 from pumpgrok.execution.entry_hook import EntryDenied, entry_provenance
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _BuyConfirmed, _BuyQuote
 from pumpgrok.risk.engine import RiskDecision, order_hash_for
@@ -658,7 +659,11 @@ class _BuyMixin:
         order_id: str,
     ) -> Fill:
         """Ledger append and Fill for a confirmed BUY."""
-        network_cost = self._fees.buy_network_cost(first_buy=self._is_first_buy(request.mint))
+        first_buy = self._is_first_buy(request.mint)
+        # The network cost includes the ATA rent on a first buy; the position holds that
+        # rent as its deposit asset until it closes.
+        network_cost = self._fees.buy_network_cost(first_buy=first_buy)
+        deposit = self._fees.ata_deposit_term(first_buy=first_buy)
         cash_debit = confirmed.filled + network_cost
         price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
         slipped = self._buy_slippage_bps(confirmed)
@@ -679,7 +684,9 @@ class _BuyMixin:
             slipped=slipped,
             had_position=had_position,
         )
-        stored = self._store.append_batch(rows)
+        stored = self._store.append_batch(
+            rows, sidecar=opening_deposit_writer(request.mint, deposit)
+        )
         self._inflight.discard(order_id)
         # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
         observed = confirmed.curve1.ts
