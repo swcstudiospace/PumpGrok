@@ -14,8 +14,13 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 15: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
 - Phase 15: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before; seq 146, events read 41)
 - Phase 15: trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
-- Phase 15: trading-smoke events.hash after: cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62
+- Phase 15: trading-smoke events.hash after (fee model v2 before the refund-era pin below; superseded): cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62
 - Phase 15: trading-smoke seq and row count before and after: 155 and 155 (events read 5 in both)
+- Phase 15 (refund era): trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 15 (refund era): trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404; seq 155, row count 155, events read 5
+- Phase 15 (refund era): smoke-10m events.hash unchanged: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 15 (refund era): the 24 characterization digests and the event smoke golden (tests/desk/test_event_golden_hashes.py) are re-pinned to values from a fresh run. Event smoke ledger events.hash: f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 before, 0c7cf490cd08b25864148df2150938b023bcc871b8db97af08389b9bbc572b28 after; seat trace unchanged at 24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
+- Phase 15 (refund era): test_one_buy_flows_to_curve_priced_fill expected network cost is 1497440 (fee model v2: 9000 plus the first-buy rent 1488440)
 - Phase 15 starts at the Phase 14 close, where smoke-10m already measures 1dffa784 (Phase 14 entry below). The b69c29... value that the Phase 15 plan text cites is the Phase 14 before value, not a Phase 15 starting value.
 - Owner decision 1: one trading-smoke re-pin, recorded in the two trading-smoke lines above. Strategy parameters are PENDING OWNER APPROVAL (see docs/runbooks/strategies.md); they are proposals inside bounds, not final pins.
 
