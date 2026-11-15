@@ -8,6 +8,14 @@ stamp. run_legacy_replay therefore yields the fills run_once_replay yields on th
 dataset, seed and filter.
 
 The adapter writes no ledger rows of its own: no ticket refs and no strategy state.
+
+REPLAY-ONLY EXCEPTION: this module is the one strategy module outside the IntentRouter that reaches
+exec.place. _placement_sink and _place_buy call the sniper's granted exec.place directly, so
+legacy_screening's replay fills do not pass through supervisor.intent_router. The owner
+accepted this exception for the replay only. No production module may import or call these
+placement names, and no other strategy module may reach exec.place. The rule is enforced by
+tests/strategies/test_legacy_exception.py. See docs/strategies-replay-exception.md for the
+decision and the replay runner allowlist.
 """
 
 from __future__ import annotations
