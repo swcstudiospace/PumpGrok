@@ -420,12 +420,13 @@ class _MarksMixin:
         )
         if row is None:
             return {"status": "no_position", "mint": mint}
+        deposit = self._open_deposits().get(mint, 0)
         return {
             "status": "closed",
             "mint": mint,
             "reason": reason,
             "proceeds_lamports": proceeds,
-            "realized_pnl_lamports": proceeds - int(pos.cost_basis_lamports),
+            "realized_pnl_lamports": proceeds - (int(pos.cost_basis_lamports) - deposit),
             "seq": int(row["seq"]),
         }
 
@@ -486,8 +487,10 @@ class _MarksMixin:
         if pos is None or pos.token_units <= 0:
             return None
         proceeds, venue_fee, network_cost = valued
-        realized = proceeds - int(pos.cost_basis_lamports)
-        pnl_pct, hold_seconds = self._close_stats(pos, realized)
+        # The close refunds the open account's ATA deposit to cash; it is not sale proceeds.
+        deposit = self._open_deposits().get(mint, 0)
+        realized = proceeds - (int(pos.cost_basis_lamports) - deposit)
+        pnl_pct, hold_seconds = self._close_stats(pos, realized, deposit)
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
         order_id = self._ids.ulid()
         price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
@@ -499,6 +502,7 @@ class _MarksMixin:
                 proceeds=proceeds,
                 venue_fee=venue_fee,
                 network_cost=network_cost,
+                refund_lamports=deposit,
                 units=pos.token_units,
                 price_exit=price_exit,
                 ledger_source=ledger_source,
@@ -531,9 +535,9 @@ class _MarksMixin:
         self._last_price_ts.pop(mint, None)
         return stored[1]
 
-    def _close_stats(self, pos: PositionView, realized: int) -> tuple[Decimal, int]:
-        """PnL fraction against cost basis, and hold seconds floored at zero."""
-        basis = int(pos.cost_basis_lamports)
+    def _close_stats(self, pos: PositionView, realized: int, deposit: int) -> tuple[Decimal, int]:
+        """PnL fraction against basis net of the refunded deposit; hold seconds floored at zero."""
+        basis = int(pos.cost_basis_lamports) - deposit
         pnl_pct = Decimal(realized) / Decimal(basis) if basis else Decimal("0")
         try:
             hold_s = int(self._clock.now() - parse_ts_utc(pos.opened_ts_utc))
@@ -550,6 +554,7 @@ class _MarksMixin:
         proceeds: int,
         venue_fee: int,
         network_cost: int,
+        refund_lamports: int,
         units: int,
         price_exit: str,
         ledger_source: str,
@@ -573,7 +578,7 @@ class _MarksMixin:
                 "price_avg": price_exit,
                 "venue_fee_lamports": venue_fee,
                 "network_cost_lamports": network_cost,
-                "cash_delta_lamports": proceeds,
+                "cash_delta_lamports": proceeds + refund_lamports,
                 "venue_tx_ref": venue_tx_ref,
                 "route": "curve",
             },
