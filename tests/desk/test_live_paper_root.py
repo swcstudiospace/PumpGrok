@@ -172,4 +172,4 @@ def test_live_paper_root_has_no_signing_or_send_symbol() -> None:
     tree = ast.parse(LIVE_PAPER_SOURCE.read_text(encoding="utf-8"), filename=str(LIVE_PAPER_SOURCE))
     found = _scan_forbidden(tree)
     assert found - ALLOWLIST == set(), found
-    assert ALLOWLIST == frozenset()
+    assert frozenset() == ALLOWLIST
