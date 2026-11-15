@@ -255,8 +255,15 @@ def test_deposit_term_is_the_rent_on_a_v2_first_buy_and_zero_otherwise() -> None
     assert FeeModelV2().ata_deposit_term(first_buy=False) == 0
 
 
-def _run_lifecycle(root: Any, fees: FeeModel, *, forced: bool) -> dict[str, Any]:
-    """Buy, mark, then close: a full sell, or a forced close with no live curve."""
+def _sell_fill_payloads(store: LedgerStore) -> list[dict[str, Any]]:
+    rows = store.read(types=["FillRecorded"], limit=None)
+    return [row["payload"] for row in rows if row["payload"]["side"] == "sell"]
+
+
+def _run_lifecycle(
+    root: Any, fees: FeeModel, *, forced: bool, partial: bool = False
+) -> dict[str, Any]:
+    """Buy, mark, then close: a full sell, a partial sell, or a forced close."""
     root.mkdir(parents=True)
     clock = FixtureClock(START)
     store = _store(root / "ledger.sqlite")
@@ -282,14 +289,23 @@ def _run_lifecycle(root: Any, fees: FeeModel, *, forced: bool) -> dict[str, Any]
             )
             steps["proceeds"] = closed["proceeds_lamports"]
             steps["realized"] = closed["realized_pnl_lamports"]
+            again = await adapter.close_position(
+                mint=MINT, ticket_id=TICKET_A, reason="kill_flatten"
+            )
+            steps["second_close"] = again["status"]
         else:
+            units = first.filled_units // 2 if partial else first.filled_units
             await _place(
                 adapter,
                 clock,
-                _order(TICKET_A, Side.SELL, ids.ulid(), units=first.filled_units),
+                _order(TICKET_A, Side.SELL, ids.ulid(), units=units),
                 seat="bot-06-exit",
             )
         steps["after_close"] = adapter.equity_lamports()
+        steps["buy"] = _buy_fill_payloads(store)[0]
+        steps["sells"] = _sell_fill_payloads(store)
+        closes = store.read(types=["PositionClosed"], limit=None)
+        steps["closes"] = [row["payload"] for row in closes]
         return steps
 
     try:
@@ -305,12 +321,39 @@ def test_rent_is_a_deposit_asset_until_the_account_closes(tmp_path: Any) -> None
     assert v2["at_mark"] == v1["at_mark"], "the first mark carries the rent as an asset"
     assert v2["deposit_after_buy"] == {MINT: ATA_RENT_OFFLINE_LAMPORTS}
     assert v1["deposit_after_buy"] == {MINT: 0}
-    assert v2["after_close"] == v1["after_close"] - ATA_RENT_OFFLINE_LAMPORTS, "charged once"
+    assert v2["after_close"] == v1["after_close"], "the full close refunds the rent to cash"
 
 
-def test_a_forced_close_books_the_rent_once_and_never_as_proceeds(tmp_path: Any) -> None:
+def test_a_full_close_credits_the_deposit_to_cash_once_and_keeps_it_out_of_realized(
+    tmp_path: Any,
+) -> None:
+    v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=False)
+    v1 = _run_lifecycle(tmp_path / "v1", FeeModel(), forced=False)
+    [sell] = v2["sells"]
+    [closed] = v2["closes"]
+    [v1_closed] = v1["closes"]
+    rent = ATA_RENT_OFFLINE_LAMPORTS
+    cost_basis_ex_rent = v2["buy"]["filled_lamports"] + v2["buy"]["network_cost_lamports"] - rent
+    assert sell["cash_delta_lamports"] == sell["filled_lamports"] + rent, "refund in the close"
+    assert closed["realized_pnl_lamports"] == sell["filled_lamports"] - cost_basis_ex_rent
+    assert closed["realized_pnl_lamports"] == v1_closed["realized_pnl_lamports"]
+
+
+def test_a_partial_sell_keeps_the_deposit_whole_until_the_full_close(tmp_path: Any) -> None:
+    v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=False, partial=True)
+    [sell] = v2["sells"]
+    assert sell["cash_delta_lamports"] == sell["filled_lamports"], "no rent leaves on a partial"
+    assert v2["closes"] == [], "a partial exit closes nothing"
+
+
+def test_a_forced_close_refunds_the_deposit_once_and_never_books_it_as_proceeds(
+    tmp_path: Any,
+) -> None:
     v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=True)
     v1 = _run_lifecycle(tmp_path / "v1", FeeModel(), forced=True)
-    assert v2["proceeds"] == v1["proceeds"], "the deposit is consumed, not sold"
-    assert v2["realized"] == v1["realized"] - ATA_RENT_OFFLINE_LAMPORTS
-    assert v2["after_close"] == v1["after_close"] - ATA_RENT_OFFLINE_LAMPORTS
+    [sell] = v2["sells"]
+    assert v2["proceeds"] == v1["proceeds"], "the deposit is refunded, not sold"
+    assert sell["cash_delta_lamports"] == v2["proceeds"] + ATA_RENT_OFFLINE_LAMPORTS
+    assert v2["realized"] == v1["realized"], "realized excludes the rent"
+    assert v2["after_close"] == v1["after_close"], "the rent comes back to cash once"
+    assert v2["second_close"] == "no_position", "a closed position refunds nothing again"
