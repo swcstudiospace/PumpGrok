@@ -26,10 +26,9 @@ from typing import Any, Protocol
 
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.datafeed.bridge import ObservationBridge
+from pumpgrok.datafeed.bridge import ObservationBridge, build_observation_bridge
 from pumpgrok.datafeed.price import LivePriceSource, ReservesCache
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport
-from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel, read_ata_rent
@@ -135,8 +134,10 @@ async def build_live_paper_root(
             max_observations=max_observations,
         )
         reserves = ReservesCache(capacity=RESERVES_CACHE_CAPACITY)
-        bridge = ObservationBridge(
-            bus=EventBus(clock=clock, handler=_no_event_consumers, dlq=_dead_letter),
+        bridge = build_observation_bridge(
+            clock=clock,
+            handler=_no_event_consumers,
+            dlq=_dead_letter,
             recorder=LiveRecorder(data_dir / TICKS_DIR, clock=clock),
             price=prices,
         )

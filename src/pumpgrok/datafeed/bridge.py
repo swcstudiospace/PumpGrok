@@ -12,8 +12,9 @@ from collections.abc import Mapping
 from typing import Protocol
 
 from pumpgrok.datafeed.events import CurveObservation
-from pumpgrok.events.bus import EventBus
+from pumpgrok.events.bus import Dlq, EventBus, Handler
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
+from pumpgrok.replay.clock import Clock
 from pumpgrok.replay.live_recorder import LiveRecorder
 
 MARKET_KINDS = frozenset({EventKind.token_created, EventKind.migration, EventKind.trade})
@@ -74,3 +75,20 @@ class ObservationBridge:
             token_units=token_units,
         )
         await self.bus.publish(event)
+
+
+def build_observation_bridge(
+    *,
+    clock: Clock,
+    handler: Handler,
+    dlq: Dlq,
+    recorder: LiveRecorder,
+    price: PriceObserver | None = None,
+) -> ObservationBridge:
+    """Build an :class:`ObservationBridge` over a new :class:`EventBus`.
+
+    The bus is constructed here so composition roots that must not import the bus
+    module can still obtain a bridge. The bridge behaves exactly as one built directly.
+    """
+    bus = EventBus(clock=clock, handler=handler, dlq=dlq)
+    return ObservationBridge(bus=bus, recorder=recorder, price=price)

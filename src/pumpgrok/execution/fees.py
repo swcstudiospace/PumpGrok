@@ -52,7 +52,7 @@ ATA_TOKEN_ACCOUNT_DATA_LEN: Final = 165
 #: Offline replay fallback for the rent-exempt minimum of one token account. Owner
 #: decision 2026-11-15: the value is read from RPC at runtime; this pin is used only
 #: when no RPC read happened (offline replay). 1488440 is the active rate since epoch 1033.
-ATA_RENT_OFFLINE_LAMPORTS: Final = 1_488_440
+ATA_RENT_OFFLINE_LAMPORTS: int = 1_488_440
 ATA_RENT_OFFLINE_EPOCH: Final = 1033
 ATA_RENT_OFFLINE_SOURCE: Final = (
     "offline-pinned: owner decision 2026-11-15, public docs (SIMD-0437); replay only"
