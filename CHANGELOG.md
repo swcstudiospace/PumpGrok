@@ -2,6 +2,19 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 15: paper fee model v2 default
+
+### Changed
+
+- Paper fee default is fee model v2 (commits `a2b9045`, `0b843d4`), which charges ATA rent on the first buy. The trading-smoke pin was re-pinned once, by owner approval, for this change. Rows 149, 150, 151 and 155 changed; every other row is unchanged.
+
+### Verification
+
+- Phase 15: trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 15: trading-smoke events.hash after: cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62
+- Phase 15: trading-smoke seq and row count before and after: 155 and 155 (events read 5 in both)
+- Phase 15: smoke-10m events.hash unchanged: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (seq 146, events read 41)
+
 ## [Unreleased] - v4 Phase 14: replay operator grants
 
 ### Changed
