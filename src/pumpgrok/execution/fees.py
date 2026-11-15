@@ -14,9 +14,9 @@ sent) records nothing.
 
 FEE-01 (fee model v2, :class:`FeeModelV2`) is the paper default. The ATA rent on the
 first buy of each mint is a refundable deposit: the cash leaves on that buy and the
-deposit is held as an asset in the position's mark until the position closes, when
-the rent is charged once. It also adds a PumpPortal term that applies only
-when the PumpPortal builder is selected, and a cap on the priority price. The ATA
+deposit is held as an asset in the position's mark until the position closes in full, when
+it is refunded to cash and kept out of realized P&L. It also adds a PumpPortal term that
+applies only when the PumpPortal builder is selected, and a cap on the priority price. The ATA
 rent is read at runtime from RPC by :func:`read_ata_rent`. The pinned value is an
 offline replay fallback; it records its epoch and source and is never the stale
 2039280. :class:`FeeModel` (v1) stays selectable through :func:`fee_model_for`.
