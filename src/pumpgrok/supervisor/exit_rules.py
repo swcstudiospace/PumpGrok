@@ -38,6 +38,7 @@ from pumpgrok.engine.exits import restore_peak
 from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 from pumpgrok.engine.watcher import PositionWatcher
 from pumpgrok.execution.curve_math import spot
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.ticket_refs import load_refs
@@ -131,6 +132,7 @@ class LedgerExitBook:
         exit check runs. Entry, amount, opening time and ticket are refreshed
         from the ledger on every pass.
         """
+        deposits = position_deposits_by_seq(store)
         state = initial_state(source="replay", initial_equity_lamports=0, day_utc="")
         opened_seq: dict[str, int] = {}
         sells: dict[str, str] = {}
@@ -138,7 +140,7 @@ class LedgerExitBook:
         for event in store.read(limit=None):
             if event["type"] == "PositionOpened":
                 opened_seq[str(event["payload"]["mint"])] = int(event["seq"])
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
             _track_sell(event, sells, settled)
         refs = load_refs(store)
         self._strategy_pending = {
