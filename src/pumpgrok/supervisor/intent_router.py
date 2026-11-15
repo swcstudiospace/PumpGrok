@@ -50,9 +50,7 @@ RouteStatus = Literal["submitted", "duplicate", "refused"]
 
 
 class _RiskCheck(Protocol):
-    def check(
-        self, order: OrderRequest, *, source: str, correlation_id: str
-    ) -> RiskDecision: ...
+    def check(self, order: OrderRequest, *, source: str, correlation_id: str) -> RiskDecision: ...
 
 
 @dataclass(frozen=True)
@@ -116,6 +114,10 @@ class IntentRouter:
             ticket_id=ticket_id,
             strategy_id=intent.strategy_id,
         )
+        return await self._check_and_place(intent, ticket_id)
+
+    async def _check_and_place(self, intent: Intent, ticket_id: str) -> RouteResult:
+        """Steps 5 to 7: size and risk checks, then the one exec.place call."""
         slice_lamports = self._slices.get(intent.strategy_id)
         if slice_lamports is None:
             return self._refuse(intent, "unknown_strategy", ticket_id)
