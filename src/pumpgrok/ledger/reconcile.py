@@ -91,9 +91,13 @@ def reconcile(store: LedgerStore) -> dict[str, Any]:
     else:
         base = _genesis(store, store.read(since_seq=1, limit=1))
     tail = store.read(since_seq=snapshot_seq + 1, limit=None)
+    # Deferred: the execution package imports the risk engine, which imports this ledger.
+    from pumpgrok.execution.deposits import position_deposits_by_seq
+
+    deposits = position_deposits_by_seq(store)
     tail_state = base
     for event in tail:
-        tail_state = reduce(tail_state, event)
+        tail_state = reduce(tail_state, event, deposits)
 
     full_events = store.read(since_seq=1, limit=None)
     if not full_events:
@@ -107,7 +111,7 @@ def reconcile(store: LedgerStore) -> dict[str, Any]:
     genesis = _genesis(store, full_events)
     full_state = genesis
     for event in full_events:
-        full_state = reduce(full_state, event)
+        full_state = reduce(full_state, event, deposits)
 
     check = _integrity_checks(store, snapshot, tail_state, full_state, full_events)
     if check is not None:
