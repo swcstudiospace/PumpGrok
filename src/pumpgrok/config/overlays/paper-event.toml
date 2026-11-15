@@ -1,0 +1,89 @@
+# Paper-event profile: paper with wider limits for the multi-strategy paper run.
+# Selected with PUMPGROK_PROFILE=paper-event. Every value except the two [risk]
+# limits below is copied from paper.toml; paper.toml and live.toml are unchanged.
+# Later sources win: PUMPGROK_* env > PUMPGROK_CONFIG operator TOML > this file > defaults.
+
+[execution]
+mode = "paper"
+
+[risk]
+max_trade_fraction = "0.02"
+max_token_fraction = "0.05"
+daily_loss_halt_fraction = "0.05"
+drawdown_halt_fraction = "0.15"
+max_open_positions = 6
+max_trades_per_day = 40
+liquidity_floor_multiple = 10
+partial_fill_fraction = "0.02"
+
+[replay]
+seed = 20260101
+
+# Marker only: enabling live requires the live gate (separate module).
+[live]
+enabled = false
+
+[data]
+rest_url = "https://frontend-api.pump.fun"
+ws_url = "wss://pumpportal.fun/api/data"
+ws_max_queue = 16
+
+[rpc]
+endpoints = ["https://api.mainnet-beta.solana.com"]
+
+[grok]
+base_url = "https://api.x.ai/v1"
+strong_model = "grok-4.3"
+strong_effort = "low"
+fast_model = "grok-4.20-0309-non-reasoning"
+
+[jupiter]
+quote_url = "https://api.jup.ag/swap/v2/order"
+
+[filter]
+min_unique_buyers = 5
+max_curve_progress = 0.40
+require_metadata = true
+min_age_seconds = 120.0
+max_risk_score = 7.0
+min_total_score = 0.65
+block_creator_after_rugs = 1
+rug_loss_pct = 60.0
+one_position_per_creator = true
+forget_creators_after_days = 30.0
+
+[safety.thresholds]
+transfer_tax_hard_fail_pct = 10.0
+transfer_tax_warn_pct = 5.0
+top10_concentration_warn_pct = 20.0
+top10_concentration_fail_pct = 25.0
+liquidity_multiple_min = 10.0
+liquidity_multiple_recommended = 20.0
+lp_lock_min_days = 180.0
+creator_share_veto = 0.25
+top5_share_veto = 0.80
+kill_below_score = 40.0
+conditional_below_score = 70.0
+
+[scoring.weights]
+audit = 0.30
+narrative = 0.25
+timing = 0.15
+metrics = 0.30
+
+[scoring]
+timing_cache_seconds = 900.0
+
+[exits]
+stop_loss_pct = 30.0
+take_profit_pct = 120.0
+trailing_stop_pct = 35.0
+max_hold_seconds = 3600.0
+stop_loss_poll_seconds = 15.0
+
+[ops]
+reputation_path = "var/reputation.json"
+
+[notify]
+# Telegram chat ids and webhook URLs. Empty means stdout and file only (R39).
+allowlist = []

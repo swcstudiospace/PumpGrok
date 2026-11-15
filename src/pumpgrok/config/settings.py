@@ -112,7 +112,7 @@ __all__ = [
 ]
 
 
-OVERLAY_PROFILES: tuple[str, str, str] = ("dev", "paper", "live")
+OVERLAY_PROFILES: tuple[str, str, str, str] = ("dev", "paper", "live", "paper-event")
 DEFAULT_PROFILE = "paper"
 
 # Mirrors hermes/profiles.yaml forbidden_env_keys, extended with the
