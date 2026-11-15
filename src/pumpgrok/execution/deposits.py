@@ -1,4 +1,4 @@
-"""ATA deposits held as assets until their position closes (FEE-01 deposit treatment).
+"""ATA deposits held as assets until their position closes, then refunded (FEE-01 deposit).
 
 The first buy of a mint pays the ATA rent as a refundable deposit. The ledger row that opens
 the position is unchanged in shape; its deposit is a fact of its own, written in the same
@@ -7,7 +7,8 @@ are kept. The sidecar sits outside the hash chain and adds no event type or fiel
 
 A mint's deposit is the one recorded for its latest opening (seq order), so a reopened mint
 carries only its current opening's deposit. A re-buy after a close pays no rent and records
-zero. Legacy ledgers have no sidecar rows and therefore hold no deposit.
+zero. Legacy ledgers have no sidecar rows and therefore hold no deposit. A full close credits
+the deposit back to cash once; a partial exit keeps it whole.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore, SidecarWriter
 
-__all__ = ["open_deposits", "opening_deposit_writer"]
+__all__ = ["open_deposits", "opening_deposit_writer", "position_deposits_by_seq"]
 
 _TABLE = "position_deposits"
 _DDL = (
@@ -51,13 +52,26 @@ def opening_deposit_writer(mint: str, deposit_lamports: int) -> SidecarWriter:
     return write
 
 
+def _table_exists(db: sqlite3.Connection) -> bool:
+    row = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;", (_TABLE,)
+    ).fetchone()
+    return row is not None
+
+
+def position_deposits_by_seq(store: LedgerStore) -> dict[int, int]:
+    """The deposit recorded against each PositionOpened seq; empty when none was recorded."""
+    db = store._db
+    if not _table_exists(db):
+        return {}
+    rows = db.execute(f"SELECT opened_seq, deposit_lamports FROM {_TABLE} ORDER BY opened_seq;")
+    return {int(seq): int(lamports) for seq, lamports in rows.fetchall()}
+
+
 def open_deposits(store: LedgerStore) -> dict[str, int]:
     """The deposit recorded for each mint's latest opening; empty when none was recorded."""
     db = store._db
-    exists = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;", (_TABLE,)
-    ).fetchone()
-    if exists is None:
+    if not _table_exists(db):
         return {}
     rows = db.execute(f"SELECT mint, deposit_lamports FROM {_TABLE} ORDER BY opened_seq;")
     return {str(mint): int(lamports) for mint, lamports in rows.fetchall()}
