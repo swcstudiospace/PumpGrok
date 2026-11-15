@@ -89,7 +89,7 @@ def attribute(
     refs maps a ticket id to its strategy id. Every id in strategy_ids gets a bucket even when
     it has no rows, so an idle strategy reads zero rather than missing.
     """
-    per: dict[str, int] = {strategy_id: 0 for strategy_id in strategy_ids}
+    per: dict[str, int] = dict.fromkeys(strategy_ids, 0)
     per.setdefault(UNATTRIBUTED, 0)
     open_tickets: dict[str, str] = {}
     state = genesis
