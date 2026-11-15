@@ -172,7 +172,11 @@ def _order(ticket: str, side: Side, decision_id: str, *, units: int | None = Non
 
 
 async def _place(
-    adapter: PaperAdapter, clock: FixtureClock, request: OrderRequest, *, seat: str = "bot-04-sniper"
+    adapter: PaperAdapter,
+    clock: FixtureClock,
+    request: OrderRequest,
+    *,
+    seat: str = "bot-04-sniper",
 ) -> Fill:
     task = asyncio.create_task(adapter.place(request, seat=seat, correlation_id="test"))
     for _ in range(400):
