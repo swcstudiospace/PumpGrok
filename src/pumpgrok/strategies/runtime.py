@@ -23,7 +23,7 @@ from pumpgrok.strategies.base import (
     TickSnapshot,
     version_id,
 )
-from pumpgrok.strategies.tape import Tape
+from pumpgrok.strategies.tape import DEFAULT_TAPE_CAPACITY, Tape
 
 __all__ = ["IntentSink", "StampHook", "StrategyRuntime", "StrategyRuntimeError"]
 
@@ -50,7 +50,7 @@ class StrategyRuntime:
         clock: FixtureClock,
         strategies: Sequence[Strategy],
         sink: IntentSink,
-        tape_capacity: int | None = None,
+        tape_capacity: int = DEFAULT_TAPE_CAPACITY,
     ) -> None:
         ids = [strategy.strategy_id for strategy in strategies]
         if len(set(ids)) != len(ids):
@@ -62,8 +62,9 @@ class StrategyRuntime:
             strategy.strategy_id: version_id(type(strategy), dict(type(strategy).DEFAULTS))
             for strategy in strategies
         }
-        capacity = {} if tape_capacity is None else {"capacity": tape_capacity}
-        self._tapes = {strategy.strategy_id: Tape(**capacity) for strategy in strategies}
+        self._tapes = {
+            strategy.strategy_id: Tape(capacity=tape_capacity) for strategy in strategies
+        }
 
     async def run(
         self,
