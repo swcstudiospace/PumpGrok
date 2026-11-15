@@ -45,11 +45,11 @@ runs of every fixture agreed, and the values below were copied from this output)
         trace=45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6
         rows=145 intents=0 errors=[] dlq=0
     smoke first
-        ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747
+        ledger=0c7cf490cd08b25864148df2150938b023bcc871b8db97af08389b9bbc572b28
         trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
         rows=154 intents=2 errors=[] dlq=0
     smoke second
-        ledger=f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747
+        ledger=0c7cf490cd08b25864148df2150938b023bcc871b8db97af08389b9bbc572b28
         trace=24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
         rows=154 intents=2 errors=[] dlq=0
     soak-3d first
@@ -65,7 +65,7 @@ soak-3d admits no candidate: its rows carry no ``unique_buyers``, so the engine 
 the sniper path is not exercised there. Its golden pins the seat trace and the seeded ledger only.
 
 The legacy cadence pins are not touched here: smoke-10m events.hash 1dffa784... (seeded head pin)
-and the trading smoke pin 106495a9... stay in their own tests.
+and the trading smoke pin a4461e80... stay in their own tests.
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ GOLDEN_RUNS: dict[str, tuple[str, str]] = {
         "45fb30f9d96c5c0a9a78ad360b5f5bd25734759a21a706f31969dcbfeead26b6",
     ),
     "smoke": (
-        "f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747",
+        "0c7cf490cd08b25864148df2150938b023bcc871b8db97af08389b9bbc572b28",
         "24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02",
     ),
     "soak-3d": (
