@@ -1185,7 +1185,7 @@
   },
   {
     "idempotency_key": "fill|01KDVDND5JAPXD42TJSZCAN8FP",
-    "payload_sha256": "ba3d9f2c97c5123cea26e129947d94197be4a1317fe1ef603d269a82bb2cacdf",
+    "payload_sha256": "227078c5ea79e8f6662f514fecb9465e43475ed1a532424738ea94e3888b63e4",
     "seq": 149,
     "source": "replay",
     "ts": "2026-01-01T00:00:04.000000Z",
@@ -1193,15 +1193,15 @@
   },
   {
     "idempotency_key": "position|01KDVDND5JAPXD42TJSZCAN8FP",
-    "payload_sha256": "7e7d2aa885fcaef2570e7cac9e6b89f4cded2d5efe238c2c19a21fd94b762880",
+    "payload_sha256": "7d56c37333592e8eaa3f217dff6a563c57638e8441a7a0a122d3ea902ebb5a04",
     "seq": 150,
     "source": "replay",
     "ts": "2026-01-01T00:00:04.000000Z",
     "type": "PositionOpened"
   },
   {
-    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":10009000},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":24453593,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
-    "payload_sha256": "62115015566110ed25f0fa465a591f971f997fb58712e38982c023f17d11edad",
+    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":11497440},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":24453593,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
+    "payload_sha256": "dc14f3fffc8650b013cb7a2fb7b1665e9a39caafd9d552cfba72d4c39e66771d",
     "seq": 151,
     "source": "replay",
     "ts": "2026-01-01T00:00:30.000000Z",
@@ -1233,7 +1233,7 @@
   },
   {
     "idempotency_key": "close|01KDVDP7HAZ59CGEATNNFTR3DT",
-    "payload_sha256": "8f810005c6ff8665e0669ffa8bc3504d3ccdffe620ad1c9a5408baf21736d6d9",
+    "payload_sha256": "6924ad8d46e9ebc8717798563067252a8f6ec2492db01423c8e2a15e63d7a81d",
     "seq": 155,
     "source": "replay",
     "ts": "2026-01-01T00:00:30.750000Z",
