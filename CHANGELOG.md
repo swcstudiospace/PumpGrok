@@ -2,18 +2,22 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
-## [Unreleased] - v4 Phase 15: paper fee model v2 default
+## [Unreleased] - v4 Phase 15: strategy framework and multi-strategy paper
 
 ### Changed
 
 - Paper fee default is fee model v2 (commits `a2b9045`, `0b843d4`), which charges ATA rent on the first buy. The trading-smoke pin was re-pinned once, by owner approval, for this change. Rows 149, 150, 151 and 155 changed; every other row is unchanged.
+- Strategy framework (plans 15-01 to 15-06): frozen Strategy protocol and static registry; paper-event overlay (6 open positions, 40 trades per day; live stays at 3 and 20); runtime with per-strategy capital slices and attribution; legacy_screening through the runtime; three baseline strategies (momentum_breakout, new_launch_sniper, mean_reversion) with fixture datasets; live-data paper root (paper only, RPC endpoint passed by the caller); intent router to exec.place, which refuses and journals below autonomous-paper and approves nothing.
 
 ### Verification
 
+- Phase 15: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 15: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before; seq 146, events read 41)
 - Phase 15: trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
 - Phase 15: trading-smoke events.hash after: cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62
 - Phase 15: trading-smoke seq and row count before and after: 155 and 155 (events read 5 in both)
-- Phase 15: smoke-10m events.hash unchanged: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (seq 146, events read 41)
+- Phase 15 starts at the Phase 14 close, where smoke-10m already measures 1dffa784 (Phase 14 entry below). The b69c29... value that the Phase 15 plan text cites is the Phase 14 before value, not a Phase 15 starting value.
+- Owner decision 1: one trading-smoke re-pin, recorded in the two trading-smoke lines above. Strategy parameters are PENDING OWNER APPROVAL (see docs/runbooks/strategies.md); they are proposals inside bounds, not final pins.
 
 ## [Unreleased] - v4 Phase 14: replay operator grants
 

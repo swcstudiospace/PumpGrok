@@ -1,0 +1,60 @@
+{
+  "plan": "15-08",
+  "seat": "bot-09-journal",
+  "requirement": "PRC-03",
+  "criteria": [14],
+  "task": "Task 2: CHANGELOG Phase 15 entry (journal-owned pull request)",
+  "files": [
+    "CHANGELOG.md",
+    ".receipts/bot-09-journal/15-08-changelog.json"
+  ],
+  "pairs": {
+    "smoke_10m": {
+      "before": "1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700",
+      "after": "1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700",
+      "equal": true,
+      "after_source": "uv run pumpgrok verify --fixture smoke-10m, exit 0, measured in this run",
+      "seq": 146,
+      "events_read": 41,
+      "plan_value_b69c": "NOT USED. b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is the Phase 14 before value; the Phase 14 CHANGELOG entry records its move to 1dffa784 at Phase 14 close, and HEAD measures 1dffa784."
+    },
+    "trading_smoke": {
+      "before": "106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627",
+      "after": "cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62",
+      "differs": true,
+      "after_source": "tests/fixtures/replay/pins/trading_smoke.json events_hash",
+      "before_source": "Phase 14 CHANGELOG entry (trading-smoke events.hash after) and the existing Phase 15 entry at 4c83ee0",
+      "seq_before": 155,
+      "seq_after": 155,
+      "row_count_before": 155,
+      "row_count_after": 155
+    }
+  },
+  "changelog_lines_present": [
+    "Phase 15: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700",
+    "Phase 15: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before; seq 146, events read 41)",
+    "Phase 15: trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627",
+    "Phase 15: trading-smoke events.hash after: cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62"
+  ],
+  "grep_checks": {
+    "phase15_smoke10m_before_with_1dffa784": {"exit": 0},
+    "phase15_smoke10m_before_with_b69c": {"exit": 1, "note": "FAILS by design of this receipt: the plan's literal b69c line is not written because the measured before value is 1dffa784. Owner decision required (see deviations)."},
+    "phase15_trading_smoke_before_regex": {"exit": 0},
+    "phase15_trading_smoke_after_equals_pin": {"exit": 0},
+    "phase15_smoke10m_after_1dffa784": {"exit": 0}
+  },
+  "entry_handling": {
+    "existing_entry": "4c83ee0 (journal-owned) already held the Phase 15 section with the trading-smoke pair and a smoke-10m 'unchanged' line.",
+    "action": "Extended the existing section; did not duplicate it. Section title changed to the plan title 'v4 Phase 15: strategy framework and multi-strategy paper'. Replaced the 'unchanged' smoke-10m line with the before/after pair. Added a Changed bullet for the strategy framework (plans 15-01 to 15-06) and a line stating parameters are PENDING OWNER APPROVAL."
+  },
+  "deviations": [
+    "smoke-10m before value: the plan text (criteria 14, Task 2, must_haves) cites b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d. The measured value at HEAD is 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700. The measured value is recorded, per the shared instruction. The b69c target is not written as a Phase 15 before value.",
+    "Existing Phase 15 section at 4c83ee0 was extended rather than duplicated; its title now equals the plan title 'v4 Phase 15: strategy framework and multi-strategy paper'."
+  ],
+  "open_items_for_owner": [
+    "Confirm that criterion 14 reads the Phase 15 smoke-10m pair as 1dffa784 (equal) and not b69c. The plan's ROADMAP line 201 grep and tests/replay checks need the same decision."
+  ],
+  "owner_review": "PENDING OWNER APPROVAL: strategy parameters and fee v2 terms are proposals, not final pins.",
+  "contracts_touched": [],
+  "push": "none"
+}
