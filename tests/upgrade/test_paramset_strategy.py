@@ -92,7 +92,7 @@ def test_out_of_bound_strategy_value_is_refused_naming_key_not_value() -> None:
 def test_out_of_bound_strategy_value_is_not_clamped() -> None:
     """A value below its minimum is refused, not raised to the minimum."""
     params = ParamSet(strategy={"mean_reversion": {"z_threshold": 0.1}})
-    with pytest.raises(OutOfBoundsError, match="mean_reversion.z_threshold"):
+    with pytest.raises(OutOfBoundsError, match=r"mean_reversion\.z_threshold"):
         validate_against_bounds(params, load_bounds())
 
 
@@ -106,7 +106,7 @@ def test_strategy_id_without_bound_is_refused() -> None:
 def test_strategy_key_without_bound_is_refused() -> None:
     """A parameter key inside a bounded strategy with no bound is refused."""
     params = ParamSet(strategy={"momentum_breakout": {"unbounded_knob": 1}})
-    with pytest.raises(OutOfBoundsError, match="momentum_breakout.unbounded_knob"):
+    with pytest.raises(OutOfBoundsError, match=r"momentum_breakout\.unbounded_knob"):
         validate_against_bounds(params, load_bounds())
 
 
