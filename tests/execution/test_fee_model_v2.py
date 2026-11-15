@@ -346,14 +346,15 @@ def test_a_partial_sell_keeps_the_deposit_whole_until_the_full_close(tmp_path: A
     assert v2["closes"] == [], "a partial exit closes nothing"
 
 
-def test_a_forced_close_refunds_the_deposit_once_and_never_books_it_as_proceeds(
+def test_a_forced_close_returns_the_deposit_once_inside_market_value(
     tmp_path: Any,
 ) -> None:
     v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=True)
     v1 = _run_lifecycle(tmp_path / "v1", FeeModel(), forced=True)
     [sell] = v2["sells"]
-    assert v2["proceeds"] == v1["proceeds"], "the deposit is refunded, not sold"
-    assert sell["cash_delta_lamports"] == v2["proceeds"] + ATA_RENT_OFFLINE_LAMPORTS
+    # Market value 195677515 (sale value plus the held deposit) less the 9000 network cost.
+    assert v2["proceeds"] == 195668515, "proceeds are market value less network cost"
+    assert sell["cash_delta_lamports"] == v2["proceeds"], "the deposit is inside market value"
     assert v2["realized"] == v1["realized"], "realized excludes the rent"
     assert v2["after_close"] == v1["after_close"], "the rent comes back to cash once"
     assert v2["second_close"] == "no_position", "a closed position refunds nothing again"
