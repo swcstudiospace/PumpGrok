@@ -658,7 +658,7 @@ class _BuyMixin:
         order_id: str,
     ) -> Fill:
         """Ledger append and Fill for a confirmed BUY."""
-        network_cost = self._fees.network_cost()
+        network_cost = self._fees.buy_network_cost(first_buy=self._is_first_buy(request.mint))
         cash_debit = confirmed.filled + network_cost
         price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
         slipped = self._buy_slippage_bps(confirmed)
@@ -715,6 +715,17 @@ class _BuyMixin:
         """True when the ledger fold holds a non-empty position in ``mint``."""
         state = self._fold_state()
         return bool(state.positions.get(mint) is not None and state.positions[mint].token_units > 0)
+
+    def _is_first_buy(self, mint: str) -> bool:
+        """True when the ledger holds no FillRecorded BUY for ``mint``.
+
+        Decided from ledger fills, so a restart over the same ledger reaches the same answer.
+        """
+        for row in self._store.read(types=["FillRecorded"], limit=None):
+            payload = row["payload"]
+            if payload.get("side") == "buy" and payload.get("mint") == mint:
+                return False
+        return True
 
     async def _place_buy(
         self,

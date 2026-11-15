@@ -12,7 +12,7 @@ from pumpgrok.core.adapter import ExecutionAdapter, ExecutionMode, OrderRequest,
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.entry_hook import EntryDenied, EntryPolicy
-from pumpgrok.execution.fees import FeeModel
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel
 from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter.batch import _BatchMixin
 from pumpgrok.execution.paper_adapter.buy import _BuyMixin
@@ -66,7 +66,7 @@ class PaperAdapter(
         self._rng = rng
         self._budget = budget if budget is not None else RiskBudget()
         self._limits = limits if limits is not None else EngineLimits()
-        self._fees = fees if fees is not None else FeeModel()
+        self._fees = fees if fees is not None else PAPER_DEFAULT_FEE_MODEL
         self._price = price_source
         self._source = source
         self._p_drop = p_drop

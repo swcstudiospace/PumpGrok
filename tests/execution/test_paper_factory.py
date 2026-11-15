@@ -26,7 +26,7 @@ from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.execution import build_adapter, build_paper_adapter
-from pumpgrok.execution.fees import FeeModel
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel
 from pumpgrok.execution.paper_adapter import (
     CurveSnapshot,
     OrderRejectedError,
@@ -267,7 +267,7 @@ async def test_source_replaced_after_composition_fails_the_buy(live_env) -> None
 
 def test_fee_model_defaults_to_v1_and_accepts_a_selected_model(live_env) -> None:
     clock, store, _health, live = live_env
-    assert _live_adapter(clock, store, live)._fees == FeeModel()
+    assert _live_adapter(clock, store, live)._fees == PAPER_DEFAULT_FEE_MODEL
     selected = FeeModel(venue_fee_bps=200)
     assert _live_adapter(clock, store, live, fees=selected)._fees is selected
 

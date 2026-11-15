@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Final, Literal
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.entry_hook import BoundEntryPolicy, EntryPolicy
+from pumpgrok.execution.fees import FeeModel, fee_model_for
 from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter import PaperAdapter, PriceSource
 from pumpgrok.ledger.store import LedgerStore
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from pumpgrok.execution.paper_adapter import CurveSnapshot
     from pumpgrok.replay.sources import FixtureCurveSource
 
-__all__ = ["VerifiedReplay", "build_paper_adapter", "verify_replay"]
+__all__ = ["VerifiedReplay", "build_paper_adapter", "paper_fee_model", "verify_replay"]
 
 # Module-private mint token: only verify_replay holds it, so a VerifiedReplay
 # cannot be assembled by a caller that merely names the class.
@@ -128,6 +129,15 @@ def _compose_live(
     return policy, live_source
 
 
+def paper_fee_model(settings: object) -> FeeModel:
+    """The paper fee model the settings select: v2 (FEE-01) unless ``paper_fees.model`` is v1.
+
+    Backtest and paper both call this, so one settings value fixes both fee models.
+    """
+    section = getattr(settings, "paper_fees", None)
+    return fee_model_for(getattr(section, "model", "v2"))
+
+
 def build_paper_adapter(
     settings: object,
     *,
@@ -156,9 +166,9 @@ def build_paper_adapter(
     is handed to it synchronously; it never affects admission.
     Without either, ``price_source`` (if any) serves sells and reads only, and every
     BUY is refused with ``data_unavailable``. ``fees`` selects the fee model; the
-    default is the v1 :class:`FeeModel`. The operator risk budget and engine limits
-    come from ``settings`` (``risk`` / ``limits``); objects without those attributes
-    fall back to defaults.
+    default is ``paper_fee_model(settings)``: v2 unless ``paper_fees.model`` is v1. The operator
+    risk budget and engine limits come from ``settings`` (``risk`` / ``limits``); objects without
+    those attributes fall back to defaults.
     """
     if reserves_observer is not None and live_source is None:
         raise ValueError("reserves observer needs the exact live source")
@@ -188,6 +198,8 @@ def build_paper_adapter(
     limits = getattr(settings, "limits", None)
     if limits is None:
         limits = EngineLimits()
+    if fees is None:
+        fees = paper_fee_model(settings)
     return PaperAdapter(
         store=store,
         risk=risk,
