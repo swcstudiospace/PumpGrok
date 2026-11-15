@@ -17,6 +17,8 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
+
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore, SidecarWriter
 
@@ -24,7 +26,7 @@ __all__ = ["open_deposits", "opening_deposit_writer", "position_deposits_by_seq"
 
 _TABLE = "position_deposits"
 _DDL = (
-    f"CREATE TABLE IF NOT EXISTS {_TABLE} ("
+    "CREATE TABLE IF NOT EXISTS position_deposits ("
     " opened_seq INTEGER PRIMARY KEY,"
     " mint TEXT NOT NULL,"
     " deposit_lamports INTEGER NOT NULL);"
@@ -45,7 +47,8 @@ def opening_deposit_writer(mint: str, deposit_lamports: int) -> SidecarWriter:
         db.execute(_DDL)
         for row in openings:
             db.execute(
-                f"INSERT INTO {_TABLE} (opened_seq, mint, deposit_lamports) VALUES (?, ?, ?);",
+                "INSERT INTO position_deposits"
+                " (opened_seq, mint, deposit_lamports) VALUES (?, ?, ?);",
                 (int(row["seq"]), mint, deposit_lamports),
             )
 
@@ -59,19 +62,10 @@ def _table_exists(db: sqlite3.Connection) -> bool:
     return row is not None
 
 
-def position_deposits_by_seq(store: LedgerStore) -> dict[int, int]:
-    """The deposit recorded against each PositionOpened seq; empty when none was recorded."""
-    db = store._db
-    if not _table_exists(db):
-        return {}
-    rows = db.execute(f"SELECT opened_seq, deposit_lamports FROM {_TABLE} ORDER BY opened_seq;")
-    return {int(seq): int(lamports) for seq, lamports in rows.fetchall()}
-
-
 def open_deposits(store: LedgerStore) -> dict[str, int]:
     """The deposit recorded for each mint's latest opening; empty when none was recorded."""
     db = store._db
     if not _table_exists(db):
         return {}
-    rows = db.execute(f"SELECT mint, deposit_lamports FROM {_TABLE} ORDER BY opened_seq;")
+    rows = db.execute("SELECT mint, deposit_lamports FROM position_deposits ORDER BY opened_seq;")
     return {str(mint): int(lamports) for mint, lamports in rows.fetchall()}
