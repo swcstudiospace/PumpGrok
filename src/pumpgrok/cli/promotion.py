@@ -104,7 +104,7 @@ def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float
     summary would read as a flat zero return and zero Sharpe. The chain is verified first,
     as the paper gate does.
     """
-    rows, _ = _read_window_ledger(paper_path, verify=True)
+    rows, _, _ = _read_window_ledger(paper_path, verify=True)
     stamps = [_row_stamp(row) for row in rows]
     reached_end = any(stamp >= window_end for stamp in stamps)
     observed = any(cutoff <= stamp < window_end for stamp in stamps)
