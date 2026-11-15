@@ -10,7 +10,7 @@ A ticket attributed to no strategy (the legacy path) has no row.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pumpgrok.core.errors import PumpgrokError
@@ -55,7 +55,7 @@ def append_with_ticket_ref(
     if ticket_id in load_refs(store):
         raise TicketAttributionConflict(f"ticket {ticket_id} is already attributed")
 
-    def write_ref(db: sqlite3.Connection, stored: list[dict[str, Any]]) -> None:
+    def write_ref(db: sqlite3.Connection, stored: Sequence[Mapping[str, Any]]) -> None:
         try:
             db.execute(
                 "INSERT INTO strategy_ticket_refs (ticket_id, strategy_id, event_id)"
