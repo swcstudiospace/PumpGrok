@@ -20,6 +20,7 @@ from pumpgrok.backtest.results import SharedResult
 from pumpgrok.backtest.split import HoldoutSplit
 from pumpgrok.config.settings import ConfigError
 from pumpgrok.core.adapter import Fill, FillStatus
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
@@ -43,8 +44,8 @@ class _Dataset:
 
 def _read_window_ledger(
     ledger_path: Path, *, verify: bool = False
-) -> tuple[list[dict[str, Any]], str | None]:
-    """Every row plus the initial-equity meta of one ledger, read-only.
+) -> tuple[list[dict[str, Any]], str | None, dict[int, int]]:
+    """Every row, the initial-equity meta and each opening's ATA deposit, read-only.
 
     LedgerStore.read documents itself read-only: no locks, no chain
     mutation. This helper owns open and close around the read. With
@@ -57,9 +58,10 @@ def _read_window_ledger(
             store.verify()
         rows = store.read(limit=None)
         meta = store.get_meta("initial_equity_lamports")
+        deposits = position_deposits_by_seq(store)
     finally:
         store.close()
-    return (rows, meta)
+    return (rows, meta, deposits)
 
 
 def _fill_from_payload(row: Mapping[str, Any], payload: dict[str, Any]) -> tuple[Fill, Decimal]:
@@ -162,7 +164,11 @@ def _row_stamp(row: Mapping[str, Any]) -> float:
         raise ConfigError(["paper ledger holds a row with an unusable timestamp"]) from exc
 
 
-def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
+def _window_curve(
+    genesis: LedgerState,
+    rows: Sequence[Mapping[str, Any]],
+    deposits: Mapping[int, int] | None = None,
+) -> tuple[int, ...]:
     """Equity after each fill, folding every row of the window in ledger order.
 
     Each fill's point is taken when the next fill begins or the window ends,
@@ -179,7 +185,7 @@ def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tu
             if pending:
                 curve.append(equity_lamports(state))
             pending = True
-        state = reduce(state, row)
+        state = reduce(state, row, deposits)
     if pending:
         curve.append(equity_lamports(state))
     return tuple(curve)
@@ -188,7 +194,11 @@ def _window_curve(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tu
 _SETTLEMENT_ROWS = frozenset({"PositionOpened", "PositionClosed"})
 
 
-def _equity_path(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
+def _equity_path(
+    genesis: LedgerState,
+    rows: Sequence[Mapping[str, Any]],
+    deposits: Mapping[int, int] | None = None,
+) -> tuple[int, ...]:
     """Equity before the first window row, then at each settled point, in ledger order.
 
     A settlement is a FillRecorded row and the PositionOpened or PositionClosed row
@@ -205,7 +215,7 @@ def _equity_path(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> tup
         if unsettled and kind not in _SETTLEMENT_ROWS:
             # A fill that no position row followed is settled as it stands.
             path.append(equity_lamports(state))
-        state = reduce(state, row)
+        state = reduce(state, row, deposits)
         if kind == "FillRecorded":
             unsettled = True
             continue
@@ -222,6 +232,7 @@ def _window_metrics(
     genesis: LedgerState,
     rows: Sequence[Mapping[str, Any]],
     elapsed_days: Decimal,
+    deposits: Mapping[int, int] | None = None,
 ) -> MetricsReport:
     """Window metrics whose return and drawdown cover every row, not only fills.
 
@@ -231,13 +242,13 @@ def _window_metrics(
     full equity path: return from opening to closing equity, drawdown from the
     running peak over every point. Fill-count statistics stay with summarize.
     """
-    path = _equity_path(genesis, rows)
+    path = _equity_path(genesis, rows, deposits)
     opening, closing = path[0], path[-1]
     report = summarize(
         fills,
         MetricsContext(
             initial_equity_lamports=opening,
-            equity_curve_lamports=_window_curve(genesis, rows),
+            equity_curve_lamports=_window_curve(genesis, rows, deposits),
             elapsed_days=elapsed_days,
         ),
     )
@@ -333,7 +344,7 @@ def _evaluate_holdout(
     holdout_window = windows.holdout
     if holdout_window.window_id != split.holdout_id:
         raise ConfigError(["backtest holdout window identity drifted"])
-    rows, meta = _read_window_ledger(holdout_ledger)
+    rows, meta, deposits = _read_window_ledger(holdout_ledger)
     last_row_stamp = _last_row_stamp(rows)
     window_end_ts = _window_end(last_row_stamp)
     fills, latencies = _fills_from_rows(rows)
@@ -342,7 +353,9 @@ def _evaluate_holdout(
     events = dataset.events
     window_start_utc, first_stamp, last_stamp = _window_span(events, cutoff)
     elapsed_days = _elapsed_days(first_stamp, last_stamp)
-    window_metrics = _window_metrics(fills, genesis=genesis, rows=rows, elapsed_days=elapsed_days)
+    window_metrics = _window_metrics(
+        fills, genesis=genesis, rows=rows, elapsed_days=elapsed_days, deposits=deposits
+    )
     backtest_result = SharedResult.from_fills(
         run_id=run_id,
         dataset=spec.name,
