@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, dump_state, initial_state, load_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 
@@ -91,9 +92,6 @@ def reconcile(store: LedgerStore) -> dict[str, Any]:
     else:
         base = _genesis(store, store.read(since_seq=1, limit=1))
     tail = store.read(since_seq=snapshot_seq + 1, limit=None)
-    # Deferred: the execution package imports the risk engine, which imports this ledger.
-    from pumpgrok.execution.deposits import position_deposits_by_seq
-
     deposits = position_deposits_by_seq(store)
     tail_state = base
     for event in tail:
