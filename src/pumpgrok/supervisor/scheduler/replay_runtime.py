@@ -20,6 +20,7 @@ from pumpgrok.core.registry import ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.tool import Tool
 from pumpgrok.engine.pipeline import CandidateVerdict, evaluate_candidates
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.execution.paper_factory import build_paper_adapter, verify_replay
 from pumpgrok.ledger.store import LedgerStore
@@ -259,6 +260,8 @@ def open_replay_runtime(
             clock=clock,
             rng=make_rng(seed),
             replay=verified,
+            # Offline pinned ATA rent (FEE-01); replay never reads RPC.
+            fees=PAPER_DEFAULT_FEE_MODEL,
             source="replay",
             # The fixture is the venue: no random tx drop, so a recorded buy fills.
             p_drop=0.0,

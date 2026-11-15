@@ -42,7 +42,7 @@ FORBIDDEN_SYMBOLS = frozenset(
 ALLOWLIST: frozenset[str] = frozenset()
 
 
-def _build(tmp_path: Path, transport: ReadOnlyDouble, **overrides: object) -> LivePaperRoot:
+async def _build(tmp_path: Path, transport: ReadOnlyDouble, **overrides: object) -> LivePaperRoot:
     kwargs: dict[str, object] = {
         "mode": "paper",
         "endpoint": ENDPOINT,
@@ -56,7 +56,7 @@ def _build(tmp_path: Path, transport: ReadOnlyDouble, **overrides: object) -> Li
         "max_observations": 4,
     }
     kwargs.update(overrides)
-    return build_live_paper_root(**kwargs)  # type: ignore[arg-type]
+    return await build_live_paper_root(**kwargs)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("mode", ["live", "replay", "manual", "PAPER", ""])
@@ -64,7 +64,7 @@ async def test_non_paper_mode_is_refused_before_any_io(tmp_path: Path, mode: str
     transport = ReadOnlyDouble()
 
     with pytest.raises(ValueError):
-        _build(tmp_path, transport, mode=mode)
+        await _build(tmp_path, transport, mode=mode)
 
     assert transport.frames == []
     assert not (tmp_path / "desk").exists()
@@ -75,7 +75,7 @@ async def test_missing_endpoint_is_refused_before_any_io(tmp_path: Path, endpoin
     transport = ReadOnlyDouble()
 
     with pytest.raises(ValueError):
-        _build(tmp_path, transport, endpoint=endpoint)
+        await _build(tmp_path, transport, endpoint=endpoint)
 
     assert transport.frames == []
     assert not (tmp_path / "desk").exists()
@@ -108,7 +108,7 @@ async def test_call_without_endpoint_is_refused(tmp_path: Path) -> None:
 
 async def test_paper_root_builds_with_explicit_endpoint_and_double(tmp_path: Path) -> None:
     transport = ReadOnlyDouble()
-    root = _build(tmp_path, transport)
+    root = await _build(tmp_path, transport)
     try:
         assert transport.frames == []
         assert root.boundary.endpoint == ENDPOINT
@@ -136,7 +136,7 @@ async def test_paper_root_builds_with_explicit_endpoint_and_double(tmp_path: Pat
 
 async def test_root_boundary_reads_reach_double_and_sends_do_not(tmp_path: Path) -> None:
     transport = ReadOnlyDouble()
-    root = _build(tmp_path, transport)
+    root = await _build(tmp_path, transport)
     try:
         await root.boundary.rpc("getAccountInfo", [MINT, {"encoding": "base64"}])
         assert [frame["method"] for _, frame in transport.frames] == ["getAccountInfo"]

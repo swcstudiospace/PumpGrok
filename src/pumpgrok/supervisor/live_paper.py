@@ -10,6 +10,10 @@ adapter out of its closure.
 Refusals come first and do no I/O: a mode other than ``"paper"``, then an absent or
 empty endpoint. There is no default endpoint; the owner names one at deployment (owner
 decision 4). The transport is injected, and this module opens no socket.
+
+ATA rent (FEE-01): with ``rent_rpc`` the rent-exempt minimum is read from RPC once at build time
+(:func:`read_ata_rent`); a failed read fails the build. Without it the recorded offline pin
+(:data:`PAPER_DEFAULT_FEE_MODEL`) is used.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Protocol
 
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
@@ -27,6 +32,7 @@ from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel, read_ata_rent
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.execution.paper_factory import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore
@@ -53,6 +59,16 @@ def _dead_letter(event: Event) -> None:
     raise RuntimeError(f"live-data paper root has no dead-letter sink for {event.kind}")
 
 
+class RentRpc(Protocol):
+    """The one JSON-RPC call the rent read makes. The caller owns the client.
+
+    :class:`ReadOnlyBoundary` is not used here: its read allowlist does not admit
+    ``getMinimumBalanceForRentExemption``.
+    """
+
+    async def call(self, method: str, params: list[Any]) -> Any: ...
+
+
 @dataclass(frozen=True)
 class LivePaperRoot:
     """The wired live-data paper path. Call :meth:`close` to release its stores."""
@@ -63,6 +79,7 @@ class LivePaperRoot:
     bridge: ObservationBridge
     risk: RiskEngine
     adapter: PaperAdapter
+    fees: FeeModel
     store: LedgerStore
 
     def close(self) -> None:
@@ -70,7 +87,7 @@ class LivePaperRoot:
         self.health.close()
 
 
-def build_live_paper_root(
+async def build_live_paper_root(
     *,
     mode: str,
     endpoint: str,
@@ -82,18 +99,26 @@ def build_live_paper_root(
     limits: EngineLimits,
     max_age_s: float,
     max_observations: int,
+    rent_rpc: RentRpc | None = None,
 ) -> LivePaperRoot:
     """Build the live-data paper root over a read-only ``endpoint`` and ``transport``.
 
     Raises ValueError, before any I/O, for a mode other than ``"paper"`` or an absent
     endpoint. ``endpoint`` has no default: the owner chooses it at deployment. The
     read-only boundary validates the endpoint's scheme and shape before any read.
+
+    An RPC client in ``rent_rpc`` supplies the ATA rent: it is read once, here, with
+    :func:`read_ata_rent`, and a failed or invalid read fails the build. Without it, the
+    recorded offline pin (:data:`PAPER_DEFAULT_FEE_MODEL`) is used.
     """
     if mode != "paper":
         raise ValueError("live-data paper root builds in paper mode only")
     if not isinstance(endpoint, str) or not endpoint:
         raise ValueError("live-data paper root needs an explicit read-only endpoint")
     boundary = ReadOnlyBoundary(endpoint=endpoint, transport=transport)
+    fees: FeeModel = PAPER_DEFAULT_FEE_MODEL
+    if rent_rpc is not None:
+        fees = await read_ata_rent(rent_rpc)
 
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -134,6 +159,7 @@ def build_live_paper_root(
             rng=rng,
             live_source=prices,
             reserves_observer=reserves.observe,
+            fees=fees,
             source="paper",
         )
         root = LivePaperRoot(
@@ -143,6 +169,7 @@ def build_live_paper_root(
             bridge=bridge,
             risk=risk,
             adapter=adapter,
+            fees=fees,
             store=store,
         )
         stack.pop_all()
