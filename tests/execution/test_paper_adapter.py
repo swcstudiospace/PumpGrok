@@ -122,7 +122,7 @@ async def test_one_buy_flows_to_curve_priced_fill(tmp_path: Path) -> None:
     assert fill.filled_units == expected_out
     assert fill.price_avg == Decimal(x_net) / Decimal(expected_out)
     assert fill.venue_fee_lamports == venue_fee
-    assert fill.network_cost_lamports == fees.network_cost()
+    assert fill.network_cost_lamports == 1497440  # 9000 + 1488440 first-buy rent
     assert fill.route == "curve"
     assert fill.venue_tx_ref.startswith("dry_run:")
     store = adapter._store
