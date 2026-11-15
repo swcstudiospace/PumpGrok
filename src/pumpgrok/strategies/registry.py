@@ -3,18 +3,25 @@
 The registry is a literal tuple of strategy classes in a fixed order. There is no
 dynamic loading and no entry-point discovery. checked_registry runs at import and
 refuses a duplicate strategy_id, so a clash stops the process before any strategy runs.
-LegacyScreening lives in strategies.legacy (the adapter over the replay decision path)
-and is re-exported here so the registry names every registered strategy.
+LegacyScreening lives in strategies.legacy (the adapter over the replay decision path).
+The three baseline strategies (15-04) are listed after it, so the registry names every
+registered strategy.
 """
 
 from __future__ import annotations
 
 from pumpgrok.strategies.base import Strategy
 from pumpgrok.strategies.legacy import LegacyScreening
+from pumpgrok.strategies.mean_reversion import MeanReversion
+from pumpgrok.strategies.momentum_breakout import MomentumBreakout
+from pumpgrok.strategies.new_launch_sniper import NewLaunchSniper
 
 __all__ = [
     "STRATEGIES",
     "LegacyScreening",
+    "MeanReversion",
+    "MomentumBreakout",
+    "NewLaunchSniper",
     "StrategyRegistryError",
     "checked_registry",
 ]
@@ -37,4 +44,9 @@ def checked_registry(*classes: type[Strategy]) -> tuple[type[Strategy], ...]:
     return tuple(classes)
 
 
-STRATEGIES: tuple[type[Strategy], ...] = checked_registry(LegacyScreening)
+STRATEGIES: tuple[type[Strategy], ...] = checked_registry(
+    LegacyScreening,
+    MomentumBreakout,
+    NewLaunchSniper,
+    MeanReversion,
+)

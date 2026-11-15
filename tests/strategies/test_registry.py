@@ -1,9 +1,9 @@
 """STR-01: the strategy registry is static, ordered, and refuses duplicate ids.
 
 BOUNDS declared on each registered strategy must equal its [strategy.ID.*] tables in
-upgrade_bounds.toml exactly. The three baseline strategies are not written until 15-04;
-their TOML tables are named in DEFERRED_TO_15_04 and checked for presence and absence
-here, so no equality assertion is skipped and none is silently dropped.
+upgrade_bounds.toml exactly. The three baseline strategies are registered here, and each DEFAULTS
+set must equal the proposals table in 15-PLANS-INDEX.md, so the proposals stay the single source.
+Every [strategy.ID.*] section must belong to a registered strategy.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pumpgrok.strategies.registry import (
 )
 from pumpgrok.upgrade.bounds import KeyBound, default_bounds_path, load_bounds
 
-DEFERRED_TO_15_04 = frozenset({"momentum_breakout", "new_launch_sniper", "mean_reversion"})
+BASELINE_IDS = frozenset({"momentum_breakout", "new_launch_sniper", "mean_reversion"})
 
 
 def _toml_sections() -> dict[str, dict[str, KeyBound]]:
@@ -58,7 +58,12 @@ class _Beta:
 
 def test_registry_is_a_static_ordered_tuple() -> None:
     assert isinstance(STRATEGIES, tuple)
-    assert [cls.strategy_id for cls in STRATEGIES] == ["legacy_screening"]
+    assert [cls.strategy_id for cls in STRATEGIES] == [
+        "legacy_screening",
+        "momentum_breakout",
+        "new_launch_sniper",
+        "mean_reversion",
+    ]
 
 
 def test_checked_registry_keeps_the_given_order() -> None:
@@ -89,10 +94,43 @@ def test_registered_bounds_equal_toml_sections_exactly() -> None:
         assert declared == toml_keys, cls.strategy_id
 
 
-def test_toml_sections_not_registered_are_exactly_the_deferred_three() -> None:
+def test_every_toml_strategy_section_is_a_registered_strategy() -> None:
     registered = {cls.strategy_id for cls in STRATEGIES}
-    unregistered_in_toml = set(_toml_sections()) - registered
-    assert unregistered_in_toml == DEFERRED_TO_15_04
+    assert set(_toml_sections()) == BASELINE_IDS
+    assert BASELINE_IDS <= registered
+
+
+PROPOSALS: dict[str, dict[str, Any]] = {
+    "momentum_breakout": {
+        "lookback_seconds": 300,
+        "breakout_pct": 20.0,
+        "max_hold_seconds": 900,
+        "stop_loss_pct": 25.0,
+    },
+    "new_launch_sniper": {
+        "max_age_seconds": 300,
+        "min_unique_buyers": 5,
+        "max_curve_progress": 0.10,
+        "take_profit_pct": 80.0,
+    },
+    "mean_reversion": {
+        "window_seconds": 600,
+        "z_threshold": 2.0,
+        "max_hold_seconds": 900,
+        "stop_loss_pct": 15.0,
+    },
+}
+
+
+@pytest.mark.parametrize("cls", [c for c in STRATEGIES if c.strategy_id in PROPOSALS])
+def test_baseline_defaults_equal_the_proposals_table(cls: Any) -> None:
+    assert dict(cls.DEFAULTS) == PROPOSALS[cls.strategy_id]
+
+
+@pytest.mark.parametrize("cls", [c for c in STRATEGIES if c.strategy_id in PROPOSALS])
+def test_baseline_defaults_sit_inside_their_bounds(cls: Any) -> None:
+    for key, bound in cls.BOUNDS.items():
+        assert bound.minimum <= cls.DEFAULTS[key] <= bound.maximum, (cls.strategy_id, key)
 
 
 def test_legacy_hook_declares_no_intents() -> None:
