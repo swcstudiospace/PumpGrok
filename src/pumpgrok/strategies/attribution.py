@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pumpgrok.backtest.equity import equity_lamports, net_lamports
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 
@@ -56,7 +57,8 @@ def desk_genesis(store: LedgerStore) -> LedgerState:
 
 def desk_net_lamports(store: LedgerStore) -> int:
     """The desk's net realized lamports over every row of the ledger."""
-    return net_lamports(desk_genesis(store), store.read(limit=None))
+    deposits = position_deposits_by_seq(store)
+    return net_lamports(desk_genesis(store), store.read(limit=None), deposits)
 
 
 def _ticket_of(payload: Mapping[str, Any], open_tickets: Mapping[str, str]) -> str:
@@ -83,6 +85,7 @@ def attribute(
     refs: Mapping[str, str],
     *,
     strategy_ids: Sequence[str] = (),
+    deposits: Mapping[int, int] | None = None,
 ) -> Attribution:
     """Fold the rows from genesis, attributing each row's equity change to one bucket.
 
@@ -97,7 +100,7 @@ def attribute(
         row_type = str(row.get("type", ""))
         payload = row.get("payload") or {}
         before = equity_lamports(state)
-        state = reduce(state, row)
+        state = reduce(state, row, deposits)
         delta = equity_lamports(state) - before
         ticket = _ticket_of(payload, open_tickets)
         bucket = refs.get(ticket, UNATTRIBUTED) if ticket else UNATTRIBUTED
