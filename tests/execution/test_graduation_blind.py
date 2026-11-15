@@ -28,7 +28,7 @@ from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.curve_math import sell_out
-from pumpgrok.execution.fees import FeeModel
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel
 from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
@@ -189,7 +189,10 @@ async def test_mark_to_market_values_liquidation_every_60s(tmp_path: Path) -> No
     body = json.loads(str(row["payload_json"]))
     fees = FeeModel()
     gross = sell_out(S0, T0, fill.filled_units)
-    assert body["equity_lamports"] - body["cash_lamports"] == gross - fees.venue_fee(gross)
+    # The mark is market value: the sale net of the venue fee, plus the first buy's ATA deposit.
+    deposit = PAPER_DEFAULT_FEE_MODEL.ata_deposit_term(first_buy=True)
+    market = gross - fees.venue_fee(gross) + deposit
+    assert body["equity_lamports"] - body["cash_lamports"] == market
     marks = json.loads(str(body["prices_json"]))
     assert marks[MINT]["source"] == "curve"
 

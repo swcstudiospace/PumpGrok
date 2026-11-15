@@ -688,13 +688,40 @@ class _BuyMixin:
             rows, sidecar=opening_deposit_writer(request.mint, deposit)
         )
         self._inflight.discard(order_id)
-        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
-        observed = confirmed.curve1.ts
-        self._last_price_ts[request.mint] = observed if observed is not None else self._clock.now()
-        self._last_reserves[request.mint] = (
-            confirmed.curve1.s_lamports,
-            confirmed.curve1.t_units,
+        self._remember_buy_observation(request.mint, confirmed.curve1)
+        return self._buy_fill_result(
+            request,
+            quote=quote,
+            confirmed=confirmed,
+            order_id=order_id,
+            venue_tx_ref=venue_tx_ref,
+            price_avg=price_avg,
+            slipped=slipped,
+            network_cost=network_cost,
+            ledger_seq=int(stored[0]["seq"]),
         )
+
+    def _remember_buy_observation(self, mint: str, curve1: CurveSnapshot) -> None:
+        """Cache the CONFIRMING tick as the mint's last price and reserves."""
+        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
+        observed = curve1.ts
+        self._last_price_ts[mint] = observed if observed is not None else self._clock.now()
+        self._last_reserves[mint] = (curve1.s_lamports, curve1.t_units)
+
+    def _buy_fill_result(
+        self,
+        request: OrderRequest,
+        *,
+        quote: _BuyQuote,
+        confirmed: _BuyConfirmed,
+        order_id: str,
+        venue_tx_ref: str,
+        price_avg: Decimal,
+        slipped: int,
+        network_cost: int,
+        ledger_seq: int,
+    ) -> Fill:
+        """The Fill a confirmed BUY returns to its caller."""
         return Fill(
             order_id=order_id,
             decision_id=request.decision_id,
@@ -708,7 +735,7 @@ class _BuyMixin:
             venue_fee_lamports=confirmed.venue_fee,
             network_cost_lamports=network_cost,
             route="curve",
-            ledger_seq=int(stored[0]["seq"]),
+            ledger_seq=ledger_seq,
         )
 
     @staticmethod
