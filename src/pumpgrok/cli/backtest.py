@@ -38,7 +38,8 @@ from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel
+from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS
+from pumpgrok.execution.paper_factory import paper_fee_model
 from pumpgrok.replay.fixtures import FixtureDataset, event_epoch, load_dataset
 from pumpgrok.risk.limits import EngineLimits
 
@@ -267,11 +268,13 @@ def _settle(
     return _Settled(outcome=outcome, eligible=eligible, reasons=reasons, gate=gate)
 
 
-def _emit_report(plan: _Plan, harness_result: HarnessResult, settled: _Settled) -> None:
+def _emit_report(
+    plan: _Plan, harness_result: HarnessResult, settled: _Settled, settings: Settings
+) -> None:
     """Build the deterministic backtest report from the run and print it (CONTEXT G-01)."""
     outcome = settled.outcome
     gate = settled.gate
-    fees = FeeModel()
+    fees = paper_fee_model(settings)
     report = build_report(
         run_id=plan.manifest.run_id,
         dataset=plan.dataset.name,
@@ -338,7 +341,7 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     with _run_lock(plan.run_dir):
         harness_result = _run_trials(plan)
         settled = _settle(args, settings, plan, harness_result)
-        _emit_report(plan, harness_result, settled)
+        _emit_report(plan, harness_result, settled, settings)
     return settled.gate.exit_code
 
 

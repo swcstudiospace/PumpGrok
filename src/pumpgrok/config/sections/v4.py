@@ -95,4 +95,4 @@ class PaperFeesSettings(BaseModel):
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
-    model: Literal["v1"] = "v1"
+    model: Literal["v1", "v2"] = "v2"
