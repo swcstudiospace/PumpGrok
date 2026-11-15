@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,25 @@ def read_initial_equity_readonly(ledger_path: Path) -> int:
     return int(row[0])
 
 
+def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
+    """Read the position_deposits sidecar (PositionOpened seq -> deposit) without writing.
+
+    Returns {} when the ledger file is absent or no deposit was ever recorded (a legacy
+    ledger), so the fold holds no deposit. The table is written by execution/deposits.py.
+    """
+    if not ledger_path.exists():
+        return {}
+    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    db = sqlite3.connect(uri, uri=True)
+    try:
+        rows = db.execute("SELECT opened_seq, deposit_lamports FROM position_deposits").fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        db.close()
+    return {int(seq): int(lamports) for seq, lamports in rows}
+
+
 def day_start(day: str) -> str:
     """UTC instant at which a YYYY-MM-DD day starts, in the ledger ``ts_utc`` form.
 
@@ -131,7 +151,11 @@ def _in_window(ts: str, start: str, end: str) -> bool:
 
 
 def _fold_bounded(
-    events: list[dict[str, Any]], genesis: LedgerState, start: str, end: str
+    events: list[dict[str, Any]],
+    genesis: LedgerState,
+    start: str,
+    end: str,
+    deposits: Mapping[int, int] | None = None,
 ) -> tuple[LedgerState, LedgerState, list[dict[str, Any]]]:
     """Fold only events before ``end``; return (state at ``start``, state at ``end``, visible).
 
@@ -145,8 +169,8 @@ def _fold_bounded(
         if ts >= end:
             continue
         if ts < start:
-            start_state = reduce(start_state, event)
-        state = reduce(state, event)
+            start_state = reduce(start_state, event, deposits)
+        state = reduce(state, event, deposits)
         visible.append(event)
     return start_state, state, visible
 
@@ -281,6 +305,7 @@ class DailyReport:
     ) -> ReportModel:
         last = day if last_day is None else last_day
         events = read_events_readonly(ledger_path)
+        deposits = read_deposits_readonly(ledger_path)
         start = day_start(day)
         end = day_next(last)
         window = [e for e in events if _in_window(str(e.get("ts_utc", "")), start, end)]
@@ -289,7 +314,7 @@ class DailyReport:
             initial_equity_lamports=read_initial_equity_readonly(ledger_path),
             day_utc=day,
         )
-        start_state, state, visible = _fold_bounded(events, genesis, start, end)
+        start_state, state, visible = _fold_bounded(events, genesis, start, end, deposits)
         position_rows = _position_rows(state)
         closed = [e for e in window if e["type"] == "PositionClosed"]
         fills = [e for e in window if e["type"] == "FillRecorded"]
