@@ -34,8 +34,7 @@ def test_strategy_param_changes_trial_identity(tmp_path: Path) -> None:
         ledger_path=ledger_path,
     )
     recorded = [
-        verdict.params_hash
-        for verdict in TrialLedger(run_id="STRAT01", path=ledger_path).trials
+        verdict.params_hash for verdict in TrialLedger(run_id="STRAT01", path=ledger_path).trials
     ]
     assert len(recorded) == 2
     legacy_identity, strategy_identity = recorded

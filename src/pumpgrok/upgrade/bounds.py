@@ -145,8 +145,7 @@ def _check_section(
             )
         if value < bound.minimum or value > bound.maximum:
             raise OutOfBoundsError(
-                f"out of bounds: {section}.{key}={shown} outside "
-                f"[{bound.minimum}, {bound.maximum}]"
+                f"out of bounds: {section}.{key}={shown} outside [{bound.minimum}, {bound.maximum}]"
             )
 
 
