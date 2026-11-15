@@ -98,13 +98,15 @@ def fees_lamports(events: Sequence[Mapping[str, Any]], *, since_ts: str, until_t
 
 
 def equity_curve(
-    events: Sequence[Mapping[str, Any]], genesis: LedgerState
+    events: Sequence[Mapping[str, Any]],
+    genesis: LedgerState,
+    deposits: Mapping[int, int] | None = None,
 ) -> list[tuple[str, int]]:
-    """(ts, equity) after every fill and mark, by refolding the tail."""
+    """(ts, equity) after every fill and mark, by refolding the tail (deposits as in reduce)."""
     state = genesis
     curve: list[tuple[str, int]] = []
     for event in events:
-        state = reduce(state, event)
+        state = reduce(state, event, deposits)
         if event.get("type") in ("FillRecorded", "OrderRejected", "MarkToMarket"):
             curve.append((str(event.get("ts_utc", "")), equity_lamports(state)))
     return curve
