@@ -1,0 +1,32 @@
+{
+  "plan": "15-05",
+  "phase": "15-strategy-framework-and-multi-strategy-paper",
+  "requirement": "MKT-09",
+  "criteria": [10, 12],
+  "seat": "bot-02-risk",
+  "branch": "bot-00-chief/v4-phase-14",
+  "base": {
+    "commit": "0052468",
+    "head_before_plan": "e86ad93"
+  },
+  "commits": [
+    {"sha": "b168841", "author": "bot-02-risk <bot-02-risk@local>", "subject": "test(15-05): read-only ReadTransport double for the live-data paper root (MKT-09)", "files": ["tests/datafeed/readonly_double.py"]}
+  ],
+  "double": {
+    "file": "tests/datafeed/readonly_double.py",
+    "is_test_code_only": true,
+    "read_methods": ["logsSubscribe", "getAccountInfo", "getTransaction", "subscribeNewToken", "subscribeMigration"],
+    "behaviour": "records accepted frames, refuses any frame whose method is outside the read allowlist before recording it, returns a canned read response, opens no socket, holds no key material"
+  },
+  "guard_runs": [
+    {"command": "uv run python -m pytest -q -p no:cacheprovider tests/datafeed/test_readonly.py tests/safety/test_import_graph_no_live.py tests/safety/test_no_signing_outside_live_stub.py", "exit_code": 0, "result": "99 passed, 0 skipped, with src/pumpgrok/supervisor/live_paper.py and strategies/ and datafeed/ present"},
+    {"command": "uv run python -m pytest -q -p no:cacheprovider tests/safety/test_import_graph_no_live.py tests/safety/test_no_signing_outside_live_stub.py", "exit_code": 0, "result": "criterion 12 set green"}
+  ],
+  "guards": {
+    "readonly_py_edited_by_this_plan": false,
+    "safety_tests_edited_by_this_plan": false,
+    "guard_test_weakened": false,
+    "stop_triggered": false
+  },
+  "branch_state_note": "src/pumpgrok/datafeed/readonly.py and tests/safety/* differ from v4-base because of commits earlier on this branch. They match the pre-wave HEAD e86ad93 exactly; no commit in plan 15-05 touches them."
+}
