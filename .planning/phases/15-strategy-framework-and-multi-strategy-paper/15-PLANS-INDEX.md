@@ -261,7 +261,7 @@ Fee v2 proposals (15-07), all PENDING OWNER APPROVAL:
 
 | Term | Proposed | Reason |
 |---|---|---|
-| ata_rent_lamports (charged on first buy of each mint) | 2039280 | Standard rent-exempt minimum for a 165-byte SPL token account. Verify against chain docs before pinning. |
+| ata_rent_lamports (charged on first buy of each mint) | RPC read at runtime (getMinimumBalanceForRentExemption(165)); offline replay pin recorded with epoch and source; SUPERSEDED 2039280 (owner decision 2026-11-15) | Standard rent-exempt minimum for a 165-byte SPL token account. Verify against chain docs before pinning. |
 | pumpportal_fee_bps | 0 | Applies only when the PumpPortal builder is selected. No builder is used in v4 paper, and the rate is not in the repository. |
 | priority_cap_micro_lamports_per_cu | 20000 | Equal to the current `micro_lamports_per_cu` default, so the cap does not move the priority cost by itself. |
 
