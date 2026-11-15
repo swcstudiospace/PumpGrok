@@ -134,8 +134,12 @@ class RiskEngine(_EngineSteps):
             initial_equity_lamports=initial,
             day_utc=utc_day(self._clock.now()),
         )
+        # Deferred: the execution package imports the risk engine, which imports this module.
+        from pumpgrok.execution.deposits import position_deposits_by_seq
+
+        deposits = position_deposits_by_seq(self._store)
         for event in events:
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
         return state
 
     def attach_flatten_hook(self, hook: Callable[[], Awaitable[None]]) -> None:
