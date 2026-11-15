@@ -164,9 +164,7 @@ class _RentRpc(Protocol):
     async def call(self, method: str, params: list[Any]) -> Any: ...
 
 
-async def read_ata_rent(
-    rpc: _RentRpc, *, base: FeeModelV2 = PAPER_DEFAULT_FEE_MODEL
-) -> FeeModelV2:
+async def read_ata_rent(rpc: _RentRpc, *, base: FeeModelV2 = PAPER_DEFAULT_FEE_MODEL) -> FeeModelV2:
     """Read the rent-exempt minimum for one token account at runtime and return v2 with it.
 
     The RPC result replaces the offline pin. A non-integer or non-positive result is
