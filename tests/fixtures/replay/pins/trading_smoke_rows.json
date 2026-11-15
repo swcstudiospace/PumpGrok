@@ -1200,8 +1200,8 @@
     "type": "PositionOpened"
   },
   {
-    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":11497440},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":24453593,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
-    "payload_sha256": "dc14f3fffc8650b013cb7a2fb7b1665e9a39caafd9d552cfba72d4c39e66771d",
+    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":11497440},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":25942033,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
+    "payload_sha256": "9e38067e21f6249be71b72d0154aeb8fc70ceb6ac494cb0c0def0b892b299493",
     "seq": 151,
     "source": "replay",
     "ts": "2026-01-01T00:00:30.000000Z",
@@ -1225,7 +1225,7 @@
   },
   {
     "idempotency_key": "fill|01KDVDP7HAZ59CGEATNNFTR3DT",
-    "payload_sha256": "459325908aba01997b546c744b3f502dd01b10cc42748c1b6cfac4e6a43b3603",
+    "payload_sha256": "e671a2912753416d49b4575e7bb1a844c5b64022c3af18592a803a4c25ca4b8b",
     "seq": 154,
     "source": "replay",
     "ts": "2026-01-01T00:00:30.750000Z",
@@ -1233,7 +1233,7 @@
   },
   {
     "idempotency_key": "close|01KDVDP7HAZ59CGEATNNFTR3DT",
-    "payload_sha256": "6924ad8d46e9ebc8717798563067252a8f6ec2492db01423c8e2a15e63d7a81d",
+    "payload_sha256": "8f810005c6ff8665e0669ffa8bc3504d3ccdffe620ad1c9a5408baf21736d6d9",
     "seq": 155,
     "source": "replay",
     "ts": "2026-01-01T00:00:30.750000Z",
