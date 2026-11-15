@@ -62,8 +62,8 @@ def _resolved_module(rel: str, node: ast.ImportFrom) -> str:
     return ".".join([*base, *tail])
 
 
-def legacy_placement_findings(tree: ast.AST, rel: str) -> list[Finding]:
-    """Imports of, and attribute references to, legacy placement names in one module."""
+def _legacy_imports(tree: ast.AST, rel: str) -> tuple[set[str], list[Finding]]:
+    """The names that denote the legacy module in one module, and its placement imports."""
     found: list[Finding] = []
     legacy_handles = {LEGACY_MODULE}  # dotted names that denote the legacy module
     for node in ast.walk(tree):
@@ -78,10 +78,19 @@ def legacy_placement_findings(tree: ast.AST, rel: str) -> list[Finding]:
                     found.append((rel, node.lineno, f"imports legacy.{alias.name}"))
                 if module == "pumpgrok.strategies" and alias.name == "legacy":
                     legacy_handles.add(alias.asname or alias.name)
+    return legacy_handles, found
+
+
+def legacy_placement_findings(tree: ast.AST, rel: str) -> list[Finding]:
+    """Imports of, and attribute references to, legacy placement names in one module."""
+    legacy_handles, found = _legacy_imports(tree, rel)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and node.attr in LEGACY_PLACEMENT_NAMES:
-            if ast.unparse(node.value) in legacy_handles:
-                found.append((rel, node.lineno, f"references legacy.{node.attr}"))
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr in LEGACY_PLACEMENT_NAMES
+            and ast.unparse(node.value) in legacy_handles
+        ):
+            found.append((rel, node.lineno, f"references legacy.{node.attr}"))
     return found
 
 

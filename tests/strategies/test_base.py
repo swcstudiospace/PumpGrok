@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+import inspect
 import uuid
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -25,7 +26,7 @@ from pumpgrok.strategies import (
 )
 from pumpgrok.upgrade.bounds import KeyBound
 
-SAMPLE_BODY = '''
+SAMPLE_BODY = """
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -56,7 +57,7 @@ class SampleStrategy:
                 version_id=context.version_id,
             ),
         )
-'''
+"""
 
 
 def _tick() -> TickSnapshot:
@@ -85,7 +86,9 @@ class _DefaultsOnly:
     DEFAULTS: ClassVar[dict[str, Any]] = {"rate": 3}
 
 
-def test_version_id_is_stable_for_identical_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_version_id_is_stable_for_identical_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cls = _load_sample(tmp_path, monkeypatch, SAMPLE_BODY)
     params = dict(cls.DEFAULTS)
     assert version_id(cls, params) == version_id(cls, params)
@@ -217,6 +220,4 @@ def test_hook_cannot_reach_a_ledger_handle(tmp_path: Path, monkeypatch: pytest.M
 
 
 def _hook_parameters(func: Any) -> list[str]:
-    import inspect
-
     return [p.name for p in inspect.signature(func).parameters.values() if p.name != "self"]

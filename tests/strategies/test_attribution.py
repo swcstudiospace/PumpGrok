@@ -17,8 +17,8 @@ from pumpgrok.ledger.reducer import initial_state
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.strategies import legacy
 from pumpgrok.strategies.attribution import attribute, desk_genesis, desk_net_lamports
-from pumpgrok.strategies.tape import Tape, TapeError
 from pumpgrok.strategies.base import TapePoint
+from pumpgrok.strategies.tape import Tape, TapeError
 
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
@@ -69,7 +69,7 @@ def test_attributed_buckets_sum_to_the_desk_total_exactly(tmp_path: Path) -> Non
         }
         tickets.discard("")
         assert tickets, "the smoke run must open a position under a ticket"
-        refs = {ticket: "momentum_breakout" for ticket in tickets}
+        refs = dict.fromkeys(tickets, "momentum_breakout")
         result = attribute(genesis, rows, refs, strategy_ids=("momentum_breakout",))
         assert result.per_strategy["momentum_breakout"] != 0
         assert sum(result.per_strategy.values()) == result.desk_total_lamports

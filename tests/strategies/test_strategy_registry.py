@@ -97,7 +97,7 @@ def test_registered_bounds_equal_toml_sections_exactly() -> None:
 def test_every_toml_strategy_section_is_a_registered_strategy() -> None:
     registered = {cls.strategy_id for cls in STRATEGIES}
     assert set(_toml_sections()) == BASELINE_IDS
-    assert BASELINE_IDS <= registered
+    assert registered >= BASELINE_IDS
 
 
 PROPOSALS: dict[str, dict[str, Any]] = {

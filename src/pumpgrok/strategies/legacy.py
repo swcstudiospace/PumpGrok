@@ -31,11 +31,12 @@ from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.pipeline import BUY, decide_token, tick_to_candidate
 from pumpgrok.logging.json import bind_seat
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import event_epoch
 from pumpgrok.replay.runner import ReplayTrade
 from pumpgrok.strategies.base import Intent, StrategyContext, TickSnapshot
 from pumpgrok.strategies.runtime import IntentSink, StrategyRuntime
-from pumpgrok.supervisor.scheduler.orders import _run_exit_rules, _replay_trading
+from pumpgrok.supervisor.scheduler.orders import _replay_trading, _run_exit_rules
 from pumpgrok.supervisor.scheduler.replay_runtime import (
     REPLAY_BUY_LAMPORTS,
     REPLAY_SLIPPAGE_BPS,
@@ -53,7 +54,7 @@ __all__ = ["LegacyReplay", "LegacyScreening", "run_legacy_replay", "tick_snapsho
 RISK_CORRELATION = "desk"
 
 
-def tick_snapshot(event: Mapping[str, Any]) -> TickSnapshot:
+def tick_snapshot(event: dict[str, Any]) -> TickSnapshot:
     """The runtime's immutable view of one recorded tick, read through the screening mapping."""
     token = tick_to_candidate(event)
     return TickSnapshot(
@@ -82,7 +83,7 @@ class LegacyScreening:
     def __init__(
         self,
         *,
-        events: Sequence[Mapping[str, Any]] = (),
+        events: Sequence[dict[str, Any]] = (),
         filter_cfg: FilterSettings | None = None,
         ids: IdFactory | None = None,
     ) -> None:
@@ -178,13 +179,13 @@ async def _replay(
     seed: int,
     ledger_path: str | Path | None,
 ) -> LegacyReplay:
-    runtime = open_replay_runtime(
-        dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path
-    )
+    runtime = open_replay_runtime(dataset_dir, filter_cfg, seed=seed, ledger_path=ledger_path)
     try:
         trading = _replay_trading(runtime)
         events = list(runtime.dataset.events)
         screen = LegacyScreening(events=events, filter_cfg=filter_cfg, ids=runtime.ids)
+        if not isinstance(runtime.clock, FixtureClock):
+            raise RuntimeError("legacy replay runs on the fixture clock")
         driver = StrategyRuntime(
             clock=runtime.clock,
             strategies=(screen,),
