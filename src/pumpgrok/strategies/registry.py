@@ -3,15 +3,14 @@
 The registry is a literal tuple of strategy classes in a fixed order. There is no
 dynamic loading and no entry-point discovery. checked_registry runs at import and
 refuses a duplicate strategy_id, so a clash stops the process before any strategy runs.
+LegacyScreening lives in strategies.legacy (the adapter over the replay decision path)
+and is re-exported here so the registry names every registered strategy.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, ClassVar
-
-from pumpgrok.strategies.base import Intent, Strategy, StrategyContext
-from pumpgrok.upgrade.bounds import KeyBound
+from pumpgrok.strategies.base import Strategy
+from pumpgrok.strategies.legacy import LegacyScreening
 
 __all__ = [
     "STRATEGIES",
@@ -36,21 +35,6 @@ def checked_registry(*classes: type[Strategy]) -> tuple[type[Strategy], ...]:
             raise StrategyRegistryError(f"duplicate strategy_id in registry: {strategy_id}")
         seen.add(strategy_id)
     return tuple(classes)
-
-
-class LegacyScreening:
-    """The legacy screening strategy. It declares no tunable parameters, so no bounds.
-
-    Its decisions come from the existing replay decision path, which the runtime wires
-    in 15-03. This hook declares no intents of its own.
-    """
-
-    strategy_id: ClassVar[str] = "legacy_screening"
-    BOUNDS: ClassVar[Mapping[str, KeyBound]] = {}
-    DEFAULTS: ClassVar[Mapping[str, Any]] = {}
-
-    def on_tick(self, context: StrategyContext) -> tuple[Intent, ...]:
-        return ()
 
 
 STRATEGIES: tuple[type[Strategy], ...] = checked_registry(LegacyScreening)
