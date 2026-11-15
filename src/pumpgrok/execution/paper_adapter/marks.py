@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.curve_math import sell_out, spot
+from pumpgrok.execution.deposits import open_deposits
 from pumpgrok.execution.entry_hook import bound_replay_source
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _ledger_mark_epoch
 from pumpgrok.ledger.reducer import PositionView, position_value_lamports
@@ -126,7 +127,7 @@ class _MarksMixin:
             return None
         gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
         venue = self._fees.venue_fee(gross)
-        mtm = gross - venue
+        mtm = gross - venue + self._open_deposits().get(mint, 0)
         cash = int(state.cash_lamports)
         # Book value: this mint at the fresh mark, every other open position at
         # its last ledger mark (the same sum the fold uses for equity).
@@ -194,9 +195,11 @@ class _MarksMixin:
         if not held:
             return None
         if supplied:
-            marks, values = self._price_supplied(held, supplied_snapshots, now)
+            marks, values = self._price_supplied(
+                held, supplied_snapshots, now, self._open_deposits()
+            )
         else:
-            marks, values = await self._price_held(held, now)
+            marks, values = await self._price_held(held, now, self._open_deposits())
         if not marks:
             return None
         row = self._append_mark_row(
@@ -268,11 +271,16 @@ class _MarksMixin:
             )
         )
 
+    def _open_deposits(self) -> dict[str, int]:
+        """ATA deposit held by each mint's open account, from the deposit sidecar."""
+        return open_deposits(self._store)
+
     def _price_supplied(
         self,
         held: dict[str, PositionView],
         snapshots: Mapping[str, CurveSnapshot],
         now: float,
+        deposits: Mapping[str, int],
     ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
         """Value validated supplied observations without reading or changing caches."""
         marks: dict[str, dict[str, Any]] = {}
@@ -280,9 +288,10 @@ class _MarksMixin:
         for mint, curve in snapshots.items():
             gross = sell_out(curve.s_lamports, curve.t_units, held[mint].token_units)
             venue = self._fees.venue_fee(gross)
-            values[mint] = gross - venue
+            mtm = gross - venue + deposits.get(mint, 0)
+            values[mint] = mtm
             marks[mint] = {
-                "mtm_lamports": gross - venue,
+                "mtm_lamports": mtm,
                 "venue_fee_lamports": venue,
                 "spot": str(spot(curve.s_lamports, curve.t_units)),
                 "source": "curve",
@@ -291,7 +300,10 @@ class _MarksMixin:
         return marks, values
 
     async def _price_held(
-        self, held: dict[str, PositionView], now: float
+        self,
+        held: dict[str, PositionView],
+        now: float,
+        deposits: Mapping[str, int],
     ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
         """Read each held mint's curve; a mint with no usable curve keeps its last mark."""
         marks: dict[str, dict[str, Any]] = {}
@@ -310,9 +322,10 @@ class _MarksMixin:
             recorded = curve.ts if curve.ts is not None else now
             gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
             venue = self._fees.venue_fee(gross)
-            values[mint] = gross - venue
+            mtm = gross - venue + deposits.get(mint, 0)
+            values[mint] = mtm
             marks[mint] = {
-                "mtm_lamports": gross - venue,
+                "mtm_lamports": mtm,
                 "venue_fee_lamports": venue,
                 "spot": str(spot(curve.s_lamports, curve.t_units)),
                 "source": "curve",
@@ -430,15 +443,17 @@ class _MarksMixin:
     def _last_good_value(self, mint: str, pos: PositionView) -> tuple[int, int, int] | None:
         """Last ledger mark, else the last-good reserves; never reads a live price.
 
-        A ledger mark is already net of the venue fee, so the close takes only the
-        network cost off it and books the venue fee stored with that mark. Marks
+        A ledger mark is already net of the venue fee and carries the open account's
+        deposit. The close consumes that deposit, so it takes the deposit and the network
+        cost off the mark, and books the venue fee stored with that mark. Marks
         written before the venue key existed report a venue fee of 0 (disclosed);
         their cash is unaffected. The reserves path reports both fees.
         """
         if pos.last_mtm_lamports > 0:
             network = self._fees.network_cost()
+            deposit = self._open_deposits().get(mint, 0)
             return (
-                int(pos.last_mtm_lamports) - network,
+                int(pos.last_mtm_lamports) - deposit - network,
                 int(pos.last_mtm_venue_fee_lamports),
                 network,
             )

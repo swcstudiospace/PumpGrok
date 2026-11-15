@@ -18,6 +18,7 @@ from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution import build_paper_adapter
+from pumpgrok.execution.deposits import open_deposits
 from pumpgrok.execution.fees import (
     ATA_RENT_OFFLINE_EPOCH,
     ATA_RENT_OFFLINE_LAMPORTS,
@@ -246,3 +247,70 @@ def test_explicit_v1_selection_charges_no_rent(tmp_path: Any) -> None:
     )
     assert fill.network_cost_lamports == FeeModel().network_cost()
     store.close()
+
+
+def test_deposit_term_is_the_rent_on_a_v2_first_buy_and_zero_otherwise() -> None:
+    assert FeeModel().ata_deposit_term(first_buy=True) == 0
+    assert FeeModelV2().ata_deposit_term(first_buy=True) == ATA_RENT_OFFLINE_LAMPORTS
+    assert FeeModelV2().ata_deposit_term(first_buy=False) == 0
+
+
+def _run_lifecycle(root: Any, fees: FeeModel, *, forced: bool) -> dict[str, Any]:
+    """Buy, mark, then close: a full sell, or a forced close with no live curve."""
+    root.mkdir(parents=True)
+    clock = FixtureClock(START)
+    store = _store(root / "ledger.sqlite")
+    ticks = [tick(START + 60.0 * i, MINT, S0, T0) for i in range(60)]
+    replay = replay_authority(root, clock, ticks)
+    ids = IdFactory(clock, make_rng(9))
+
+    async def no_curve(_mint: str) -> None:
+        return None
+
+    async def scenario() -> dict[str, Any]:
+        adapter = _adapter(store, clock, replay, fees=fees)
+        steps: dict[str, Any] = {"start": adapter.equity_lamports()}
+        first = await _place(adapter, clock, _order(TICKET_A, Side.BUY, ids.ulid()))
+        steps["after_buy"] = adapter.equity_lamports()
+        steps["deposit_after_buy"] = open_deposits(store)
+        assert await adapter.mark_to_market(MINT, correlation_id="test") is not None
+        steps["at_mark"] = adapter.equity_lamports()
+        if forced:
+            adapter._read_curve = no_curve  # type: ignore[method-assign]
+            closed = await adapter.close_position(
+                mint=MINT, ticket_id=TICKET_A, reason="kill_flatten"
+            )
+            steps["proceeds"] = closed["proceeds_lamports"]
+            steps["realized"] = closed["realized_pnl_lamports"]
+        else:
+            await _place(
+                adapter,
+                clock,
+                _order(TICKET_A, Side.SELL, ids.ulid(), units=first.filled_units),
+                seat="bot-06-exit",
+            )
+        steps["after_close"] = adapter.equity_lamports()
+        return steps
+
+    try:
+        return asyncio.run(scenario())
+    finally:
+        store.close()
+
+
+def test_rent_is_a_deposit_asset_until_the_account_closes(tmp_path: Any) -> None:
+    v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=False)
+    v1 = _run_lifecycle(tmp_path / "v1", FeeModel(), forced=False)
+    assert v2["after_buy"] == v2["start"], "the buy itself moves no equity"
+    assert v2["at_mark"] == v1["at_mark"], "the first mark carries the rent as an asset"
+    assert v2["deposit_after_buy"] == {MINT: ATA_RENT_OFFLINE_LAMPORTS}
+    assert v1["deposit_after_buy"] == {MINT: 0}
+    assert v2["after_close"] == v1["after_close"] - ATA_RENT_OFFLINE_LAMPORTS, "charged once"
+
+
+def test_a_forced_close_books_the_rent_once_and_never_as_proceeds(tmp_path: Any) -> None:
+    v2 = _run_lifecycle(tmp_path / "v2", PAPER_DEFAULT_FEE_MODEL, forced=True)
+    v1 = _run_lifecycle(tmp_path / "v1", FeeModel(), forced=True)
+    assert v2["proceeds"] == v1["proceeds"], "the deposit is consumed, not sold"
+    assert v2["realized"] == v1["realized"] - ATA_RENT_OFFLINE_LAMPORTS
+    assert v2["after_close"] == v1["after_close"] - ATA_RENT_OFFLINE_LAMPORTS
