@@ -14,6 +14,7 @@ from pathlib import Path
 from pumpgrok.execution.live.live_gate import LiveGate
 from pumpgrok.reporting.daily import DailyReport, day_next, day_start, read_events_readonly
 from pumpgrok.reporting.render import ReportModel
+from pumpgrok.reporting.strategy_section import bind_strategy_section, strategy_section_of
 
 _YMD_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}"
 _PER_DAY_TEMPLATE = (
@@ -121,7 +122,7 @@ class WeeklyReport:
             for item in gate.evaluate(now=now if now is not None else day)
         )
 
-        return ReportModel(
+        model = ReportModel(
             period="weekly",
             day=_WEEK_RANGE_TEMPLATE.format(first=days[0], last=days[-1]),
             mode=base.mode,
@@ -152,3 +153,5 @@ class WeeklyReport:
             unverified=base.unverified,
             per_day=tuple(per_day),
         )
+        bind_strategy_section(model, strategy_section_of(base))
+        return model
