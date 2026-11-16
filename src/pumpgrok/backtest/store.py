@@ -7,6 +7,7 @@ returns the first row and writes nothing.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -64,8 +65,6 @@ class ResultStore:
         raw = self.row_bytes(key)
         if raw is None:
             return None
-        import json
-
         loaded = json.loads(raw)
         if not isinstance(loaded, dict):
             raise ValueError("stored body is not an object")
@@ -110,14 +109,10 @@ class ResultStore:
             raise RuntimeError("edge row missing after insert-or-get")
         return str(row[0])
 
-    def rows_for(
-        self, strategy_version_id: str, params_hash: str
-    ) -> tuple[dict[str, Any], ...]:
+    def rows_for(self, strategy_version_id: str, params_hash: str) -> tuple[dict[str, Any], ...]:
         """Every row for a strategy version and params hash, in key order. Read-only."""
         if not strategy_version_id or not params_hash:
             raise ValueError("strategy_version_id and params_hash are required")
-        import json
-
         uri = self.path.resolve().as_uri() + "?mode=ro"
         db = sqlite3.connect(uri, uri=True)
         try:

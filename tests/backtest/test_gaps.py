@@ -15,6 +15,7 @@ _DEPOSIT = 2_039_280
 _MARK = 80_000
 _COST = _MARK + _DEPOSIT
 
+
 def test_open_position_is_flattened_at_last_mark_less_haircut(tmp_path: Path) -> None:
     gap_start, _gap_end = _gap_file(tmp_path, start=50.0, end=80.0)
     _events(
@@ -96,7 +97,7 @@ def test_torn_gaps_jsonl_tail_is_tolerated(tmp_path: Path) -> None:
         {"end_ts_utc": end, "reason": "feed", "start_ts_utc": start},
         sort_keys=True,
     )
-    (tmp_path / "gaps.jsonl").write_bytes((intact + "\n" + "{\"start_ts_utc\":").encode("utf-8"))
+    (tmp_path / "gaps.jsonl").write_bytes((intact + "\n" + '{"start_ts_utc":').encode("utf-8"))
     _events(tmp_path, [_tick(0.0), _tick(80.0)])
     result = segment(
         tmp_path,

@@ -10,6 +10,7 @@ ledger source is ``paper``, an existing ``SOURCES`` value. There is no timer.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -129,8 +130,6 @@ def _result_body(edge: Edge, run: Any) -> dict[str, Any]:
 
 
 def _result_id(edge: Edge) -> str:
-    import hashlib
-
     identity = canonical_json(
         {
             "dataset_digest": edge.dataset_digest,

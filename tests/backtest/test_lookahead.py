@@ -91,7 +91,10 @@ def test_extreme_future_does_not_change_decisions_at_or_before_t() -> None:
     for cutoff in cutoffs:
         mutated_events = _mutate_after(base, cutoff)
         assert any(event["ts"] > cutoff and event["liquidity"] == 0 for event in mutated_events)
-        assert any(event["ts"] > cutoff and int(event["price"]) >= 100_000 for event in mutated_events)
+        extreme = any(
+            event["ts"] > cutoff and int(event["price"]) >= 100_000 for event in mutated_events
+        )
+        assert extreme
         mutated = _run(mutated_events)
         assert _at_or_before(original, cutoff) == _at_or_before(mutated, cutoff)
         if _at_or_before(original, 10**9) != _at_or_before(mutated, 10**9):

@@ -93,7 +93,7 @@ def round_trips(
         payload = _payload(row)
         mint = str(payload.get("mint", ""))
         if row_type == "FillRecorded":
-            _apply_fill(live, closed, refs, seq, mint, payload)
+            _apply_fill(live, closed, refs, seq, mint=mint, payload=payload)
         elif row_type == "PositionOpened" and mint in live:
             live[mint].ticket_id = str(payload.get("ticket_id", "") or "")
     open_positions: list[OpenTrip] = []
@@ -134,6 +134,7 @@ def _apply_fill(
     closed: list[RoundTrip],
     refs: Mapping[str, str],
     seq: int,
+    *,
     mint: str,
     payload: Mapping[str, Any],
 ) -> None:

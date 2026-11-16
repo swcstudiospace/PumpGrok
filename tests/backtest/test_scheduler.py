@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -98,9 +99,7 @@ def test_modules_do_not_import_an_llm_client() -> None:
                 assert not name.startswith(FORBIDDEN), f"{path.name} imports {name}"
 
 
-def test_rerun_row_bytes_are_identical(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rerun_row_bytes_are_identical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pumpgrok.backtest.scheduler.strategy_run", lambda _edge: object())
     _paper(monkeypatch)
     store = ResultStore(tmp_path / "results.sqlite")
@@ -162,6 +161,4 @@ def test_publication_is_existing_journal_verdict(
 
 
 def sorted_canonical(body: str) -> bytes:
-    import json
-
     return json.dumps(json.loads(body), sort_keys=True, separators=(",", ":")).encode("utf-8")

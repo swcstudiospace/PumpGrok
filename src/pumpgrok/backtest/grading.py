@@ -86,11 +86,37 @@ class Grade:
 def grade(dataset: str | Path, canary_result: CanaryResult, thresholds: Thresholds) -> Grade:
     """Grade one dataset. Promotion requires every condition; otherwise research_only."""
     path = Path(dataset)
+    reasons = _collect_reasons(path, canary_result, thresholds)
+    unknown = reasons - set(_REASONS)
+    if unknown:
+        raise RuntimeError(f"unknown grade reasons: {sorted(unknown)}")
+    ordered = tuple(reason for reason in _REASONS if reason in reasons)
+    if ordered:
+        return Grade("research_only", ordered)
+    return Grade("promotion_eligible", ())
+
+
+def _collect_reasons(path: Path, canary_result: CanaryResult, thresholds: Thresholds) -> set[str]:
     reasons: set[str] = set()
     if not isinstance(canary_result, CanaryResult) or not canary_result.passed:
         reasons.add("canary")
-
     manifest, events, sealed = _load(path)
+    reasons.update(_provenance_reasons(path, manifest, events, sealed))
+    window = _window_s(manifest, events)
+    if window is None or window < thresholds.long_s:
+        reasons.add("short")
+    if not _gap_light(path, events, window, thresholds):
+        reasons.add("gap")
+    return reasons
+
+
+def _provenance_reasons(
+    path: Path,
+    manifest: dict[str, Any] | None,
+    events: tuple[dict[str, Any], ...],
+    sealed: bool,
+) -> set[str]:
+    reasons: set[str] = set()
     if not sealed:
         reasons.add("unsealed")
     if _is_fixture(path, manifest):
@@ -101,20 +127,7 @@ def grade(dataset: str | Path, canary_result: CanaryResult, thresholds: Threshol
         reasons.add("synthetic")
     if _has_traded_only(events):
         reasons.add("traded_only")
-
-    window = _window_s(manifest, events)
-    if window is None or window < thresholds.long_s:
-        reasons.add("short")
-    if not _gap_light(path, events, window, thresholds):
-        reasons.add("gap")
-
-    unknown = reasons - set(_REASONS)
-    if unknown:
-        raise RuntimeError(f"unknown grade reasons: {sorted(unknown)}")
-    ordered = tuple(reason for reason in _REASONS if reason in reasons)
-    if ordered:
-        return Grade("research_only", ordered)
-    return Grade("promotion_eligible", ())
+    return reasons
 
 
 def _load(
@@ -204,9 +217,7 @@ def _has_traded_only(events: tuple[dict[str, Any], ...]) -> bool:
     return False
 
 
-def _window_s(
-    manifest: dict[str, Any] | None, events: tuple[dict[str, Any], ...]
-) -> float | None:
+def _window_s(manifest: dict[str, Any] | None, events: tuple[dict[str, Any], ...]) -> float | None:
     if manifest is not None:
         start = _epoch(manifest.get("recorded_from_utc"))
         end = _epoch(manifest.get("recorded_to_utc"))
@@ -226,7 +237,8 @@ def _gap_light(
 ) -> bool:
     if window is None or window <= 0:
         return False
-    from pumpgrok.backtest.gaps import gap_intervals
+    # gaps.segment imports APPROVED_THRESHOLDS; a module import would cycle grading <-> gaps.
+    from pumpgrok.backtest.gaps import gap_intervals  # noqa: PLC0415
 
     intervals = gap_intervals(
         events,

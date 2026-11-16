@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME
@@ -96,7 +97,8 @@ def segment(
     if cooldown_s < 0:
         raise ValueError("cooldown_s must be non-negative")
 
-    from pumpgrok.backtest.grading import APPROVED_THRESHOLDS
+    # grading imports gap_intervals; a module import would cycle gaps <-> grading.
+    from pumpgrok.backtest.grading import APPROVED_THRESHOLDS  # noqa: PLC0415
 
     root = Path(dataset)
     events = _read_events(root / EVENTS_NAME)
@@ -122,6 +124,26 @@ def segment(
     )
 
 
+@overload
+def gap_intervals(
+    events: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    gaps_jsonl: str | Path | None,
+    *,
+    single_gap_s: float,
+    report_torn: Literal[True],
+) -> tuple[tuple[tuple[float, float], ...], bool]: ...
+
+
+@overload
+def gap_intervals(
+    events: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    gaps_jsonl: str | Path | None,
+    *,
+    single_gap_s: float,
+    report_torn: Literal[False] = False,
+) -> tuple[tuple[float, float], ...]: ...
+
+
 def gap_intervals(
     events: tuple[dict[str, Any], ...] | list[dict[str, Any]],
     gaps_jsonl: str | Path | None,
@@ -137,7 +159,7 @@ def gap_intervals(
     recorded, torn = _read_gap_file(gaps_jsonl)
     found = list(recorded)
     stamps = sorted(stamp for event in events if (stamp := _event_ts(event)) is not None)
-    for earlier, later in zip(stamps, stamps[1:], strict=False):
+    for earlier, later in pairwise(stamps):
         if later - earlier > single_gap_s:
             found.append((earlier, later))
     merged = _merge(found)
@@ -317,14 +339,18 @@ def _read_gap_file(gaps_jsonl: str | Path | None) -> tuple[tuple[tuple[float, fl
     path = Path(gaps_jsonl)
     if not path.is_file():
         return (), False
-    data = path.read_bytes()
-    torn = False
-    if data and not data.endswith(b"\n"):
-        torn = True
-        if b"\n" in data:
-            data = data[: data.rfind(b"\n") + 1]
-        else:
-            data = b""
+    data, torn = _drop_torn_tail(path.read_bytes())
+    return _gap_rows(data, torn)
+
+
+def _drop_torn_tail(data: bytes) -> tuple[bytes, bool]:
+    if not data or data.endswith(b"\n"):
+        return data, False
+    trimmed = data[: data.rfind(b"\n") + 1] if b"\n" in data else b""
+    return trimmed, True
+
+
+def _gap_rows(data: bytes, torn: bool) -> tuple[tuple[tuple[float, float], ...], bool]:
     intervals: list[tuple[float, float]] = []
     lines = data.splitlines()
     for index, line in enumerate(lines):
@@ -337,14 +363,20 @@ def _read_gap_file(gaps_jsonl: str | Path | None) -> tuple[tuple[tuple[float, fl
                 torn = True
                 continue
             raise
-        if not isinstance(raw, dict):
-            continue
-        start = _epoch(raw.get("start_ts_utc"))
-        end = _epoch(raw.get("end_ts_utc"))
-        if start is None or end is None or end < start:
-            continue
-        intervals.append((start, end))
+        interval = _gap_interval(raw)
+        if interval is not None:
+            intervals.append(interval)
     return tuple(intervals), torn
+
+
+def _gap_interval(raw: object) -> tuple[float, float] | None:
+    if not isinstance(raw, dict):
+        return None
+    start = _epoch(raw.get("start_ts_utc"))
+    end = _epoch(raw.get("end_ts_utc"))
+    if start is None or end is None or end < start:
+        return None
+    return start, end
 
 
 def _merge(intervals: Any) -> tuple[tuple[float, float], ...]:

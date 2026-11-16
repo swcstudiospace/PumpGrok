@@ -16,11 +16,11 @@ from __future__ import annotations
 import asyncio
 import re
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -39,10 +39,12 @@ from pumpgrok.ledger.reducer import reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.ticket_refs import load_refs
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
+from pumpgrok.replay.fixtures import event_epoch
 from pumpgrok.replay.runner import ReplayTrade
 from pumpgrok.risk.engine.constants import BUY_SEAT, SELL_SEAT
 from pumpgrok.strategies.allocation import slice_lamports
-from pumpgrok.strategies.base import Intent
+from pumpgrok.strategies.attribution import desk_genesis, desk_net_lamports
+from pumpgrok.strategies.base import Intent, Strategy
 from pumpgrok.strategies.legacy import tick_snapshot
 from pumpgrok.strategies.registry import STRATEGIES
 from pumpgrok.strategies.runtime import StrategyRuntime
@@ -121,7 +123,7 @@ def _fresh_ledger() -> Path:
     return directory / "ledger.sqlite"
 
 
-def _strategy_class(strategy_id: str) -> type:
+def _strategy_class(strategy_id: str) -> type[Strategy]:
     for cls in STRATEGIES:
         if cls.strategy_id == strategy_id:
             return cls
@@ -129,7 +131,7 @@ def _strategy_class(strategy_id: str) -> type:
     raise ValueError(f"unknown strategy {strategy_id!r}; known: {known}")
 
 
-def _require_defaults(cls: type, params: Mapping[str, Any]) -> None:
+def _require_defaults(cls: type[Strategy], params: Mapping[str, Any]) -> None:
     defaults = dict(getattr(cls, "DEFAULTS", {}))
     if not params:
         return
@@ -158,9 +160,7 @@ async def _run(
 ) -> StrategyRun:
     cls = _strategy_class(strategy_id)
     _require_defaults(cls, params)
-    runtime = open_replay_runtime(
-        dataset_dir, FilterSettings(), seed=seed, ledger_path=ledger_path
-    )
+    runtime = open_replay_runtime(dataset_dir, FilterSettings(), seed=seed, ledger_path=ledger_path)
     try:
         if runtime.adapter._fees is not PAPER_DEFAULT_FEE_MODEL:
             raise RuntimeError("strategy replay requires the pinned paper fee model")
@@ -241,7 +241,7 @@ def _submit(trading: Any, clock: FixtureClock) -> Any:
         settled = await _await_order(clock, grant(model))
         if isinstance(settled, dict):
             return settled
-        return settled.model_dump(mode="json")
+        return cast(dict[str, Any], settled.model_dump(mode="json"))
 
     return submit
 
@@ -329,14 +329,10 @@ def _result(
 
 
 def _genesis(store: LedgerStore) -> Any:
-    from pumpgrok.strategies.attribution import desk_genesis
-
     return desk_genesis(store)
 
 
 def _net(store: LedgerStore) -> int:
-    from pumpgrok.strategies.attribution import desk_net_lamports
-
     return desk_net_lamports(store)
 
 
@@ -364,7 +360,5 @@ def _elapsed_days(events: Sequence[Mapping[str, Any]]) -> Decimal:
 def _event_stamp(event: Mapping[str, Any]) -> float:
     raw = event.get("ts")
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        from pumpgrok.replay.fixtures import event_epoch
-
         return event_epoch(dict(event))
     return float(raw)
