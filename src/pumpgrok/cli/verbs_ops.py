@@ -32,7 +32,6 @@ from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.units import sol_to_lamports
-from pumpgrok.datafeed import feed_loop
 from pumpgrok.datafeed import transport as datafeed_transport
 from pumpgrok.doctor import (
     doctor_report,
@@ -45,7 +44,6 @@ from pumpgrok.doctor import (
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
-from pumpgrok.replay.maintenance import MaintenanceRefused, import_dataset, rebuild_ticks, trim
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
@@ -71,6 +69,8 @@ def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
     """Serve the live-data paper root. --mode live never reaches this handler."""
+    # Deferred so importing the CLI does not load the event bus.
+    from pumpgrok.datafeed import feed_loop  # noqa: PLC0415
 
     endpoint = args.rpc
     try:
@@ -221,6 +221,14 @@ def _replay_verb(args: argparse.Namespace, settings: Settings) -> int:
     record; 4 for a corrupt dataset or a rebuild read the recording does not hold (CorruptFixture,
     mapped by the dispatcher).
     """
+    # Deferred so importing the CLI does not load the event bus.
+    from pumpgrok.replay.maintenance import (  # noqa: PLC0415
+        MaintenanceRefused,
+        import_dataset,
+        rebuild_ticks,
+        trim,
+    )
+
     root = PAPER_LEDGER_PATH.parent
     try:
         if args.cmd == "trim":

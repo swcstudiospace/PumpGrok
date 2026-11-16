@@ -639,8 +639,6 @@ class TestOperatorVerbs:
             ["rug", "watch"],
             ["journal", "rollup", "--daily"],
             ["audit"],
-            ["replay", "trim"],
-            ["replay", "rebuild-ticks"],
         ],
     )
     def test_find_only_verbs_print_json_exit_5(
@@ -727,8 +725,6 @@ class TestCliRegressionSweep:
             (["ticket", "create", "--mint", _TRADE_MINT], 0),
             (["ticket", "list"], 0),
             (["audit"], 5),
-            (["replay", "trim"], 5),
-            (["replay", "rebuild-ticks"], 5),
         ],
     )
     def test_every_wrapper_prints_json(

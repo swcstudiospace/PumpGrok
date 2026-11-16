@@ -46,7 +46,6 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
-from pumpgrok.datafeed import feed_loop
 from pumpgrok.datafeed import transport as datafeed_transport
 from pumpgrok.doctor import (
     event_mode_problems,
@@ -157,6 +156,9 @@ def _run_record(args: argparse.Namespace, settings: Settings) -> int:
     if not endpoints:
         raise UsageError("run --record needs an RPC endpoint")
     endpoint = endpoints[0]
+    # Deferred so importing the CLI does not load the event bus.
+    from pumpgrok.datafeed import feed_loop  # noqa: PLC0415
+
     try:
         transport = datafeed_transport.make_read_transport(endpoint)
     except ValueError as exc:

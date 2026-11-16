@@ -59,7 +59,7 @@ from pumpgrok.supervisor.scheduler.replay_runtime import (
 __all__ = ["StrategyRun", "run_strategy"]
 
 #: The smoke parity seed. Two calls with the same seed and a fresh ledger match.
-DEFAULT_SEED = 20260101
+_PARITY_SEED = 20260101
 #: One strategy's capital slice: 0.20 of paper equity, the registered weight.
 _SLICE_BPS = 2_000
 #: Replay slippage, the same bound the offline sandbox uses for a recorded fill.
@@ -97,7 +97,7 @@ def run_strategy(
     params: Mapping[str, Any],
     dataset_dir: str | Path,
     *,
-    seed: int = DEFAULT_SEED,
+    seed: int = _PARITY_SEED,
     ledger_path: str | Path | None = None,
 ) -> StrategyRun:
     """Replay one registered strategy over a fixture dataset.

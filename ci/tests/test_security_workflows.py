@@ -34,6 +34,7 @@ WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
 # The v3 receipts tracked before the glob landed are frozen here: this set may shrink, never grow.
 RECEIPT_GLOB = "!.receipts/bot-0*/v4-p*.json"
 PHASE15_RECEIPT_GLOB = "!.receipts/*/15-*.json"
+PHASE16_RECEIPT_GLOB = "!.receipts/*/16-*.json"
 LEGACY_TRACKED_RECEIPTS = frozenset(
     {
         ".receipts/bot-00-chief/complete-phase-5.json",
@@ -377,8 +378,8 @@ class TestReceiptDirectories:
         for seat in seats:
             assert (REPO_ROOT / ".receipts" / seat / ".gitkeep").is_file(), seat
 
-    def test_the_allowlist_is_the_v4_and_phase15_globs(self):
-        assert _receipt_allowlist() == [RECEIPT_GLOB, PHASE15_RECEIPT_GLOB]
+    def test_the_allowlist_is_the_v4_phase15_and_phase16_globs(self):
+        assert _receipt_allowlist() == [RECEIPT_GLOB, PHASE15_RECEIPT_GLOB, PHASE16_RECEIPT_GLOB]
 
     def test_glob_admits_v4_receipts_one_directory_deep_only(self):
         v4_receipt = ".receipts/bot-02-risk/v4-p11-receipts-pins-characterization.json"
@@ -391,6 +392,11 @@ class TestReceiptDirectories:
         assert _admits(PHASE15_RECEIPT_GLOB, ".receipts/bot-00-chief/15-sniper-rent.json")
         assert not _admits(PHASE15_RECEIPT_GLOB, ".receipts/bot-00-chief/v4-p15-x.json")
         assert not _admits(PHASE15_RECEIPT_GLOB, ".receipts/bot-02-risk/nested/15-x.json")
+
+    def test_phase16_glob_admits_phase16_receipts_only(self):
+        assert _admits(PHASE16_RECEIPT_GLOB, ".receipts/bot-00-chief/16-sniper-rent.json")
+        assert not _admits(PHASE16_RECEIPT_GLOB, ".receipts/bot-00-chief/v4-p16-x.json")
+        assert not _admits(PHASE16_RECEIPT_GLOB, ".receipts/bot-02-risk/nested/16-x.json")
 
     def test_only_glob_admitted_receipt_json_is_tracked(self):
         tracked = subprocess.run(
