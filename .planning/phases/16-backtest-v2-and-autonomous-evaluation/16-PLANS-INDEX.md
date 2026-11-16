@@ -1,6 +1,6 @@
 # Phase 16 plans index: Backtest v2 and autonomous evaluation
 
-Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved, and open question 1 (synthetic definition) is answered 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md). The Metrics v2 set is seven metrics, confirmed 2026-11-16. The 2026-11-16 amendment narrows 16-04 and adds 16-08 (plan count 8). No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index.
+Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved, and open question 1 (synthetic definition) is answered 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md). The Metrics v2 set is seven metrics, confirmed 2026-11-16. The 2026-11-16 amendment narrows 16-04 and adds 16-08 (plan count 8). No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index. Criterion 1 smoke is DEFERRED TO DEPLOYMENT (row J, 2026-11-16). The CI receipt allowlist extension admitting `.receipts/*/16-*.json` is CONFIRMED (row K). Phase 16 is not closed.
 
 Sources of truth:
 - `.planning/ROADMAP.md` Phase 16 section (goal, depends-on, requirements, success criteria 1 to 13, deliverables, plan ids 16-01 to 16-07, six waves). This index adds 16-08 (amendment 2026-11-16); the ROADMAP is not edited here.
@@ -18,7 +18,7 @@ Sources of truth:
 3. **Publication event.** The Phase 16 checkpoint says results are "published to the promotion gate as an event". Owner decision 6 (2026-11-15) selects option A: each result is written as an existing ledger JournalNote with NoteKind `verdict`. JournalNote is an existing event type. No new `EventKind`, no new `NoteKind` value and no contract change. The ROADMAP wording and criterion 11 are not edited here. Plan 16-05 carries the decision.
 4. **Stale smoke-10m baseline in other phases.** Phase 15 criterion 14, and Phase 17, 18 and 19 criteria with their CHANGELOG greps, still name `b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d`. The CHANGELOG has recorded `1dffa...` since Phase 14, so those criteria will not pass as written. Owner amendment needed for those phases. Not edited here. Commit 6281a39 records the Phase 15 item as an open owner item.
 5. **Stale fee doc comment.** `src/pumpgrok/execution/fees.py:22` still says ATA rent is 2039280. The owner decision of 2026-11-15 makes rent RPC-read at runtime with a pinned offline fallback. The fix belongs to Phase 15 (SNIPER seat). Phase 16 does not edit that file.
-6. **Phase 15 criterion 1 deferral.** Phase 16 criterion 1 runs `pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke`. Commit 6281a39 records the deferral for Phase 15 only. Plan 16-07 assumes it does not carry forward to Phase 16. Owner to confirm.
+6. **Phase 16 criterion 1 smoke deferral.** Phase 16 criterion 1 runs `pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke`. Commit 6281a39 records the deferral for Phase 15 only. Owner decision 2026-11-16 (row J): the smoke checkpoint is DEFERRED TO DEPLOYMENT, as for Phase 15. It needs operator authority on the deployment host. Plan 16-07 must not treat that smoke as a repo-close gate. This record does not close Phase 16.
 7. **Budget.** The planner budget is at most 3 tasks and at most 5 files per plan (receipts excluded). Plan 16-06 has 8 files and is over budget. The roadmap fixes the plan list at seven, so it is not split here.
 8. **Amendment conflicts (2026-11-16).** (a) The stop condition on network clients in `backtest/` and `replay/` is narrowed to exclude the socket factory in `datafeed/transport.py` (16-08). (b) The recorder writes feed.jsonl only when `record_frame` is called, so the existing Phase 13 assertions on the manifest key set in `tests/replay/test_live_recorder.py` stay unchanged and new cases are added (16-04). (c) `live serve --mode live` must exit 3 before the wallet-confirm step, which otherwise can exit 1 under a configured live wallet (16-08, dispatch.py).
 
@@ -46,6 +46,8 @@ Sources of truth:
 | G | Option A publication: JournalNote with NoteKind verdict, whose ledger source must be an existing SOURCES value. 16-05 STOPS if the existing writer cannot record a backtest result under an existing source. | 16-05; 16-07 |
 | H | Open question 1 (synthetic definition) answered: synthetic and hand-authored data, including datasets built in `tmp_path`, is never promotion evidence; it is graded as such. Approved threshold values may enter code. | 16-03; 16-05; 16-06; 16-07 |
 | I | Metrics v2 count: seven metrics (total_return, max_drawdown, sharpe_ratio, sortino_ratio, hit_rate, profit_factor, expectancy_lamports), Sharpe and Sortino counted separately, plus annualization_valid as a flag. Corrects the six-metric wording. | 16-01; 16-06 |
+| J | Criterion 1 smoke checkpoint is DEFERRED TO DEPLOYMENT, as for Phase 15. `run --mode paper --once --replay tests/fixtures/replay/smoke` needs operator authority on the deployment host. Other criterion 1 gates are not waived. This record does not close Phase 16. | 16-07 |
+| K | CI receipt allowlist extension to admit `.receipts/*/16-*.json` is CONFIRMED, following the Phase 15 decision that admitted `.receipts/*/15-*.json`. | 16-07; G-2 |
 
 ## Amendment 2026-11-16: recorder, record and serve split (binding)
 
@@ -107,7 +109,7 @@ Seat keys: RISK = bot-02-risk, CHIEF = bot-00-chief, JOURNAL = bot-09-journal. E
 | 16-08 | Ready after 16-04 lands. Record wrap and live serve approved 2026-11-16 (decisions B and E). | 16-04 (order) |
 | 16-05 | Unblocked by the 2026-11-16 approvals. Publication confirmed (option A). Runs after 16-03 lands (plan order). | 16-03 implementation (order only) |
 | 16-06 | Unblocked by the 2026-11-16 approvals. Runs after 16-05 lands. | 16-05 (order only) |
-| 16-07 | Threshold approval received 2026-11-16. Runs after 16-01 to 16-06 land; owner close review remains. | 16-01 to 16-06 (order); owner close review |
+| 16-07 | Threshold approval received 2026-11-16. Criterion 1 smoke deferred to deployment (row J). Receipt glob `.receipts/*/16-*.json` confirmed (row K). Phase not closed; owner close review remains. | 16-01 to 16-06 (order); owner close review |
 
 ## Plan files
 
@@ -207,7 +209,7 @@ Criteria: 7 (strategy half), 8, 9. Requirements: REC-03 (backtest --strategy), O
 
 ### 16-07 Phase close (wave 6, CHIEF + JOURNAL + RISK)
 
-File: `16-07-PLAN.md`. Sizing: 3 tasks, 4 files plus 3 receipts (within budget). Autonomous: false (owner reviews the hash record and approves the close). Threshold approval received 2026-11-16 (decision 5); runs after 16-01 to 16-06 land.
+File: `16-07-PLAN.md`. Sizing: 3 tasks, 4 files plus 3 receipts (within budget). Autonomous: false (owner reviews the hash record and approves the close). Threshold approval received 2026-11-16 (decision 5); runs after 16-01 to 16-06 land. Criterion 1 smoke is deferred to deployment (row J). The `.receipts/*/16-*.json` receipt glob is confirmed (row K). This index does not close the phase.
 
 | File | Seat | Rule |
 |---|---|---|
@@ -219,7 +221,7 @@ File: `16-07-PLAN.md`. Sizing: 3 tasks, 4 files plus 3 receipts (within budget).
 | .receipts/bot-02-risk/16-07-gates.json | bot-02-risk | .receipts/bot-02-risk/** |
 | .receipts/bot-09-journal/16-07-changelog.json | bot-09-journal | .receipts/bot-09-journal/** |
 
-Criteria: 1, 10, 11, 12, 13. Requirements: PRC-01, PRC-03, LIV-07.
+Criteria: 1, 10, 11, 12, 13. Requirements: PRC-01, PRC-03, LIV-07. Criterion 1 smoke checkpoint is deferred to deployment (row J). Phase not closed.
 
 ### 16-08 run --record, transports and live serve (wave 2, RISK)
 
@@ -244,7 +246,7 @@ Criteria: 7 (record half), 13 (live serve refusal; the criterion 13 gate is re-r
 
 | # | Criterion (short) | Plan(s) | ROADMAP line |
 |---|---|---|---|
-| 1 | make lint, typecheck, test, check.sh and paper smoke replay exit 0 | 16-07 | 225 |
+| 1 | make lint, typecheck, test, check.sh and paper smoke replay exit 0 | 16-07. Smoke checkpoint DEFERRED TO DEPLOYMENT (row J); other gates not waived. Phase not closed. | 225 |
 | 2 | Metrics v2 formulas, None for undefined, annualization_valid under 7 days; negative phrase grep | 16-01 | 226 |
 | 3 | Look-ahead canary; grading refuses traded_only, fixture, hand-authored data | 16-03 | 227 |
 | 4 | Gap flatten with 500 bps haircut or exclusion and flag; no entries during cooldown | 16-03 | 228 |
@@ -273,7 +275,7 @@ Criterion 12 is amended per owner: the smoke-10m baseline is `1dffa78448f720b98a
 | BT-13 | 16-05 | 6 |
 | OBS-07 | 16-06 | 9 |
 
-Uncovered: none in the sense of unassigned work. Nothing is open after the 2026-11-16 owner answers (rows H and I of the confirmations table): open question 1 of 16-GAP-THRESHOLDS-PROPOSAL.md is answered, and the Metrics v2 count is seven. Every item is decided; see "Decided definitions and pending items".
+Uncovered: none in the sense of unassigned work. Nothing in the plan set is open after the 2026-11-16 owner answers (rows H, I, J and K of the confirmations table): open question 1 of 16-GAP-THRESHOLDS-PROPOSAL.md is answered, the Metrics v2 count is seven, criterion 1 smoke is deferred to deployment, and the `.receipts/*/16-*.json` receipt glob is confirmed. Every planning item is decided; see "Decided definitions and pending items". This record does not close Phase 16.
 
 ## Decided definitions and pending items
 
@@ -324,6 +326,10 @@ Confirmed by the owner 2026-11-16:
 Option A: each result is written as an existing ledger JournalNote with NoteKind `verdict`, carrying result id and grade, through the existing journal note path. The result is also stored in the sidecar table. Option B (a new `EventKind`) is not taken, and no waiver is requested.
 
 Confirmed by the owner 2026-11-16: the JournalNote's ledger `source` must be one of the existing `SOURCES`. No value is added. If the existing writer cannot record a backtest result under an existing source, 16-05 STOPS.
+
+### Criterion 1 smoke and receipt glob (16-07): decided 2026-11-16 (rows J and K)
+
+Criterion 1 smoke checkpoint (`run --mode paper --once --replay tests/fixtures/replay/smoke`) is DEFERRED TO DEPLOYMENT, as for Phase 15. It needs operator authority on the deployment host. Lint, typecheck, test and check.sh are not waived. The CI receipt allowlist extension admitting `.receipts/*/16-*.json` is CONFIRMED, following the Phase 15 decision that admitted `.receipts/*/15-*.json`. Phase 16 is not closed.
 
 ## Stop conditions (apply to every plan)
 
