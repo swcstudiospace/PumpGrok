@@ -1,0 +1,38 @@
+{
+  "plan": "16-05",
+  "seat": "bot-02-risk",
+  "requirement": "BT-13",
+  "criteria": [6],
+  "publication": {
+    "owner_decision": 6,
+    "date": "2026-11-15",
+    "confirmed": "2026-11-16",
+    "option": "A",
+    "channel": "existing journal note path",
+    "event_type": "JournalNote",
+    "note_kind": "verdict",
+    "ledger_source": "paper",
+    "sources_member": true,
+    "new_event_kind": false,
+    "new_note_kind": false,
+    "waiver": false
+  },
+  "commands_run": [
+    {
+      "command": "uv run python -m pytest -o addopts= -q -p no:cacheprovider tests/backtest/test_scheduler.py tests/backtest/test_evidence_provider.py",
+      "exit_code": 0,
+      "result": "11 passed"
+    }
+  ],
+  "diff_stat": {
+    "paths": [
+      "src/pumpgrok/upgrade",
+      "src/pumpgrok/cli",
+      "src/pumpgrok/events",
+      "src/pumpgrok/ledger/events.py"
+    ],
+    "stat": "",
+    "empty": true
+  },
+  "push": false
+}
