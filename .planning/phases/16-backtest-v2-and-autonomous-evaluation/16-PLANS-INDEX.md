@@ -1,9 +1,9 @@
 # Phase 16 plans index: Backtest v2 and autonomous evaluation
 
-Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved, and open question 1 (synthetic definition) is answered 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md). The Metrics v2 set is seven metrics, confirmed 2026-11-16. No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index.
+Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved, and open question 1 (synthetic definition) is answered 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md). The Metrics v2 set is seven metrics, confirmed 2026-11-16. The 2026-11-16 amendment narrows 16-04 and adds 16-08 (plan count 8). No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index.
 
 Sources of truth:
-- `.planning/ROADMAP.md` Phase 16 section (goal, depends-on, requirements, success criteria 1 to 13, deliverables, plan ids 16-01 to 16-07, six waves).
+- `.planning/ROADMAP.md` Phase 16 section (goal, depends-on, requirements, success criteria 1 to 13, deliverables, plan ids 16-01 to 16-07, six waves). This index adds 16-08 (amendment 2026-11-16); the ROADMAP is not edited here.
 - `.planning/REQUIREMENTS.md`: REC-03 (line 78), BT-08 to BT-13 (lines 90 to 95), OBS-07 (line 210).
 - `ownership.yaml` (last matching rule wins). Every file below was resolved with `resolve_owner` from `ci/gates/check_ownership.py`.
 - Phase 15 record: `.planning/phases/15-strategy-framework-and-multi-strategy-paper/15-PLANS-INDEX.md` (owner decisions, stop conditions, parameter and fee proposals).
@@ -20,13 +20,14 @@ Sources of truth:
 5. **Stale fee doc comment.** `src/pumpgrok/execution/fees.py:22` still says ATA rent is 2039280. The owner decision of 2026-11-15 makes rent RPC-read at runtime with a pinned offline fallback. The fix belongs to Phase 15 (SNIPER seat). Phase 16 does not edit that file.
 6. **Phase 15 criterion 1 deferral.** Phase 16 criterion 1 runs `pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke`. Commit 6281a39 records the deferral for Phase 15 only. Plan 16-07 assumes it does not carry forward to Phase 16. Owner to confirm.
 7. **Budget.** The planner budget is at most 3 tasks and at most 5 files per plan (receipts excluded). Plan 16-06 has 8 files and is over budget. The roadmap fixes the plan list at seven, so it is not split here.
+8. **Amendment conflicts (2026-11-16).** (a) The stop condition on network clients in `backtest/` and `replay/` is narrowed to exclude the socket factory in `datafeed/transport.py` (16-08). (b) The recorder writes feed.jsonl only when `record_frame` is called, so the existing Phase 13 assertions on the manifest key set in `tests/replay/test_live_recorder.py` stay unchanged and new cases are added (16-04). (c) `live serve --mode live` must exit 3 before the wallet-confirm step, which otherwise can exit 1 under a configured live wallet (16-08, dispatch.py).
 
 ## Owner decisions 2026-11-15 (binding for Phase 16)
 
 | # | Decision | Where it binds |
 |---|---|---|
 | 1 | Replay import accepts only ledgers this desk recorded, verified by hash chain. Anything else is rejected. | 16-04 |
-| 2 | `live serve` runs only the paper root and refuses any live mode. Live stays disabled. | 16-04; 16-07 criterion 13 |
+| 2 | `live serve` runs only the paper root and refuses any live mode. Live stays disabled. | 16-08; 16-07 criterion 13 |
 | 3 | `replay rebuild-ticks` rebuilds only from the recorded raw feed, never from derived data. | 16-04 |
 | 4 | Metrics v2 is the standard set of seven metrics: total return, max drawdown, Sharpe and Sortino annualized (counted separately), hit rate, profit factor, expectancy. Undefined values are None. Annualization under 7 days is flagged annualization_valid=false, a flag and not a metric. Count confirmed 2026-11-16 (row I). | 16-01; 16-06 |
 | 5 | Gap and grading thresholds and the cooldown: APPROVED 2026-11-16 as proposed in 16-GAP-THRESHOLDS-PROPOSAL.md. Values enter code once, as APPROVED_THRESHOLDS. Open question 1 answered 2026-11-16 (row H). | 16-03; 16-05, 16-06, 16-07 (unblocked by these approvals) |
@@ -37,14 +38,35 @@ Sources of truth:
 | # | Confirmation | Where it binds |
 |---|---|---|
 | A | Gap and grading thresholds approved as in 16-GAP-THRESHOLDS-PROPOSAL.md: long dataset 7 days; gap-light maximum single gap 300 s; total gap time at most 5 percent of the window; cooldown 300 s from gap end. The 500 bps haircut stays fixed by criterion 4. | 16-03; 16-05; 16-06; 16-07 |
-| B | `run --record` may wrap transports through replay/live_recorder.py without a CHIEF supervisor edit. | 16-04 |
+| B | `run --record` may wrap transports through replay/live_recorder.py without a CHIEF supervisor edit. | 16-08 (transport wrap); 16-04 (recorder) |
 | C | Metrics v2 readings: total_return is a ratio; total_return_lamports, annualized_return and average_hold_seconds are dropped; expectancy_lamports is a Decimal lamports mean; annualization_valid is included. Count: seven metrics (row I). | 16-01; 16-06 |
 | D | "Recorded by this desk" means source `paper`. | 16-04 |
-| E | live serve is paper-only: no --mode selector; --mode live exits 3; any other --mode value is a usage error. | 16-04; 16-07 |
+| E | live serve is paper-only: no --mode selector; --mode live exits 3; any other --mode value is a usage error. | 16-08; 16-07 |
 | F | An imported ledger is placed and verified, not converted. Replayability of imports is undefined and not decided. | 16-04 |
 | G | Option A publication: JournalNote with NoteKind verdict, whose ledger source must be an existing SOURCES value. 16-05 STOPS if the existing writer cannot record a backtest result under an existing source. | 16-05; 16-07 |
 | H | Open question 1 (synthetic definition) answered: synthetic and hand-authored data, including datasets built in `tmp_path`, is never promotion evidence; it is graded as such. Approved threshold values may enter code. | 16-03; 16-05; 16-06; 16-07 |
 | I | Metrics v2 count: seven metrics (total_return, max_drawdown, sharpe_ratio, sortino_ratio, hit_rate, profit_factor, expectancy_lamports), Sharpe and Sortino counted separately, plus annualization_valid as a flag. Corrects the six-metric wording. | 16-01; 16-06 |
+
+## Amendment 2026-11-16: recorder, record and serve split (binding)
+
+Owner decisions of 2026-11-16 on the Phase 16 plan set. Plan 16-04 is narrowed, plan 16-08 is added, and the plan count is now 8.
+
+| # | Decision | Where it binds |
+|---|---|---|
+| 1 | 16-04 files gain `src/pumpgrok/cli/dispatch.py` and `src/pumpgrok/cli/verbs_ops.py` (routing). Owner default applied; the form answer did not register. Owner to confirm. | 16-04 |
+| 2 | rebuild-ticks: the recorder persists raw feed frames to `feed.jsonl`. This changes the sealed-dataset contract and is flagged for owner review. `contracts/` is not touched (criterion 11 still holds). `live_recorder.py` and the seal allow-list are in 16-04. | 16-04 |
+| 3 | `run --record` and `live serve` move to plan 16-08 (wave 2, depends on 16-04). 16-08 maps to criterion 7 (run --record part), criterion 13 (live serve refusal) and REC-03. The `--mode live` exit 3 check stays in 16-08. | 16-08; 16-04 narrowed |
+| 4 | `trim --max-events N` keeps the last N events after the keep-fills rule. No 180 s gap insertion. | 16-04 |
+| 5 | `import` copies the ledger to `var/replay/<name>/` and records its sha256 in a sidecar file there. | 16-04 |
+
+Planner-chosen details, flagged for owner confirmation (the owner did not decide them):
+- Dataset paths: `var/datasets/<name>/` for recorded datasets, `var/datasets/<name>-trimmed/` and `var/datasets/<name>-rebuilt/` for outputs.
+- Import file name `imported-ledger.sqlite` (with its `.sha256` sidecar), so the `ledger.sqlite` that `verify --fixture` recreates is never overwritten.
+- Trim's "mints with an order" is read from a full offline replay, because events.jsonl holds no orders.
+- The derived tick file is `events.jsonl` (`EVENTS_NAME`) in the code; paper-engine.md section 4.3 calls it `ticks.jsonl`. The code name is used.
+- Budget: 16-04 and 16-08 each touch 7 files (over the planner budget of 5, finding 7).
+
+Follow-up, not in this commit: `16-07-PLAN.md` frontmatter `depends_on` must add `16-08`. Its criterion 13 gate stays in 16-07 as the close re-run.
 
 ## Owner decisions in force (Phase 15, binding)
 
@@ -55,21 +77,22 @@ Sources of truth:
 | 3 | RPC-read rent with pinned offline fallback. Runtime reads rent from RPC. Offline replay uses the pinned value with its recorded epoch and source. | Backtest and replay never call RPC. 16-02 and 16-05 use the pinned offline value from the 15-07 receipt. |
 | 4 | Legacy replay-only exception (`docs/strategies-replay-exception.md`). | 16-02 `strategy_run` adds no placement name, no import of legacy placement, and no allowlist entry. `tests/strategies/test_legacy_exception.py` stays green. |
 | 5 | PENDING strategy values approved as recorded. | Phase 16 uses the Phase 15 `upgrade_bounds.toml` and strategy DEFAULTS values exactly. No retuning. |
-| 6 | Live stays refused. The live-data root takes an RPC endpoint with no default (Phase 15 decision 4). | 16-04 `live serve` refuses `--mode live` (exit 3) and requires an explicit endpoint. 16-07 criterion 13. |
+| 6 | Live stays refused. The live-data root takes an RPC endpoint with no default (Phase 15 decision 4). | 16-08 `live serve` refuses `--mode live` (exit 3) and requires an explicit endpoint. 16-07 criterion 13. |
 
 ## Waves and dependencies
 
 | Wave | Plan | Title | Seats | Depends on | autonomous | Criteria closed | Requirements |
 |---|---|---|---|---|---|---|---|
 | 1 | 16-01 | Metrics v2 and round trips | RISK | Phase 15 (15-03, 15-07) | true | 2 | BT-08, BT-09 |
-| 1 | 16-04 | Recorder and replay verbs | RISK | Phase 13-01, Phase 14-07 | false | 7 (record half) | REC-03 |
+| 1 | 16-04 | Replay verbs and recorder amendment | RISK | Phase 13-01, Phase 14-07 | false | 7 (replay half) | REC-03 |
 | 2 | 16-02 | Event source and strategy-aware replay | RISK | 16-01; Phase 15 (15-03, 15-04, 15-06) | true | 5 | BT-12 |
+| 2 | 16-08 | run --record, transports and live serve | RISK | 16-04; Phase 13-01, Phase 14-07, Phase 15 live-data root | false | 7 (record half), 13 (live serve refusal) | REC-03, LIV-07 |
 | 3 | 16-03 | Gap segmentation and evidence grading | RISK | 16-02 | true | 3, 4 | BT-10, BT-11 |
 | 4 | 16-05 | Autonomous scheduler, store, evidence provider | RISK | 16-03 (with 16-01, 16-02) | true | 6 | BT-13 |
 | 5 | 16-06 | Strategy backtest verb and per-strategy report | RISK + JOURNAL | 16-01, 16-02, 16-05 | true | 7 (strategy half), 8, 9 | REC-03, OBS-07 |
-| 6 | 16-07 | Phase close | CHIEF + JOURNAL + RISK | 16-01 to 16-06 | false | 1, 10, 11, 12, 13 | PRC-01, PRC-03, LIV-07 |
+| 6 | 16-07 | Phase close | CHIEF + JOURNAL + RISK | 16-01 to 16-06, 16-08 | false | 1, 10, 11, 12, 13 | PRC-01, PRC-03, LIV-07 |
 
-Waves: 6, matching the roadmap. Wave 1 has two plans with no shared files: 16-01 touches `backtest/` and `tests/backtest/`; 16-04 touches `cli/`, `replay/` and `tests/cli/`.
+Waves: 6, matching the roadmap. Wave 1 has two plans with no shared files: 16-01 touches `backtest/` and `tests/backtest/`; 16-04 touches `cli/`, `replay/` and `tests/`. Wave 2 has 16-02 and 16-08, also with disjoint files. Plan count: 8 (16-01 to 16-08). ROADMAP line 249 still says seven plans; CHIEF updates it at close.
 
 Seat keys: RISK = bot-02-risk, CHIEF = bot-00-chief, JOURNAL = bot-09-journal. Each plan file lists its seat and the `ownership.yaml` rule that resolves each path.
 
@@ -80,7 +103,8 @@ Seat keys: RISK = bot-02-risk, CHIEF = bot-00-chief, JOURNAL = bot-09-journal. E
 | 16-01 | Ready. Metric set decided (decision 4). | none |
 | 16-02 | Ready. Not affected by the decisions. | 16-01 |
 | 16-03 | Ready. Thresholds approved 2026-11-16 (decision 5); open question 1 answered 2026-11-16 (row H). | none |
-| 16-04 | Ready. Record-wrap question answered 2026-11-16 (approved). | none |
+| 16-04 | Ready. Scope narrowed by the 2026-11-16 amendment: replay verbs and recorder amendment. Record and live serve moved to 16-08. | none |
+| 16-08 | Ready after 16-04 lands. Record wrap and live serve approved 2026-11-16 (decisions B and E). | 16-04 (order) |
 | 16-05 | Unblocked by the 2026-11-16 approvals. Publication confirmed (option A). Runs after 16-03 lands (plan order). | 16-03 implementation (order only) |
 | 16-06 | Unblocked by the 2026-11-16 approvals. Runs after 16-05 lands. | 16-05 (order only) |
 | 16-07 | Threshold approval received 2026-11-16. Runs after 16-01 to 16-06 land; owner close review remains. | 16-01 to 16-06 (order); owner close review |
@@ -130,20 +154,22 @@ File: `16-03-PLAN.md`. Sizing: 3 tasks, 5 files (within budget). Autonomous: tru
 
 Criteria: 3, 4. Requirements: BT-10, BT-11. Thresholds: APPROVED 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md; owner decision 5); defined once as APPROVED_THRESHOLDS in grading.py. Synthetic and hand-authored data, including datasets built in tmp_path, is never promotion evidence (owner answer 2026-11-16). No new fixture directory: gapped and traded-only datasets are built in `tmp_path` and graded as synthetic.
 
-### 16-04 Recorder and replay verbs (wave 1, RISK)
+### 16-04 Replay verbs and recorder amendment (wave 1, RISK)
 
-File: `16-04-PLAN.md`. Sizing: 3 tasks, 5 files (at budget). Autonomous: false (verb specs decided 2026-11-15, owner decisions 1 to 3; record-wrap confirmation given 2026-11-16, so no question remains open).
+File: `16-04-PLAN.md`. Sizing: 3 tasks, 7 files (over budget, finding 7; owner default for routing, and the 2026-11-16 recorder amendment). Autonomous: false (owner reviews the sealed-dataset contract change in Task 3).
 
 | File | Seat | Rule |
 |---|---|---|
 | src/pumpgrok/cli/parsing.py | bot-02-risk | src/pumpgrok/** |
-| src/pumpgrok/cli/verbs_state.py | bot-02-risk | src/pumpgrok/** |
-| src/pumpgrok/cli/record.py | bot-02-risk | src/pumpgrok/** |
-| src/pumpgrok/replay/maintenance.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/dispatch.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/verbs_ops.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/replay/maintenance.py | bot-02-risk | src/pumpgrok/replay/** |
+| src/pumpgrok/replay/live_recorder.py | bot-02-risk | src/pumpgrok/replay/** |
+| tests/replay/test_live_recorder.py | bot-02-risk | tests/replay/** |
 | tests/cli/test_record.py | bot-02-risk | tests/** |
 | .receipts/bot-02-risk/16-04-record.json | bot-02-risk | .receipts/bot-02-risk/** |
 
-Criteria: 7 (record half). Requirement: REC-03. Read-only use of `replay/live_recorder.py` and `replay/clock.py`. If the recorder wrap needs an edit to `supervisor/` (CHIEF), the plan STOPS and asks CHIEF.
+Criteria: 7 (replay half). Requirement: REC-03. Decisions: owner 1 to 3 (2026-11-15); amendment 2026-11-16, decisions 2, 4 and 5. Read-only: datafeed frame handling (portal.py, logs.py, bridge.py); supervisor/live_paper.py (CHIEF; must not change). The sealed-dataset contract change (feed.jsonl in the seal allow-list) is flagged for owner review. `run --record` and `live serve` moved to 16-08.
 
 ### 16-05 Autonomous scheduler, store and evidence provider (wave 4, RISK)
 
@@ -195,6 +221,23 @@ File: `16-07-PLAN.md`. Sizing: 3 tasks, 4 files plus 3 receipts (within budget).
 
 Criteria: 1, 10, 11, 12, 13. Requirements: PRC-01, PRC-03, LIV-07.
 
+### 16-08 run --record, transports and live serve (wave 2, RISK)
+
+File: `16-08-PLAN.md`. Sizing: 3 tasks, 7 files (over budget, finding 7). Autonomous: false (owner reviews one recorded dataset and one live serve --once run). Depends on 16-04.
+
+| File | Seat | Rule |
+|---|---|---|
+| src/pumpgrok/datafeed/transport.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/datafeed/feed_loop.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/parsing.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/dispatch.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/verbs_state.py | bot-02-risk | src/pumpgrok/** |
+| src/pumpgrok/cli/verbs_ops.py | bot-02-risk | src/pumpgrok/** |
+| tests/cli/test_record.py | bot-02-risk | tests/** |
+| .receipts/bot-02-risk/16-08-record.json | bot-02-risk | .receipts/bot-02-risk/** |
+
+Criteria: 7 (record half), 13 (live serve refusal; the criterion 13 gate is re-run by 16-07 at close). Requirements: REC-03, LIV-07. Read-only: datafeed/readonly.py; supervisor/live_paper.py (CHIEF; not edited). Owner decisions: 2 and 3 (2026-11-15), B and E (2026-11-16).
+
 ## Coverage
 
 ### Success criteria (all 13)
@@ -207,13 +250,13 @@ Criteria: 1, 10, 11, 12, 13. Requirements: PRC-01, PRC-03, LIV-07.
 | 4 | Gap flatten with 500 bps haircut or exclusion and flag; no entries during cooldown | 16-03 | 228 |
 | 5 | legacy_screening replay matches v1 fills and net lamports; per-mint bisect perf test | 16-02 | 229 |
 | 6 | Repeated edge does no work; read_autonomy gate; no LLM client; deterministic persist; evidence provider | 16-05 | 230 |
-| 7 | tests/cli/test_record.py and tests/cli/test_strategy_backtest.py; verbs rerun byte-identically | 16-04 (record), 16-06 (strategy) | 231 |
+| 7 | tests/cli/test_record.py and tests/cli/test_strategy_backtest.py; verbs rerun byte-identically | 16-04 (replay), 16-08 (run --record), 16-06 (strategy) | 231 |
 | 8 | `backtest --fixture smoke-10m` output byte-identical across two runs | 16-06 | 232 |
 | 9 | Daily and weekly reports carry per-strategy section; parts sum to desk view | 16-06 | 233 |
 | 10 | No grid or itertools.product in engine or backtest; single search engine test | 16-07 (guard; no plan adds the tokens) | 234 |
 | 11 | Zero diff under `contracts/` against `v4-base` | 16-07 (guard; every plan keeps contracts untouched) | 235 |
 | 12 | smoke-10m and trading-smoke pairs equal and unchanged; CHANGELOG records both pairs | 16-07 | 236 |
-| 13 | `run --mode live --once` exits 3 | 16-07 | 237 |
+| 13 | `run --mode live --once` exits 3 | 16-07 (gate re-run), 16-08 (live serve refusal) | 237 |
 
 Criterion 12 is amended per owner: the smoke-10m baseline is `1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700` (ROADMAP line 236 carries the amendment, commit 6281a39; the old value appears only inside the amendment note). The trading-smoke baseline is `a4461e80...`. Both hashes must be unchanged in Phase 16.
 
@@ -221,7 +264,7 @@ Criterion 12 is amended per owner: the smoke-10m baseline is `1dffa78448f720b98a
 
 | Requirement | Plan(s) | Criteria |
 |---|---|---|
-| REC-03 | 16-04, 16-06 | 7 |
+| REC-03 | 16-04, 16-06, 16-08 | 7 |
 | BT-08 | 16-01 | 2 |
 | BT-09 | 16-01 (breakdown sums), 16-06 (report sums) | 2, 9 |
 | BT-10 | 16-03 | 3 |
@@ -261,13 +304,15 @@ Notes:
 
 Values, reasons and the approval record: 16-GAP-THRESHOLDS-PROPOSAL.md. Approved: long dataset 7 days; gap-light single gap 300 s; total gap time at most 5 percent of the window; cooldown 300 s from gap end. Open question 1 (synthetic definition) is answered 2026-11-16 (row H): synthetic and hand-authored data, including datasets built in tmp_path, is never promotion evidence. The values are defined once, as APPROVED_THRESHOLDS in src/pumpgrok/backtest/grading.py. The flatten haircut of 500 bps is fixed by ROADMAP criterion 4 and is not part of the approval.
 
-### Verb specs (16-04): decided, decisions 1 to 3
+### Verb specs (16-04, 16-08): decided, decisions 1 to 3; amended 2026-11-16
 
 | Verb | Definition |
 |---|---|
-| `replay rebuild-ticks --dataset <name>` | Rebuilds `ticks.jsonl` only from the raw stream files of that dataset (the files the recorder derivation reads; paper-engine.md section 4.3 names them), merged by `(ts, file_order, line_no)`, with the same derivation the recorder runs at record time. Never reads `ticks.jsonl` or any other derived file as input. |
-| `replay import --from <ledger.sqlite> --dataset <name>` | Accepts only a ledger this desk recorded. Refused unless `LedgerStore.verify()` passes from `GENESIS_PREV_HASH` and every row has source `paper`. Rows with source `replay` or `manual` are refused. Copies the file unchanged to var/ under the dataset name, verifies the copy, records its sha256, and refuses to overwrite an existing target. |
-| `live serve --rpc <url> [--once]` | Runs the live-data paper root only. No live root exists. `--mode live` exits 3. Any other `--mode` value is a usage error. `--rpc` is required and has no default. |
+| `replay trim --dataset <name> --max-events N --keep-mints-with-fills` (16-04) | Replays the full dataset offline into a temporary ledger (source replay) to find the mints that have an order. Keeps every event of those mints, and a seeded 5 percent of the other events (one `random.Random(settings.replay.seed)`, drawn only for those events), then keeps the last N kept events in merge order. Inserts no gap row (no 180 s hole). Writes a sealed dataset to `var/datasets/<name>-trimmed/`. Refuses an existing target. |
+| `replay rebuild-ticks --dataset <name>` (16-04) | Rebuilds the derived tick file (`EVENTS_NAME`, `events.jsonl` in the code) only from the raw feed stream `feed.jsonl`, replayed in (ts, file_order, line_no) order through the live frame handling. Never reads `events.jsonl` or any other derived file. Writes a sealed dataset to `var/datasets/<name>-rebuilt/`. A dataset recorded before the amendment has no `feed.jsonl` and is refused (exit 4). |
+| `replay import --from <ledger.sqlite> --dataset <name>` (16-04) | Accepts only a ledger this desk recorded: refused (exit 2) unless `LedgerStore.verify` passes from `GENESIS_PREV_HASH` and every row has source `paper`. Copies the file unchanged to `var/replay/<name>/imported-ledger.sqlite` and writes `imported-ledger.sqlite.sha256` beside it. Refuses an existing target (exit 1). Placed and verified, not converted. |
+| `run --mode paper --record <dataset> --duration <s> [--mints <list>]` (16-08) | Records a live-paper session into `var/datasets/<dataset>/` through the websocket and JSON-RPC recording wrappers; `record_frame` runs before each observation; sealed on exit. `--record` with `--replay` exits 1; `--mode live` exits 3. |
+| `live serve --rpc <url> [--once]` (16-08) | Runs the live-data paper root only. `--mode live` exits 3; any other `--mode` value is a usage error. `--rpc` is required and has no default. `--once` is exactly one paper cycle. |
 
 Confirmed by the owner 2026-11-16:
 - Source `paper` means recorded by this desk. CHIEF's reading of `SOURCES` in `ledger/store.py` (`paper`, `replay`, `manual`) is confirmed.
@@ -286,7 +331,7 @@ Confirmed by the owner 2026-11-16: the JournalNote's ledger `source` must be one
 - Any change to `tests/fixtures/replay/**`, to any pin file, or to any hash literal. Phase 16 moves no hash. Synthetic datasets are built in `tmp_path`.
 - Any change to `src/pumpgrok/backtest/metrics.py` (v1). `tests/backtest/test_metrics.py` must stay green unchanged.
 - Any new placement name, placement import, or allowlist entry for the legacy path (`docs/strategies-replay-exception.md`).
-- Any network, RPC, LLM or Grok client reachable from `backtest/`, `replay/` or the new CLI handlers in Phase 16 code. Backtests use the pinned offline rent value only.
+- Any network, RPC, LLM or Grok client reachable from `backtest/` or `replay/`, or constructed by a Phase 16 CLI handler. The one exception is the socket factory `make_read_transport` in `datafeed/transport.py` (plan 16-08), which the record and serve handlers receive by injection; `replay/` imports no network client. Backtests use the pinned offline rent value only. (Narrowed by the 2026-11-16 amendment; see "Amendment 2026-11-16".)
 - Any token `grid` or `itertools.product` in `src/pumpgrok/engine` or `src/pumpgrok/backtest` (criterion 10 greps substrings, so comments count).
 - Any phrase `expected return`, `expected profit`, `expected pnl` or `will earn` in `src/pumpgrok/backtest` or `src/pumpgrok/reporting` (criterion 2).
 - Any approval minted outside `RiskEngine.check`. Phase 16 never mints an `autonomous_paper` approval.
@@ -299,14 +344,17 @@ Confirmed by the owner 2026-11-16: the JournalNote's ledger `source` must be one
 - Any `rebuild-ticks` input other than raw feed streams (decision 3).
 - Any threshold value in `src/pumpgrok/backtest/` or `tests/backtest/` outside APPROVED_THRESHOLDS in `grading.py`, or a second definition (decision 5).
 - Any new `EventKind`, `NoteKind` value or contract change for publication (decision 6).
+- Any change to the seal allow-list beyond `feed.jsonl`, any changed signature on `LiveRecorder`, or any edit under `supervisor/` for the recorder wrap (amendment 2026-11-16, decision 2 and decision B). STOP and ask CHIEF.
+- Any `run --record` or `live serve` code in plan 16-04 (moved to 16-08). Any `--mode live` path that does not exit 3 (decision E).
+- Any `rebuild-ticks` read of `events.jsonl` or any other derived file (decision 3). Any `trim` insertion of a gap row (amendment decision 4).
 
 ## Execution order
 
-1. 16-01 and 16-04 in parallel (RISK). The record-wrap answer was received 2026-11-16.
-2. 16-02 (RISK).
+1. 16-01 and 16-04 in parallel (RISK). 16-04 covers the replay verbs and the recorder amendment; run --record and live serve moved to 16-08 by the 2026-11-16 amendment.
+2. 16-02 and 16-08 in parallel (RISK). 16-08 needs 16-04 merged. The file sets are disjoint: 16-02 uses backtest/ and tests/backtest/; 16-08 uses datafeed/, cli/ and tests/cli/.
 3. 16-03 (RISK). Threshold approval and open question 1 answer received 2026-11-16; unblocked.
 4. 16-05 (RISK). Publication confirmed (option A) 2026-11-16; runs after 16-03.
 5. 16-06 (RISK + JOURNAL).
-6. 16-07 (CHIEF + JOURNAL + RISK): gates, guards, pins, CHANGELOG, live refusal, owner close review.
+6. 16-07 (CHIEF + JOURNAL + RISK): gates, guards, pins, CHANGELOG, live refusal, owner close review. Runs after 16-08. Follow-up, not in this commit: the 16-07 frontmatter depends_on must add 16-08.
 
 Each seat submits its own receipt for its completion claims (G-2). Journal owns the one CHANGELOG pull request. CHIEF owns the one `.planning` close update. No push in this planning step.
