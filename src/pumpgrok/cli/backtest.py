@@ -335,8 +335,13 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     summary over the recording's span; SharedResult.compare enforces window
     equality before divergence.check gates promotion (PAP-02, G-08). Without
     it promotion stays ineligible with reason divergence not compared. This
-    verb places no paper orders itself.
+    verb places no paper orders itself. ``--strategy`` does not enter this
+    body; it dispatches to the strategy backtest handler.
     """
+    if getattr(args, "strategy", None) is not None:
+        from pumpgrok.cli.strategy_backtest import strategy_backtest_verb
+
+        return strategy_backtest_verb(args, settings)
     plan = _backtest_plan(args, settings)
     with _run_lock(plan.run_dir):
         harness_result = _run_trials(plan)

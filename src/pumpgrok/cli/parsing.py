@@ -108,6 +108,12 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
         metavar="PATH",
         help="paper ledger sqlite for the same-window comparison",
     )
+    backtest.add_argument(
+        "--strategy",
+        default=None,
+        metavar="ID",
+        help="registered strategy id; one strategy, no search",
+    )
 
 
 def _add_scout(verbs: _VerbsAction, mode_option: _Parser) -> None:
