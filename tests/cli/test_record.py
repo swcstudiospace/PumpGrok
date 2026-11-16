@@ -224,7 +224,7 @@ def _ledger(path: Path, *, second_source: str = "paper", tamper: bool = False) -
             correlation_id="corr-1",
             idempotency_key="key-1",
             type="ConfigChanged",
-            payload={"n": 1},
+            payload={"source": "paper", "by": "test-operator", "keys_changed": ["n"]},
         )
         store.append(
             ts_utc=format_ts_utc(_START + 1),
@@ -232,7 +232,7 @@ def _ledger(path: Path, *, second_source: str = "paper", tamper: bool = False) -
             correlation_id="corr-2",
             idempotency_key="key-2",
             type="ConfigChanged",
-            payload={"n": 2},
+            payload={"source": second_source, "by": "test-operator", "keys_changed": ["n"]},
         )
     finally:
         store.close()
