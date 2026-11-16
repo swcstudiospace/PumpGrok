@@ -11,6 +11,7 @@ from pumpgrok.backtest.metrics_v2 import MetricsV2
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.ticket_refs import append_with_ticket_ref
 from pumpgrok.reporting.daily import DailyReport
+from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.strategy_section import (
     METRIC_COLUMNS,
     DeskView,
@@ -20,7 +21,6 @@ from pumpgrok.reporting.strategy_section import (
     render_strategy_section,
     section_from_events,
 )
-from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
 
 DAY = "2026-10-20"
