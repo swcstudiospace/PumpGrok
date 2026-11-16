@@ -8,7 +8,13 @@ import sys
 from collections.abc import Callable, Sequence
 
 from pumpgrok.cli.backtest import _backtest_verb
-from pumpgrok.cli.codes import _FIND_ONLY_ROUTES, EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER
+from pumpgrok.cli.codes import (
+    _FIND_ONLY_ROUTES,
+    EXIT_CONFIG,
+    EXIT_FIXTURE,
+    EXIT_LEDGER,
+    EXIT_LIVE,
+)
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
 from pumpgrok.cli.onboarding import onboarding_verb
@@ -109,11 +115,31 @@ def _apply_wake_mode(args: argparse.Namespace, settings: Settings) -> Settings:
     return settings.model_copy(update={"events": events})
 
 
+def _refuse_disabled_live(args: argparse.Namespace) -> int | None:
+    """Refuse live mode for record and serve before settings or wallet confirmation.
+
+    A configured live wallet must not turn this refusal into exit 1. One stderr line names it.
+    """
+    if getattr(args, "mode", None) != "live":
+        return None
+    verb = getattr(args, "verb", None)
+    if verb == "run" and getattr(args, "record", None) is not None:
+        _say(sys.stderr, "refused: run --record does not run in live mode")
+        return EXIT_LIVE
+    if verb == "live" and getattr(args, "cmd", None) == "serve":
+        _say(sys.stderr, "refused: live serve does not run in live mode")
+        return EXIT_LIVE
+    return None
+
+
 def _dispatch(argv: Sequence[str]) -> int:
     refuse_cli_secrets(argv)
     if argv and argv[0] == "tools":
         return _tools_entry(list(argv[1:]))
     args = build_parser().parse_args(list(argv))
+    refused = _refuse_disabled_live(args)
+    if refused is not None:
+        return refused
     settings = _apply_wake_mode(args, load_settings(**_settings_kwargs(args.mode)))
     _confirm_live_wallet(args, settings)
     setup_logging(mode=settings.effective_mode, profile=current_profile())

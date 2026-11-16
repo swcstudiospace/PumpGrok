@@ -66,9 +66,34 @@ def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_CONFIG if failing_inputs(records) else EXIT_OK
 
 
+def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
+    """Serve the live-data paper root. --mode live never reaches this handler."""
+    from pumpgrok.datafeed import feed_loop
+    from pumpgrok.datafeed import transport as datafeed_transport
+    from pumpgrok.replay.clock import WallClock
+
+    endpoint = args.rpc
+    try:
+        transport = datafeed_transport.make_read_transport(endpoint)
+    except ValueError as exc:
+        raise UsageError("live serve --rpc endpoint is invalid") from exc
+    return feed_loop.serve_once(
+        endpoint=endpoint,
+        transport=transport,
+        clock=WallClock(),
+        data_dir=Path("var") / "live-serve",
+        budget=settings.risk,
+        limits=settings.limits,
+        once=bool(args.once),
+        rng_seed=settings.replay.seed,
+    )
+
+
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "confirm":
         return _live_confirm(args, settings)
+    if args.cmd == "serve":
+        return _live_serve(args, settings)
     return _not_implemented(f"live {args.cmd}")
 
 

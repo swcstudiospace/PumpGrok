@@ -71,10 +71,16 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
         help="replay a recorded dataset in a loop, serving /healthz and /metrics",
     )
     run.add_argument(
-        "--record", metavar="DATASET", default=None, help="record a dataset (not yet implemented)"
+        "--record", metavar="DATASET", default=None, help="record a live-paper dataset"
     )
     run.add_argument(
-        "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
+        "--duration", metavar="SECONDS", default=None, type=int, help="record duration in seconds"
+    )
+    run.add_argument(
+        "--mints",
+        default=None,
+        metavar="LIST",
+        help="comma-separated mints to record; other mints are not admitted",
     )
     _add_wake_mode(run)
 
@@ -232,6 +238,23 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     _add_paper_trade_flags(paper_sell)
     live = verbs.add_parser("live", parents=[mode_option], help="live verbs")
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
+    live_serve = live_cmd.add_parser("serve", help="serve the live-data paper root")
+    live_serve.add_argument(
+        "--mode",
+        choices=("paper", "live"),
+        default=argparse.SUPPRESS,
+        help="execution mode; live is refused",
+    )
+    live_serve.add_argument(
+        "--rpc",
+        required=True,
+        help="read-only RPC endpoint; required, no default",
+    )
+    live_serve.add_argument(
+        "--once",
+        action="store_true",
+        help="run exactly one paper cycle and exit",
+    )
     live_confirm = live_cmd.add_parser("confirm", help="record a human live-gate confirmation")
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
