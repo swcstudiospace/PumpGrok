@@ -1,12 +1,12 @@
 # Phase 16 gap and grading thresholds: proposal
 
-Status: PROPOSAL. PENDING OWNER APPROVAL. Nothing in this file is pinned.
+Status: APPROVED 2026-11-16 by the owner for the four values below: long dataset, gap-light maximum single gap, gap-light maximum total gap time, and cooldown. Open question 1 (synthetic definition) is not answered by this approval. The flatten haircut is fixed by ROADMAP criterion 4 and is not part of the approval. Values enter code only as APPROVED_THRESHOLDS in grading.py.
 
 Owner decision 5 (2026-11-15): CHIEF drafts the gap and grading thresholds and the cooldown, with a reason for each. The owner approves before implementation.
 
-Blocks: plan 16-03 (Task 1 checkpoint). Transitively blocks 16-05, 16-06 and 16-07, because grading and gap flattening feed them.
+Blocks: the threshold approval clears the plan 16-03 Task 1 checkpoint, except open question 1 (see Approval record). Transitively, it clears the threshold blocker for 16-05, 16-06 and 16-07; their remaining order is the plan sequence in 16-PLANS-INDEX.md.
 
-Rule until approval: no threshold value appears in `src/pumpgrok/backtest/` or `tests/backtest/`. After approval, the approved values are defined once, as `APPROVED_THRESHOLDS` in `src/pumpgrok/backtest/grading.py`. Tests import that object. No other copy is written.
+Rule: no threshold value appears in `src/pumpgrok/backtest/` or `tests/backtest/` outside `APPROVED_THRESHOLDS`. The approved values are defined once, as `APPROVED_THRESHOLDS` in `src/pumpgrok/backtest/grading.py`. Tests import that object. No other copy is written.
 
 ## Proposed values
 
@@ -28,14 +28,14 @@ Gap-light has two limits. A single gap over 300 s is a gap. Total gap time over 
 
 ## Approval record
 
-Fill one row per parameter. Approved values enter code only after this table is complete.
+Filled 2026-11-16. Every row except open question 1 is complete. Approved values enter code only after this table is complete, so open question 1 must be answered first.
 
 | Parameter | Owner answer (approve, amend to a value with reason, or reject) | Date |
 |---|---|---|
-| Long dataset: minimum recorded window | | |
-| Gap-light: maximum single gap | | |
-| Gap-light: maximum total gap time | | |
-| Cooldown after a gap | | |
-| Open question 1 (synthetic definition) | | |
-| Open question 2 (percentage or seconds) | | |
-| Open question 3 (cooldown start) | | |
+| Long dataset: minimum recorded window | Approved as proposed: 7 days (604800 s). | 2026-11-16 |
+| Gap-light: maximum single gap | Approved as proposed: 300 s. | 2026-11-16 |
+| Gap-light: maximum total gap time | Approved as proposed: at most 5 percent of the window duration. | 2026-11-16 |
+| Cooldown after a gap | Approved as proposed: 300 s, counted from gap end. | 2026-11-16 |
+| Open question 1 (synthetic definition) | OPEN. Not answered. CHIEF's proposal (tmp_path datasets are synthetic) is not confirmed by the owner. | |
+| Open question 2 (percentage or seconds) | Answered by the approved value: percentage of the window (row 3). | 2026-11-16 |
+| Open question 3 (cooldown start) | Answered by the approved value: counted from gap end (row 4). | 2026-11-16 |
