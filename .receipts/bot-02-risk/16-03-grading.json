@@ -1,0 +1,71 @@
+{
+  "plan": "16-03",
+  "phase": "16-backtest-v2-and-autonomous-evaluation",
+  "requirements": ["BT-10", "BT-11"],
+  "criteria": [3, 4],
+  "seat": "bot-02-risk",
+  "branch": "bot-02-risk/phase-16-grading",
+  "base": "9032f79",
+  "owner_answers": [
+    {
+      "parameter": "Long dataset: minimum recorded window",
+      "answer": "Approved as proposed: 7 days (604800 s).",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Gap-light: maximum single gap",
+      "answer": "Approved as proposed: 300 s.",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Gap-light: maximum total gap time",
+      "answer": "Approved as proposed: at most 5 percent of the window duration.",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Cooldown after a gap",
+      "answer": "Approved as proposed: 300 s, counted from gap end.",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Open question 1 (synthetic definition)",
+      "answer": "Answered: synthetic and hand-authored data, including datasets built in `tmp_path`, is never promotion evidence; it is graded as such.",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Open question 2 (percentage or seconds)",
+      "answer": "Answered by the approved value: percentage of the window (row 3).",
+      "date": "2026-11-16"
+    },
+    {
+      "parameter": "Open question 3 (cooldown start)",
+      "answer": "Answered by the approved value: counted from gap end (row 4).",
+      "date": "2026-11-16"
+    }
+  ],
+  "approved_thresholds": {
+    "long_s": 604800,
+    "max_single_gap_s": 300,
+    "max_total_gap_numerator": 5,
+    "max_total_gap_denominator": 100,
+    "cooldown_s": 300,
+    "haircut_bps": 500,
+    "haircut_note": "500 bps is ROADMAP criterion 4, not part of the 2026-11-16 approval. Stored on APPROVED_THRESHOLDS so it is not copied."
+  },
+  "promotion_eligible_exercised": false,
+  "promotion_eligible_note": "No recorded non-synthetic dataset exists under tests/fixtures. tmp_path datasets are synthetic and were not treated as promotion evidence.",
+  "commands": [
+    {
+      "command": "python -m pytest -o addopts= -q -p no:cacheprovider tests/backtest/test_lookahead.py tests/backtest/test_grading.py tests/backtest/test_gaps.py",
+      "exit": 4,
+      "note": "system python has no pumpgrok install"
+    },
+    {
+      "command": "PYTHONPATH=src /root/src/repos/pumpgrok-wt/v4-phase-14/.venv/bin/python -m pytest -o addopts= -q -p no:cacheprovider tests/backtest/test_lookahead.py tests/backtest/test_grading.py tests/backtest/test_gaps.py",
+      "exit": 0,
+      "result": "12 passed"
+    }
+  ],
+  "not_run": ["make", "lint", "formatters", "full gates", "push"]
+}
+}
