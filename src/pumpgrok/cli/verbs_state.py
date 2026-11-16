@@ -27,7 +27,13 @@ from pumpgrok.cli.errors import (
     _say,
     _tool_error,
 )
-from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
+from pumpgrok.cli.validators import (
+    _human_by,
+    _mint,
+    _mint_approval_id,
+    _utc_now,
+    size_sol_to_lamports,
+)
 from pumpgrok.cli.wiring import (
     _call_use,
     _run_wired,
@@ -122,7 +128,67 @@ def _paper_start_gate(settings: Settings) -> list[str]:
     return lines
 
 
+def _parse_mints(raw: str | None) -> frozenset[str] | None:
+    """Validate a comma-separated mint list. None means every mint is admitted."""
+    if raw is None:
+        return None
+
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if not parts:
+        raise UsageError("bad --mints: want a comma-separated mint list")
+    return frozenset(_mint(part) for part in parts)
+
+
+def _run_record(args: argparse.Namespace, settings: Settings) -> int:
+    """Record a live-paper session into var/datasets/<name>/ and print the sealed path."""
+    from pumpgrok.datafeed import feed_loop
+    from pumpgrok.datafeed import transport as datafeed_transport
+    from pumpgrok.replay.live_recorder import DatasetConflict
+
+    if args.replay:
+        raise UsageError("run --record cannot be combined with --replay")
+    if args.duration is None or args.duration <= 0:
+        raise UsageError("run --record needs a positive --duration")
+    name = args.record
+    if not isinstance(name, str) or not DATASET_NAME_RE.fullmatch(name):
+        raise UsageError(f"dataset name is not a plain name: {name!r}")
+    mints = _parse_mints(getattr(args, "mints", None))
+    endpoints = settings.rpc.endpoints
+    if not endpoints:
+        raise UsageError("run --record needs an RPC endpoint")
+    endpoint = endpoints[0]
+    try:
+        transport = datafeed_transport.make_read_transport(endpoint)
+    except ValueError as exc:
+        raise UsageError("run --record endpoint is invalid") from exc
+    dataset_dir = Path("var") / "datasets" / name
+    try:
+        sealed = feed_loop.record_session(
+            dataset_dir,
+            duration_s=args.duration,
+            mints=mints,
+            clock=WallClock(),
+            transport=transport,
+            recorder_factory=feed_loop.recorder_factory,
+            endpoint=endpoint,
+            budget=settings.risk,
+            limits=settings.limits,
+            rng_seed=settings.replay.seed,
+            ws_url=settings.data.ws_url,
+        )
+    except DatasetConflict as exc:
+        _say(sys.stderr, f"usage error: {exc.message}")
+        return EXIT_CONFIG
+    except ValueError as exc:
+        _say(sys.stderr, f"usage error: {exc}")
+        return EXIT_CONFIG
+    _say(sys.stdout, json.dumps({"dataset": str(sealed)}))
+    return EXIT_OK
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
+    if getattr(args, "record", None) is not None:
+        return _run_record(args, settings)
     if settings.effective_mode == "live":
         gate = LiveGate(
             mode=settings.effective_mode,
@@ -166,7 +232,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
 
 def _mode_refusal(args: argparse.Namespace) -> int | None:
     """Exit code refusing a `run` argument combination this release does not run, or None."""
-    if args.record is not None or args.duration is not None:
+    if args.record is None and args.duration is not None:
         return _not_implemented("run --record")
     if args.serve:
         if args.once or not args.replay:

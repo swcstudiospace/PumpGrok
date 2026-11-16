@@ -1,14 +1,16 @@
-"""Replay maintenance verbs: trim, rebuild-ticks and import (16-04). Synthetic data only.
+"""Replay maintenance verbs and the record/serve verbs (16-04, 16-08). Synthetic data only.
 
-Datasets are built under tmp_path. ``run --record`` and ``live serve`` are plan 16-08.
+Datasets are built under tmp_path. Transports are fakes; no test opens a socket.
 """
 
 from __future__ import annotations
 
 import ast
+import asyncio
 import base64
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import struct
@@ -18,11 +20,14 @@ from typing import Any
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_OK
+from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_LIVE, EXIT_OK
+from pumpgrok.datafeed import feed_loop
+from pumpgrok.datafeed import transport as datafeed_transport
 from pumpgrok.datafeed.logs import PUMP_PROGRAM_ID
+from pumpgrok.datafeed.transport import RecordingJsonRpc
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay import maintenance
-from pumpgrok.replay.clock import format_ts_utc
+from pumpgrok.replay.clock import WallClock, format_ts_utc, parse_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, CorruptFixture, load_dataset
 from pumpgrok.replay.live_recorder import FEED_NAME, GAPS_NAME, seal_directory
 
@@ -468,3 +473,287 @@ def test_maintenance_module_imports_no_network_or_live_client() -> None:
             imported.add(node.module)
     assert not {name.split(".")[0] for name in imported} & forbidden_roots
     assert not {name for name in imported if name.startswith(forbidden_prefixes)}
+
+
+# --- run --record and live serve (16-08) -----------------------------------------------------
+
+_RPC = "https://rpc.example.invalid"
+_QUERY_SECRET = "querysecretvalue"
+_HEADER_SECRET = "headersecretvalue"
+
+
+class _FakeRpc:
+    """JSON-RPC double. Answers getTransaction from a fixture dict and records every call."""
+
+    def __init__(self, responses: dict[str, dict[str, Any]] | None = None) -> None:
+        self.responses = {} if responses is None else responses
+        self.calls: list[dict[str, Any]] = []
+
+    async def send(self, url: str, frame: dict[str, Any]) -> object:
+        self.calls.append(frame)
+        if frame.get("method") != "getTransaction":
+            return {"jsonrpc": "2.0", "id": 1, "result": 1}
+        params = frame.get("params")
+        signature = params[0] if isinstance(params, list) and params else ""
+        return self.responses[str(signature)]
+
+
+class _Logged:
+    """Recorder double that keeps call order and forwards to a real LiveRecorder."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+        self.calls: list[str] = []
+
+    def record_frame(self, raw: dict[str, object]) -> None:
+        self.calls.append("frame")
+        self.inner.record_frame(raw)
+
+    def record(self, observation: Any) -> None:
+        self.calls.append("observation")
+        self.inner.record(observation)
+
+    def record_gap(self, gap: Any) -> None:
+        self.inner.record_gap(gap)
+
+    def seal(self, *ledgers: Any) -> None:
+        self.inner.seal(*ledgers)
+
+
+def _open_factory(frames: dict[str, list[dict[str, Any]]]):
+    async def _open(url: str, *, stream: str):
+        for frame in frames[stream]:
+            yield frame
+
+    return _open
+
+
+def _install_fakes(
+    monkeypatch: pytest.MonkeyPatch,
+    frames: dict[str, list[dict[str, Any]]],
+    responses: dict[str, dict[str, Any]],
+) -> _FakeRpc:
+    fake = _FakeRpc(responses)
+    monkeypatch.setattr(datafeed_transport, "open_websocket", _open_factory(frames))
+    monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: fake)
+    return fake
+
+
+def _logging_factory(holder: dict[str, _Logged]):
+    def _factory(dataset_dir: Path, *, clock: Any) -> _Logged:
+        from pumpgrok.replay.live_recorder import LiveRecorder
+
+        logged = _Logged(LiveRecorder(dataset_dir, clock=clock))
+        holder["logged"] = logged
+        return logged
+
+    return _factory
+
+
+def _secret_create() -> dict[str, Any]:
+    payload = _portal_create(0.0, MINT)["payload"]
+    payload["uri"] = (
+        "https://example.invalid/meta?api-key="
+        + _QUERY_SECRET
+        + "&key="
+        + _QUERY_SECRET
+        + "&token="
+        + _QUERY_SECRET
+    )
+    payload["headers"] = {"Authorization": "Bearer " + _HEADER_SECRET}
+    return payload
+
+
+def _record_streams() -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    full = _trade_logs(_trade_event(MINT_RAW, vsol=31, vtok=690))
+    frames = {
+        "pumpportal": [_secret_create()],
+        "logs": [
+            _logs(0.0, "sig-a", _trade_logs(_trade_event(MINT_RAW, vsol=30, vtok=700)))["payload"],
+            _logs(0.0, "sig-c", [f"Program {PUMP_PROGRAM_ID} invoke [1]", _TRUNCATED])["payload"],
+        ],
+    }
+    response = {"jsonrpc": "2.0", "id": 1, "result": {"meta": {"err": None, "logMessages": full}}}
+    return frames, {"sig-c": response}
+
+
+def _feed_rows(directory: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in (directory / FEED_NAME).read_text().splitlines()]
+
+
+def test_record_with_replay_or_bad_duration_is_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["run", "--record", "set", "--replay", "dir", "--duration", "1"]) == EXIT_CONFIG
+    assert main(["run", "--record", "set"]) == EXIT_CONFIG
+    assert main(["run", "--record", "set", "--duration", "0"]) == EXIT_CONFIG
+    assert main(["run", "--record", "set", "--duration", "-1"]) == EXIT_CONFIG
+    assert not (tmp_path / "var" / "datasets").exists()
+
+
+def test_record_live_mode_exits_3_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    code = main(["run", "--mode", "live", "--record", "live-set", "--duration", "1"])
+    assert code == EXIT_LIVE
+    assert not (tmp_path / "var" / "datasets").exists()
+
+
+def test_record_seals_dataset_and_stamps_observations_at_frame_ts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    frames, responses = _record_streams()
+    _install_fakes(monkeypatch, frames, responses)
+    holder: dict[str, _Logged] = {}
+    monkeypatch.setattr(feed_loop, "recorder_factory", _logging_factory(holder))
+    assert main(["run", "--record", "recorded", "--duration", "1"]) == EXIT_OK
+    directory = tmp_path / "var" / "datasets" / "recorded"
+    loaded = load_dataset(directory)
+    manifest = json.loads((directory / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert FEED_NAME in manifest["sha256"]
+    rows = _feed_rows(directory)
+    configs = [row for row in rows if row["stream"] == "config"]
+    assert len(configs) == 1
+    assert configs[0]["payload"] == {"watch_capacity": feed_loop.WATCH_CAPACITY}
+    logs = [row for row in rows if row["stream"] == "logs"]
+    txs = [row for row in rows if row["stream"] == "transaction"]
+    assert len(txs) == 1
+    assert set(txs[0]["payload"]) == {"signature", "response"}
+    assert txs[0]["payload"]["signature"] == "sig-c"
+    events = list(loaded.events)
+    assert len(events) == 2
+    assert events[0]["ts_utc"] == format_ts_utc(logs[0]["ts"])
+    assert events[1]["ts_utc"] == format_ts_utc(logs[1]["ts"])
+    assert events[1]["ts_utc"] == format_ts_utc(txs[0]["ts"])
+    calls = holder["logged"].calls
+    assert calls[0] == "frame"
+    seen_frame = False
+    for name in calls:
+        if name == "frame":
+            seen_frame = True
+        else:
+            assert seen_frame
+    text = (directory / FEED_NAME).read_text(encoding="utf-8")
+    assert "REDACTED" in text
+    assert _QUERY_SECRET not in text
+    assert _HEADER_SECRET not in text
+    rebuilt = maintenance.rebuild_ticks("recorded", root=tmp_path / "var")
+    assert (rebuilt / EVENTS_NAME).read_bytes() == (directory / EVENTS_NAME).read_bytes()
+
+
+def test_record_refuses_a_non_fresh_dataset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    taken = tmp_path / "var" / "datasets" / "taken"
+    taken.mkdir(parents=True)
+    (taken / "foreign.txt").write_text("x", encoding="utf-8")
+    assert main(["run", "--record", "taken", "--duration", "1"]) == EXIT_CONFIG
+    assert (taken / "foreign.txt").is_file()
+    assert not (taken / FEED_NAME).exists()
+
+
+def test_record_mints_restricts_events_and_rejects_a_bad_mint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    bad = ["run", "--record", "bad", "--duration", "1", "--mints", "not-a-mint"]
+    assert main(bad) == EXIT_CONFIG
+    frames = {
+        "pumpportal": [
+            _portal_create(0.0, MINT)["payload"],
+            _portal_create(0.0, OTHER)["payload"],
+        ],
+        "logs": [
+            _logs(0.0, "sig-m", _trade_logs(_trade_event(MINT_RAW, vsol=30, vtok=700)))["payload"],
+            _logs(0.0, "sig-o", _trade_logs(_trade_event(OTHER_RAW, vsol=40, vtok=800)))["payload"],
+        ],
+    }
+    _install_fakes(monkeypatch, frames, {})
+    assert main(["run", "--record", "filtered", "--duration", "1", "--mints", MINT]) == EXIT_OK
+    events = list(load_dataset(tmp_path / "var" / "datasets" / "filtered").events)
+    assert events
+    assert {row["mint"] for row in events} == {MINT}
+
+
+def test_live_serve_mode_live_exits_3_without_calling_the_factory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    called: list[str] = []
+
+    def _factory(endpoint: str) -> _FakeRpc:
+        called.append(endpoint)
+        return _FakeRpc()
+
+    monkeypatch.setattr(datafeed_transport, "make_read_transport", _factory)
+    code = main(["live", "serve", "--mode", "live", "--rpc", _RPC])
+    assert code == EXIT_LIVE
+    assert called == []
+
+
+def test_live_serve_other_mode_is_usage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["live", "serve", "--mode", "replay", "--rpc", _RPC]) == EXIT_CONFIG
+    missing = main(["live", "serve"])
+    assert missing != 0
+    assert "--rpc" in capsys.readouterr().err
+
+
+def test_live_serve_once_is_one_paper_cycle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: _FakeRpc())
+    assert main(["live", "serve", "--rpc", _RPC, "--once"]) == EXIT_OK
+    assert feed_loop.cycles_run == 1
+
+
+def test_recording_jsonrpc_refuses_a_method_outside_the_allowlist() -> None:
+    rpc = RecordingJsonRpc(_RPC, _FakeRpc(), None, WallClock())
+    with pytest.raises(ValueError, match="not permitted"):
+        asyncio.run(rpc.rpc("sendTransaction", []))
+
+
+def test_live_serve_does_not_read_the_confirmation_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    original = os.environ.get
+
+    def _guarded(key: str, default: str | None = None) -> str | None:
+        if key == "PUMPGROK_CONFIRMATION_KEY":
+            raise AssertionError("confirmation key was read")
+        return original(key, default)
+
+    monkeypatch.setattr(os.environ, "get", _guarded)
+    monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: _FakeRpc())
+    assert main(["live", "serve", "--rpc", _RPC, "--once"]) == EXIT_OK
+    text = Path(feed_loop.__file__).read_text(encoding="utf-8")
+    transport_text = Path(datafeed_transport.__file__).read_text(encoding="utf-8")
+    assert "LiveAdapter" not in text
+    assert "LiveAdapter" not in transport_text
+
+
+def test_dispatch_refuses_live_before_settings_and_wallet() -> None:
+    source = Path(datafeed_transport.__file__).parents[1].joinpath("cli", "dispatch.py")
+    body = source.read_text(encoding="utf-8").split("def _dispatch", 1)[1]
+    assert body.index("_refuse_disabled_live") < body.index("load_settings")
+    assert body.index("load_settings") < body.index("_confirm_live_wallet")
+
+
+def test_record_tests_import_no_llm_or_signing_module() -> None:
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            names.append(node.module)
+    blocked = ("llm", "live_adapter", "solders", "keypair", "nacl")
+    assert not [name for name in names if any(part in name for part in blocked)]
