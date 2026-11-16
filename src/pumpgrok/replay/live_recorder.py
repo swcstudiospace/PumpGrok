@@ -23,6 +23,14 @@ from pumpgrok.replay.fixtures import (
 GAPS_NAME = "gaps.jsonl"
 # Raw feed frames, one line per frame, appended by record_frame before their observation.
 FEED_NAME = "feed.jsonl"
+# Stream names a feed.jsonl frame carries. The live wrapper writes them; replay routes on them.
+# PORTAL_STREAM and LOGS_STREAM hold the raw inbound frames of the two feeds. TRANSACTION_STREAM
+# holds one getTransaction response, keyed by signature, for each truncated notification.
+# CONFIG_STREAM holds exactly one frame per dataset: the WatchSet capacity that decided admission.
+PORTAL_STREAM = "pumpportal"
+LOGS_STREAM = "logs"
+TRANSACTION_STREAM = "transaction"
+CONFIG_STREAM = "config"
 # The only data files a live dataset may hold. Any other *.jsonl is refused at seal time.
 _DATA_FILES = (EVENTS_NAME, GAPS_NAME, FEED_NAME)
 
@@ -292,7 +300,8 @@ class LiveRecorder:
         ``raw`` holds exactly ``stream`` (the nonempty name of the feed that received the frame)
         and ``payload`` (the decoded JSON object as received). Ordering contract: the frame is
         durable before the observation it produces is appended to events.jsonl, so the caller
-        records the frame before the frame reaches the bridge.
+        records the frame before the frame reaches the bridge. A rebuild stamps each observation
+        with the ts of the frame that produced it, so the live wrapper must stamp them the same way.
         """
         if self._sealed or self._failed:
             raise RuntimeError("recorder is sealed or failed")

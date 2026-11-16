@@ -1,37 +1,76 @@
-"""Replay dataset maintenance: ``replay trim`` and ``replay import`` (16-04).
+"""Replay dataset maintenance: ``replay trim``, ``replay rebuild-ticks`` and ``replay import``.
 
-Every function here is deterministic and network-free: no transport, RPC or LLM client is
-imported. ``root`` is the operator's ``var`` directory. Datasets live under
-``<root>/datasets/<name>``; an imported ledger lives under ``<root>/replay/<name>``.
+Every function here is deterministic and network-free. No transport, RPC or LLM client is
+imported, and a rebuild answers every read from the recorded feed alone. ``root`` is the
+operator's ``var`` directory. Datasets live under ``<root>/datasets/<name>``; an imported ledger
+lives under ``<root>/replay/<name>``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
 import tempfile
+from collections import deque
 from collections.abc import Callable
+from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
 
 from pumpgrok.core.errors import PumpgrokError
+from pumpgrok.datafeed.bridge import build_observation_bridge
+from pumpgrok.datafeed.logs import LogsFeed
+from pumpgrok.datafeed.mintbook import MintBook
+from pumpgrok.datafeed.portal import PortalFeed
+from pumpgrok.datafeed.readonly import ReadOnlyBoundary
+from pumpgrok.datafeed.resync import RollingWindowLimiter
+from pumpgrok.datafeed.watchset import WatchSet
+from pumpgrok.events.models import Event
+from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
+from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import (
     EVENTS_NAME,
+    MANIFEST_NAME,
     CorruptFixture,
     FixtureManifest,
     load_dataset,
 )
-from pumpgrok.replay.live_recorder import GAPS_NAME, seal_directory
+from pumpgrok.replay.live_recorder import (
+    CONFIG_STREAM,
+    FEED_NAME,
+    GAPS_NAME,
+    LOGS_STREAM,
+    PORTAL_STREAM,
+    TRANSACTION_STREAM,
+    LiveRecorder,
+    seal_directory,
+)
 from pumpgrok.replay.rng import make_rng
 
-__all__ = ["MaintenanceRefused", "TRIM_KEEP_FRACTION", "import_dataset", "trim"]
+__all__ = [
+    "MaintenanceRefused",
+    "TRIM_KEEP_FRACTION",
+    "import_dataset",
+    "rebuild_ticks",
+    "trim",
+]
 
 # Events of mints without an order are kept with this probability, drawn from the seeded RNG.
 TRIM_KEEP_FRACTION = 0.05
 IMPORTED_LEDGER_NAME = "imported-ledger.sqlite"
 IMPORTED_DIGEST_NAME = IMPORTED_LEDGER_NAME + ".sha256"
+# The endpoint a replayed feed is bound to. Replay never opens it: every read is answered from the
+# recorded feed, and a read the recording does not hold refuses the rebuild.
+_REPLAY_ENDPOINT = "wss://pumpportal.fun/api/data"
+_RATE_WINDOW_S = 10.0
 
 
 class MaintenanceRefused(PumpgrokError):
@@ -102,7 +141,7 @@ def trim(
 
     orders = mints_with_orders(source)
     rng = make_rng(seed)
-    kept: list[tuple[bytes, dict[str, object]]] = []
+    kept: list[tuple[bytes, dict[str, Any]]] = []
     for raw, event in zip(lines, dataset.events, strict=True):
         if event.get("mint") in orders or rng.random() < TRIM_KEEP_FRACTION:
             kept.append((raw, event))
@@ -133,6 +172,262 @@ def trim(
     except BaseException:
         shutil.rmtree(target, ignore_errors=True)
         raise
+    return target
+
+
+@dataclass(frozen=True)
+class _Frame:
+    ts: float
+    stream: str
+    payload: dict[str, Any]
+    line: int
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"non-finite JSON constant {name}")
+
+
+def _read_manifest(dataset_dir: Path) -> FixtureManifest:
+    """Read and shape-check manifest.json without verifying any listed data file."""
+    try:
+        raw = json.loads(
+            (dataset_dir / MANIFEST_NAME).read_text(encoding="utf-8"),
+            parse_constant=_reject_constant,
+        )
+    except (OSError, UnicodeDecodeError, ValueError):
+        raise CorruptFixture("manifest is missing or not valid JSON", file=MANIFEST_NAME) from None
+    try:
+        return FixtureManifest.model_validate(raw)
+    except ValidationError:
+        raise CorruptFixture("manifest is invalid", file=MANIFEST_NAME) from None
+
+
+def _parse_feed(data: bytes) -> list[_Frame]:
+    """Each line is one frame ``{"ts", "stream", "payload"}``. Any other shape is refused."""
+    lines = data.split(b"\n")
+    if lines and lines[-1] == b"":
+        lines.pop()
+    frames: list[_Frame] = []
+    for number, raw in enumerate(lines, 1):
+        try:
+            value = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant)
+        except (UnicodeDecodeError, ValueError):
+            raise CorruptFixture("line is not valid JSON", file=FEED_NAME, line=number) from None
+        if not isinstance(value, dict) or set(value) != {"ts", "stream", "payload"}:
+            raise CorruptFixture(
+                "frame must hold ts, stream and payload", file=FEED_NAME, line=number
+            )
+        ts, stream, payload = value["ts"], value["stream"], value["payload"]
+        if isinstance(ts, bool) or not isinstance(ts, (int, float)):
+            raise CorruptFixture("frame ts is not a number", file=FEED_NAME, line=number)
+        if not isinstance(stream, str) or not isinstance(payload, dict):
+            raise CorruptFixture(
+                "frame stream or payload has the wrong type", file=FEED_NAME, line=number
+            )
+        frames.append(_Frame(ts=float(ts), stream=stream, payload=payload, line=number))
+    return frames
+
+
+def _plan(frames: list[_Frame]) -> tuple[int, dict[str, deque[dict[str, Any]]], list[_Frame]]:
+    """Split the feed into its watch capacity, its recorded getTransaction responses and the
+    portal and logs frames to replay, in ``(ts, line)`` order."""
+    configs = [frame for frame in frames if frame.stream == CONFIG_STREAM]
+    if len(configs) != 1:
+        raise CorruptFixture("feed must hold exactly one config frame", file=FEED_NAME)
+    config = configs[0]
+    capacity = config.payload.get("watch_capacity")
+    if set(config.payload) != {"watch_capacity"} or type(capacity) is not int or capacity <= 0:
+        raise CorruptFixture(
+            "config frame must hold a positive watch_capacity", file=FEED_NAME, line=config.line
+        )
+    responses: dict[str, deque[dict[str, Any]]] = {}
+    replayed: list[_Frame] = []
+    for frame in sorted(frames, key=lambda item: (item.ts, item.line)):
+        if frame.stream == TRANSACTION_STREAM:
+            signature = frame.payload.get("signature")
+            response = frame.payload.get("response")
+            if (
+                set(frame.payload) != {"signature", "response"}
+                or not isinstance(signature, str)
+                or not isinstance(response, dict)
+            ):
+                raise CorruptFixture(
+                    "transaction frame must hold signature and response",
+                    file=FEED_NAME,
+                    line=frame.line,
+                )
+            responses.setdefault(signature, deque()).append(response)
+        elif frame.stream in (PORTAL_STREAM, LOGS_STREAM):
+            replayed.append(frame)
+        elif frame.stream != CONFIG_STREAM:
+            raise CorruptFixture("feed holds an unknown stream", file=FEED_NAME, line=frame.line)
+    return capacity, responses, replayed
+
+
+class _StreamFrames:
+    """Frame source of one replayed feed. The frame is pushed just before its pump runs."""
+
+    def __init__(self) -> None:
+        self._pending: deque[object] = deque()
+
+    def push(self, frame: object) -> None:
+        self._pending.append(frame)
+
+    async def next_frame(self) -> object:
+        return self._pending.popleft()
+
+    async def reconnect(self) -> None:
+        raise CorruptFixture("a recorded feed cannot reconnect during rebuild", file=FEED_NAME)
+
+
+class _RecordedReads:
+    """The read transport of a rebuild. It answers only from recorded getTransaction responses.
+
+    A read the recording does not hold is noted and refused. The feed then records a gap
+    instead of raising, so the rebuild checks ``unrecorded`` after every frame.
+    """
+
+    def __init__(self, responses: dict[str, deque[dict[str, Any]]]) -> None:
+        self._responses = responses
+        self.unrecorded: list[str] = []
+
+    async def send(self, url: str, frame: dict[str, object]) -> object:
+        method = frame.get("method")
+        params = frame.get("params")
+        signature = params[0] if isinstance(params, list) and params else None
+        queue: deque[dict[str, Any]] | None = None
+        if method == "getTransaction" and isinstance(signature, str):
+            queue = self._responses.get(signature)
+        if not queue:
+            self.unrecorded.append(str(method))
+            raise RuntimeError("no recorded response for this read")
+        return queue.popleft()
+
+
+async def _no_event_consumers(_event: Event) -> None:
+    """A rebuild publishes no events: curve ticks reach the recorder through the bridge."""
+
+
+def _refuse_dead_letter(_event: Event) -> None:
+    raise CorruptFixture("a rebuilt event could not be handed to its consumer", file=FEED_NAME)
+
+
+async def _replay(
+    frames: list[_Frame],
+    *,
+    capacity: int,
+    responses: dict[str, deque[dict[str, Any]]],
+    feed: bytes,
+    gaps: bytes | None,
+    target: Path,
+    scratch: Path,
+) -> None:
+    """Run the recorded portal and logs frames through the live feed code, clocked at each frame.
+
+    Every observation is stamped with its frame's ts, because the clock is set to that ts before
+    the frame is pumped. The rebuilt dataset gets the recorded feed and gaps bytes unchanged, so
+    it is rebuildable in turn.
+    """
+    clock = FixtureClock(0.0)
+    recorder = LiveRecorder(target, clock=clock)
+    bridge = build_observation_bridge(
+        clock=clock,
+        handler=_no_event_consumers,
+        dlq=_refuse_dead_letter,
+        recorder=recorder,
+    )
+    reads = _RecordedReads(responses)
+    boundary = ReadOnlyBoundary(endpoint=_REPLAY_ENDPOINT, transport=reads)
+    # Replay makes no paced reads, so the limiter never waits: a wait would move the clock.
+    limiter = RollingWindowLimiter(clock, limit=len(frames) + 1, window_s=_RATE_WINDOW_S)
+    watch = WatchSet(max_watched_mints=capacity)
+    mintbook = MintBook(watch=watch)
+    portal_frames, logs_frames = _StreamFrames(), _StreamFrames()
+    with closing(SourceSupervisor(clock, make_rng(), path=scratch / "cursor.sqlite")) as supervisor:
+        portal = PortalFeed(
+            boundary=boundary,
+            frames=portal_frames,
+            clock=clock,
+            supervisor=supervisor,
+            mintbook=mintbook,
+            bridge=bridge,
+            limiter=limiter,
+        )
+        logs = LogsFeed(
+            boundary=boundary,
+            frames=logs_frames,
+            clock=clock,
+            supervisor=supervisor,
+            watch=watch,
+            bridge=bridge,
+            limiter=limiter,
+        )
+        for frame in frames:
+            clock.advance_to(frame.ts)
+            if frame.stream == PORTAL_STREAM:
+                portal_frames.push(frame.payload)
+                await portal.pump_once()
+            else:
+                logs_frames.push(frame.payload)
+                await logs.pump_once()
+            if reads.unrecorded:
+                raise CorruptFixture(
+                    "a truncated notification needs a read the recording does not hold",
+                    file=FEED_NAME,
+                    method=reads.unrecorded[0],
+                )
+    leftover = sorted(signature for signature, queue in responses.items() if queue)
+    if leftover:
+        raise CorruptFixture("a recorded transaction response was never requested", file=FEED_NAME)
+    if not target.exists():
+        raise CorruptFixture("the feed yields no curve observations", file=FEED_NAME)
+    _write_new(target / FEED_NAME, feed)
+    if gaps is not None:
+        _write_new(target / GAPS_NAME, gaps)
+    try:
+        recorder.seal()
+    except ValueError:
+        raise CorruptFixture("the feed yields no curve observations", file=FEED_NAME) from None
+
+
+def rebuild_ticks(name: str, *, root: Path) -> Path:
+    """Write ``<name>-rebuilt``: the curve ticks of ``<name>``, derived from its raw feed alone.
+
+    ``feed.jsonl`` is the only input. The derived ``events.jsonl`` is never read, so deleting or
+    corrupting it leaves the output unchanged (owner decision 3). The feed is replayed through
+    the live portal and logs feed code, with the clock at each frame's ts and the watch capacity
+    taken from the recorded config frame. A getTransaction read is answered only from a recorded
+    response; one the recording does not hold refuses the rebuild.
+    """
+    _plain_name(name)
+    source = root / "datasets" / name
+    if not source.is_dir():
+        raise MaintenanceRefused(f"dataset not found: {name}", kind="usage")
+    manifest = _read_manifest(source)
+    if FEED_NAME not in manifest.sha256:
+        raise CorruptFixture("dataset lists no raw feed stream", file=FEED_NAME)
+    feed = _verified_bytes(source, manifest, FEED_NAME)
+    gaps = _verified_bytes(source, manifest, GAPS_NAME) if GAPS_NAME in manifest.sha256 else None
+    capacity, responses, frames = _plan(_parse_feed(feed))
+    target = root / "datasets" / f"{name}-rebuilt"
+    if target.exists():
+        raise MaintenanceRefused(f"target exists: {target.name}", kind="usage")
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            asyncio.run(
+                _replay(
+                    frames,
+                    capacity=capacity,
+                    responses=responses,
+                    feed=feed,
+                    gaps=gaps,
+                    target=target,
+                    scratch=Path(scratch),
+                )
+            )
+        except BaseException:
+            shutil.rmtree(target, ignore_errors=True)
+            raise
     return target
 
 

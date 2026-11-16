@@ -45,7 +45,7 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
-from pumpgrok.replay.maintenance import MaintenanceRefused, import_dataset, trim
+from pumpgrok.replay.maintenance import MaintenanceRefused, import_dataset, rebuild_ticks, trim
 from pumpgrok.supervisor.scheduler import run_once_replay
 from pumpgrok.tools import ensure_paper_genesis
 
@@ -189,15 +189,13 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _replay_verb(args: argparse.Namespace, settings: Settings) -> int:
-    """Dataset maintenance: ``replay trim`` and ``replay import`` (16-04).
+    """Dataset maintenance: ``replay trim``, ``replay rebuild-ticks`` and ``replay import``.
 
     Exit codes: 0 on success, printing the written directory as one JSON line; 1 for usage and
     target conflicts; 2 for a ledger that fails verification or holds a row this desk did not
-    record; 4 for a corrupt dataset (CorruptFixture, mapped by the dispatcher). ``replay
-    rebuild-ticks`` is not implemented in this release and exits 5.
+    record; 4 for a corrupt dataset or a rebuild read the recording does not hold (CorruptFixture,
+    mapped by the dispatcher).
     """
-    if args.cmd == "rebuild-ticks":
-        return _not_implemented("replay rebuild-ticks")
     root = PAPER_LEDGER_PATH.parent
     try:
         if args.cmd == "trim":
@@ -208,6 +206,8 @@ def _replay_verb(args: argparse.Namespace, settings: Settings) -> int:
                 seed=settings.replay.seed,
                 mints_with_orders=lambda directory: _mints_with_orders(directory, settings),
             )
+        elif args.cmd == "rebuild-ticks":
+            written = rebuild_ticks(args.dataset, root=root)
         else:
             written = import_dataset(Path(args.source), name=args.dataset, root=root)
     except MaintenanceRefused as exc:
