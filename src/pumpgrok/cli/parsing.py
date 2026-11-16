@@ -282,9 +282,7 @@ def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
     trim = replay_cmd.add_parser("trim", help="trim a dataset: mints with fills plus 5 percent")
-    trim.add_argument(
-        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
-    )
+    trim.add_argument("--dataset", required=True, metavar="NAME", help="dataset under var/datasets")
     trim.add_argument(
         "--max-events",
         required=True,
@@ -312,9 +310,7 @@ def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
         metavar="LEDGER",
         help="ledger.sqlite recorded by this desk (source paper)",
     )
-    imported.add_argument(
-        "--dataset", required=True, metavar="NAME", help="dataset name to write"
-    )
+    imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
 
 
 def build_parser() -> argparse.ArgumentParser:

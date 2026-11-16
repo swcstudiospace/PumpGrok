@@ -137,16 +137,8 @@ def section_from_events(
         return ""
     prefix = [event for event in events if str(event.get("ts_utc", "")) < end]
     book = round_trips(prefix, refs)
-    seq_ts = {
-        int(event["seq"]): str(event.get("ts_utc", ""))
-        for event in prefix
-        if "seq" in event
-    }
-    closed = tuple(
-        trip
-        for trip in book.closed
-        if start <= seq_ts.get(trip.closed_seq, "") < end
-    )
+    seq_ts = {int(event["seq"]): str(event.get("ts_utc", "")) for event in prefix if "seq" in event}
+    closed = tuple(trip for trip in book.closed if start <= seq_ts.get(trip.closed_seq, "") < end)
     if not any(trip.strategy != UNATTRIBUTED for trip in closed):
         return ""
     window = RoundTrips(closed=closed, open_positions=())

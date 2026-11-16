@@ -135,9 +135,7 @@ def read_ticket_refs_readonly(ledger_path: Path) -> dict[str, str]:
     uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
     db = sqlite3.connect(uri, uri=True)
     try:
-        rows = db.execute(
-            "SELECT ticket_id, strategy_id FROM strategy_ticket_refs"
-        ).fetchall()
+        rows = db.execute("SELECT ticket_id, strategy_id FROM strategy_ticket_refs").fetchall()
     except sqlite3.Error:
         return {}
     finally:
@@ -155,7 +153,6 @@ def _inclusive_days(day: str, last: str) -> Decimal:
         if count > 4000:
             raise ValueError(f"report span {day} to {last} is not a calendar range")
     return Decimal(count)
-
 
 
 def day_start(day: str) -> str:

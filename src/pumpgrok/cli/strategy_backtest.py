@@ -86,9 +86,7 @@ def render_strategy_report(
         parts.append(f"{name}: {_metric_text(getattr(metrics, name))}\n")
     flag = "true" if metrics.annualization_valid else "false"
     parts.append(f"annualization_valid: {flag}\n")
-    parts.append(
-        "note: undefined values are None; annualization_valid is a flag, not a metric\n"
-    )
+    parts.append("note: undefined values are None; annualization_valid is a flag, not a metric\n")
     body = "".join(parts)
     body.encode("ascii")
     return body

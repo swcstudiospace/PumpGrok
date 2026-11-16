@@ -39,9 +39,7 @@ def _merge_key(event: Mapping[str, Any], index: int) -> tuple[float, int, int]:
 class DatasetCurveSource:
     """Tick events in merge order, indexed per mint for window queries."""
 
-    def __init__(
-        self, events: Sequence[Mapping[str, Any]], *, clock: Clock | None = None
-    ) -> None:
+    def __init__(self, events: Sequence[Mapping[str, Any]], *, clock: Clock | None = None) -> None:
         ordered = sorted(enumerate(events), key=lambda item: _merge_key(item[1], item[0]))
         self._events: tuple[Mapping[str, Any], ...] = tuple(event for _, event in ordered)
         by_mint: dict[str, list[_Row]] = {}
