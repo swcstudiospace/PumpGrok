@@ -1,10 +1,10 @@
 # Phase 16 gap and grading thresholds: proposal
 
-Status: APPROVED 2026-11-16 by the owner for the four values below: long dataset, gap-light maximum single gap, gap-light maximum total gap time, and cooldown. Open question 1 (synthetic definition) is not answered by this approval. The flatten haircut is fixed by ROADMAP criterion 4 and is not part of the approval. Values enter code only as APPROVED_THRESHOLDS in grading.py.
+Status: APPROVED 2026-11-16 by the owner for the four values below: long dataset, gap-light maximum single gap, gap-light maximum total gap time, and cooldown. Open question 1 (synthetic definition) is answered 2026-11-16: synthetic and hand-authored data, including datasets built in tmp_path, is never promotion evidence. The flatten haircut is fixed by ROADMAP criterion 4 and is not part of the approval. Values enter code only as APPROVED_THRESHOLDS in grading.py.
 
 Owner decision 5 (2026-11-15): CHIEF drafts the gap and grading thresholds and the cooldown, with a reason for each. The owner approves before implementation.
 
-Blocks: the threshold approval clears the plan 16-03 Task 1 checkpoint, except open question 1 (see Approval record). Transitively, it clears the threshold blocker for 16-05, 16-06 and 16-07; their remaining order is the plan sequence in 16-PLANS-INDEX.md.
+Blocks: none. The approval and the open question 1 answer clear the plan 16-03 checkpoint. Transitively, they clear the threshold blocker for 16-05, 16-06 and 16-07; their remaining order is the plan sequence in 16-PLANS-INDEX.md.
 
 Rule: no threshold value appears in `src/pumpgrok/backtest/` or `tests/backtest/` outside `APPROVED_THRESHOLDS`. The approved values are defined once, as `APPROVED_THRESHOLDS` in `src/pumpgrok/backtest/grading.py`. Tests import that object. No other copy is written.
 
@@ -22,13 +22,13 @@ Gap-light has two limits. A single gap over 300 s is a gap. Total gap time over 
 
 ## Open questions for the owner
 
-1. The definition of "synthetic". 16-03 asks whether it covers datasets built in `tmp_path`. CHIEF proposes yes: such datasets are synthetic and never grade as promotion evidence.
+1. The definition of "synthetic". 16-03 asked whether it covers datasets built in `tmp_path`. CHIEF proposed yes. Answered 2026-11-16: yes, and hand-authored data is covered too. Such data is never promotion evidence and is graded as such.
 2. Whether the total gap budget should be a percentage (proposed) or a fixed number of seconds.
 3. Whether the cooldown counts from gap end (proposed) or gap start.
 
 ## Approval record
 
-Filled 2026-11-16. Every row except open question 1 is complete. Approved values enter code only after this table is complete, so open question 1 must be answered first.
+Every row is complete. Open question 1 was answered 2026-11-16.
 
 | Parameter | Owner answer (approve, amend to a value with reason, or reject) | Date |
 |---|---|---|
@@ -36,6 +36,6 @@ Filled 2026-11-16. Every row except open question 1 is complete. Approved values
 | Gap-light: maximum single gap | Approved as proposed: 300 s. | 2026-11-16 |
 | Gap-light: maximum total gap time | Approved as proposed: at most 5 percent of the window duration. | 2026-11-16 |
 | Cooldown after a gap | Approved as proposed: 300 s, counted from gap end. | 2026-11-16 |
-| Open question 1 (synthetic definition) | OPEN. Not answered. CHIEF's proposal (tmp_path datasets are synthetic) is not confirmed by the owner. | |
+| Open question 1 (synthetic definition) | Answered: synthetic and hand-authored data, including datasets built in `tmp_path`, is never promotion evidence; it is graded as such. | 2026-11-16 |
 | Open question 2 (percentage or seconds) | Answered by the approved value: percentage of the window (row 3). | 2026-11-16 |
 | Open question 3 (cooldown start) | Answered by the approved value: counted from gap end (row 4). | 2026-11-16 |

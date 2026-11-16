@@ -1,6 +1,6 @@
 # Phase 16 plans index: Backtest v2 and autonomous evaluation
 
-Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved (16-GAP-THRESHOLDS-PROPOSAL.md); open question 1 (synthetic definition) is not answered. No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index.
+Status: plan set drafted, not executed. Owner decisions of 2026-11-15 and owner confirmations of 2026-11-16 are recorded below and in each affected plan. The gap and grading thresholds and the cooldown are approved, and open question 1 (synthetic definition) is answered 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md). The Metrics v2 set is seven metrics, confirmed 2026-11-16. No code, test, fixture, pin, gate or CHANGELOG entry has been changed by this index.
 
 Sources of truth:
 - `.planning/ROADMAP.md` Phase 16 section (goal, depends-on, requirements, success criteria 1 to 13, deliverables, plan ids 16-01 to 16-07, six waves).
@@ -13,7 +13,7 @@ Sources of truth:
 
 ## Findings the owner must see
 
-1. **Spec gaps, decided where marked.** The repo docs define none of the following: `replay import`, `live serve`, the Metrics v2 formula set, the gap and grading thresholds (long dataset, gap-light, cooldown), the semantics of `replay rebuild-ticks` beyond its one-line description, and the channel by which a backtest result is published to the promotion gate. The owner decided `replay import`, `live serve`, `replay rebuild-ticks`, the Metrics v2 set and the publication channel on 2026-11-15 (section "Owner decisions 2026-11-15"). The gap and grading thresholds and the cooldown were approved on 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md, approval record). Open question 1 (synthetic definition) is not yet answered, so no value enters code yet.
+1. **Spec gaps, decided where marked.** The repo docs define none of the following: `replay import`, `live serve`, the Metrics v2 formula set, the gap and grading thresholds (long dataset, gap-light, cooldown), the semantics of `replay rebuild-ticks` beyond its one-line description, and the channel by which a backtest result is published to the promotion gate. The owner decided `replay import`, `live serve`, `replay rebuild-ticks`, the Metrics v2 set and the publication channel on 2026-11-15 (section "Owner decisions 2026-11-15"). The gap and grading thresholds and the cooldown were approved on 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md, approval record). Open question 1 (synthetic definition) was answered on 2026-11-16: synthetic and hand-authored data, including tmp_path datasets, is never promotion evidence, so approved values may enter code (16-03).
 2. **Existing promotion path.** `src/pumpgrok/cli/promotion.py` and `src/pumpgrok/upgrade/scheduled.py` (UPG-05: autonomous-paper only, human-invoked) already run a promotion check. BT-13 must feed the existing gate (`upgrade/gate.py`) through `BacktestEvidenceProvider`. It must not add a second promotion or search path (criterion 10).
 3. **Publication event.** The Phase 16 checkpoint says results are "published to the promotion gate as an event". Owner decision 6 (2026-11-15) selects option A: each result is written as an existing ledger JournalNote with NoteKind `verdict`. JournalNote is an existing event type. No new `EventKind`, no new `NoteKind` value and no contract change. The ROADMAP wording and criterion 11 are not edited here. Plan 16-05 carries the decision.
 4. **Stale smoke-10m baseline in other phases.** Phase 15 criterion 14, and Phase 17, 18 and 19 criteria with their CHANGELOG greps, still name `b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d`. The CHANGELOG has recorded `1dffa...` since Phase 14, so those criteria will not pass as written. Owner amendment needed for those phases. Not edited here. Commit 6281a39 records the Phase 15 item as an open owner item.
@@ -28,8 +28,8 @@ Sources of truth:
 | 1 | Replay import accepts only ledgers this desk recorded, verified by hash chain. Anything else is rejected. | 16-04 |
 | 2 | `live serve` runs only the paper root and refuses any live mode. Live stays disabled. | 16-04; 16-07 criterion 13 |
 | 3 | `replay rebuild-ticks` rebuilds only from the recorded raw feed, never from derived data. | 16-04 |
-| 4 | Metrics v2 is the standard set: total return, max drawdown, Sharpe and Sortino annualized, hit rate, profit factor, expectancy. Undefined values are None. Annualization under 7 days is flagged annualization_valid=false. | 16-01; 16-06 |
-| 5 | Gap and grading thresholds and the cooldown: APPROVED 2026-11-16 as proposed in 16-GAP-THRESHOLDS-PROPOSAL.md (open question 1 pending). Values enter code once, as APPROVED_THRESHOLDS, after open question 1 is answered. | 16-03; 16-05, 16-06, 16-07 (unblocked by this approval) |
+| 4 | Metrics v2 is the standard set of seven metrics: total return, max drawdown, Sharpe and Sortino annualized (counted separately), hit rate, profit factor, expectancy. Undefined values are None. Annualization under 7 days is flagged annualization_valid=false, a flag and not a metric. Count confirmed 2026-11-16 (row I). | 16-01; 16-06 |
+| 5 | Gap and grading thresholds and the cooldown: APPROVED 2026-11-16 as proposed in 16-GAP-THRESHOLDS-PROPOSAL.md. Values enter code once, as APPROVED_THRESHOLDS. Open question 1 answered 2026-11-16 (row H). | 16-03; 16-05, 16-06, 16-07 (unblocked by these approvals) |
 | 6 | Promotion-gate publication: option A, the existing journal note path. No new bus event kind. Criterion 11 stays unchanged. | 16-05; 16-07 |
 
 ## Owner confirmations 2026-11-16 (binding for Phase 16)
@@ -38,11 +38,13 @@ Sources of truth:
 |---|---|---|
 | A | Gap and grading thresholds approved as in 16-GAP-THRESHOLDS-PROPOSAL.md: long dataset 7 days; gap-light maximum single gap 300 s; total gap time at most 5 percent of the window; cooldown 300 s from gap end. The 500 bps haircut stays fixed by criterion 4. | 16-03; 16-05; 16-06; 16-07 |
 | B | `run --record` may wrap transports through replay/live_recorder.py without a CHIEF supervisor edit. | 16-04 |
-| C | Metrics v2 readings: total_return is a ratio; total_return_lamports, annualized_return and average_hold_seconds are dropped; expectancy_lamports is a Decimal lamports mean; annualization_valid is included. Count check open: see "Metrics v2 set" notes. | 16-01; 16-06 |
+| C | Metrics v2 readings: total_return is a ratio; total_return_lamports, annualized_return and average_hold_seconds are dropped; expectancy_lamports is a Decimal lamports mean; annualization_valid is included. Count: seven metrics (row I). | 16-01; 16-06 |
 | D | "Recorded by this desk" means source `paper`. | 16-04 |
 | E | live serve is paper-only: no --mode selector; --mode live exits 3; any other --mode value is a usage error. | 16-04; 16-07 |
 | F | An imported ledger is placed and verified, not converted. Replayability of imports is undefined and not decided. | 16-04 |
 | G | Option A publication: JournalNote with NoteKind verdict, whose ledger source must be an existing SOURCES value. 16-05 STOPS if the existing writer cannot record a backtest result under an existing source. | 16-05; 16-07 |
+| H | Open question 1 (synthetic definition) answered: synthetic and hand-authored data, including datasets built in `tmp_path`, is never promotion evidence; it is graded as such. Approved threshold values may enter code. | 16-03; 16-05; 16-06; 16-07 |
+| I | Metrics v2 count: seven metrics (total_return, max_drawdown, sharpe_ratio, sortino_ratio, hit_rate, profit_factor, expectancy_lamports), Sharpe and Sortino counted separately, plus annualization_valid as a flag. Corrects the six-metric wording. | 16-01; 16-06 |
 
 ## Owner decisions in force (Phase 15, binding)
 
@@ -62,7 +64,7 @@ Sources of truth:
 | 1 | 16-01 | Metrics v2 and round trips | RISK | Phase 15 (15-03, 15-07) | true | 2 | BT-08, BT-09 |
 | 1 | 16-04 | Recorder and replay verbs | RISK | Phase 13-01, Phase 14-07 | false | 7 (record half) | REC-03 |
 | 2 | 16-02 | Event source and strategy-aware replay | RISK | 16-01; Phase 15 (15-03, 15-04, 15-06) | true | 5 | BT-12 |
-| 3 | 16-03 | Gap segmentation and evidence grading | RISK | 16-02 | false | 3, 4 | BT-10, BT-11 |
+| 3 | 16-03 | Gap segmentation and evidence grading | RISK | 16-02 | true | 3, 4 | BT-10, BT-11 |
 | 4 | 16-05 | Autonomous scheduler, store, evidence provider | RISK | 16-03 (with 16-01, 16-02) | true | 6 | BT-13 |
 | 5 | 16-06 | Strategy backtest verb and per-strategy report | RISK + JOURNAL | 16-01, 16-02, 16-05 | true | 7 (strategy half), 8, 9 | REC-03, OBS-07 |
 | 6 | 16-07 | Phase close | CHIEF + JOURNAL + RISK | 16-01 to 16-06 | false | 1, 10, 11, 12, 13 | PRC-01, PRC-03, LIV-07 |
@@ -77,7 +79,7 @@ Seat keys: RISK = bot-02-risk, CHIEF = bot-00-chief, JOURNAL = bot-09-journal. E
 |---|---|---|
 | 16-01 | Ready. Metric set decided (decision 4). | none |
 | 16-02 | Ready. Not affected by the decisions. | 16-01 |
-| 16-03 | Partly blocked. Thresholds approved 2026-11-16 (decision 5). Open question 1 (synthetic definition, tmp_path) must be answered before values enter code (16-03 Tasks 2 and 3). | open question 1 answer |
+| 16-03 | Ready. Thresholds approved 2026-11-16 (decision 5); open question 1 answered 2026-11-16 (row H). | none |
 | 16-04 | Ready. Record-wrap question answered 2026-11-16 (approved). | none |
 | 16-05 | Unblocked by the 2026-11-16 approvals. Publication confirmed (option A). Runs after 16-03 lands (plan order). | 16-03 implementation (order only) |
 | 16-06 | Unblocked by the 2026-11-16 approvals. Runs after 16-05 lands. | 16-05 (order only) |
@@ -115,7 +117,7 @@ Criteria: 5. Requirement: BT-12. Read-only use of `supervisor/intent_router.py` 
 
 ### 16-03 Gap segmentation and evidence grading (wave 3, RISK)
 
-File: `16-03-PLAN.md`. Sizing: 3 tasks, 5 files (within budget). Autonomous: false (owner approved thresholds 2026-11-16 before they are committed). Open question 1 (synthetic definition) must be answered before values enter code.
+File: `16-03-PLAN.md`. Sizing: 3 tasks, 5 files (within budget). Autonomous: true (owner approvals of 2026-11-16 recorded; no open question remains).
 
 | File | Seat | Rule |
 |---|---|---|
@@ -126,7 +128,7 @@ File: `16-03-PLAN.md`. Sizing: 3 tasks, 5 files (within budget). Autonomous: fal
 | tests/backtest/test_gaps.py | bot-02-risk | tests/** |
 | .receipts/bot-02-risk/16-03-grading.json | bot-02-risk | .receipts/bot-02-risk/** |
 
-Criteria: 3, 4. Requirements: BT-10, BT-11. Thresholds: APPROVED 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md; owner decision 5); defined once as APPROVED_THRESHOLDS in grading.py after open question 1 is answered. No new fixture directory: gapped and traded-only datasets are built in `tmp_path` and labeled synthetic.
+Criteria: 3, 4. Requirements: BT-10, BT-11. Thresholds: APPROVED 2026-11-16 (16-GAP-THRESHOLDS-PROPOSAL.md; owner decision 5); defined once as APPROVED_THRESHOLDS in grading.py. Synthetic and hand-authored data, including datasets built in tmp_path, is never promotion evidence (owner answer 2026-11-16). No new fixture directory: gapped and traded-only datasets are built in `tmp_path` and graded as synthetic.
 
 ### 16-04 Recorder and replay verbs (wave 1, RISK)
 
@@ -228,7 +230,7 @@ Criterion 12 is amended per owner: the smoke-10m baseline is `1dffa78448f720b98a
 | BT-13 | 16-05 | 6 |
 | OBS-07 | 16-06 | 9 |
 
-Uncovered: none in the sense of unassigned work. Open after the 2026-11-16 owner approvals: open question 1 of 16-GAP-THRESHOLDS-PROPOSAL.md (synthetic definition; values enter code only after it is answered), and the count check on the Metrics v2 set (see its notes). Every other item is decided; see "Decided definitions and pending items".
+Uncovered: none in the sense of unassigned work. Nothing is open after the 2026-11-16 owner answers (rows H and I of the confirmations table): open question 1 of 16-GAP-THRESHOLDS-PROPOSAL.md is answered, and the Metrics v2 count is seven. Every item is decided; see "Decided definitions and pending items".
 
 ## Decided definitions and pending items
 
@@ -253,11 +255,11 @@ Notes:
 - Money fields are int lamports, except expectancy_lamports, which is a mean. Ratios are Decimal. Undefined is None, never 0 or infinity.
 - Annualization basis is 365 days, the constant in backtest/metrics.py. The 7-day floor is the value BT-08 names.
 - Confirmed 2026-11-16 by the owner: total_return is a ratio; total_return_lamports, annualized_return and average_hold_seconds are dropped; expectancy_lamports is a Decimal lamports mean; the set is the metrics named above plus annualization_valid.
-- OPEN count check (2026-11-16): the owner's confirmation describes six named metrics. Decision 4 names seven (Sharpe and Sortino counted separately), and the table keeps seven. No metric is removed until the owner confirms the count.
+- Count confirmed 2026-11-16 by the owner (row I): seven metrics, Sharpe and Sortino counted separately, plus annualization_valid, which is a flag and not a metric. The earlier six-metric reading is withdrawn.
 
 ### Gap and grading thresholds and cooldown (16-03): APPROVED 2026-11-16 (values as proposed), decision 5
 
-Values, reasons and the approval record: 16-GAP-THRESHOLDS-PROPOSAL.md. Approved: long dataset 7 days; gap-light single gap 300 s; total gap time at most 5 percent of the window; cooldown 300 s from gap end. Open question 1 (synthetic definition) is not answered, so values enter code only after it is. The values are then defined once, as APPROVED_THRESHOLDS in src/pumpgrok/backtest/grading.py. The flatten haircut of 500 bps is fixed by ROADMAP criterion 4 and is not part of the approval.
+Values, reasons and the approval record: 16-GAP-THRESHOLDS-PROPOSAL.md. Approved: long dataset 7 days; gap-light single gap 300 s; total gap time at most 5 percent of the window; cooldown 300 s from gap end. Open question 1 (synthetic definition) is answered 2026-11-16 (row H): synthetic and hand-authored data, including datasets built in tmp_path, is never promotion evidence. The values are defined once, as APPROVED_THRESHOLDS in src/pumpgrok/backtest/grading.py. The flatten haircut of 500 bps is fixed by ROADMAP criterion 4 and is not part of the approval.
 
 ### Verb specs (16-04): decided, decisions 1 to 3
 
@@ -302,7 +304,7 @@ Confirmed by the owner 2026-11-16: the JournalNote's ledger `source` must be one
 
 1. 16-01 and 16-04 in parallel (RISK). The record-wrap answer was received 2026-11-16.
 2. 16-02 (RISK).
-3. 16-03 (RISK). Threshold approval received 2026-11-16; values enter code only after the open question 1 answer.
+3. 16-03 (RISK). Threshold approval and open question 1 answer received 2026-11-16; unblocked.
 4. 16-05 (RISK). Publication confirmed (option A) 2026-11-16; runs after 16-03.
 5. 16-06 (RISK + JOURNAL).
 6. 16-07 (CHIEF + JOURNAL + RISK): gates, guards, pins, CHANGELOG, live refusal, owner close review.
