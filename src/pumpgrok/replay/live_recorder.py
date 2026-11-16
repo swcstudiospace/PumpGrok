@@ -21,8 +21,10 @@ from pumpgrok.replay.fixtures import (
 
 # Closed feed gaps. The file exists only once a gap has closed.
 GAPS_NAME = "gaps.jsonl"
+# Raw feed frames, one line per frame, appended by record_frame before their observation.
+FEED_NAME = "feed.jsonl"
 # The only data files a live dataset may hold. Any other *.jsonl is refused at seal time.
-_DATA_FILES = (EVENTS_NAME, GAPS_NAME)
+_DATA_FILES = (EVENTS_NAME, GAPS_NAME, FEED_NAME)
 
 
 class DatasetConflict(PumpgrokError):
@@ -150,6 +152,59 @@ def _recover_torn_tail(path: Path) -> int:
     return len(data) - kept
 
 
+def seal_directory(
+    dataset_dir: Path,
+    *,
+    recorded_from_utc: str,
+    recorded_to_utc: str,
+    sources: dict[str, str],
+    notes: str,
+    seed_hint: int = 0,
+) -> None:
+    """Write the manifest for a directory of data files, then accept it with the replay loader.
+
+    The one sealing path: LiveRecorder.seal and the replay maintenance verbs both call it. The
+    manifest is linked into place only after its bytes are durable; a dataset the loader refuses
+    has its manifest removed again.
+    """
+    linked = False
+    try:
+        manifest = FixtureManifest(
+            dataset=dataset_dir.name,
+            recorded_from_utc=recorded_from_utc,
+            recorded_to_utc=recorded_to_utc,
+            seed_hint=seed_hint,
+            sources=sources,
+            sha256=_digest_data_files(dataset_dir),
+            notes=notes,
+        )
+        encoded = (manifest.model_dump_json(indent=2) + "\n").encode("utf-8")
+        with tempfile.NamedTemporaryFile(dir=dataset_dir, delete=False) as stream:
+            temporary = Path(stream.name)
+            try:
+                if stream.write(encoded) != len(encoded):
+                    raise OSError("incomplete manifest write")
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.link(temporary, dataset_dir / MANIFEST_NAME)
+                linked = True
+            finally:
+                temporary.unlink(missing_ok=True)
+        # The replay loader is the acceptance test: a dataset it refuses is never sealed.
+        load_dataset(dataset_dir)
+        _sync_directory(dataset_dir)
+    except BaseException:
+        if linked:
+            try:
+                (dataset_dir / MANIFEST_NAME).unlink()
+                _sync_directory(dataset_dir)
+            except BaseException as cleanup_error:
+                raise RuntimeError(
+                    "manifest rollback durability is indeterminate"
+                ) from cleanup_error
+        raise
+
+
 class LiveRecorder:
     """Append ticks before publication and seal their exact bytes with a manifest."""
 
@@ -231,6 +286,30 @@ class LiveRecorder:
         data = (json.dumps(line, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
         self._persist(GAPS_NAME, data)
 
+    def record_frame(self, raw: dict[str, object]) -> None:
+        """Durably append one raw feed frame to feed.jsonl, stamped with the recorder's clock.
+
+        ``raw`` holds exactly ``stream`` (the nonempty name of the feed that received the frame)
+        and ``payload`` (the decoded JSON object as received). Ordering contract: the frame is
+        durable before the observation it produces is appended to events.jsonl, so the caller
+        records the frame before the frame reaches the bridge.
+        """
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if set(raw) != {"stream", "payload"}:
+            raise ValueError("a frame holds exactly stream and payload")
+        stream, payload = raw["stream"], raw["payload"]
+        if not isinstance(stream, str) or not stream.strip():
+            raise ValueError("stream must be a nonempty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a JSON object")
+        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        line = {"ts": self.clock.now(), "stream": stream, "payload": payload}
+        data = (
+            json.dumps(line, separators=(",", ":"), sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+        self._persist(FEED_NAME, data)
+
     def _claim_dataset(self) -> None:
         """Refuse a directory holding foreign entries before this recorder's first write."""
         if not self._claimed:
@@ -256,43 +335,17 @@ class LiveRecorder:
             raise RuntimeError("recorder is sealed or failed")
         if self._first_utc is None or self._last_utc is None:
             raise ValueError("cannot seal a dataset without observations")
-        linked = False
         try:
             for ledger in ledgers:
                 ledger.close()
-            manifest = FixtureManifest(
-                dataset=self.dataset_dir.name,
+            seal_directory(
+                self.dataset_dir,
                 recorded_from_utc=self._first_utc,
                 recorded_to_utc=self._last_utc,
-                seed_hint=0,
                 sources=self._sources,
-                sha256=_digest_data_files(self.dataset_dir),
                 notes="Read-only curve observations",
             )
-            encoded = (manifest.model_dump_json(indent=2) + "\n").encode("utf-8")
-            with tempfile.NamedTemporaryFile(dir=self.dataset_dir, delete=False) as stream:
-                temporary = Path(stream.name)
-                try:
-                    if stream.write(encoded) != len(encoded):
-                        raise OSError("incomplete manifest write")
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                    os.link(temporary, self.dataset_dir / MANIFEST_NAME)
-                    linked = True
-                finally:
-                    temporary.unlink(missing_ok=True)
-            # The replay loader is the acceptance test: a dataset it refuses is never sealed.
-            load_dataset(self.dataset_dir)
-            _sync_directory(self.dataset_dir)
         except BaseException:
             self._failed = True
-            if linked:
-                try:
-                    (self.dataset_dir / MANIFEST_NAME).unlink()
-                    _sync_directory(self.dataset_dir)
-                except BaseException as cleanup_error:
-                    raise RuntimeError(
-                        "manifest rollback durability is indeterminate"
-                    ) from cleanup_error
             raise
         self._sealed = True

@@ -236,10 +236,56 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
+    _add_replay(verbs, mode_option)
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {text!r}")
+    return value
+
+
+def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    replay_cmd.add_parser("trim", help="trim a replay dataset")
-    replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    trim = replay_cmd.add_parser("trim", help="trim a dataset: mints with fills plus 5 percent")
+    trim.add_argument(
+        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
+    )
+    trim.add_argument(
+        "--max-events",
+        required=True,
+        type=_positive_int,
+        dest="max_events",
+        metavar="N",
+        help="keep the last N kept events",
+    )
+    trim.add_argument(
+        "--keep-mints-with-fills",
+        required=True,
+        action="store_true",
+        dest="keep_mints_with_fills",
+        help="keep every event of a mint with an order (the only keep rule)",
+    )
+    rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    rebuild.add_argument(
+        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
+    )
+    imported = replay_cmd.add_parser("import", help="import a ledger this desk recorded")
+    imported.add_argument(
+        "--from",
+        required=True,
+        dest="source",
+        metavar="LEDGER",
+        help="ledger.sqlite recorded by this desk (source paper)",
+    )
+    imported.add_argument(
+        "--dataset", required=True, metavar="NAME", help="dataset name to write"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

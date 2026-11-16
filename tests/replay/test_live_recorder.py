@@ -19,7 +19,7 @@ from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay import live_recorder as recorder_module
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import EVENTS_NAME, CorruptFixture, load_dataset, read_jsonl
-from pumpgrok.replay.live_recorder import GAPS_NAME, DatasetConflict, LiveRecorder
+from pumpgrok.replay.live_recorder import FEED_NAME, GAPS_NAME, DatasetConflict, LiveRecorder
 
 
 async def _handle(_event: Event) -> None:
@@ -450,3 +450,38 @@ async def test_open_gap_is_closed_and_recorded_when_the_dataset_seals(tmp_path: 
     ]
     dataset = load_dataset(dataset_dir)
     assert set(dataset.manifest.sha256) == {EVENTS_NAME, GAPS_NAME}
+
+
+def test_record_frame_appends_raw_frames_and_seals_them_in_the_manifest(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    recorder = LiveRecorder(tmp_path, clock=clock)
+    frame = {"txType": "create", "mint": "MintAAAA1111111111111111111111111111111111"}
+    recorder.record_frame({"stream": "pumpportal", "payload": frame})
+    observation = CurveObservation(
+        mint="MintAAAA1111111111111111111111111111111111",
+        ts_utc=clock.utc_iso(),
+        s_lamports=42_000_000_000,
+        t_units=764_608_076_000_000,
+        complete=False,
+        source="fixture-rpc",
+    )
+    recorder.record(observation)
+    recorder.seal()
+
+    assert read_jsonl(tmp_path / FEED_NAME) == [
+        {"ts": 1_767_225_600.0, "stream": "pumpportal", "payload": frame}
+    ]
+    dataset = load_dataset(tmp_path)
+    assert set(dataset.manifest.sha256) == {EVENTS_NAME, FEED_NAME}
+
+
+def test_record_frame_refuses_a_malformed_frame_without_writing(tmp_path: Path) -> None:
+    clock = FixtureClock(1_767_225_600.0)
+    recorder = LiveRecorder(tmp_path, clock=clock)
+    with pytest.raises(ValueError):
+        recorder.record_frame({"stream": "pumpportal"})
+    with pytest.raises(ValueError):
+        recorder.record_frame({"stream": "pumpportal", "payload": [1, 2]})
+    with pytest.raises(ValueError):
+        recorder.record_frame({"stream": " ", "payload": {}})
+    assert not (tmp_path / FEED_NAME).exists()
