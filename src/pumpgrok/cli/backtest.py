@@ -339,7 +339,8 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     body; it dispatches to the strategy backtest handler.
     """
     if getattr(args, "strategy", None) is not None:
-        from pumpgrok.cli.strategy_backtest import strategy_backtest_verb
+        # Import cycle: strategy_backtest imports _backtest_dataset from this module.
+        from pumpgrok.cli.strategy_backtest import strategy_backtest_verb  # noqa: PLC0415
 
         return strategy_backtest_verb(args, settings)
     plan = _backtest_plan(args, settings)

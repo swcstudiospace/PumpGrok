@@ -14,6 +14,7 @@ import os
 import shutil
 import sqlite3
 import struct
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +28,9 @@ from pumpgrok.datafeed.logs import PUMP_PROGRAM_ID
 from pumpgrok.datafeed.transport import RecordingJsonRpc
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay import maintenance
-from pumpgrok.replay.clock import WallClock, format_ts_utc, parse_ts_utc
+from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, CorruptFixture, load_dataset
-from pumpgrok.replay.live_recorder import FEED_NAME, GAPS_NAME, seal_directory
+from pumpgrok.replay.live_recorder import FEED_NAME, GAPS_NAME, LiveRecorder, seal_directory
 
 _START = 1_800_000_000.0
 _ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -154,9 +155,7 @@ def _scenario() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         _logs(_START + 2, "sig-a", _trade_logs(_trade_event(MINT_RAW, vsol=30, vtok=700))),
         _logs(_START + 3, "sig-b", _trade_logs(_trade_event(OTHER_RAW, vsol=40, vtok=800))),
         _logs(_START + 4, "sig-c", [f"Program {PUMP_PROGRAM_ID} invoke [1]", _TRUNCATED]),
-        _transaction(
-            _START + 4, "sig-c", _trade_logs(_trade_event(MINT_RAW, vsol=31, vtok=690))
-        ),
+        _transaction(_START + 4, "sig-c", _trade_logs(_trade_event(MINT_RAW, vsol=31, vtok=690))),
     ]
     ticks = [_tick(_START + 2, MINT, 30, 700), _tick(_START + 4, MINT, 31, 690)]
     return frames, ticks
@@ -520,8 +519,10 @@ class _Logged:
         self.inner.seal(*ledgers)
 
 
-def _open_factory(frames: dict[str, list[dict[str, Any]]]):
-    async def _open(url: str, *, stream: str):
+def _open_factory(
+    frames: dict[str, list[dict[str, Any]]],
+) -> Callable[..., AsyncIterator[dict[str, Any]]]:
+    async def _open(url: str, *, stream: str) -> AsyncIterator[dict[str, Any]]:
         for frame in frames[stream]:
             yield frame
 
@@ -539,10 +540,8 @@ def _install_fakes(
     return fake
 
 
-def _logging_factory(holder: dict[str, _Logged]):
+def _logging_factory(holder: dict[str, _Logged]) -> Callable[..., _Logged]:
     def _factory(dataset_dir: Path, *, clock: Any) -> _Logged:
-        from pumpgrok.replay.live_recorder import LiveRecorder
-
         logged = _Logged(LiveRecorder(dataset_dir, clock=clock))
         holder["logged"] = logged
         return logged
@@ -551,7 +550,10 @@ def _logging_factory(holder: dict[str, _Logged]):
 
 
 def _secret_create() -> dict[str, Any]:
-    payload = _portal_create(0.0, MINT)["payload"]
+    raw = _portal_create(0.0, MINT)["payload"]
+    if not isinstance(raw, dict):
+        raise AssertionError("portal create payload is not an object")
+    payload: dict[str, Any] = raw
     payload["uri"] = (
         "https://example.invalid/meta?api-key="
         + _QUERY_SECRET

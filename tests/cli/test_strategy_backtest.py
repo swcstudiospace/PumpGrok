@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,16 @@ from pumpgrok.backtest import manifest as backtest_manifest
 from pumpgrok.cli import main as cli_main
 from pumpgrok.cli.errors import UsageError
 from pumpgrok.cli.parsing import build_parser
-from tests.cli.test_backtest_verb_characterization import EXPECTED_REPORT, FIXED_CODE_VERSION
+
+_CHAR_PATH = Path(__file__).with_name("test_backtest_verb_characterization.py")
+_CHAR_SPEC = importlib.util.spec_from_file_location(
+    "test_backtest_verb_characterization", _CHAR_PATH
+)
+assert _CHAR_SPEC is not None and _CHAR_SPEC.loader is not None
+_CHAR_MOD = importlib.util.module_from_spec(_CHAR_SPEC)
+_CHAR_SPEC.loader.exec_module(_CHAR_MOD)
+EXPECTED_REPORT = _CHAR_MOD.EXPECTED_REPORT
+FIXED_CODE_VERSION = _CHAR_MOD.FIXED_CODE_VERSION
 
 _METRIC_NAMES = (
     "total_return",
@@ -39,9 +49,7 @@ def _run(
 
 def test_strategy_flag_belongs_to_backtest_only() -> None:
     parser = build_parser()
-    parsed = parser.parse_args(
-        ["backtest", "--fixture", "smoke", "--strategy", "legacy_screening"]
-    )
+    parsed = parser.parse_args(["backtest", "--fixture", "smoke", "--strategy", "legacy_screening"])
     assert parsed.strategy == "legacy_screening"
     assert parser.parse_args(["backtest", "--fixture", "smoke"]).strategy is None
     with pytest.raises(UsageError):

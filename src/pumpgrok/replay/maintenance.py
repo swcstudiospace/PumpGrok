@@ -56,8 +56,8 @@ from pumpgrok.replay.live_recorder import (
 from pumpgrok.replay.rng import make_rng
 
 __all__ = [
-    "MaintenanceRefused",
     "TRIM_KEEP_FRACTION",
+    "MaintenanceRefused",
     "import_dataset",
     "rebuild_ticks",
     "trim",
@@ -108,6 +108,30 @@ def _write_new(path: Path, data: bytes) -> None:
         os.fsync(stream.fileno())
 
 
+def _select_kept(
+    events_bytes: bytes,
+    events: tuple[dict[str, Any], ...],
+    orders: frozenset[str],
+    seed: int,
+    max_events: int,
+) -> list[tuple[bytes, dict[str, Any]]]:
+    """Keep order-mint events and a seeded fraction of the rest, then the tail."""
+    lines = events_bytes.split(b"\n")
+    if lines and lines[-1] == b"":
+        lines.pop()
+    if len(lines) != len(events):
+        raise CorruptFixture("event line count does not match the loaded events", file=EVENTS_NAME)
+    rng = make_rng(seed)
+    kept: list[tuple[bytes, dict[str, Any]]] = []
+    for raw, event in zip(lines, events, strict=True):
+        if event.get("mint") in orders or rng.random() < TRIM_KEEP_FRACTION:
+            kept.append((raw, event))
+    kept = kept[-max_events:]
+    if not kept:
+        raise MaintenanceRefused("trim keeps no events", kind="usage")
+    return kept
+
+
 def trim(
     name: str,
     *,
@@ -133,21 +157,7 @@ def trim(
     dataset = load_dataset(source)
     manifest = dataset.manifest
     events_bytes = _verified_bytes(source, manifest, EVENTS_NAME)
-    lines = events_bytes.split(b"\n")
-    if lines and lines[-1] == b"":
-        lines.pop()
-    if len(lines) != len(dataset.events):
-        raise CorruptFixture("event line count does not match the loaded events", file=EVENTS_NAME)
-
-    orders = mints_with_orders(source)
-    rng = make_rng(seed)
-    kept: list[tuple[bytes, dict[str, Any]]] = []
-    for raw, event in zip(lines, dataset.events, strict=True):
-        if event.get("mint") in orders or rng.random() < TRIM_KEEP_FRACTION:
-            kept.append((raw, event))
-    kept = kept[-max_events:]
-    if not kept:
-        raise MaintenanceRefused("trim keeps no events", kind="usage")
+    kept = _select_kept(events_bytes, dataset.events, mints_with_orders(source), seed, max_events)
 
     target = root / "datasets" / f"{name}-trimmed"
     if target.exists():
@@ -379,7 +389,7 @@ async def _replay(
     leftover = sorted(signature for signature, queue in responses.items() if queue)
     if leftover:
         raise CorruptFixture("a recorded transaction response was never requested", file=FEED_NAME)
-    if not target.exists():
+    if not await asyncio.to_thread(target.exists):
         raise CorruptFixture("the feed yields no curve observations", file=FEED_NAME)
     _write_new(target / FEED_NAME, feed)
     if gaps is not None:

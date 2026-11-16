@@ -32,6 +32,8 @@ from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.units import sol_to_lamports
+from pumpgrok.datafeed import feed_loop
+from pumpgrok.datafeed import transport as datafeed_transport
 from pumpgrok.doctor import (
     doctor_report,
     event_mode_problems,
@@ -42,10 +44,11 @@ from pumpgrok.doctor import (
 )
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.replay.clock import WallClock
+from pumpgrok.replay.maintenance import MaintenanceRefused, import_dataset, rebuild_ticks, trim
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
-from pumpgrok.replay.maintenance import MaintenanceRefused, import_dataset, rebuild_ticks, trim
 from pumpgrok.supervisor.scheduler import run_once_replay
 from pumpgrok.tools import ensure_paper_genesis
 
@@ -68,9 +71,6 @@ def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
     """Serve the live-data paper root. --mode live never reaches this handler."""
-    from pumpgrok.datafeed import feed_loop
-    from pumpgrok.datafeed import transport as datafeed_transport
-    from pumpgrok.replay.clock import WallClock
 
     endpoint = args.rpc
     try:
