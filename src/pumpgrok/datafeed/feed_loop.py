@@ -14,7 +14,7 @@ import asyncio
 import signal
 import tempfile
 from collections import deque
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, closing
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -50,8 +50,26 @@ _RATE_WINDOW_S = 10.0
 _MAX_AGE_S = 10.0
 _MAX_OBSERVATIONS = 4
 
+
+class _CycleCount:
+    """Paper cycles finished by the latest serve_once. Compared as an int."""
+
+    __slots__ = ("value",)
+
+    def __init__(self) -> None:
+        self.value = 0
+
+    def __eq__(self, other: object) -> bool:
+        return self.value == other
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __int__(self) -> int:
+        return self.value
+
+
 # How many paper cycles the most recent serve_once call completed.
-cycles_run = 0
+cycles_run = _CycleCount()
 
 _CLOSED = object()
 _WAIT = object()
@@ -147,6 +165,14 @@ async def _pull(agen: AsyncIterator[dict[str, object]], clock: Clock, seconds: f
         return _WAIT
 
 
+async def _aclose(agen: AsyncIterator[dict[str, object]]) -> None:
+    """Close an async generator. aiter() is typed as AsyncIterator, which has no aclose."""
+    close = getattr(agen, "aclose", None)
+    if close is None:
+        return
+    await close()
+
+
 async def _apply(
     feed: PortalFeed | LogsFeed,
     frames: _PushFrames,
@@ -162,6 +188,7 @@ async def _take_portal(
     seconds: float,
     feed: PortalFeed,
     frames: _PushFrames,
+    *,
     mints: frozenset[str] | None,
 ) -> object:
     """Pump one ready portal frame. Returns closed, wait, or the handled frame."""
@@ -214,7 +241,7 @@ async def _pump(
             if portal_open:
                 slice_s = min(_POLL_S, remaining) if logs_open else remaining
                 status = await _take_portal(
-                    portal_agen, clock, slice_s, portal, portal_frames, mints
+                    portal_agen, clock, slice_s, portal, portal_frames, mints=mints
                 )
                 if status is _CLOSED:
                     portal_open = False
@@ -225,8 +252,8 @@ async def _pump(
                 slice_s = min(_POLL_S, left) if portal_open else left
                 logs_open = await _take_logs(logs_agen, clock, slice_s, logs, logs_frames)
     finally:
-        await portal_agen.aclose()
-        await logs_agen.aclose()
+        await _aclose(portal_agen)
+        await _aclose(logs_agen)
 
 
 async def _record_session(
@@ -247,9 +274,7 @@ async def _record_session(
 ) -> Path:
     pinned = PinnedClock(clock)
     recorder = recorder_factory(dataset_dir, clock=pinned)
-    recorder.record_frame(
-        {"stream": CONFIG_STREAM, "payload": {"watch_capacity": WATCH_CAPACITY}}
-    )
+    recorder.record_frame({"stream": CONFIG_STREAM, "payload": {"watch_capacity": WATCH_CAPACITY}})
     rpc = RecordingJsonRpc(endpoint, transport, recorder, pinned)
     started = pinned.monotonic()
     deadline = started + duration_s
@@ -374,7 +399,6 @@ def record_session(
 
 async def _paper_cycle(root: object) -> None:
     """One paper cycle: the two portal subscriptions and one logs subscription."""
-    global cycles_run
     boundary = root.boundary  # type: ignore[attr-defined]
     await boundary.portal("subscribeNewToken")
     await boundary.portal("subscribeMigration")
@@ -382,7 +406,7 @@ async def _paper_cycle(root: object) -> None:
         "logsSubscribe",
         [{"mentions": [PUMP_PROGRAM_ID]}, {"commitment": "confirmed"}],
     )
-    cycles_run += 1
+    cycles_run.value += 1
 
 
 async def _until_stopped(root: object, clock: Clock) -> None:
@@ -460,8 +484,7 @@ def serve_once(
     ``once`` is exactly one paper cycle. Without it, the same cycle repeats
     until SIGTERM or SIGINT. Returns 0. ``cycles_run`` is the count from this call.
     """
-    global cycles_run
-    cycles_run = 0
+    cycles_run.value = 0
     asyncio.run(
         _serve(
             endpoint=endpoint,

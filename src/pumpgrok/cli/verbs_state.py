@@ -46,6 +46,8 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
+from pumpgrok.datafeed import feed_loop
+from pumpgrok.datafeed import transport as datafeed_transport
 from pumpgrok.doctor import (
     event_mode_problems,
     failing_inputs,
@@ -60,6 +62,7 @@ from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
+from pumpgrok.replay.live_recorder import DatasetConflict
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
@@ -141,9 +144,6 @@ def _parse_mints(raw: str | None) -> frozenset[str] | None:
 
 def _run_record(args: argparse.Namespace, settings: Settings) -> int:
     """Record a live-paper session into var/datasets/<name>/ and print the sealed path."""
-    from pumpgrok.datafeed import feed_loop
-    from pumpgrok.datafeed import transport as datafeed_transport
-    from pumpgrok.replay.live_recorder import DatasetConflict
 
     if args.replay:
         raise UsageError("run --record cannot be combined with --replay")
@@ -186,9 +186,8 @@ def _run_record(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _run(args: argparse.Namespace, settings: Settings) -> int:
-    if getattr(args, "record", None) is not None:
-        return _run_record(args, settings)
+def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int | None, str]:
+    """Exit code that refuses a non-record run before a supervisor starts, plus wake mode."""
     if settings.effective_mode == "live":
         gate = LiveGate(
             mode=settings.effective_mode,
@@ -201,10 +200,10 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
-            return EXIT_LIVE
+            return EXIT_LIVE, settings.events.wake_mode
     refusal = _mode_refusal(args)
     if refusal is not None:
-        return refusal
+        return refusal, settings.events.wake_mode
     wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
     if wake_mode == "event":
         problems = event_mode_problems(installed_job_findings())
@@ -214,7 +213,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 "event mode refused: no supervisor was started",
                 *(f"  - {problem}" for problem in problems),
             )
-            return EXIT_CONFIG
+            return EXIT_CONFIG, wake_mode
     if settings.effective_mode == "paper":
         missing = _paper_start_gate(settings)
         if missing:
@@ -224,7 +223,16 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 "(see `pumpgrok onboarding list`)",
                 *missing,
             )
-            return EXIT_CONFIG
+            return EXIT_CONFIG, wake_mode
+    return None, wake_mode
+
+
+def _run(args: argparse.Namespace, settings: Settings) -> int:
+    if getattr(args, "record", None) is not None:
+        return _run_record(args, settings)
+    blocked, wake_mode = _run_start_block(args, settings)
+    if blocked is not None:
+        return blocked
     if args.serve:
         return _serve_replay_loop(Path(args.replay), settings, wake_mode)
     return _skip_cycle(Path(args.replay), settings, wake_mode)
