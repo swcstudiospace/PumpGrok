@@ -1,0 +1,23 @@
+{
+  "plan": "16-07",
+  "task": "1",
+  "seat": "bot-02-risk",
+  "head": "f05381d",
+  "recorded_by": "orchestrator verification run at f05381d; values copied verbatim; the seat did not rerun them. Written by the orchestrator directly on this seat branch.",
+  "commands": [
+    {"command": "make lint", "exit_code": 0, "result": "pass", "note": "verified at f05381d"},
+    {"command": "make typecheck", "exit_code": 0, "result": "pass", "note": "verified at f05381d"},
+    {"command": "make test", "exit_code": 0, "result": "pass", "note": "coverage TOTAL 91.30 percent; required 89.9 percent; log /tmp/v4-final-test.log"},
+    {"command": "./scripts/check.sh", "exit_code": 0, "result": "pass", "note": "verified at f05381d"},
+    {"command": ".venv/bin/pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 1, "result": "deferred", "note": "roster tools lack an authenticated operator decision in this checkout; criterion 1 deferred to deployment"},
+    {"command": "criterion 10 grid guard: the negated grep written in 16-07-PLAN.md Task 1", "exit_code": 0, "result": "pass", "note": "no matches over src/pumpgrok/engine and src/pumpgrok/backtest"},
+    {"command": ".venv/bin/python -m pytest -o addopts= -q -p no:cacheprovider tests/backtest/test_single_search_engine.py tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "result": "pass", "note": "19 passed in 630.81 s"},
+    {"command": "criterion 2 wording guard: the negated grep written in 16-01-PLAN.md", "exit_code": 0, "result": "pass", "note": "no matches over src/pumpgrok/backtest and src/pumpgrok/reporting"},
+    {"command": "git diff --name-only v4-base -- contracts", "exit_code": 0, "result": "pass", "note": "0 files (criterion 11)"},
+    {"command": ".venv/bin/pumpgrok backtest --fixture smoke-10m, run twice", "exit_code": null, "result": "pass", "note": "exit codes not captured; the two outputs are byte identical (criterion 8)"}
+  ],
+  "deferred": [
+    {"criterion": 1, "command": ".venv/bin/pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke", "exit_code": 1, "source": ".planning/phases/16-backtest-v2-and-autonomous-evaluation/16-PLANS-INDEX.md row J, dated 2026-11-16"}
+  ],
+  "notes": "Criterion 1 is deferred to deployment and is recorded as deferred, not as passed. Lint, typecheck, test and check.sh are not waived."
+}
