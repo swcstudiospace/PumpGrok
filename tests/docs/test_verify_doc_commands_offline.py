@@ -1,4 +1,4 @@
-"""Offline contract for scripts/verify_doc_commands.sh and scripts/probe_curve_layout.py.
+"""Offline contract for scripts/verify_doc_commands.sh and scripts/probe_pump_accounts.py.
 
 Greptile R1 findings 17 and 18. The shell script is run from a throwaway repo
 root holding a copy of itself, so the real CLAUDE.md and AGENTS.md are never
@@ -9,18 +9,26 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import json
 import os
 import shutil
 import stat
+import struct
 import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
+from pumpgrok.replay.clock import FixtureClock
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "verify_doc_commands.sh"
-PROBE = REPO_ROOT / "scripts" / "probe_curve_layout.py"
+PROBE = REPO_ROOT / "scripts" / "probe_pump_accounts.py"
+
+ACCOUNT = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
+ENDPOINT = "https://api.mainnet-beta.solana.com"
+_CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 
 DOCUMENTED_OFFLINE = (
     "uv run pumpgrok doctor",
@@ -101,61 +109,55 @@ def test_documented_offline_command_passes(tmp_path: Path, command: str) -> None
 
 
 def _load_probe() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("probe_curve_layout", PROBE)
+    spec = importlib.util.spec_from_file_location("probe_pump_accounts", PROBE)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def _account_payload(owner: str, disc_hex: str) -> dict:
-    """A getAccountInfo payload whose bytes have the right length and plausible counters."""
-    probe = _load_probe()
-    raw = probe._CURVE_STRUCT.pack(
+def _account_value(owner: str, disc_hex: str) -> dict:
+    """A getAccountInfo value whose bytes have the right length and plausible counters."""
+    raw = _CURVE_STRUCT.pack(
         bytes.fromhex(disc_hex), 30_000_000_000, 1_000_000_000_000, 5_000_000_000, 7, 9, 0
     )
     data = base64.b64encode(raw).decode("ascii")
-    return {
-        "result": {
-            "context": {"slot": 1},
-            "value": {"owner": owner, "data": [data, "base64"]},
-        }
-    }
+    return {"owner": owner, "lamports": 2_039_280, "executable": False, "data": [data, "base64"]}
 
 
 @pytest.mark.parametrize(
-    ("owner", "disc_hex", "expected_error_prefix"),
+    ("owner", "disc_hex", "expected_error"),
     [
         (
             "11111111111111111111111111111111",
             "17b7f83760d8ac60",
-            "ValueError: account owner '11111111111111111111111111111111'",
+            "owner is not the expected program; layout stays ASSUMED",
         ),
         (
             "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
             "0000000000000000",
-            "ValueError: account discriminator 0000000000000000",
+            "invalid bonding curve discriminator; layout stays ASSUMED",
         ),
     ],
 )
 def test_probe_keeps_assumed_for_unexpected_account(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    owner: str,
-    disc_hex: str,
-    expected_error_prefix: str,
+    tmp_path: Path, owner: str, disc_hex: str, expected_error: str
 ) -> None:
     """Finding 18: a wrong owner or discriminator must never record VERIFIED."""
     probe = _load_probe()
-    payload = _account_payload(owner, disc_hex)
-    monkeypatch.setattr(probe, "_rpc_get_account", lambda *args, **kwargs: payload)
+    value = _account_value(owner, disc_hex)
     out = tmp_path / "probe.json"
-    doc = tmp_path / "doc.md"
 
-    assert probe.main(["--account", "Acct111", "--out", str(out), "--doc", str(doc)]) == 0
+    rc = probe.main(
+        ["--account", ACCOUNT, "--endpoint", ENDPOINT, "--out", str(out)],
+        fetch=lambda *_args: value,
+        clock=FixtureClock(),
+    )
 
-    record = out.read_text(encoding="utf-8")
-    assert '"layout_status": "ASSUMED"' in record
-    assert expected_error_prefix in record
-    assert "Status: ASSUMED" in doc.read_text(encoding="utf-8")
-    assert "VERIFIED" not in doc.read_text(encoding="utf-8")
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    record = json.loads(text)
+    assert record["status"] == "ASSUMED"
+    assert record["error"] == expected_error
+    assert record["decoded"] is None
+    assert "VERIFIED" not in text

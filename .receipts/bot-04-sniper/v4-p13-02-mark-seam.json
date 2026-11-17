@@ -1,0 +1,26 @@
+{
+  "task_id": "v4-p13-02-mark-seam",
+  "bot": "bot-04-sniper",
+  "branch": "bot-04-sniper/phase-13-safe-marks",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-02 paper mark accounting seam, stacked on the risk price source",
+  "status": "Draft only; independent receipt approval, durable last-good recovery, and release integration remain pending.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/execution tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=marks-safe-final.xml", "exit_code": 0, "output_tail": "JUnit: 125 tests, 0 failures, 0 errors, 0 skipped; includes eight unchanged replay pin checks. JUnit SHA-256 532869750999c8c5046afb5a0441b4e34301056e9d0ade92e58bf79907dd6651."},
+    {"cmd": "uv run ruff format src/pumpgrok/execution/paper_adapter/marks.py tests/execution/test_safe_mark_open_positions.py", "exit_code": 0, "output_tail": "2 files left unchanged."},
+    {"cmd": "uv run ruff check src/pumpgrok/execution/paper_adapter/marks.py tests/execution/test_safe_mark_open_positions.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run mypy src/pumpgrok/execution/paper_adapter/marks.py", "exit_code": 0, "output_tail": "No issues found."}
+  ],
+  "claims": [
+    {"claim": "Focused execution and replay-pin tests pass offline.", "evidence_command_index": 0},
+    {"claim": "Changed mark source and tests pass focused lint.", "evidence_command_index": 2},
+    {"claim": "Changed mark source passes focused type checking.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Independent receipt approval is absent; this is not approved for merge.",
+    "SAFE-MARK-02 is not fixed: timeout-zero ledger writes are rejected until a reviewed durable contract exists. The unchanged future regression is retained in test-only commit d553029 on bot-04-sniper/phase-13-durable-exit-red; it fails with no_mark on the pre-gate code. Its local JUnit SHA-256 is 4dfe0661334a9d42465d2ea2d16aec36939d2c6795383cb16ed66db5fdb46d3b.",
+    "No trusted production mark producer or durable activation is established; source provenance is not an authenticity guarantee.",
+    "Live provider, full desk integration, canonical suite and independent receipt approval are not verified. Layout remains ASSUMED; live trading remains disabled."
+  ],
+  "rollback_plan": "Revert the mark seam commits in a reviewed pull request; retain the ledger and operator data. Recovery is expected within five minutes."
+}

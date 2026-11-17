@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pumpgrok.cli.errors import _Parser
 from pumpgrok.cli.validators import _approval_id, _mint, _size_sol, _slippage_bps, _ticket
+from pumpgrok.config.sections.v4 import WAKE_MODES
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -50,6 +51,16 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
     _add_seat(parser)
 
 
+def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--wake-mode",
+        choices=WAKE_MODES,
+        default=None,
+        dest="wake_mode",
+        help="supervisor wake: cadence (default) or event; overrides events.wake_mode",
+    )
+
+
 def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run = verbs.add_parser("run", parents=[mode_option], help="run the desk")
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
@@ -60,15 +71,24 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
         help="replay a recorded dataset in a loop, serving /healthz and /metrics",
     )
     run.add_argument(
-        "--record", metavar="DATASET", default=None, help="record a dataset (not yet implemented)"
+        "--record", metavar="DATASET", default=None, help="record a live-paper dataset"
     )
     run.add_argument(
-        "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
+        "--duration", metavar="SECONDS", default=None, type=int, help="record duration in seconds"
     )
+    run.add_argument(
+        "--mints",
+        default=None,
+        metavar="LIST",
+        help="comma-separated mints to record; other mints are not admitted",
+    )
+    _add_wake_mode(run)
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
-    verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor = verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor.add_argument("--json", action="store_true", help="one record per operator input")
+    _add_wake_mode(doctor)
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
     verify.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to verify")
@@ -87,6 +107,12 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
         default=None,
         metavar="PATH",
         help="paper ledger sqlite for the same-window comparison",
+    )
+    backtest.add_argument(
+        "--strategy",
+        default=None,
+        metavar="ID",
+        help="registered strategy id; one strategy, no search",
     )
 
 
@@ -164,6 +190,37 @@ def _add_events(verbs: _VerbsAction, mode_option: _Parser) -> None:
     purge.add_argument("name", help="dlq row name")
 
 
+def _add_seat_tool(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--seat", required=True, help="roster seat id, e.g. bot-04-sniper")
+    parser.add_argument("--tool", required=True, help="a tool named in that seat's roster")
+
+
+def _add_onboarding(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    onboarding = verbs.add_parser(
+        "onboarding",
+        parents=[mode_option],
+        help="operator choices: seat tool access and the RPC endpoint",
+    )
+    onboarding_cmd = onboarding.add_subparsers(dest="cmd", required=True, metavar="ONBOARDING")
+    onboarding_cmd.add_parser(
+        "init-key", help="create the operator key (interactive terminal, operator account)"
+    )
+    onboarding_cmd.add_parser("list", help="roster-derived tool choices and the RPC choice")
+    access = onboarding_cmd.add_parser("access", help="explicitly allow or deny a seat tool")
+    _add_seat_tool(access)
+    decision = access.add_mutually_exclusive_group(required=True)
+    decision.add_argument("--allow", dest="decision", action="store_const", const="allow")
+    decision.add_argument("--deny", dest="decision", action="store_const", const="deny")
+    revoke = onboarding_cmd.add_parser("revoke", help="revoke a seat tool grant")
+    _add_seat_tool(revoke)
+    rpc = onboarding_cmd.add_parser("rpc", help="show, or choose, a configured RPC endpoint")
+    rpc.add_argument(
+        "--endpoint",
+        default=None,
+        help="a configured endpoint URL; only its scheme, host and port are recorded",
+    )
+
+
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
@@ -187,14 +244,73 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     _add_paper_trade_flags(paper_sell)
     live = verbs.add_parser("live", parents=[mode_option], help="live verbs")
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
+    live_serve = live_cmd.add_parser("serve", help="serve the live-data paper root")
+    live_serve.add_argument(
+        "--mode",
+        choices=("paper", "live"),
+        default=argparse.SUPPRESS,
+        help="execution mode; live is refused",
+    )
+    live_serve.add_argument(
+        "--rpc",
+        required=True,
+        help="read-only RPC endpoint; required, no default",
+    )
+    live_serve.add_argument(
+        "--once",
+        action="store_true",
+        help="run exactly one paper cycle and exit",
+    )
     live_confirm = live_cmd.add_parser("confirm", help="record a human live-gate confirmation")
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
+    _add_replay(verbs, mode_option)
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {text!r}")
+    return value
+
+
+def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    replay_cmd.add_parser("trim", help="trim a replay dataset")
-    replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    trim = replay_cmd.add_parser("trim", help="trim a dataset: mints with fills plus 5 percent")
+    trim.add_argument("--dataset", required=True, metavar="NAME", help="dataset under var/datasets")
+    trim.add_argument(
+        "--max-events",
+        required=True,
+        type=_positive_int,
+        dest="max_events",
+        metavar="N",
+        help="keep the last N kept events",
+    )
+    trim.add_argument(
+        "--keep-mints-with-fills",
+        required=True,
+        action="store_true",
+        dest="keep_mints_with_fills",
+        help="keep every event of a mint with an order (the only keep rule)",
+    )
+    rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    rebuild.add_argument(
+        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
+    )
+    imported = replay_cmd.add_parser("import", help="import a ledger this desk recorded")
+    imported.add_argument(
+        "--from",
+        required=True,
+        dest="source",
+        metavar="LEDGER",
+        help="ledger.sqlite recorded by this desk (source paper)",
+    )
+    imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -222,4 +338,5 @@ def build_parser() -> argparse.ArgumentParser:
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
     _add_tail(verbs, mode_option)
+    _add_onboarding(verbs, mode_option)
     return parser

@@ -117,6 +117,16 @@ def effective_roster(contracts_dir: Path, seat_id: str) -> list[dict[str, Any]]:
     return [dict(entry) for entry in own]
 
 
+def roster_tool_names(contracts_dir: Path, seat_id: str) -> frozenset[str]:
+    """Tool names one seat's roster lists (own tools, plus the core eight when core: true).
+
+    Only the ten seat ids are accepted, so a typo cannot read an arbitrary roster file.
+    """
+    if seat_id not in EXPECTED_SEAT_IDS:
+        raise ValueError(f"unknown seat {seat_id!r}")
+    return frozenset(entry["name"] for entry in effective_roster(contracts_dir, seat_id))
+
+
 def transport_name(dotted: str) -> str:
     """Exposure-time transport name: dots become underscores (R19)."""
     return dotted.replace(".", "_")

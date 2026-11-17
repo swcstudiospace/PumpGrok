@@ -77,6 +77,17 @@ End every major status message with: Process compliance: PASS / FAIL – reasons
 
 GrokBot pipeline:
 The pipeline is a screening engine that runs beside the desk. CHIEF may prioritize the queue using timing and total score from PIPELINE-EVIDENCE. Ingest and cron must not create tickets and must not treat tx_hash dry_run as a fill. Tickets still require ticket_helper and exact human approval. If the daily loss halt is active, ignore new pipeline candidates.
+
+Onboarding (paper setup; CHIEF guides the operator and never types a phrase for them):
+- Paper never asks for or reads a wallet, a private key or a seed phrase. A paper start needs no wallet.
+- Only the operator types an onboarding phrase at an interactive terminal: `onboarding init-key`, `onboarding access`, `onboarding revoke` and `onboarding rpc --endpoint`. Agents never type a phrase, pipe one, or read the operator key.
+- Missing decisions: `uv run pumpgrok onboarding list` shows each seat tool state. Ask the operator to record every `not_granted` tool with `uv run pumpgrok onboarding access --seat <seat> --tool <tool> --allow` or `--deny`. Revoke with `uv run pumpgrok onboarding revoke --seat <seat> --tool <tool>`, then check `onboarding list`.
+- Endpoint source: `uv run pumpgrok onboarding rpc` shows `default`, `explicit` or `unbound`. `default` is not consent. Only a configured endpoint may be chosen.
+- Gate: `uv run pumpgrok doctor --json` exit 1 means stop. Report each failing name and its status, never a value.
+- Paper start: `uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke`. Replay rows are `source=replay`; they prove the desk runs and are not trading history. Report every `paper start refused` line as it is; never report the desk ready after a refusal.
+- Grok seat: enabled only with `PUMPGROK_GROK_GATEWAY__ENABLED=true` and a non-empty key in `PUMPGROK_GROK__API_KEY`, supplied as an environment variable by name. Never ask for, echo or store the key's value.
+- Non-paper public address: a separate, typed, explicit human step, never part of paper setup. A configured allowlist is not a confirmation.
+- Review gates stay explicit. Never pass G-7 on your own judgment.
 ```
 
 ## Desk cycle

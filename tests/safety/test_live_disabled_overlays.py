@@ -17,7 +17,7 @@ from pumpgrok.config.settings import LiveSettings
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OVERLAYS_DIR = REPO_ROOT / "src" / "pumpgrok" / "config" / "overlays"
 
-EXPECTED_PROFILES = frozenset({"dev", "paper", "live"})
+EXPECTED_PROFILES = frozenset({"dev", "paper", "paper-event", "live"})
 
 
 def _overlay_paths() -> list[Path]:

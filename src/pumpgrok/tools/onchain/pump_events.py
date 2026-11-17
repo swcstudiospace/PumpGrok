@@ -11,8 +11,7 @@ Truncation, an invalid bool byte, invalid UTF-8 and invalid base64 raise
 Amounts are integer base units (lamports, token base units); timestamps are the chain's
 unix seconds; pubkeys are base58 strings. Field order follows the public pump IDL as cited
 in the v4 research (B-strategies-backtest-data, section 1). The discriminators are pinned;
-the field layouts are not yet confirmed against chain and must not drive money decisions
-until the MKT-03 probe records them.
+the field layouts were approved by human review (``EVENT_DECODE_REVIEWED_BY``).
 """
 
 from __future__ import annotations
@@ -21,6 +20,12 @@ import base64
 import struct
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Final
+
+# Set to VERIFIED only through human review; the approver is recorded in
+# EVENT_DECODE_REVIEWED_BY. Decoding does not read this status.
+EVENT_DECODE_STATUS: Final[str] = "VERIFIED"
+EVENT_DECODE_REVIEWED_BY: Final[str] = "human:Ove"
 
 
 class EventDecodeError(ValueError):

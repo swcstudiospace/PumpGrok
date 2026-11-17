@@ -1,6 +1,6 @@
 """Candidate parameter overrides: the leaf home of CandidateParams (UPG-01, BT-07).
 
-CandidateParams validates filter and exits override mappings, builds the
+CandidateParams validates filter, exits and strategy override mappings, builds the
 effective FilterSettings and ExitsSettings, and hashes the normalized
 overrides. It lives in this module, not in the evaluator, so the upgrade
 parameter sets and the ledger active-set reader can import it without
@@ -87,10 +87,21 @@ def _normalized_mapping(mapping: Mapping[str, Any] | None) -> dict[str, Any]:
     return {key: _normalized_leaf(value) for key, value in mapping.items()}
 
 
-class CandidateParams(BaseModel):
-    """One candidate parameter set: filter and exits overrides only.
+def _normalized_strategy(mapping: Mapping[str, Mapping[str, Any]] | None) -> dict[str, Any]:
+    """Normalize the strategy section; a strategy with no overrides is omitted."""
+    if not mapping:
+        return {}
+    return {
+        strategy_id: _normalized_mapping(overrides)
+        for strategy_id, overrides in mapping.items()
+        if overrides
+    }
 
-    Both mappings are optional; absent means desk defaults. Each provided
+
+class CandidateParams(BaseModel):
+    """One candidate parameter set: filter, exits and strategy overrides.
+
+    Every mapping is optional; absent means desk defaults. Each provided
     mapping is validated by constructing the real FilterSettings or
     ExitsSettings model, so unknown fields fail. Any other top-level key,
     including scoring weights, fails through extra forbidden. Scoring knobs
@@ -103,6 +114,7 @@ class CandidateParams(BaseModel):
 
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
+    strategy: dict[str, dict[str, Any]] | None = None
 
     @field_validator("filter")
     @classmethod
@@ -122,6 +134,23 @@ class CandidateParams(BaseModel):
             return None
         _reject_scoring_knobs("exits", value)
         ExitsSettings(**value)
+        return value
+
+    @field_validator("strategy")
+    @classmethod
+    def _check_strategy(
+        cls, value: dict[str, dict[str, Any]] | None
+    ) -> dict[str, dict[str, Any]] | None:
+        """Refuse non-scalar leaves; strategy names are gated by the upgrade bounds."""
+        if value is None:
+            return None
+        for strategy_id, overrides in value.items():
+            if not strategy_id:
+                raise ValueError("strategy id must be a non-empty string")
+            try:
+                _normalized_mapping(overrides)
+            except TypeError as err:
+                raise ValueError(f"strategy {strategy_id!r}: {err}") from err
         return value
 
     def filter_settings(self) -> FilterSettings:
@@ -148,6 +177,9 @@ class CandidateParams(BaseModel):
             "exits": _normalized_mapping(self.exits),
             "filter": _normalized_mapping(self.filter),
         }
+        strategy = _normalized_strategy(self.strategy)
+        if strategy:
+            payload["strategy"] = strategy
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 

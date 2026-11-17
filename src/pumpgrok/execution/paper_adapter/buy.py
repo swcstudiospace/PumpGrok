@@ -10,12 +10,15 @@ from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest, Side
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.execution.curve_math import buy_out, impact_buy
+from pumpgrok.execution.deposits import opening_deposit_writer
+from pumpgrok.execution.entry_hook import EntryDenied, entry_provenance
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _BuyConfirmed, _BuyQuote
 from pumpgrok.risk.engine import RiskDecision, order_hash_for
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.entry_hook import EntryPolicy
     from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter.models import _InflightOrders
     from pumpgrok.ledger.store import LedgerStore
@@ -24,6 +27,7 @@ if TYPE_CHECKING:
 
 class _BuyMixin:
     if TYPE_CHECKING:
+        _entry_policy: EntryPolicy | None
         _active_places: set[str]
         _clock: Clock
         _fees: FeeModel
@@ -47,6 +51,7 @@ class _BuyMixin:
         def _slippage_bps(self, request: OrderRequest) -> int: ...
 
         async def _read_curve(self, mint: str) -> CurveSnapshot | None: ...
+        async def _read_entry_curve(self, mint: str) -> CurveSnapshot | None: ...
 
         async def _append_order_batch(
             self,
@@ -235,7 +240,21 @@ class _BuyMixin:
         correlation_id: str,
     ) -> CurveSnapshot:
         """Decision reserves with the ACCEPTED entry gates; refusals raise here."""
-        curve0 = await self._read_curve(request.mint)
+        if request.side is Side.BUY:
+            try:
+                curve0 = await self._read_entry_curve(request.mint)
+            except EntryDenied as denied:
+                raise await self._reject(
+                    request,
+                    request.decision_id,
+                    "data_unavailable",
+                    denied.detail,
+                    stage="ACCEPTED",
+                    source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
+        else:
+            curve0 = await self._read_curve(request.mint)
         if curve0 is None:
             raise await self._reject(
                 request,
@@ -247,7 +266,10 @@ class _BuyMixin:
                 correlation_id=correlation_id,
             )
         # The source gate prices entries only: a stop-loss sell must still fill (INV-R-16).
-        if request.side is Side.BUY and not rpc_curve_price_allowed(curve_source=curve0.source):
+        if request.side is Side.BUY and not rpc_curve_price_allowed(
+            curve_source=curve0.source,
+            provenance=entry_provenance(self._entry_policy, curve0),
+        ):
             raise await self._reject(
                 request,
                 request.decision_id,
@@ -637,7 +659,11 @@ class _BuyMixin:
         order_id: str,
     ) -> Fill:
         """Ledger append and Fill for a confirmed BUY."""
-        network_cost = self._fees.network_cost()
+        first_buy = self._is_first_buy(request.mint)
+        # The network cost includes the ATA rent on a first buy; the position holds that
+        # rent as its deposit asset until it closes.
+        network_cost = self._fees.buy_network_cost(first_buy=first_buy)
+        deposit = self._fees.ata_deposit_term(first_buy=first_buy)
         cash_debit = confirmed.filled + network_cost
         price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
         slipped = self._buy_slippage_bps(confirmed)
@@ -658,13 +684,44 @@ class _BuyMixin:
             slipped=slipped,
             had_position=had_position,
         )
-        stored = self._store.append_batch(rows)
-        self._inflight.discard(order_id)
-        self._last_price_ts[request.mint] = self._clock.now()
-        self._last_reserves[request.mint] = (
-            confirmed.curve1.s_lamports,
-            confirmed.curve1.t_units,
+        stored = self._store.append_batch(
+            rows, sidecar=opening_deposit_writer(request.mint, deposit)
         )
+        self._inflight.discard(order_id)
+        self._remember_buy_observation(request.mint, confirmed.curve1)
+        return self._buy_fill_result(
+            request,
+            quote=quote,
+            confirmed=confirmed,
+            order_id=order_id,
+            venue_tx_ref=venue_tx_ref,
+            price_avg=price_avg,
+            slipped=slipped,
+            network_cost=network_cost,
+            ledger_seq=int(stored[0]["seq"]),
+        )
+
+    def _remember_buy_observation(self, mint: str, curve1: CurveSnapshot) -> None:
+        """Cache the CONFIRMING tick as the mint's last price and reserves."""
+        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
+        observed = curve1.ts
+        self._last_price_ts[mint] = observed if observed is not None else self._clock.now()
+        self._last_reserves[mint] = (curve1.s_lamports, curve1.t_units)
+
+    def _buy_fill_result(
+        self,
+        request: OrderRequest,
+        *,
+        quote: _BuyQuote,
+        confirmed: _BuyConfirmed,
+        order_id: str,
+        venue_tx_ref: str,
+        price_avg: Decimal,
+        slipped: int,
+        network_cost: int,
+        ledger_seq: int,
+    ) -> Fill:
+        """The Fill a confirmed BUY returns to its caller."""
         return Fill(
             order_id=order_id,
             decision_id=request.decision_id,
@@ -678,7 +735,7 @@ class _BuyMixin:
             venue_fee_lamports=confirmed.venue_fee,
             network_cost_lamports=network_cost,
             route="curve",
-            ledger_seq=int(stored[0]["seq"]),
+            ledger_seq=ledger_seq,
         )
 
     @staticmethod
@@ -692,6 +749,17 @@ class _BuyMixin:
         """True when the ledger fold holds a non-empty position in ``mint``."""
         state = self._fold_state()
         return bool(state.positions.get(mint) is not None and state.positions[mint].token_units > 0)
+
+    def _is_first_buy(self, mint: str) -> bool:
+        """True when the ledger holds no FillRecorded BUY for ``mint``.
+
+        Decided from ledger fills, so a restart over the same ledger reaches the same answer.
+        """
+        for row in self._store.read(types=["FillRecorded"], limit=None):
+            payload = row["payload"]
+            if payload.get("side") == "buy" and payload.get("mint") == mint:
+                return False
+        return True
 
     async def _place_buy(
         self,

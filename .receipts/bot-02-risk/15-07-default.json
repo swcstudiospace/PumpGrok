@@ -1,0 +1,71 @@
+{
+  "plan": "15-07",
+  "seat": "bot-02-risk",
+  "requirement": "FEE-01",
+  "criteria": [9, 14],
+  "owner_review": "PENDING: trading-smoke re-pin not applied; owner approval required",
+  "commits": {
+    "risk_default_and_parity": "0b843d4bbdcefef7ac69eff5615b5a49d9d8e7e6",
+    "sniper_feat_referenced": "a2b9045922d0cc7a91dc81e5b6427a07ebf7aa90"
+  },
+  "files_owned_by_seat": [
+    "src/pumpgrok/cli/backtest.py",
+    "src/pumpgrok/config/sections/v4.py",
+    "tests/config/test_paper_fees_default.py",
+    "tests/backtest/test_fee_parity.py",
+    "tests/config/test_v4_settings_skeleton.py"
+  ],
+  "cross_seat_handoffs": [
+    {
+      "file": "src/pumpgrok/config/sections/v4.py",
+      "reason": "PaperFeesSettings.model Literal widened to v1|v2 and default set to v2. settings.py holds no fee default; the default lives here, so settings.py is unchanged.",
+      "approved_by": "Main (owner route), 2026-11-15"
+    },
+    {
+      "file": "tests/config/test_v4_settings_skeleton.py",
+      "reason": "assertion paper_fees.model == v1 becomes v2 (default flip)",
+      "approved_by": "Main (owner route), 2026-11-15"
+    },
+    {
+      "file": "src/pumpgrok/cli/backtest.py",
+      "reason": "_emit_report takes settings and selects its fee model through paper_fee_model, the same selector paper uses; the old FeeModel() import is removed",
+      "approved_by": "within 15-07 files_modified"
+    }
+  ],
+  "settings_surface": "paper_fees.model: Literal[v1, v2], default v2; v1 accepted explicitly; unknown values fail ConfigError (tested)",
+  "commands_run": [
+    "uv run python -m pytest -v -p no:cacheprovider tests/config/test_paper_fees_default.py tests/backtest/test_fee_parity.py (in the RED and GREEN runs listed in the SNIPER receipt)",
+    "scratch regen only, see SNIPER receipt; no pin file written"
+  ],
+  "per_file_results": {
+    "tests/config/test_paper_fees_default.py": "4 passed (GREEN run 1); RED: collection error (missing PAPER_DEFAULT_FEE_MODEL, paper_fee_model)",
+    "tests/backtest/test_fee_parity.py": "2 passed (GREEN run 1); RED: collection error (missing PAPER_DEFAULT_FEE_MODEL)"
+  },
+  "trading_smoke_pin": {
+    "pinned_values_unchanged": {
+      "events_hash": "106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627",
+      "row_count": 155,
+      "seq": 155
+    },
+    "candidate_if_owner_approves": {
+      "events_hash": "cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62",
+      "row_count": 155,
+      "seq": 155
+    },
+    "pins_written": false,
+    "trading_smoke_test_status": "tests/replay/test_trading_smoke_pin.py: 3 failed (events_hash, full row dump, exported seed), 2 passed (pin names, row_count). Expected until owner approves the re-pin."
+  },
+  "smoke_10m": {
+    "events_hash": "1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700",
+    "unchanged_from_head": true,
+    "note": "Plan target b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is not what HEAD prints; flagged to owner"
+  },
+  "gaps": [
+    "Production paper composition roots do not call read_ata_rent. Until they do, production uses the offline pin (owner decision says RPC read at runtime). Wiring is outside 15-07's list.",
+    "test_paper_factory.py test name still reads defaults_to_v1 (only the assertion was changed, per Main)."
+  ],
+  "pins_touched": false,
+  "contracts_touched": false,
+  "changelog_touched": false,
+  "push": false
+}

@@ -6,14 +6,16 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.idempotency import exec_place_key
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -37,19 +39,11 @@ def _store(tmp_path: Path) -> LedgerStore:
     return store
 
 
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
 def _harness(tmp_path: Path):
+    """Replay-bound adapter: curve reads come from a verified dataset of one tick at START."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
+    store.set_meta("source", "replay")
     ids = IdFactory(clock, make_rng(13))
     engine = RiskEngine(
         store=store,
@@ -60,15 +54,16 @@ def _harness(tmp_path: Path):
         get_reserves=lambda _mint: (S0, T0),
         env={},
     )
-    snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
-    adapter = PaperAdapter(
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+    adapter = build_paper_adapter(
+        SimpleNamespace(risk=RiskBudget()),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(13),
-        budget=RiskBudget(),
-        price_source=_ScriptedCurves([snap, snap]),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
     return adapter, clock, store

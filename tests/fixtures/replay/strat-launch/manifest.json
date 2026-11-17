@@ -1,0 +1,14 @@
+{
+  "dataset": "strat-launch",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-01T00:05:00.000Z",
+  "seed_hint": 20260101,
+  "provenance": "synthetic",
+  "sources": {
+    "rest": "hand-authored"
+  },
+  "sha256": {
+    "events.jsonl": "af5c6f58d4fb4473b63e66381c0d3f0dde615aad10efe9fee10acecfda853cbd"
+  },
+  "notes": "Hand-authored strategy fixture for new_launch_sniper (15-04). Not market evidence; PENDING OWNER APPROVAL of parameters."
+}

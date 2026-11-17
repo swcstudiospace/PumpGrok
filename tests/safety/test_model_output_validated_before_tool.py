@@ -8,13 +8,16 @@ model-derived arguments ever runs (the recording tool stays empty).
 Model text is never passed to eval, a shell, or an f-string command:
 validation is pure model_validate before any tool path.
 
-Harness: AuditorAgent driven by an httpx MockTransport (no network),
-seeded clock and rng; no wall clock.
+Harness: AuditorAgent admitted through a real GrokGateway over the real
+XaiTransport, with an httpx MockTransport (no network), a fixed clock and a
+seeded rng for the tool registry; no wall clock.
 """
 
 from __future__ import annotations
 
 import json as json_lib
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -25,9 +28,16 @@ from pumpgrok.config.settings import GrokSettings
 from pumpgrok.core.registry import ToolRegistry
 from pumpgrok.core.tool import SideEffect, ToolInput, ToolOutput, ToolSpec
 from pumpgrok.engine.agents.auditor import AuditorAgent
+from pumpgrok.engine.agents.base import result_schemas, system_prompts
 from pumpgrok.engine.models import AuditResult, Token
+from pumpgrok.grok.budget import LayeredBudget
+from pumpgrok.grok.cache import ResponseCache
+from pumpgrok.grok.gateway import Candidate, GrokGateway
+from pumpgrok.grok.transport import XaiTransport
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
+
+START = 1_800_000_000.0
 
 VALID = {
     "coordinated_buying": False,
@@ -45,7 +55,7 @@ def _settings() -> GrokSettings:
     return GrokSettings(api_key=SecretStr("test-key"))
 
 
-def _agent(text: str) -> AuditorAgent:
+def _agent(text: str, tmp_path: Path) -> AuditorAgent:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -56,14 +66,37 @@ def _agent(text: str) -> AuditorAgent:
         )
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    return AuditorAgent(
-        _settings(),
-        clock=FixtureClock(start=0.0),
-        rng=make_rng(11),
+    settings = _settings()
+    clock = FixtureClock(start=START)
+    transport = XaiTransport(
+        api_key=settings.api_key.get_secret_value(),
+        base_url=settings.base_url,
         client=client,
-        ops=None,
-        max_retries=1,
+        prompts=system_prompts(),
+        schemas=result_schemas(),
     )
+    gateway = GrokGateway(
+        clock=clock,
+        transport=transport,
+        cache=ResponseCache(tmp_path / "cache.sqlite", clock),
+        budget=LayeredBudget(tmp_path / "budget.sqlite", clock),
+    )
+    return AuditorAgent(settings, gateway=gateway, clock=clock)
+
+
+def _admit() -> dict[str, Any]:
+    """Admission arguments: facts that pass every prefilter rule at ``START``."""
+    return {
+        "event_id": "EV-INV-R-26",
+        "candidate": Candidate(
+            mint="Mint111",
+            created_at=START - 300.0,
+            first_trade_at=START - 60.0,
+            unique_buyers=10,
+            prerank=Decimal("0.8"),
+            last_decision_at=None,
+        ),
+    }
 
 
 def _token() -> Token:
@@ -128,14 +161,14 @@ _MALFORMED: dict[str, Any] = {
 
 
 @pytest.mark.parametrize("case", sorted(_MALFORMED))
-async def test_invalid_model_output_never_reaches_tools(case: str) -> None:
+async def test_invalid_model_output_never_reaches_tools(case: str, tmp_path: Path) -> None:
     """INV-R-26: malformed model output falls back; the tool spy stays empty."""
     raw = _MALFORMED[case]
     text = raw if isinstance(raw, str) else json_lib.dumps(raw)
-    agent = _agent(text)
+    agent = _agent(text, tmp_path)
     spy = _SpyTool(_spec())
     _registry(spy)
-    result = await agent.run(_token(), [], [], None)
+    result = await agent.run(_token(), [], [], None, **_admit())
     assert isinstance(result, AuditResult)
     assert result.flags == ["agent_failure"]
     assert result.organic_buyer_share == 0.0
@@ -143,10 +176,10 @@ async def test_invalid_model_output_never_reaches_tools(case: str) -> None:
     assert spy.calls == []
 
 
-async def test_valid_model_output_validates_cleanly() -> None:
+async def test_valid_model_output_validates_cleanly(tmp_path: Path) -> None:
     """INV-R-26: the gate is not reject-all; a valid answer validates."""
-    agent = _agent(json_lib.dumps(VALID))
-    result = await agent.run(_token(), [], [], None)
+    agent = _agent(json_lib.dumps(VALID), tmp_path)
+    result = await agent.run(_token(), [], [], None, **_admit())
     assert isinstance(result, AuditResult)
     assert result.flags == []
     assert result.organic_buyer_share == 0.8

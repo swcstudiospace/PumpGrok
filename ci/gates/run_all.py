@@ -79,6 +79,12 @@ def main() -> int:
         )
     )
 
+    # G-8 runs the idle event desk (EVT-12). It takes no --bot: an idle desk is silent on every
+    # commit, and its own gate reports the interpreter it needs when none is available.
+    results.append(
+        run("G-8  Idle desk makes zero Grok calls", [str(GATES_DIR / "check_idle_grok.py")])
+    )
+
     print(f"\n{'=' * 70}\nSUMMARY\n{'=' * 70}")
     failed = 0
     for name, code in results:

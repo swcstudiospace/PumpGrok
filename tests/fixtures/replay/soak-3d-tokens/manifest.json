@@ -1,0 +1,16 @@
+{
+  "dataset": "soak-3d-tokens",
+  "provenance": "synthetic",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-03T23:59:00.000Z",
+  "seed_hint": 20260101,
+  "sources": {
+    "rest": "synthetic",
+    "pumpportal": "synthetic"
+  },
+  "sha256": {
+    "events.jsonl": "04d71ad28dae2cd6b4c78552489b9459dbc57d58c0ffd6c7479c7fc63406369a",
+    "llm.jsonl": "835864d239ebbc0a63cf0367fc0de690ae39076e9b3ec94de07dc73e004bbaa2"
+  },
+  "notes": "SYNTHETIC. Not market evidence. Regenerate with `.venv/bin/python tests/fixtures/replay/soak-3d-tokens/generator.py` from the repository root. Built from tests/fixtures/replay/soak-3d (events.jsonl sha256 18ac3097d5330ee5aa74b904fe8e8113c76ec04367d8fb6fcf9ae58c261f44de, manifest.json sha256 40a5207b97d3630c6397680cf2d7df25f197b6c5b26165eb8c56013fcff5f0dd). Each soak-3d tick is one candidate; token facts are derived as the module docstring of generator.py maps them: each mint's ticks are cut into 6-hour launch windows; a window's first tick is its created and first trade time, buyers by tick ordinal within the window, prerank from the reserve against the soak graduation tick. 4320 raw candidates: 216 admitted by pumpgrok.grok.gateway.prefilter with the mint cooldown fed by earlier admissions, and 4104 rejected by it (mint_cooldown 432, too_few_buyers 72, too_old 3576, too_young 24). Each admitted request has one llm.jsonl record keyed by the gateway request key; llm answers are synthetic, not model output."
+}

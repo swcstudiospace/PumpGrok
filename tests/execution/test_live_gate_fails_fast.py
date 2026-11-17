@@ -23,20 +23,53 @@ from pathlib import Path
 import pytest
 
 from pumpgrok.cli import main
+from pumpgrok.config import settings as settings_mod
 from pumpgrok.config.settings import load_settings
 from pumpgrok.core.adapter import OrderRequest, Side
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.execution.live import PRECONDITION_IDS, LiveGate, Precondition
 from pumpgrok.execution.live.live_adapter import LiveAdapterStub
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.tools import ensure_paper_genesis
 
 EPOCH_START = 1767225600.0  # 2026-01-01T00:00:00Z
 NOW = "2026-10-20T00:00:00Z"
 MINT = "So11111111111111111111111111111111111111112"
 CID = "01J0000000000000000000000000"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, recorded as the onboarding verbs record it.
+
+    The paper genesis is written first, as ``_record_tool`` does, then the operator key and an
+    allow per roster tool. Each allow is an HMAC-authenticated protected record bound to a
+    ConfigChanged row in the paper ledger, the same records the startup gate reads.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, settings_mod.load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 def _append(store: LedgerStore, seq: int, type: str, payload: dict, ts: str) -> None:
@@ -146,6 +179,7 @@ def test_paper_mode_never_evaluates_gate(tmp_path: Path, monkeypatch: pytest.Mon
     gate = LiveGate(mode="paper", environ={"PUMPGROK_LIVE_ENABLE": "1"}, root=tmp_path)
     assert gate.check(now=NOW)[0] == "mode_live"
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     monkeypatch.delenv("PUMPGROK_LIVE_ENABLE", raising=False)
     smoke = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
     calls: list[LiveGate] = []

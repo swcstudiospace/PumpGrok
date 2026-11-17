@@ -1,10 +1,16 @@
-"""No fund-moving symbols outside the refusing live stub (SEC-003).
+"""No fund-moving symbols outside the refusing live stub (SEC-003), no ed25519 import elsewhere.
 
 Walks the AST of every ``src/pumpgrok/**/*.py`` file and fails on any exact
 ``sign``, ``send_transaction``, ``sendTransaction`` or ``Keypair`` symbol,
 except under ``src/pumpgrok/execution/live/`` where the refusing
 ``LiveAdapterStub`` lives. Matching is exact AST equality, never substrings,
 so ``signature`` (``engine/analyzer.py``) and docstring mentions never match.
+
+It also fails on any import that names an ``ed25519`` module outside the
+decode-only ``src/pumpgrok/core/ed25519_point.py`` (INV-S-01, owner-approved
+amendment): ``import ed25519``, ``from x.ed25519 import y`` and
+``from x import ed25519`` all count. ``ed25519_point`` is a different name and
+never matches.
 
 Node kinds mirror ``tests/safety/test_static_guards.py``: names, attributes,
 import aliases, definitions, arguments, keywords, and string constants.
@@ -21,6 +27,8 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 
 EXEMPT_PREFIX = "execution/live/"
+
+DECODE_ONLY_MODULE = "core/ed25519_point.py"
 
 FORBIDDEN = frozenset({"sign", "send_transaction", "sendTransaction", "Keypair"})
 
@@ -52,23 +60,36 @@ def _names(node: ast.AST) -> list[str]:
     return []
 
 
+def _names_ed25519_module(node: ast.AST) -> bool:
+    """True when an import statement names an ``ed25519`` module or imports one."""
+    if isinstance(node, ast.Import):
+        return any("ed25519" in alias.name.split(".") for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        module_parts = node.module.split(".") if node.module else []
+        return "ed25519" in module_parts or any(alias.name == "ed25519" for alias in node.names)
+    return False
+
+
 def _scan_file(path: Path, rel: str) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     found: list[tuple[int, str]] = []
-    for node in ast.walk(tree):
-        for name in _names(node):
-            if name in FORBIDDEN:
-                found.append((node.lineno, f"signing symbol {name!r}"))
+    if not rel.startswith(EXEMPT_PREFIX):
+        for node in ast.walk(tree):
+            for name in _names(node):
+                if name in FORBIDDEN:
+                    found.append((node.lineno, f"signing symbol {name!r}"))
+    if rel != DECODE_ONLY_MODULE:
+        for node in ast.walk(tree):
+            if _names_ed25519_module(node):
+                found.append((node.lineno, "ed25519 import outside the decode-only module"))
     return [f"{rel}:{line}: {reason}" for line, reason in sorted(found)]
 
 
 def find_violations(package_root: Path) -> list[str]:
-    """Return one `path:line: reason` entry per signing symbol use."""
+    """Return one `path:line: reason` entry per signing symbol or ed25519 import."""
     found: list[str] = []
     for path in sorted(package_root.rglob("*.py")):
         rel = path.relative_to(package_root).as_posix()
-        if rel.startswith(EXEMPT_PREFIX):
-            continue
         found.extend(_scan_file(path, rel))
     return found
 
@@ -105,6 +126,16 @@ PROBES: list[tuple[str, str, bool]] = [
     ("core/probe.py", "signature_hash = 1\n", False),
     ("execution/live/probe.py", "def sign(tx):\n    return tx\n", False),
     ("execution/live/probe.py", "sig = Keypair()\n", False),
+    ("core/probe.py", "import ed25519\n", True),
+    ("core/probe.py", "from cryptography.hazmat.primitives.asymmetric.ed25519 import X\n", True),
+    ("core/probe.py", "from cryptography.hazmat.primitives.asymmetric import ed25519\n", True),
+    ("core/probe.py", "from . import ed25519\n", True),
+    ("core/probe.py", "from .ed25519 import X\n", True),
+    ("execution/live/probe.py", "import ed25519\n", True),
+    ("core/probe.py", "from pumpgrok.core.ed25519_point import decode_public_point\n", False),
+    ("core/probe.py", "import ed25519_point\n", False),
+    ("core/ed25519_point.py", "import ed25519\n", False),
+    ("core/ed25519_point.py", "def sign(tx):\n    return tx\n", True),
 ]
 
 
@@ -125,3 +156,15 @@ def test_smuggled_signing_symbol_in_scratch_copy_is_caught(tmp_path: Path) -> No
     ids.write_text(ids.read_text(encoding="utf-8") + "\ndef sign(tx):\n    return tx\n")
     found = find_violations(package)
     assert any(entry.startswith("core/ids.py:") for entry in found), found
+
+
+def test_planted_ed25519_import_in_scratch_copy_is_caught(tmp_path: Path) -> None:
+    package = tmp_path / "pumpgrok"
+    shutil.copytree(SRC, package, ignore=shutil.ignore_patterns("__pycache__"))
+    ids = package / "core" / "ids.py"
+    planted = "\nfrom cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey\n"
+    ids.write_text(ids.read_text(encoding="utf-8") + planted)
+    found = find_violations(package)
+    assert any(entry.startswith("core/ids.py:") and "ed25519 import" in entry for entry in found), (
+        found
+    )

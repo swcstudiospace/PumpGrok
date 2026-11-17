@@ -16,7 +16,7 @@ from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.execution.live.live_gate import PRECONDITION_IDS, LiveGate, Precondition
 
 NOW = "2026-10-20T00:00:00Z"
-SYSTEM_PROGRAM = "11111111111111111111111111111111"
+VALID_KEY = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
 ALLOWLIST_EMPTY = "live.wallet_allowlist is empty; no public key is allowlisted"
 CAP_UNSET = "live.notional_cap_lamports is not set"
 CAP_RANGE = "live.notional_cap_lamports must satisfy 0 < value <= 1 SOL"
@@ -40,14 +40,14 @@ def test_default_gate_keeps_all_nine_unmet(tmp_path: Path) -> None:
 
 def test_allowlist_of_one_key_meets_row_5_only(tmp_path: Path) -> None:
     """One 32-byte public key meets row 5; rows 1 to 4, 7, 8 and 9 do not change."""
-    assert WalletSettings(allowlist=(SYSTEM_PROGRAM,)).allowlist == (SYSTEM_PROGRAM,)
+    assert WalletSettings(allowlist=(VALID_KEY,)).allowlist == (VALID_KEY,)
     baseline = _by_id(LiveGate(mode="live", environ={}, root=tmp_path))
     gate = _by_id(
         LiveGate(
             mode="live",
             environ={},
             root=tmp_path,
-            wallet_allowlist=(SYSTEM_PROGRAM,),
+            wallet_allowlist=(VALID_KEY,),
         )
     )
     assert gate["wallet_allowlist"].met is True
@@ -94,10 +94,10 @@ def test_out_of_range_cap_leaves_row_6_unmet(tmp_path: Path, cap: int) -> None:
     ("allowlist", "cap"),
     [
         ((), None),
-        ((SYSTEM_PROGRAM,), None),
+        ((VALID_KEY,), None),
         ((), LAMPORTS_PER_SOL),
-        ((SYSTEM_PROGRAM,), LAMPORTS_PER_SOL),
-        ((SYSTEM_PROGRAM,), 0),
+        ((VALID_KEY,), LAMPORTS_PER_SOL),
+        ((VALID_KEY,), 0),
     ],
 )
 def test_rows_8_and_9_stay_unmet(

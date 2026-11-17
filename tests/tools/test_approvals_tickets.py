@@ -14,12 +14,14 @@ import random
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, get_args
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.approvals import (
     ApprovalRecord,
     parse_human_phrase,
@@ -28,7 +30,8 @@ from pumpgrok.core.approvals import (
 from pumpgrok.core.errors import PermissionDenied
 from pumpgrok.core.ids import IdFactory, bind_calling_seat
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
+from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket, day_ticket_count
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
@@ -49,22 +52,6 @@ SIZE = 200_000_000
 SEAT = "bot-04-sniper"
 
 
-class ScriptedCurves:
-    """Pop one scripted snapshot per read; hold the last."""
-
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
-def _snap() -> CurveSnapshot:
-    return CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
-
-
 def _store(tmp_path: Path) -> LedgerStore:
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     store.set_meta("initial_equity_lamports", str(EQUITY))
@@ -78,10 +65,11 @@ def _harness(
     seed: int = 7,
     autonomy: str = "manual-ticket",
     limits: EngineLimits | None = None,
-    reads: list[CurveSnapshot] | None = None,
 ) -> tuple[PaperAdapter, FixtureClock, RiskEngine, IdFactory, LedgerStore]:
+    """Replay-bound adapter: curve reads come from a verified dataset of one tick at START."""
     clock = FixtureClock(START)
     store = _store(tmp_path)
+    store.set_meta("source", "replay")
     ids = IdFactory(clock, make_rng(seed))
     engine = RiskEngine(
         store=store,
@@ -91,15 +79,16 @@ def _harness(
         autonomy=autonomy,  # type: ignore[arg-type]
         get_reserves=lambda _mint: (S0, T0),
     )
-    adapter = PaperAdapter(
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+    adapter = build_paper_adapter(
+        SimpleNamespace(risk=RiskBudget(), limits=limits),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(seed),
-        budget=RiskBudget(),
-        limits=limits,
-        price_source=ScriptedCurves(reads if reads is not None else [_snap(), _snap()]),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
     return adapter, clock, engine, ids, store
@@ -537,9 +526,7 @@ async def test_autonomous_paper_buy_mints_approval_and_fills(tmp_path: Path) -> 
 
 
 async def test_autonomous_size_based_sell_derives_units_and_closes(tmp_path: Path) -> None:
-    adapter, clock, _engine, ids, store = _harness(
-        tmp_path, autonomy="autonomous-paper", reads=[_snap()] * 8
-    )
+    adapter, clock, _engine, ids, store = _harness(tmp_path, autonomy="autonomous-paper")
     try:
         ticket_id = _ticket(store, clock)
         with bind_calling_seat(SEAT):
@@ -595,7 +582,7 @@ async def test_manual_sell_without_position_refuses_no_position(tmp_path: Path) 
 
 
 async def test_unit_sell_against_sol_approval_is_refused(tmp_path: Path) -> None:
-    adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
+    adapter, clock, _engine, ids, store = _harness(tmp_path)
     try:
         ticket_id = _ticket(store, clock)
         with bind_calling_seat(SEAT):
@@ -631,7 +618,7 @@ async def test_unit_sell_against_sol_approval_is_refused(tmp_path: Path) -> None
 
 
 async def test_oversize_unit_sell_against_sol_approval_is_refused(tmp_path: Path) -> None:
-    adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
+    adapter, clock, _engine, ids, store = _harness(tmp_path)
     try:
         ticket_id = _ticket(store, clock)
         with bind_calling_seat(SEAT):
@@ -716,7 +703,7 @@ async def test_cancel_wrong_approval_fails_closed(tmp_path: Path) -> None:
 
 
 async def test_cancel_inflight_then_terminal(tmp_path: Path) -> None:
-    adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
+    adapter, clock, _engine, ids, store = _harness(tmp_path)
     try:
         ticket_id = _ticket(store, clock)
         approval_id = _approve(store, clock, ids, ticket_id)
@@ -792,7 +779,7 @@ async def test_cancel_after_fill_is_already_filled(tmp_path: Path) -> None:
 
 
 async def test_positions_reports_ledger_equity_and_cash(tmp_path: Path) -> None:
-    adapter, clock, _engine, ids, store = _harness(tmp_path, reads=[_snap()] * 8)
+    adapter, clock, _engine, ids, store = _harness(tmp_path)
     try:
         ticket_id = _ticket(store, clock)
         with bind_calling_seat(SEAT):

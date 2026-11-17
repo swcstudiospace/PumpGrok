@@ -19,11 +19,16 @@ through the ``MarkToMarket`` rows the serve loop writes (the reducer ratchets
 ``price_peak`` from each row's ``spot``; existing R32 type, no new event). A
 restart restores them from the ledger fold in ``sync`` before the first exit
 check, so the trailing stop does not re-learn from the next curve read.
+
+A strategy position (its ticket has a row in ``strategy_ticket_refs``) that already
+carries a pending sell is not offered to a rule sell or a graduation close again: the
+pending sell settles first. Every other position is unchanged.
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import logging
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -33,12 +38,16 @@ from pumpgrok.engine.exits import restore_peak
 from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 from pumpgrok.engine.watcher import PositionWatcher
 from pumpgrok.execution.curve_math import spot
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.ticket_refs import load_refs
 from pumpgrok.replay.clock import Clock, parse_ts_utc
 from pumpgrok.replay.sources import FixtureCurveSource
 
 __all__ = ["ExitRules", "GraduateClose", "LedgerExitBook", "PlaceSell", "RuleSell"]
+
+log = logging.getLogger(__name__)
 
 #: ``(mint, ticket_id, token_units, rule)`` -> the place tool's output payload.
 PlaceSell = Callable[[str, str, int, str], Awaitable[dict[str, Any]]]
@@ -50,6 +59,18 @@ GraduateClose = Callable[[str, int, int], Awaitable[dict[str, Any] | None]]
 def _scaled_price(lamports_per_token: Decimal) -> int:
     """Lamports-per-token quote to the integer ``PRICE_SCALE`` price (INT-01)."""
     return int((lamports_per_token * PRICE_SCALE).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _track_sell(event: Mapping[str, Any], sells: dict[str, str], settled: set[str]) -> None:
+    """Record each sell order's ticket, and each order that has an outcome row."""
+    body = event.get("payload")
+    if not isinstance(body, dict):
+        return
+    order_id = str(body.get("order_id", ""))
+    if event["type"] == "OrderPlaced" and body.get("side") == "sell":
+        sells[order_id] = str(body.get("ticket_id", ""))
+    elif event["type"] in ("FillRecorded", "OrderRejected"):
+        settled.add(order_id)
 
 
 @dataclass(frozen=True)
@@ -73,6 +94,8 @@ class LedgerExitBook:
     _identity: dict[str, int] = field(default_factory=dict)
     #: (mint, opening sequence) pairs whose sell the venue left unknown.
     _held_out: set[tuple[str, int]] = field(default_factory=set)
+    #: Tickets whose strategy sell is pending: placed, with no fill or rejection yet.
+    _strategy_pending: set[str] = field(default_factory=set)
 
     @property
     def positions(self) -> dict[str, ExitPosition]:
@@ -96,6 +119,10 @@ class LedgerExitBook:
         """Stop offering the tracked position in ``mint`` whose sell the venue left unknown."""
         self._held_out.add((mint, self._identity[mint]))
 
+    def strategy_sell_pending(self, mint: str) -> bool:
+        """Whether the tracked position is a strategy ticket with a sell still pending."""
+        return self._tickets.get(mint) in self._strategy_pending
+
     def sync(self, store: LedgerStore) -> None:
         """Rebuild the open positions from the ledger, one tracked position per mint.
 
@@ -105,12 +132,20 @@ class LedgerExitBook:
         exit check runs. Entry, amount, opening time and ticket are refreshed
         from the ledger on every pass.
         """
+        deposits = position_deposits_by_seq(store)
         state = initial_state(source="replay", initial_equity_lamports=0, day_utc="")
         opened_seq: dict[str, int] = {}
+        sells: dict[str, str] = {}
+        settled: set[str] = set()
         for event in store.read(limit=None):
             if event["type"] == "PositionOpened":
                 opened_seq[str(event["payload"]["mint"])] = int(event["seq"])
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
+            _track_sell(event, sells, settled)
+        refs = load_refs(store)
+        self._strategy_pending = {
+            ticket for order, ticket in sells.items() if order not in settled and ticket in refs
+        }
         fresh: dict[str, ExitPosition] = {}
         identity: dict[str, int] = {}
         for mint, view in state.positions.items():
@@ -172,6 +207,9 @@ class ExitRules:
         return _scaled_price(spot(snapshot.s_lamports, snapshot.t_units))
 
     async def _sell(self, position: ExitPosition, price: int, reason: str) -> None:
+        if self._book.strategy_sell_pending(position.mint):
+            log.info("%s: a strategy sell is pending; no second sell", position.mint[:8])
+            return
         ticket = self._book.ticket(position.mint)
         result = await self._place_sell(position.mint, ticket, int(position.token_amount), reason)
         status = str(result["status"])
@@ -195,6 +233,8 @@ class ExitRules:
         if self._graduate is None:
             return
         for mint in list(self._book.positions):
+            if self._book.strategy_sell_pending(mint):
+                continue
             snapshot = await self._curves.curve(mint)
             if snapshot is None or not snapshot.complete:
                 continue

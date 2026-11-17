@@ -26,15 +26,18 @@ from __future__ import annotations
 import os
 import re
 import tomllib
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, get_args
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import (
     BaseSettings,
+    EnvSettingsSource,
+    InitSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
     TomlConfigSettingsSource,
 )
 
@@ -109,7 +112,7 @@ __all__ = [
 ]
 
 
-OVERLAY_PROFILES: tuple[str, str, str] = ("dev", "paper", "live")
+OVERLAY_PROFILES: tuple[str, str, str, str] = ("dev", "paper", "live", "paper-event")
 DEFAULT_PROFILE = "paper"
 
 # Mirrors hermes/profiles.yaml forbidden_env_keys, extended with the
@@ -157,6 +160,106 @@ def mask(secret: str) -> str:
     if not secret:
         return "<empty>"
     return f"*** ({len(secret)} chars)"
+
+
+def _toml_files() -> list[Path]:
+    """Overlay for the active profile, then PUMPGROK_CONFIG (later file wins)."""
+    files = [overlay_path(current_profile())]
+    config_file = os.environ.get("PUMPGROK_CONFIG", "").strip()
+    if config_file:
+        files.append(Path(config_file))
+    return files
+
+
+_WALLET_KEY = "wallet"
+_WALLET_ENV = "PUMPGROK_WALLET"
+
+
+def _without_wallet(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy of a source mapping with the wallet section removed."""
+    return {key: value for key, value in data.items() if key != _WALLET_KEY}
+
+
+class _EnvWithoutWallet(EnvSettingsSource):
+    """Env source that never loads PUMPGROK_WALLET or any PUMPGROK_WALLET__* name.
+
+    The names are dropped before pydantic-settings decodes them, so a malformed wallet value
+    on the paper path is never parsed.
+    """
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        loaded = super()._load_env_vars()
+        wallet = _WALLET_ENV.lower()
+        return {
+            name: value
+            for name, value in loaded.items()
+            if name.lower() != wallet and not name.lower().startswith(wallet + "__")
+        }
+
+
+class _TomlWithoutWallet(TomlConfigSettingsSource):
+    def __call__(self) -> dict[str, Any]:
+        return _without_wallet(super().__call__())
+
+
+class _ModeProbe(BaseSettings):
+    """Effective mode only. It declares no wallet field, so it cannot read the wallet input."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="PUMPGROK_",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
+
+    mode: Mode | None = Field(default=None)
+    execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            env_settings,
+            TomlConfigSettingsSource(settings_cls, toml_file=_toml_files()),
+        )
+
+    def resolved(self) -> Mode:
+        """Same precedence as Settings.effective_mode: init/env mode, then TOML execution.mode."""
+        return self.mode if self.mode is not None else self.execution.mode
+
+
+def resolve_effective_mode(**init_kwargs: Any) -> Mode | None:
+    """Effective mode, resolved before any wallet input is read.
+
+    Precedence: init kwarg > PUMPGROK_MODE > TOML (top-level mode, then execution.mode).
+    Returns None when the mode cannot be resolved. Callers must treat None as not paper, so
+    the wallet input is validated (fail closed).
+    """
+    try:
+        return _ModeProbe(**init_kwargs).resolved()
+    except (ValidationError, SettingsError):
+        return None
+
+
+def confirm_wallet_allowlist(allowlist: Sequence[str], read_line: Callable[[str], str]) -> None:
+    """Operator retypes each allowlist address, in order; any other answer refuses.
+
+    Nothing is confirmed automatically. The prompt and the refusal name the entry index only,
+    never the address or what was typed.
+    """
+    for index, entry in enumerate(allowlist):
+        try:
+            typed = read_line(f"Retype wallet allowlist entry {index} to confirm it: ")
+        except EOFError:
+            typed = ""
+        if typed.strip() != entry:
+            raise ConfigError([f"allowlist entry {index} was not confirmed by retyping it"])
 
 
 class Settings(BaseSettings):
@@ -227,10 +330,17 @@ class Settings(BaseSettings):
         PUMPGROK_CONFIG file]. dotenv/file-secret sources are
         intentionally excluded: secrets arrive via the environment.
         """
-        files = [overlay_path(current_profile())]
-        config_file = os.environ.get("PUMPGROK_CONFIG", "").strip()
-        if config_file:
-            files.append(Path(config_file))
+        init_kwargs = (
+            init_settings.init_kwargs if isinstance(init_settings, InitSettingsSource) else None
+        )
+        files = _toml_files()
+        if init_kwargs is not None and resolve_effective_mode(**init_kwargs) == "paper":
+            # Paper never reads the wallet: wallet input is dropped before it is decoded.
+            return (
+                InitSettingsSource(settings_cls, init_kwargs=_without_wallet(init_kwargs)),
+                _EnvWithoutWallet(settings_cls),
+                _TomlWithoutWallet(settings_cls, toml_file=files),
+            )
         return (
             init_settings,
             env_settings,
@@ -446,7 +556,7 @@ def load_settings(**kwargs: Any) -> Settings:
     try:
         return Settings(**kwargs)
     except ValidationError as exc:
-        raise ConfigError(_format_validation_error(exc)) from exc
+        raise ConfigError(_format_validation_error(exc)) from None
 
 
 def health_port(settings: Settings, *, once: bool = False, replay: str | None = None) -> int:

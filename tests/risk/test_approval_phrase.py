@@ -6,17 +6,19 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord, parse_human_phrase, record_human_approval
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
@@ -39,7 +41,7 @@ def _store(tmp_path: Path) -> LedgerStore:
     recreate_ledger_db(path)
     store = LedgerStore(str(path))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     return store
 
 
@@ -103,7 +105,7 @@ def _approve(
         at=datetime.fromtimestamp(clock.now(), UTC),
     )
     record_human_approval(
-        store, record, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
+        store, record, ts_utc=format_ts_utc(clock.now()), source="replay", correlation_id="test"
     )
     return approval_id
 
@@ -197,7 +199,7 @@ def test_exit_rule_approval_authorises_manual_ticket_sell(tmp_path: Path) -> Non
             at=datetime.fromtimestamp(clock.now(), UTC),
         )
         record_human_approval(
-            store, record, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
+            store, record, ts_utc=format_ts_utc(clock.now()), source="replay", correlation_id="test"
         )
         decision = engine.check(
             _sell(clock, ids, approval_id), seat="bot-06-exit", exit_reason="exit_rule"
@@ -237,7 +239,7 @@ def test_autonomy_level_switch_is_human_only_and_journaled(tmp_path: Path) -> No
             "human:alice",
             previous="manual-ticket",
             ts_utc=ts,
-            source="paper",
+            source="replay",
             correlation_id="test",
         )
         assert [row["type"] for row in rows] == ["ConfigChanged", "JournalNote"]
@@ -249,16 +251,6 @@ def test_autonomy_level_switch_is_human_only_and_journaled(tmp_path: Path) -> No
         store.close()
 
 
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
 async def test_consumed_approval_demands_fresh_approval(tmp_path: Path) -> None:
     """INV-R-10/12: an approval covers one order; reuse is approval_missing."""
     clock = FixtureClock(start=START)
@@ -266,15 +258,16 @@ async def test_consumed_approval_demands_fresh_approval(tmp_path: Path) -> None:
     try:
         ids = IdFactory(clock, make_rng(41))
         engine = _engine(store, clock)
-        snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
-        adapter = PaperAdapter(
+        replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+        adapter = build_paper_adapter(
+            SimpleNamespace(risk=RiskBudget()),
             store=store,
             risk=engine,
             ids=ids,
             clock=clock,
             rng=make_rng(41),
-            budget=RiskBudget(),
-            price_source=_ScriptedCurves([snap, snap]),
+            replay=replay,
+            source="replay",
             p_drop=0.0,
         )
         approval_id = _approve(store, clock, ids, f"approve {TICKET} {MINT} 0.2 100")

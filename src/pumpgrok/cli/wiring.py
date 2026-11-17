@@ -24,7 +24,7 @@ from pumpgrok.core.tool import Tool
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.tools import build_operator_registry
+from pumpgrok.tools import build_production_operator_registry
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -67,7 +67,7 @@ async def _with_tools(
     return not-yet-implemented (Phase 4 orchestration). No tool implementation
     is ever imported or called directly here; everything goes through find().
     """
-    reg, manifests, client = build_operator_registry(
+    reg, manifests, client = build_production_operator_registry(
         data_dir=Path("var") / "desk",
         repo_root=_repo_root(),
         settings=settings,
@@ -196,7 +196,7 @@ def _tools_schema(tool_id: str) -> int:
 
     async def _schema() -> int:
         settings = load_settings()
-        reg, _, client = build_operator_registry(
+        reg, _, client = build_production_operator_registry(
             data_dir=Path("var") / "desk",
             repo_root=_repo_root(),
             settings=settings,

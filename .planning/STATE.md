@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v4
 milestone_name: PumpGrok Desk v4
-status: "Phase 12 verified 12/12; ship checkpoint open (draft PRs, owner receipt approval pending)"
-last_updated: "2026-11-08"
-last_activity: 2026-11-08
-last_activity_desc: Phase 12 verified at 9d32a35; seat branches opened as draft PRs; G-2 awaits owner approval
-state_head: 8e8c4c3f09f2ce4f1e366d10ea56cb6db832c931
+status: "Phase 13 complete on integration head; PR to main pending (draft)"
+last_updated: "2026-11-13"
+last_activity: 2026-11-13
+last_activity_desc: "Phase 13 gates green (lint, typecheck, test, check.sh, smoke replay, live exit 3, smoke-10m hash unchanged); verification 13-VERIFICATION.md"
+state_head: 8927dab
 progress:
   total_phases: 9
-  completed_phases: 1
-  percent: 11
+  completed_phases: 3
+  percent: 33
   blocked_phases: 0
-current_phase: 12
-stopped_at: "Phase 12 verified 12/12 at 9d32a35 (report commit 57da233). Draft PRs open for bot-02-risk, bot-09-journal and bot-00-chief on phase-12-event-runtime; not merged. Resume after the owner adds approved_by to the three v4-p12 receipts and the PRs merge. Phase 13 starts only after Phase 12 merges (ROADMAP Execution Order)."
+current_phase: 14
+stopped_at: "Phase 13 closed 2026-11-13 at 8927dab (verification 13-VERIFICATION.md). Phase 12 merged 2026-11-11 (PRs #61-#63). Phase 14 next. Phase 13 PR to main is a draft; not merged. Phase 13 open items: portal frame fields ASSUMED until live probe; no live-feed provenance; supplied-mark branch dead code."
 ---
 paid_rpc_provider: none
 

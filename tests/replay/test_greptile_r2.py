@@ -16,7 +16,10 @@ from typing import Any
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import ExitsSettings, FilterSettings
+from pumpgrok.config.settings import ExitsSettings, FilterSettings, load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
@@ -27,10 +30,12 @@ from pumpgrok.supervisor.scheduler import (
     run_once_replay,
     serve_fixture_timeline,
 )
+from pumpgrok.tools import ensure_paper_genesis
 
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
 SEED = 20260101
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
 MINT_B = "SmokeMintBBBB2222222222222222222222222222222"
 MINT_C = "SmokeMintCCCC3333333333333333333333333333333"
 T_UNITS = 121_500_000_000_000
@@ -99,12 +104,38 @@ def _rows(ledger: Path) -> list[dict[str, Any]]:
         store.close()
 
 
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, recorded as the onboarding verbs record it.
+
+    The paper genesis is written first, as ``_record_tool`` does, then the operator key and an
+    allow per roster tool. Each allow is an HMAC-authenticated protected record bound to a
+    ConfigChanged row in the paper ledger, the same records the startup gate reads.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
+
+
 # Finding 2: a valid zero daily-loss fraction halts the replay; the run still succeeds.
 def test_zero_daily_loss_fraction_halts_and_the_run_exits_0(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PUMPGROK_RISK__DAILY_LOSS_HALT_FRACTION", "0")
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
     ledger = tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite"
     halts = [r for r in _rows(ledger) if r["type"] == "HaltSet"]

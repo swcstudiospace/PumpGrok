@@ -25,9 +25,9 @@ def test_smoke_10m_events_hash_matches_the_pin(clean_cwd: Path) -> None:
     assert run.events_hash == SMOKE_10M_EVENTS_HASH
 
 
-def test_smoke_10m_chain_has_seq_two_and_forty_one_events(clean_cwd: Path) -> None:
+def test_smoke_10m_chain_has_seq_146_and_forty_one_events(clean_cwd: Path) -> None:
     run = verify_fixture("smoke-10m")
-    assert (run.seq, run.events_read) == (2, 41)
+    assert (run.seq, run.events_read) == (146, 41)
 
 
 def test_smoke_10m_ledger_lands_under_the_clean_directory(clean_cwd: Path) -> None:

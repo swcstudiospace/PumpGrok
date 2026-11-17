@@ -1,0 +1,44 @@
+{
+  "plan": "16-02",
+  "phase": "16-backtest-v2-and-autonomous-evaluation",
+  "requirement": "BT-12",
+  "criteria": [5],
+  "seat": "bot-02-risk",
+  "branch": "bot-02-risk/phase-16-strategy-replay",
+  "base": "095308767f414ec555e2e11a47b8ae335d642b90",
+  "commands_run": [
+    {
+      "command": "PYTHONPATH=src /root/src/repos/pumpgrok/.venv/bin/python -m pytest -o addopts= -q -p no:cacheprovider tests/backtest/test_strategy_replay.py tests/backtest/test_dataset_curve_source_perf.py",
+      "cwd": "/root/src/repos/pumpgrok-wt/phase-16-strategy-replay",
+      "exit": 0,
+      "result": "6 passed in 15.38s"
+    }
+  ],
+  "parity": {
+    "dataset": "tests/fixtures/replay/smoke",
+    "seed": 20260101,
+    "v1_fill_count": 3,
+    "strategy_run_fill_count": 3,
+    "v1_net_lamports": 14435593,
+    "strategy_run_net_lamports": 14435593,
+    "fills_equal": true,
+    "net_equal": true
+  },
+  "perf_counts": {
+    "note": "events examined by one window lookup on mint m3 at ts 50, n=10 mints, total ticks n*m; bound is 8*log2(total)+8",
+    "1000": 13,
+    "10000": 20,
+    "100000": 28
+  },
+  "no_edit": {
+    "statement": "no file under supervisor/, execution/, strategies/, or tests/fixtures/ changed",
+    "git_diff_stat": "",
+    "git_status_short": [
+      "src/pumpgrok/backtest/event_source.py",
+      "src/pumpgrok/backtest/strategy_run.py",
+      "tests/backtest/test_strategy_replay.py",
+      "tests/backtest/test_dataset_curve_source_perf.py",
+      ".receipts/bot-02-risk/16-02-replay.json"
+    ]
+  }
+}

@@ -16,19 +16,52 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import FORBIDDEN_SUBSTRINGS, FilterSettings
+from pumpgrok.config.settings import FORBIDDEN_SUBSTRINGS, FilterSettings, load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import GENESIS_PREV_HASH, LedgerStore
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
+from pumpgrok.replay.grants import REPLAY_GRANT_BY
 from pumpgrok.replay.runner import run_replay
 from pumpgrok.supervisor.scheduler import rollover_key
+from pumpgrok.tools import ensure_paper_genesis
 
 SMOKE = Path(__file__).resolve().parent / "fixtures" / "replay" / "smoke"
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, as the onboarding verbs record it.
+
+    The paper genesis is written first, then the operator key and an HMAC-authenticated
+    allow per roster tool, so the paper startup gate reads complete authority inputs.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 @pytest.fixture(autouse=True)
@@ -71,9 +104,18 @@ def _verdict(path: Path) -> dict[str, object]:
 
 
 def _replay_ledger_contract(path: Path) -> None:
-    """CLI replay ledgers hold the verdict row, the D6 rollover row and the order rows."""
+    """CLI replay ledgers hold the verdict row, the D6 rollover row and the order rows.
+
+    The sandbox also seeds one replay ConfigChanged grant per roster tool of every seat before
+    the run (replay/grants.py). Those grant rows are allowed, but each must be a replay grant and
+    there must be exactly one per roster tool. Every other row is compared exactly, in order.
+    """
     rows = _rows(path, "SELECT type, idempotency_key, payload_json FROM events ORDER BY seq")
-    assert [row[0] for row in rows] == [
+    grants = [row for row in rows if row[0] == "ConfigChanged"]
+    assert len(grants) == _roster_size()
+    assert all(json.loads(str(row[2]))["by"] == REPLAY_GRANT_BY for row in grants)
+    rest = [row for row in rows if row[0] != "ConfigChanged"]
+    assert [row[0] for row in rest] == [
         "JournalNote",
         "DailyRollover",
         "OrderRejected",
@@ -86,10 +128,14 @@ def _replay_ledger_contract(path: Path) -> None:
         "FillRecorded",
         "PositionClosed",
     ]
-    payload = json.loads(str(rows[1][2]))
+    payload = json.loads(str(rest[1][2]))
     day = str(load_dataset(SMOKE).events[0]["ts_utc"])[:10]
     assert payload["day_utc"] == day
-    assert rows[1][1] == rollover_key(day)
+    assert rest[1][1] == rollover_key(day)
+
+
+def _roster_size() -> int:
+    return sum(len(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)) for seat in EXPECTED_SEAT_IDS)
 
 
 def test_runner_folds_fixture_events_into_one_fail_closed_verdict(tmp_path: Path) -> None:
@@ -130,6 +176,7 @@ def test_skip_cycle_cli_reports_the_runner_verdict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
 
     verdict = _verdict(_ledger(tmp_path))
@@ -165,6 +212,7 @@ def test_killswitch_env_passes_settings_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     monkeypatch.setenv("PUMPGROK_KILLSWITCH", "1")
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
     _replay_ledger_contract(_ledger(tmp_path))
@@ -174,6 +222,7 @@ def test_second_run_recreates_the_replay_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     argv = ["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]
     assert main(argv) == 0
     assert main(argv) == 0
@@ -193,13 +242,15 @@ def test_tampered_fixture_exits_4_before_any_ledger(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     dataset = tmp_path / "fixtures" / "smoke"
     shutil.copytree(SMOKE, dataset)
     with (dataset / "events.jsonl").open("a", encoding="utf-8") as handle:
         handle.write('{"ts_utc":"2026-01-01T00:00:04.000Z","kind":"tick"}\n')
 
     assert main(["run", "--mode", "paper", "--once", "--replay", str(dataset)]) == 4
-    assert not (tmp_path / "var").exists()
+    replay = _ledger(tmp_path)
+    assert not replay.exists() or _rows(replay, "SELECT COUNT(*) FROM events") == [(0,)]
     assert "corrupt fixture" in capsys.readouterr().err
 
 
@@ -224,6 +275,7 @@ def test_refused_live_run_leaves_seeded_ledger_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
     ledger = _ledger(tmp_path)
     rows_before = _rows(ledger, "SELECT * FROM events ORDER BY seq")

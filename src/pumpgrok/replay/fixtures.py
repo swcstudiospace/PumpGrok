@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -46,6 +46,10 @@ class FixtureManifest(BaseModel):
     sources: dict[str, str] = Field(default_factory=dict)
     sha256: dict[str, str]
     notes: str = ""
+    # Optional and additive. "synthetic" marks a dataset built by a script, never market
+    # evidence. Absent on every dataset that predates the label, so those manifests verify
+    # unchanged. Any other value is refused.
+    provenance: Literal["synthetic", "recorded"] | None = None
 
     @field_validator("dataset")
     @classmethod

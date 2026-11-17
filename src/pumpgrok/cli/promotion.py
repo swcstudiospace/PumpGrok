@@ -3,13 +3,12 @@
 run_promotion_check searches the declared space (upgrade/space.py) over one recorded
 dataset with the same holdout path as ``backtest``, takes the search winner alone, asks the
 gate for a verdict on that winner, and hands the verdict to upgrade.scheduled.apply_candidate.
-It acts only at the autonomous-paper level, read from the operator ledger. A non-autonomous
-level, an empty space, a winner already active, or a paper window that has not finished with
-at least one observation returns skipped and writes nothing. Any exception returns failed and
-promotes nothing.
-
-make_promotion_check wraps the check in a closure taking (store, clock). The closure runs the
-check at most once per PROMOTION_CHECK_INTERVAL_S on the injected clock.
+It acts only at the autonomous-paper level, read from the operator ledger, and only when a human
+invokes it (automatic=False, the default). No serve path calls it. automatic=True returns
+skipped before any work, so the desk never activates a candidate or moves its level on its own.
+A non-autonomous level, an empty space, a winner already active, or a paper window that has not
+finished with at least one observation returns skipped and writes nothing. Any exception returns
+failed and promotes nothing.
 """
 
 from __future__ import annotations
@@ -45,20 +44,14 @@ from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.upgrade.bounds import load_bounds
 from pumpgrok.upgrade.gate import REQUIRED_AUTONOMY_LEVEL, evaluate_candidate
 from pumpgrok.upgrade.params import ParamSet
-from pumpgrok.upgrade.scheduled import (
-    PROMOTION_CHECK_INTERVAL_S,
-    CheckOutcome,
-    apply_candidate,
-    due,
-    mark,
-)
+from pumpgrok.upgrade.scheduled import CheckOutcome, apply_candidate
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
 
     from pumpgrok.core.ids import Clock
 
-__all__ = ["make_promotion_check", "run_promotion_check"]
+__all__ = ["run_promotion_check"]
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -111,7 +104,7 @@ def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float
     summary would read as a flat zero return and zero Sharpe. The chain is verified first,
     as the paper gate does.
     """
-    rows, _ = _read_window_ledger(paper_path, verify=True)
+    rows, _, _ = _read_window_ledger(paper_path, verify=True)
     stamps = [_row_stamp(row) for row in rows]
     reached_end = any(stamp >= window_end for stamp in stamps)
     observed = any(cutoff <= stamp < window_end for stamp in stamps)
@@ -241,6 +234,7 @@ def run_promotion_check(
     initial_equity_lamports: int,
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
+    automatic: bool = False,
 ) -> CheckOutcome:
     """Run one promotion check over the declared space; return its outcome.
 
@@ -254,7 +248,13 @@ def run_promotion_check(
     complete. Nothing is written. failed: any exception; a structured line names its class,
     and nothing is promoted. promoted or escalated: the gate's verdict on the search winner was
     applied (see upgrade.scheduled.apply_candidate).
+
+    automatic=True is the serve path. It returns skipped before any search, so no candidate is
+    activated and no level is written automatically. Promotion is a human action.
     """
+    if automatic:
+        log.info("promotion_check outcome=skipped detail=automatic promotion is human-only")
+        return "skipped"
     risk_budget = RiskBudget() if budget is None else budget
     engine_limits = EngineLimits() if limits is None else limits
     try:
@@ -289,38 +289,3 @@ def run_promotion_check(
         return "failed"
     log.info("promotion_check outcome=%s candidates=%d", outcome, len(space))
     return outcome
-
-
-def make_promotion_check(
-    dataset_dir: str | Path,
-    *,
-    space: Sequence[Mapping[str, Any]],
-    seed: int,
-    initial_equity_lamports: int,
-    budget: RiskBudget | None = None,
-    limits: EngineLimits | None = None,
-) -> Callable[[LedgerStore, Clock], None]:
-    """Return a closure taking (store, clock) that runs the check once per interval.
-
-    The closure receives the serve's own store and clock on each tick. It checks due() first
-    and returns at once when the interval has not passed. When it has, the closure runs
-    run_promotion_check and then marks the clock time, so a skipped, promoted, escalated or
-    failed check all wait one full interval.
-    """
-
-    def _promotion_check(store: LedgerStore, clock: Clock) -> None:
-        if not due(store, clock, PROMOTION_CHECK_INTERVAL_S):
-            return
-        run_promotion_check(
-            store,
-            dataset_dir,
-            clock=clock,
-            space=space,
-            seed=seed,
-            initial_equity_lamports=initial_equity_lamports,
-            budget=budget,
-            limits=limits,
-        )
-        mark(store, clock)
-
-    return _promotion_check
