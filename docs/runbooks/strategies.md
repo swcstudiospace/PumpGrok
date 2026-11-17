@@ -75,3 +75,16 @@ uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke
 ```
 
 Live stays refused: `uv run pumpgrok run --mode live --once` exits 3.
+
+## Phase 16 verbs: backtest, record, replay and live serve
+
+These verbs run on the paper path and never move funds. Live mode refuses `run --record` and `live serve` before any settings or wallet check (`src/pumpgrok/cli/dispatch.py`). `uv run pumpgrok run --mode live --once` still exits 3.
+
+- `uv run pumpgrok backtest --fixture DATASET --strategy ID` backtests one registered strategy with no parameter search, and prints Metrics v2 (`src/pumpgrok/cli/strategy_backtest.py`).
+- `uv run pumpgrok run --record DATASET --duration SECONDS [--mints LIST]` records a live-paper dataset into `var/datasets/DATASET/` and seals it. It needs a positive `--duration`, an RPC endpoint from settings, and no `--replay`. `--mints` restricts recording to a comma-separated list.
+- `uv run pumpgrok replay trim --dataset NAME --max-events N --keep-mints-with-fills` trims a dataset. `--keep-mints-with-fills` is required and is the only keep rule; `--max-events N` keeps the last N kept events.
+- `uv run pumpgrok replay rebuild-ticks --dataset NAME` rebuilds ticks from a recording.
+- `uv run pumpgrok replay import --dataset NAME` writes an imported dataset under NAME.
+- `uv run pumpgrok live serve --rpc ENDPOINT [--once]` serves the live-data paper root. `--rpc` is required and has no default (owner decision 4). `--once` runs one paper cycle and exits.
+
+Scheduled backtests publish their verdict as a JournalNote with NoteKind verdict (`src/pumpgrok/backtest/scheduler.py`). No event kind was added (owner decision 6).
