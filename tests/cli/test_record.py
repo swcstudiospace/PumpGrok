@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from pumpgrok.cli import main
+from pumpgrok.cli import main, verbs_state
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_LIVE, EXIT_OK
 from pumpgrok.datafeed import feed_loop
 from pumpgrok.datafeed import transport as datafeed_transport
@@ -28,7 +28,7 @@ from pumpgrok.datafeed.logs import PUMP_PROGRAM_ID
 from pumpgrok.datafeed.transport import RecordingJsonRpc
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay import maintenance
-from pumpgrok.replay.clock import WallClock, format_ts_utc
+from pumpgrok.replay.clock import FixtureClock, WallClock, format_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, CorruptFixture, load_dataset
 from pumpgrok.replay.live_recorder import FEED_NAME, GAPS_NAME, LiveRecorder, seal_directory
 
@@ -583,6 +583,20 @@ def _feed_rows(directory: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in (directory / FEED_NAME).read_text().splitlines()]
 
 
+@pytest.fixture
+def frozen_record_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give `run --record` a clock that never advances, so its record deadline never fires.
+
+    `_run_record` builds the feed loop clock with WallClock(), and the loop ends once
+    monotonic() reaches start + duration. Under CPU load, startup can use up that window, so
+    no frame is recorded and sealing refuses. With a frozen clock the loop ends only when both
+    fake sources close, which they do once their frames are exhausted. The fakes never block,
+    so no clock timeout fires.
+    """
+    monkeypatch.setattr(verbs_state, "WallClock", lambda: FixtureClock(start=_START))
+
+
+@pytest.mark.usefixtures("frozen_record_clock")
 def test_record_with_replay_or_bad_duration_is_usage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -594,6 +608,7 @@ def test_record_with_replay_or_bad_duration_is_usage(
     assert not (tmp_path / "var" / "datasets").exists()
 
 
+@pytest.mark.usefixtures("frozen_record_clock")
 def test_record_live_mode_exits_3_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -603,6 +618,7 @@ def test_record_live_mode_exits_3_and_writes_nothing(
     assert not (tmp_path / "var" / "datasets").exists()
 
 
+@pytest.mark.usefixtures("frozen_record_clock")
 def test_record_seals_dataset_and_stamps_observations_at_frame_ts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -646,6 +662,7 @@ def test_record_seals_dataset_and_stamps_observations_at_frame_ts(
     assert (rebuilt / EVENTS_NAME).read_bytes() == (directory / EVENTS_NAME).read_bytes()
 
 
+@pytest.mark.usefixtures("frozen_record_clock")
 def test_record_refuses_a_non_fresh_dataset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -658,6 +675,7 @@ def test_record_refuses_a_non_fresh_dataset(
     assert not (taken / FEED_NAME).exists()
 
 
+@pytest.mark.usefixtures("frozen_record_clock")
 def test_record_mints_restricts_events_and_rejects_a_bad_mint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
