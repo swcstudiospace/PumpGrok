@@ -2,6 +2,37 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 16: backtest v2 and autonomous evaluation
+
+### Added
+
+- Metrics v2: seven metrics and round trips (plan 16-01, BT-08, BT-09; commit a3696ec).
+- Replay trim and import, the feed.jsonl recorder contract, and rebuild-ticks from the recorded feed (plan 16-04; commits 6a65c40, f776c7f, 0953087).
+- Event source and strategy-aware replay (plan 16-02; commit c00dfe3).
+- Grade evidence and segment gaps (plan 16-03; commit 338528e).
+- Autonomous scheduler and evidence provider (plan 16-05; commit ebab2df).
+- Strategy backtest verb prints Metrics v2, and a per-strategy report section (plan 16-06; commits bf74098, dca5105).
+- run --record and live serve on the paper root (plan 16-08; commit ea2a22d). Live serve is paper-only, and run --mode live --once exits 3 (owner decision 2).
+- Publication is a JournalNote with NoteKind verdict, and no event kind was added (owner decision 6). The ledger and core packages have no diff from 5fa947b to f05381d.
+
+### Fixed
+
+- Phase 16 guard regressions cleared (acea4b3); backtest lint and type errors cleared (57b2fec); cli and datafeed lint cleared without behaviour changes (fb1f6cf).
+- Deterministic record clock for the run --record tests, so they no longer depend on CPU load (6dd3912).
+
+### Changed
+
+- Criterion 1 paper smoke is deferred to deployment by owner decision (16-PLANS-INDEX.md row J). The CI receipt allowlist admits .receipts/*/16-*.json (commit 81ddc31).
+
+### Verification
+
+- Phase 16: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 16: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 16: trading-smoke events.hash before: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 16: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 16 before values were measured at 5fa947b, the integration head before the first Phase 16 merge (22dd90b). After values were measured at f05381d.
+- At f05381d, make lint, make typecheck, make test and ./scripts/check.sh exit 0 (coverage 91.30 percent, floor 89.9 percent). Criterion 1 is deferred; see Changed.
+
 ## [Unreleased] - v4 Phase 15: strategy framework and multi-strategy paper
 
 ### Changed
