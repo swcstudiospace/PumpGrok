@@ -234,6 +234,7 @@ def test_manual_ticket_skips_and_writes_nothing(ledger, tmp_path, monkeypatch) -
         space=_declared(tmp_path),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "skipped"
     assert ledger.count() == before
@@ -299,6 +300,7 @@ def test_autonomous_search_gates_only_the_winner(ledger, tmp_path, monkeypatch) 
         space=_declared(tmp_path),
         seed=7,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "promoted"
     assert len(calls) == 1
@@ -325,6 +327,7 @@ def test_repeated_declaration_counts_once(ledger, tmp_path, monkeypatch) -> None
         space=[*declared, declared[0]],
         seed=7,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "promoted"
     assert calls[0]["n_trials"] == 2
@@ -346,6 +349,7 @@ def test_winner_already_active_is_skipped(ledger, tmp_path, monkeypatch) -> None
         space=_declared(tmp_path, ONE_TEXT),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "skipped"
     assert len(calls) == 1
@@ -365,6 +369,7 @@ def test_harness_failure_returns_failed_and_promotes_nothing(ledger, tmp_path) -
         space=_declared(tmp_path),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "failed"
     assert ledger.count() == before

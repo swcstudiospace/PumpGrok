@@ -4,8 +4,9 @@ run_promotion_check searches the declared space (upgrade/space.py) over one reco
 dataset with the same holdout path as ``backtest``, takes the search winner alone, asks the
 gate for a verdict on that winner, and hands the verdict to upgrade.scheduled.apply_candidate.
 It acts only at the autonomous-paper level, read from the operator ledger, and only when a human
-invokes it (automatic=False, the default). No serve path calls it. automatic=True returns
-skipped before any work, so the desk never activates a candidate or moves its level on its own.
+invokes it with mode="human". No serve path calls it. mode="automatic" returns skipped before any
+work, so the desk never activates a candidate or moves its level on its own. mode has no default:
+a call without it raises TypeError, so no default promotes.
 A non-autonomous level, an empty space, a winner already active, or a paper window that has not
 finished with at least one observation returns skipped and writes nothing. Any exception returns
 failed and promotes nothing.
@@ -16,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pumpgrok.backtest.divergence import check
 from pumpgrok.backtest.evaluate import evaluated_settings_hash
@@ -234,7 +235,7 @@ def run_promotion_check(
     initial_equity_lamports: int,
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
-    automatic: bool = False,
+    mode: Literal["automatic", "human"],
 ) -> CheckOutcome:
     """Run one promotion check over the declared space; return its outcome.
 
@@ -249,12 +250,15 @@ def run_promotion_check(
     and nothing is promoted. promoted or escalated: the gate's verdict on the search winner was
     applied (see upgrade.scheduled.apply_candidate).
 
-    automatic=True is the serve path. It returns skipped before any search, so no candidate is
-    activated and no level is written automatically. Promotion is a human action.
+    mode="automatic" is the serve path. It returns skipped before any search, so no candidate is
+    activated and no level is written automatically. mode="human" is the only path that promotes.
+    It is an explicit human action; no serve path may pass it. mode has no default.
     """
-    if automatic:
+    if mode == "automatic":
         log.info("promotion_check outcome=skipped detail=automatic promotion is human-only")
         return "skipped"
+    if mode != "human":
+        raise ValueError(f"promotion check mode must be 'automatic' or 'human', got {mode!r}")
     risk_budget = RiskBudget() if budget is None else budget
     engine_limits = EngineLimits() if limits is None else limits
     try:
