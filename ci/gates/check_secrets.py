@@ -64,12 +64,14 @@ PATTERNS: list[tuple[str, str, str]] = [
     ),
     (
         "helius_url_key",
-        r"(?i)helius(?:-rpc)?\.com/[^\s\"']*api-key=[A-Za-z0-9-]{20,}",
+        r"(?i)helius(?:-rpc)?\.com/(?:(?!helius(?:-rpc)?\.com/)[^\s\"'])*api-key=[A-Za-z0-9-]{20,}",
         "Helius RPC URL with key",
     ),
     (
         "quicknode_url",
-        r"(?i)[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}",
+        # Lookbehind: a match starts only where a run of host characters begins. Without it, each
+        # start inside a long alphanumeric run rescans the run, which is quadratic on long lines.
+        r"(?i)(?<![a-z0-9-])[a-z0-9-]+\.solana-mainnet\.quiknode\.pro/[A-Za-z0-9]{20,}",
         "QuickNode endpoint with token",
     ),
     ("telegram_bot_token", r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b", "Telegram bot token"),
@@ -114,7 +116,6 @@ SKIP_EXT = {
     ".jpg",
     ".jpeg",
     ".gif",
-    ".svg",
     ".ico",
     ".pdf",
     ".zip",
@@ -131,21 +132,35 @@ SKIP_EXT = {
     ".mp4",
     ".mp3",
     ".webp",
-    ".lock",
 }
+
+# Tracked lockfile, exempt by exact name. Other lockfiles are scanned like any other file.
+EXEMPT_NAMES = {"uv.lock"}
 
 # Terraform state holds resource attributes verbatim, including generated passwords. Solana
 # keypair files are JSON byte arrays and carry no other marker, so their names are flagged.
 ALWAYS_FLAG_FILES = {
     "terraform.tfstate",
     "terraform.tfstate.backup",
-    ".env",
     "id_rsa",
     "id_ed25519",
     "id.json",
     "keypair.json",
     "wallet.json",
 }
+# Env files hold live values. The tracked template is scanned like any other file instead.
+ENV_TEMPLATE_NAMES = {".env.example"}
+
+
+def _always_flagged(name: str) -> bool:
+    if name in ALWAYS_FLAG_FILES:
+        return True
+    return (name == ".env" or name.startswith(".env.")) and name not in ENV_TEMPLATE_NAMES
+
+
+def _skipped(rel: str) -> bool:
+    """Paths whose content is not scanned: binary extensions and the exempt lockfile."""
+    return Path(rel).name in EXEMPT_NAMES or Path(rel).suffix.lower() in SKIP_EXT
 
 
 def shannon_entropy(s: str) -> float:
@@ -242,19 +257,18 @@ def _forbidden(rel: str) -> list[dict]:
 
 
 def _scan_text(rel: str, text: str) -> list[dict]:
+    # No line-length cap: a cap lets a credential pass by padding its line. The patterns are
+    # anchored so that they stay linear on long lines; ci/tests/test_secrets_gate_scope.py pins it.
     findings: list[dict] = []
     for i, line in enumerate(text.splitlines(), start=1):
-        if len(line) > 4000:  # minified bundle
-            continue
         findings.extend(scan_line(rel, i, line))
     return findings
 
 
 def scan_file(path: Path, rel: str) -> list[dict]:
-    if Path(rel).name in ALWAYS_FLAG_FILES:
+    if _always_flagged(Path(rel).name):
         return _forbidden(rel)
-
-    if path.suffix.lower() in SKIP_EXT:
+    if _skipped(rel):
         return []
 
     try:
@@ -266,13 +280,11 @@ def scan_file(path: Path, rel: str) -> list[dict]:
 
 
 def scan_blob(rel: str, blob: str) -> list[dict]:
-    """Scan the staged content of rel, which is the index object `blob`, not the worktree file."""
-    if Path(rel).name in ALWAYS_FLAG_FILES:
+    """Scan the content of rel as the git object `blob`, not the worktree file."""
+    if _always_flagged(Path(rel).name):
         return _forbidden(rel)
-
-    if Path(rel).suffix.lower() in SKIP_EXT:
+    if _skipped(rel):
         return []
-
     return _scan_text(rel, _git(["cat-file", "blob", blob]))
 
 
@@ -294,10 +306,18 @@ def _git(args: list[str]) -> str:
     return out.stdout
 
 
-def changed_files(base: str) -> list[str]:
-    # -z: plain output quotes non-ASCII names, and a quoted name names no file on disk.
-    raw = _git(["diff", "--name-only", "-z", f"{base}...HEAD"])
-    return [name for name in raw.split("\0") if name]
+def _raw_entries(raw: str) -> list[tuple[str, str, str]]:
+    """Parse `git diff --raw -z --no-renames` output into (path, dst_mode, dst_sha) records."""
+    fields = raw.split("\0")
+    # git -z ends every record with NUL, so the split leaves one trailing empty field. Anything
+    # else at the end, or an odd field count, is not the format this parser reads: fail closed.
+    if fields.pop() != "" or len(fields) % 2:
+        sys.exit("check_secrets: unexpected git diff --raw -z output")
+    entries: list[tuple[str, str, str]] = []
+    for meta, path in zip(fields[0::2], fields[1::2], strict=True):
+        _src_mode, dst_mode, _src_sha, dst_sha, _status = meta.lstrip(":").split()
+        entries.append((path, dst_mode, dst_sha))
+    return entries
 
 
 def staged_blobs() -> dict[str, str]:
@@ -307,17 +327,7 @@ def staged_blobs() -> dict[str, str]:
     under its new path. Gitlinks (mode 160000) are submodule pointers with no file content.
     """
     raw = _git(["diff", "--cached", "--raw", "-z", "--no-renames", "--diff-filter=ACMT"])
-    fields = raw.split("\0")
-    # git -z ends every record with NUL, so the split leaves one trailing empty field. Anything
-    # else at the end, or an odd field count, is not the format this parser reads: fail closed.
-    if fields.pop() != "" or len(fields) % 2:
-        sys.exit("check_secrets: unexpected git diff --raw -z output")
-    blobs: dict[str, str] = {}
-    for meta, path in zip(fields[0::2], fields[1::2], strict=True):
-        _src_mode, dst_mode, _src_sha, dst_sha, _status = meta.lstrip(":").split()
-        if dst_mode != "160000":
-            blobs[path] = dst_sha
-    return blobs
+    return {path: sha for path, mode, sha in _raw_entries(raw) if mode != "160000"}
 
 
 def main() -> int:
@@ -330,57 +340,28 @@ def main() -> int:
     args = ap.parse_args()
 
     root = args.root.resolve()
-
-    staged_index: dict[str, str] | None = None
-    if args.files is not None:
-        targets = args.files
-    elif args.staged:
-        # The index is what a commit records; the working tree may hold something else.
-        staged_index = staged_blobs()
-        targets = list(staged_index)
-    elif args.all:
-        targets = [
-            str(p.relative_to(root))
-            for p in root.rglob("*")
-            if p.is_file() and not any(part in SKIP_DIRS for part in p.parts)
-        ]
-    else:
-        targets = changed_files(args.base)
-
-    if not targets:
+    jobs = _select_jobs(args, root)
+    if not jobs:
         print("G-3 PASS — no files to scan")
         return 0
 
     findings: list[dict] = []
-    for rel in targets:
-        if any(part in SKIP_DIRS for part in Path(rel).parts):
-            continue
-        if staged_index is not None:
-            findings.extend(scan_blob(rel, staged_index[rel]))
-            continue
-        path = root / rel
-        if not path.exists() or not path.is_file():
-            continue
-        findings.extend(scan_file(path, rel))
+    for rel, blob, commit in jobs:
+        if blob is not None:
+            found = scan_blob(rel, blob)
+        else:
+            path = root / rel
+            if not path.is_file():
+                continue
+            found = scan_file(path, rel)
+        findings.extend({**f, "commit": commit} for f in found)
 
     if findings:
-        print(f"G-3 FAIL — {len(findings)} potential secret(s)", file=sys.stderr)
-        for f in findings:
-            loc = f"{f['file']}:{f['line']}" if f["line"] else f["file"]
-            print(f"  {loc}", file=sys.stderr)
-            print(f"    {f['rule']}: {f['desc']}", file=sys.stderr)
-            if f["excerpt"]:
-                print(f"    {f['excerpt']}", file=sys.stderr)
-        print(
-            "\n  If a hit is real, the secret is COMPROMISED. "
-            "Rotate it first, then clean history.\n"
-            "  If it is a false positive, add '# pragma: allowlist secret' with a reason.\n"
-            "  See skills/security/secrets-handling/SKILL.md",
-            file=sys.stderr,
-        )
+        _report(findings)
         return 1
 
-    print(f"G-3 PASS — {len(targets)} file(s) scanned, no secrets detected")
+    scanned = len({rel for rel, _, _ in jobs})
+    print(f"G-3 PASS — {scanned} file(s) scanned, no secrets detected")
     return 0
 
 
