@@ -427,3 +427,30 @@ def test_entry_check_is_never_consulted_for_source_checks() -> None:
     )
     assert policy.check_source(source) is None
     assert check.calls == []
+
+
+async def test_entry_gate_refusal_places_no_buy_on_paper_path(tmp_path: Path) -> None:
+    """A BUY that the injected gate refuses is rejected at ACCEPTED; no fill is recorded."""
+    clock = FixtureClock(START)
+    store = _store(tmp_path, "replay")
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+    check = _RecordingCheck(reason="top-10 holders 30%")
+    adapter = build_paper_adapter(
+        object(),
+        store=store,
+        risk=_engine(store, clock),
+        ids=IdFactory(clock, make_rng(7)),
+        clock=clock,
+        rng=make_rng(7),
+        replay=replay,
+        source="replay",
+        entry_gate=EntryGate(check=check, holder_blind_advisory=False),
+        p_drop=0.0,
+    )
+    request = _request(adapter, TICKET, side=Side.BUY, units=None)
+    with pytest.raises(OrderRejectedError) as exc_info:
+        await _place(adapter, clock, request, seat="bot-04-sniper")
+    assert exc_info.value.reason == "data_unavailable"
+    assert check.calls == [(MINT, False)]
+    assert _rejections(store) == [("ACCEPTED", "data_unavailable")]
+    assert "FillRecorded" not in _event_kinds(store)
