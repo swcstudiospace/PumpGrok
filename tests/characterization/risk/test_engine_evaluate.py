@@ -709,6 +709,7 @@ def test_evaluate_direct_call_matches_the_check_walk(tmp_path: Path) -> None:
             source="paper",
             correlation_id="desk",
             stage="ACCEPTED",
+            strategy_id=None,
         )
         assert decision.passed is False
         assert decision.reason == "kill_switch"
