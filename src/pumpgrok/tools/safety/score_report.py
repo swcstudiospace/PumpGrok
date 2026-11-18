@@ -5,9 +5,9 @@ top_holders, deployer_history, market.liquidity) and scores 0..100
 (100 = safest) with per-check reasons. Thresholds come from config
 (``SafetyThresholds``) with an optional caller override; any check without
 data returns ``blind``, never an exception. A blind check on a required
-id, or a hard top-5 veto, forces ``verdict_recommendation = KILL``, except
-the SAFE-4/SAFE-8 holder pair stays advisory while no paid RPC provider is
-recorded (amendment 2026-10-25).
+id, a required id left out of ``checks``, or a hard top-5 veto, forces
+``verdict_recommendation = KILL``, except a blind SAFE-4/SAFE-8 holder pair, which
+stays advisory while no paid RPC provider is recorded (amendment 2026-10-25).
 Recommendation only: RISK issues the verdict from the journaled report.
 
 ``creator`` is caller-supplied (creation event): the mint account carries
@@ -439,6 +439,9 @@ async def run_score_report(
     top5 = Decimal(str((top or {}).get("top5_share", "0")))
     hard_veto = bool(top is not None and top5 > Decimal(str(active.top5_share_veto)))
     advisory_active = not paid_rpc_provider_recorded()
+    # A required check left out of ``checks`` was never evaluated: it forces KILL like a
+    # blind required check, and the holder advisory pair does not excuse it.
+    omitted_required = REQUIRED_IDS - wanted
     blind_required = [
         r.id
         for r in rows
@@ -451,7 +454,8 @@ async def run_score_report(
         for r in rows
         if r.status == "blind" and advisory_active and r.id in HOLDER_ADVISORY_PAIR
     ]
-    verdict = _verdict(score, hard_veto or bool(blind_required), active)
+    forced_kill = hard_veto or bool(blind_required) or bool(omitted_required)
+    verdict = _verdict(score, forced_kill, active)
 
     out = {
         "score": int(score),
