@@ -733,9 +733,12 @@ def test_live_serve_once_is_one_paper_cycle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: _FakeRpc())
+    fake = _FakeRpc()
+    monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: fake)
     assert main(["live", "serve", "--rpc", _RPC, "--once"]) == EXIT_OK
-    assert feed_loop.cycles_run == 1
+    subscribed = {"subscribeNewToken", "subscribeMigration", "logsSubscribe"}
+    subscriptions = [frame["method"] for frame in fake.calls if frame["method"] in subscribed]
+    assert subscriptions == ["subscribeNewToken", "subscribeMigration", "logsSubscribe"]
 
 
 def test_recording_jsonrpc_refuses_a_method_outside_the_allowlist() -> None:
