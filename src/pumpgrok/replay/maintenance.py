@@ -389,7 +389,7 @@ async def _replay(
     leftover = sorted(signature for signature, queue in responses.items() if queue)
     if leftover:
         raise CorruptFixture("a recorded transaction response was never requested", file=FEED_NAME)
-    if not await asyncio.to_thread(target.exists):
+    if not await asyncio.to_thread((target / EVENTS_NAME).is_file):
         raise CorruptFixture("the feed yields no curve observations", file=FEED_NAME)
     _write_new(target / FEED_NAME, feed)
     if gaps is not None:
@@ -420,10 +420,12 @@ def rebuild_ticks(name: str, *, root: Path) -> Path:
     gaps = _verified_bytes(source, manifest, GAPS_NAME) if GAPS_NAME in manifest.sha256 else None
     capacity, responses, frames = _plan(_parse_feed(feed))
     target = root / "datasets" / f"{name}-rebuilt"
-    if target.exists():
-        raise MaintenanceRefused(f"target exists: {target.name}", kind="usage")
-    with tempfile.TemporaryDirectory() as scratch:
-        try:
+    try:
+        target.mkdir()
+    except FileExistsError:
+        raise MaintenanceRefused(f"target exists: {target.name}", kind="usage") from None
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
             asyncio.run(
                 _replay(
                     frames,
@@ -435,9 +437,9 @@ def rebuild_ticks(name: str, *, root: Path) -> Path:
                     scratch=Path(scratch),
                 )
             )
-        except BaseException:
-            shutil.rmtree(target, ignore_errors=True)
-            raise
+    except BaseException:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
     return target
 
 
@@ -462,39 +464,55 @@ def _verify_paper_ledger(path: Path) -> None:
         raise MaintenanceRefused("ledger holds a row whose source is not paper", kind="ledger")
 
 
+def _backup_copy(source: Path, destination: Path) -> None:
+    """Copy ``source`` to a new file at ``destination`` with the sqlite backup API.
+
+    The backup reads through the WAL, so rows committed to the ``-wal`` sidecar and not yet
+    checkpointed are included. A byte copy of the main file would miss them and attest a partial
+    ledger. The source is opened read-only and never written.
+    """
+    try:
+        with (
+            closing(sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)) as src,
+            closing(sqlite3.connect(str(destination))) as dst,
+        ):
+            src.backup(dst)
+    except sqlite3.Error:
+        raise MaintenanceRefused(
+            "ledger is not a readable sqlite database", kind="ledger"
+        ) from None
+
+
 def import_dataset(ledger: Path, *, name: str, root: Path) -> Path:
     """Copy a ledger this desk recorded to ``<root>/replay/<name>/imported-ledger.sqlite``.
 
     Accepted only when the ledger verifies from genesis and every row's source is ``paper``
-    (owner decision 1, 2026-11-15). The verified bytes are copied unchanged, the copy is read
-    back and matched to their sha256, and the digest is written beside it in ``sha256sum`` form.
-    Nothing is converted. An existing target is refused before anything is written.
+    (owner decision 1, 2026-11-15). The ledger is copied with the sqlite backup API into a
+    scratch file beside the target, that copy is verified, and it is renamed into place. Its
+    sha256 is written beside it in ``sha256sum`` form. Nothing is converted. An existing target
+    is refused before anything is written into it.
     """
     _plain_name(name)
     if not ledger.is_file():
         raise MaintenanceRefused("ledger file not found", kind="usage")
-    data = ledger.read_bytes()
-    digest = hashlib.sha256(data).hexdigest()
-    with tempfile.TemporaryDirectory() as scratch:
-        candidate = Path(scratch) / IMPORTED_LEDGER_NAME
-        candidate.write_bytes(data)
-        _verify_paper_ledger(candidate)
     target = root / "replay" / name
-    if target.exists():
-        raise MaintenanceRefused(f"target exists: {name}", kind="usage")
-    try:
-        target.mkdir(parents=True)
-    except FileExistsError:
-        raise MaintenanceRefused(f"target exists: {name}", kind="usage") from None
-    try:
-        _write_new(target / IMPORTED_LEDGER_NAME, data)
-        copied = (target / IMPORTED_LEDGER_NAME).read_bytes()
-        if hashlib.sha256(copied).hexdigest() != digest:
-            raise MaintenanceRefused(
-                "copied ledger does not match the verified bytes", kind="ledger"
-            )
-        _write_new(target / IMPORTED_DIGEST_NAME, f"{digest}  {IMPORTED_LEDGER_NAME}\n".encode())
-    except BaseException:
-        shutil.rmtree(target, ignore_errors=True)
-        raise
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=target.parent, prefix=f".{name}-import-") as scratch:
+        copy = Path(scratch) / IMPORTED_LEDGER_NAME
+        _backup_copy(ledger, copy)
+        _verify_paper_ledger(copy)
+        with copy.open("rb") as stream:
+            os.fsync(stream.fileno())
+        digest = hashlib.sha256(copy.read_bytes()).hexdigest()
+        try:
+            target.mkdir()
+        except FileExistsError:
+            raise MaintenanceRefused(f"target exists: {name}", kind="usage") from None
+        try:
+            os.replace(copy, target / IMPORTED_LEDGER_NAME)
+            digest_line = f"{digest}  {IMPORTED_LEDGER_NAME}\n"
+            _write_new(target / IMPORTED_DIGEST_NAME, digest_line.encode("utf-8"))
+        except BaseException:
+            shutil.rmtree(target, ignore_errors=True)
+            raise
     return target
