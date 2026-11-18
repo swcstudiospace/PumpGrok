@@ -122,6 +122,41 @@ def test_a_walked_buy_carries_nineteen_id_and_status_rows(tmp_path: Path) -> Non
     assert decision.order_hash == order_hash_for(order)
 
 
+def test_a_strategy_attributed_buy_keeps_the_nineteen_rows_and_shape(tmp_path: Path) -> None:
+    """A per-strategy walk adds no step id and no decision field (RSK-08)."""
+    clock = FixtureClock(start=_START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", "10000000000")
+    store.set_meta("source", "paper")
+    ids = IdFactory(clock, random.Random(11))
+    try:
+        engine = RiskEngine(
+            store=store,
+            budget=RiskBudget(),
+            ids=ids,
+            clock=clock,
+            autonomy="autonomous-paper",
+            get_reserves=lambda _mint: (42_000_000_000, 764_000_000_000_000),
+        )
+        order = OrderRequest(
+            ticket_id="SOL-20260201-001",
+            mint="So11111111111111111111111111111111111111112",
+            side="buy",
+            decision_id=ids.ulid(),
+            size_lamports=200_000_000,
+            max_slippage_bps=50,
+            approval_id=f"apr-{ids.ulid()}",
+            correlation_id="test",
+        )
+        decision = engine.check(order, seat="bot-04-sniper", strategy_id="alpha")
+    finally:
+        store.close()
+    assert decision.passed is True
+    assert set(RiskDecision.model_fields) == PINNED_DECISION_FIELDS
+    assert [row["id"] for row in decision.evaluated] == list(PINNED_STEP_IDS)
+    assert set(decision.caps) <= {"max_token_fraction", "max_trade_fraction"}
+
+
 def _smoke_ledger(monkeypatch: pytest.MonkeyPatch, cwd: Path) -> Path:
     monkeypatch.chdir(cwd)
     captured = io.StringIO()

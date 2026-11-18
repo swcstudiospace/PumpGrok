@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strategy kill cleared by a human (killswitch clear --strategy).",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "strategy_id": {
+      "title": "Strategy Id",
+      "type": "string"
+    },
+    "cleared_by": {
+      "description": "\"human:<name>\"",
+      "title": "Cleared By",
+      "type": "string"
+    },
+    "approval_id": {
+      "default": "",
+      "title": "Approval Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "strategy_id",
+    "cleared_by"
+  ],
+  "title": "StrategyKillCleared",
+  "type": "object"
+}

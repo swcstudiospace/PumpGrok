@@ -1,4 +1,4 @@
-"""The 18 R32 event models (paper-engine.md 3.3, FOUND-013).
+"""The R32 event models (paper-engine.md 3.3, FOUND-013) and the Phase 17 strategy kill pair.
 
 Complete vocabulary: contracts/events/<snake>.schema.json generation (plan 01-07)
 consumes :func:`event_json_schemas`. Money is integer base units (R28):
@@ -50,7 +50,7 @@ class _ClosedModel(BaseModel):
 
 
 class EventType(StrEnum):
-    """The 18 CamelCase R32 event types."""
+    """The CamelCase event types: the R32 types plus the Phase 17 strategy kill pair."""
 
     OrderPlaced = "OrderPlaced"
     OrderRejected = "OrderRejected"
@@ -62,6 +62,8 @@ class EventType(StrEnum):
     HaltCleared = "HaltCleared"
     KillSwitchSet = "KillSwitchSet"
     KillSwitchCleared = "KillSwitchCleared"
+    StrategyKillSet = "StrategyKillSet"
+    StrategyKillCleared = "StrategyKillCleared"
     BreakerTripped = "BreakerTripped"
     BreakerReset = "BreakerReset"
     DailyRollover = "DailyRollover"
@@ -226,6 +228,24 @@ class KillSwitchCleared(_ClosedModel):
     sources_now_clear: list[str] = []
 
 
+class StrategyKillSet(_ClosedModel):
+    """Strategy kill engaged by a human (killswitch set --strategy); refuses its buys."""
+
+    source: EventSource
+    strategy_id: str
+    reason: str
+    set_by: str = Field(description='"human:<name>"')
+
+
+class StrategyKillCleared(_ClosedModel):
+    """Strategy kill cleared by a human (killswitch clear --strategy)."""
+
+    source: EventSource
+    strategy_id: str
+    cleared_by: str = Field(description='"human:<name>"')
+    approval_id: str = ""
+
+
 class BreakerTripped(_ClosedModel):
     """Risk breaker tripped."""
 
@@ -335,6 +355,8 @@ EVENT_MODELS: dict[EventType, type[_ClosedModel]] = {
     EventType.Escalation: Escalation,
     EventType.JournalNote: JournalNote,
     EventType.ApprovalRecorded: ApprovalRecorded,
+    EventType.StrategyKillSet: StrategyKillSet,
+    EventType.StrategyKillCleared: StrategyKillCleared,
 }
 
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")

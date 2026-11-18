@@ -226,6 +226,10 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
     killswitch_set = killswitch_cmd.add_parser("set", help="engage the killswitch")
     killswitch_set.add_argument("--reason", required=True, help="why the killswitch is set")
+    killswitch_set.add_argument(
+        "--strategy", default=None, help="engage a strategy kill for this strategy id"
+    )
+    killswitch_set.add_argument("--by", default=None, help="human engaging a strategy kill")
     killswitch_flatten = killswitch_cmd.add_parser(
         "flatten", help="request flatten of every open paper position"
     )
@@ -235,6 +239,9 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     )
     killswitch_clear.add_argument("--by", required=True, help="human releasing the killswitch")
     killswitch_clear.add_argument("--reason", required=True, help="why the killswitch clears")
+    killswitch_clear.add_argument(
+        "--strategy", default=None, help="clear only the kill of this strategy id"
+    )
     killswitch_cmd.add_parser("status", help="report killswitch state")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")

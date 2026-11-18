@@ -15,6 +15,7 @@ from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.ticket_refs import load_refs
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.alert_channel import AlertChannel
 from pumpgrok.risk.breakers import BreakerSet
@@ -269,6 +270,7 @@ class RiskEngine(_EngineSteps):
         source: str = "paper",
         correlation_id: str = "desk",
         stage: Literal["ACCEPTED", "CONFIRMING"] = "ACCEPTED",
+        strategy_id: str | None = None,
     ) -> RiskDecision:
         """Run the R34 steps for one order; first failure wins.
 
@@ -281,11 +283,21 @@ class RiskEngine(_EngineSteps):
         ``already_open``, ``creator_already_open``) so a buy that raced another
         fill is refused at the fill, and a sell refuses with ``no_position`` when
         its holding has closed.
+        ``strategy_id`` is the buy's strategy: its ``max_token_fraction`` row is that strategy's own
+        slice, and a strategy kill refuses its buys (sells pass).
         """
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
         order_hash = order_hash_for(order)
-        cache_key = self._cache_key(order, order_hash=order_hash, stage=stage)
+        cache_key = self._cache_key(
+            order,
+            order_hash=order_hash,
+            stage=stage,
+            seat=seat,
+            creator=creator,
+            exit_reason=exit_reason,
+            strategy_id=strategy_id,
+        )
         cached = self._decisions.get(cache_key)
         if cached is not None:
             return cached
@@ -298,6 +310,7 @@ class RiskEngine(_EngineSteps):
             source=source,
             correlation_id=correlation_id,
             stage=stage,
+            strategy_id=strategy_id,
         )
         self._decisions[cache_key] = decision
         while len(self._decisions) > _DECISION_CACHE_MAX:
@@ -310,6 +323,10 @@ class RiskEngine(_EngineSteps):
         *,
         order_hash: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
+        seat: str | None,
+        creator: str | None,
+        exit_reason: str | None,
+        strategy_id: str | None,
     ) -> str:
         """Cache key with a gate generation: ledger head plus live gate state.
 
@@ -317,14 +334,19 @@ class RiskEngine(_EngineSteps):
         flip, or a breaker cooldown transition) changes the key, so a cached
         PASS never replays past an engaged gate and a cached REJECT never
         survives a human clear.
+        Seat, creator, exit reason, observe-only and strategy id are keyed too: each changes the
+        decision.
         """
         kill = self._killswitch.poll()
+        observe_only = seat is not None and seat in self._observe_only
         return (
             f"{stage}|{order_hash}|{order.approval_id or ''}"
             f"|{self._store.count()}"
             f"|{int(kill.active)}|{kill.source}|{kill.reason}"
             f"|{','.join(sorted(self._breakers.open_breakers()))}"
             f"|{','.join(sorted(self._breakers.half_open_breakers()))}"
+            f"|{seat or ''}|{creator or ''}|{exit_reason or ''}|{int(observe_only)}"
+            f"|{strategy_id or ''}"
         )
 
     def _new_ctx(
@@ -340,6 +362,7 @@ class RiskEngine(_EngineSteps):
         state: LedgerState,
         equity: int,
         probes: ProbeView,
+        strategy_id: str | None,
     ) -> _StepCtx:
         is_buy = order.side.value == "buy"
         ctx = _StepCtx(
@@ -367,6 +390,10 @@ class RiskEngine(_EngineSteps):
             final_size=order.size_lamports if is_buy else None,
         )
         ctx.approval_id = order.approval_id or None
+        ctx.strategy_id = strategy_id
+        if is_buy and strategy_id is not None:
+            refs = load_refs(self._store)
+            ctx.strategy_tickets = frozenset(t for t, owner in refs.items() if owner == strategy_id)
         return ctx
 
     def _evaluate(
@@ -380,6 +407,7 @@ class RiskEngine(_EngineSteps):
         source: str,
         correlation_id: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
+        strategy_id: str | None,
     ) -> RiskDecision:
         state = self._fold()
         self._breakers.sync_from_ledger()
@@ -400,6 +428,7 @@ class RiskEngine(_EngineSteps):
             state=state,
             equity=equity,
             probes=probes,
+            strategy_id=strategy_id,
         )
         try:
             walk_steps(self, ctx)
