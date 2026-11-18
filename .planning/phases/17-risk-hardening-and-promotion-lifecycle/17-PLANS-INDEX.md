@@ -95,7 +95,7 @@ These are not in any Phase 17 plan. Each is a post-Phase-17 sweep unit with its 
 - `supervisor/seat_relay.py:137-155` seat relay cursor (bot-00-chief).
 - `replay/maintenance.py:423-476` replay maintenance (bot-02-risk).
 - `tools/onchain` large_transfers (bot-03-whale for transfers.py; bot-05-rug for holders.py).
-- `tools/safety/score_report.py:430-446` and `tools/safety/authorities.py:31-36` parsing (bot-05-rug). 17-03 reads `REQUIRED_IDS` but edits neither file.
+- `tools/safety/score_report.py:430-446` and `tools/onchain/authorities.py` parsing (bot-05-rug; authorities lines to be re-checked by bot-05). `tools/safety/authorities.py` does not exist. 17-03 reads `REQUIRED_IDS` but edits none of these files.
 - Observation bus and the daily report: both wait for owner decisions.
 
 ## Gate policy
@@ -117,7 +117,7 @@ These are not in any Phase 17 plan. Each is a post-Phase-17 sweep unit with its 
 6. **Strategy kill events are new.** `KillSwitchCleared` clears the whole desk (`ledger/reducer.py:402`), so a strategy clear cannot reuse it. 17-01 adds `StrategyKillSet` and `StrategyKillCleared`. Planner decision; owner may reject.
 7. **Not decided by any D17 entry (TODO, owner).**
    - Required-feed list (17-02).
-   - Kill-clear design (17-01 T6): decided by the owner. The strategy clear extends `killswitch clear` with `--strategy <id>` and `--by human:<name>`, using the existing approval path. No phrase grammar. The strategy-kill set verb is not wired (TODO(owner)).
+   - Kill-clear and kill-set design (17-01 T6): decided by the owner. `killswitch clear --strategy <id>` and `killswitch set --strategy <id> --reason <text>`, both with `--by human:<name>`, using the existing approval path. No phrase grammar. Both verbs are wired in 17-01 T6.
    - Whether the per-strategy cap divides `max_token_fraction` across strategies (17-01). The plan uses the full fraction per strategy, matching the D17-4 wording "applied per strategy".
    - Demotion triggers beyond the hash-change reset (17-04).
    - Evaluator trigger event kinds (17-05). Planner suggests `FillRecorded` and `PositionClosed` (`ledger/events.py:57-59`).
@@ -136,3 +136,4 @@ These are not in any Phase 17 plan. Each is a post-Phase-17 sweep unit with its 
 - Item 2, replay pins are a hard stop. Written into 17-01 and 17-02 execution rules, their verification sections, and the gate policy above.
 - Item 3, 17-01 stays one plan with two commits: S-K1 to S-K4 first, then RSK-01, RSK-02, RSK-08, S-K5 and S-K6. Deviation to confirm: the RSK tasks were not named in Main's split, so they are placed in commit 2 with S-K5 and S-K6.
 - Item 4, 17-01 T6 unblocked by the owner: the strategy-kill clear extends the existing `killswitch clear` verb with `--strategy <id>` and `--by human:<name>`; same human-only check and existing approval path; no new phrase grammar. T6 stays in commit 2. Recorded in 17-01 T6 and Finding 7.
+- Item 5, Main (IRC): 17-01 T4 clear contract refuses only for env and alert sources, removes the latch by compare-and-delete, and makes a retry idempotent; the three existing clear tests move to the new contract; commit 1 includes tools/risk/kill_switch.py. 17-03: authority sources are tools/onchain/authorities.py, authorities_tool.py and checks/authority.py; readers.py holds extensions only; list keys are deny and warn; a BLIND top-10 holder row warns when no paid RPC provider is recorded, and an absent required row rejects. 17-05 T5 passes the holder-pair flag from the composition root.
