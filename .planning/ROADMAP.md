@@ -274,11 +274,11 @@ Coverage: all 157 v4 requirements map to exactly one phase (see Traceability in 
 
 **Deliverables**:
 
-- [ ] `risk/strategy_slice.py`, `risk/entry_checks.py`, `risk/feed_health.py`, `config/mint_lists.toml`, breaker extensions and the engine reason mapping on existing rows (RSK-01 to RSK-03, RSK-05, RSK-08)
-- [ ] `src/pumpgrok/promotion/`, `config/promotion_thresholds.toml`, the `upgrade/gate.py` paper parameter and the `promotion demote` verb (PRM-01 to PRM-06)
-- [ ] `supervisor/event_desk.py` composition root, wake subscriptions and the entry-gate wiring in `supervisor/live_paper.py` (PRM-05, RT-03)
-- [ ] `supervisor/recovery.py` restart recovery wiring with crash tests; restores probation, the watch set, exit deadlines and exit peaks from the ledger, tapes start empty (RT-04, narrowed 2026-11-18)
-- [ ] `CHANGELOG.md` Phase 17 entry with both hash pairs (PRC-03)
+- [x] `risk/strategy_slice.py`, `risk/entry_checks.py`, `risk/feed_health.py`, `config/mint_lists.toml`, breaker extensions and the engine reason mapping on existing rows (RSK-01 to RSK-03, RSK-05, RSK-08)
+- [x] `src/pumpgrok/promotion/`, `config/promotion_thresholds.toml`, the `upgrade/gate.py` paper parameter and the `promotion demote` verb (PRM-01 to PRM-06)
+- [x] `events/event_desk.py` composition root, wake subscriptions and the entry-gate wiring in `supervisor/live_paper.py` (PRM-05, RT-03)
+- [x] `supervisor/recovery.py` restart recovery wiring with crash tests; restores probation, the watch set, exit deadlines and exit peaks from the ledger, tapes start empty (RT-04, narrowed 2026-11-18)
+- [x] `CHANGELOG.md` Phase 17 entry with both hash pairs (PRC-03)
 
 **Plans**: 7 planned (17-01 to 17-07) in 6 waves. Plan ids: 17-01, 17-02, 17-03, 17-04, 17-05, 17-06, 17-07. Source of truth: the v4 plan index, which is not in this repository; the plan ids listed here are the list of record. The per-plan PLAN and SUMMARY files are written under `.planning/phases/17-*/` by the GSD workflow.
 
@@ -376,6 +376,6 @@ Ship checkpoints, where the owner approves receipts in batches as human:SomeRand
 | 14. Event-driven desk and Grok gateway | 0/9 | Not started | - |
 | 15. Strategy framework and multi-strategy paper | 0/8 | Not started | - |
 | 16. Backtest v2 and autonomous evaluation | 0/7 | Not started | - |
-| 17. Risk hardening and promotion lifecycle | 0/7 | Not started | - |
+| 17. Risk hardening and promotion lifecycle | 7/7 | Implemented on seat branches at integration head c53d3c0; make lint, typecheck, test (91.37% against the 89.9% floor) and audit pass; check.sh passes; criterion 14 exits 3; criterion 12 lists four contract files; criterion 13 measured (smoke-10m 1dffa784, trading-smoke a4461e80); criterion 1 deferred to deployment (D17-2). Branches await draft PRs and owner merge. | - |
 | 18. Dormant live path, amendment-gated | 0/11 | Not started | - |
 | 19. Observability, docs, hardening and milestone audit | 0/9 | Not started | - |
