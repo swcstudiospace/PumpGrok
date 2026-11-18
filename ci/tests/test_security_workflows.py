@@ -15,6 +15,8 @@ from __future__ import annotations
 import datetime
 import fnmatch
 import importlib.util
+import re
+import shlex
 import subprocess
 import tomllib
 from pathlib import Path
@@ -200,6 +202,40 @@ class TestGatesWorkflow:
         assert "check_desk_integrity.py --repo ." in run
         assert "--bot" not in run
 
+    def test_gate_self_test_overlays_its_tests_and_config_from_base(self, gates):
+        # The suite that judges the gates comes from the base too: a PR-added test module,
+        # conftest or pytest setting would otherwise run in place of the trusted ones.
+        steps = gates["jobs"]["gate-self-test"]["steps"]
+        overlay = [
+            s for s in steps if 'git checkout "origin/$BASE_REF" -- ci/gates/' in s.get("run", "")
+        ]
+        assert overlay, "gate-self-test must overlay ci/gates from base"
+        run = overlay[0]["run"]
+        lines = [line.strip() for line in run.splitlines()]
+        rm_line = next(line for line in lines if line.startswith("rm -rf "))
+        checkout = next(
+            line for line in lines if line.startswith('git checkout "origin/$BASE_REF" --')
+        )
+        assert "ci/tests" in shlex.split(rm_line)
+        assert run.index(rm_line) < run.index(checkout)
+        tokens = shlex.split(checkout)
+        paths = set(tokens[tokens.index("--") + 1 :])
+        assert {"ci/gates/", "ci/tests/", "tests/conftest.py", "pyproject.toml"} <= paths
+
+    def test_gate_suite_runs_against_the_locked_environment(self, gates):
+        # pyproject.toml is overlaid from base, so a plain `uv run` could re-lock the PR's uv.lock
+        # before the suite starts. --frozen runs the environment the install step just synced.
+        runs = [s.get("run", "") for s in gates["jobs"]["gate-self-test"]["steps"]]
+        suite = [run for run in runs if "pytest ci/tests/" in run]
+        assert suite and "uv run --frozen pytest ci/tests/" in suite[0]
+
+    def test_secrets_gate_job_fetches_full_history(self, gates):
+        # G-3 diffs base...HEAD: the checkout needs the base ref's history, not a shallow clone.
+        checkout = gates["jobs"]["gates"]["steps"][0]
+        assert checkout["uses"].startswith("actions/checkout")
+        assert checkout["with"]["fetch-depth"] == 0
+        assert any("G-3" in s.get("name", "") for s in gates["jobs"]["gates"]["steps"])
+
 
 class TestSecurityGatesStillBlock:
     def test_no_bypass_snippets_in_any_run_block(self, security_pr):
@@ -212,6 +248,16 @@ class TestSecurityGatesStillBlock:
             checkout = security_pr["jobs"][job_name]["steps"][0]
             assert checkout["uses"].startswith("actions/checkout")
             assert checkout["with"]["fetch-depth"] == 0, job_name
+
+    def test_gitleaks_tarball_is_checksum_verified_before_unpacking(self, security_pr):
+        # The scanner binary is downloaded and then executed. The pinned digest is the only proof
+        # it is the published release, so it must be checked before tar unpacks the archive.
+        run = next(
+            block for block in _run_blocks(security_pr) if "gitleaks_8.21.2_linux_x64" in block
+        )
+        digest = re.search(r"GITLEAKS_SHA256=[0-9a-f]{64}\b", run)
+        assert digest, "gitleaks download needs a sha256 digest"
+        assert run.index("sha256sum -c") < run.index("tar xzf gitleaks.tar.gz")
 
     def test_bandit_blocks_high_severity_against_its_baseline(self, security_pr):
         run = _step(security_pr, "Bandit — whole repo")["run"]
@@ -344,6 +390,32 @@ class TestSecurityExceptions:
         )
         errors = gate.check_text(text, datetime.date(2026, 10, 22))
         assert len(errors) == 1 and "ISO" in errors[0]
+
+
+class TestExceptionsGateRunsOnRealClock:
+    # The guard suite above pins a date to check the table's shape. Expiry is checked against the
+    # runner's clock only by the job below, which SECURITY.md names as the CI check.
+    def test_a_job_runs_the_gate_with_no_pinned_date(self, security_pr):
+        jobs = [
+            job
+            for job in security_pr["jobs"].values()
+            if any("check_exceptions.py" in s.get("run", "") for s in job.get("steps", []))
+        ]
+        assert len(jobs) == 1
+        gate_runs = [
+            s["run"] for s in jobs[0]["steps"] if "python3" in s.get("run", "")
+        ]
+        assert gate_runs == ["python3 ci/security/check_exceptions.py"]
+
+    def test_pull_requests_run_the_base_copy_of_the_gate(self, security_pr):
+        overlay = [
+            s
+            for s in security_pr["jobs"]["exceptions"]["steps"]
+            if "ci/security/check_exceptions.py" in s.get("run", "") and "git checkout" in s["run"]
+        ]
+        assert overlay and overlay[0]["if"] == "github.event_name == 'pull_request'"
+        checkout = 'git checkout "origin/$BASE_REF" -- ci/security/check_exceptions.py'
+        assert checkout in overlay[0]["run"]
 
 
 class TestPreCommitHooks:

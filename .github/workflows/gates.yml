@@ -2,9 +2,11 @@
 #
 # Gates are required status checks: they block the merge rather than merely reporting.
 #
-# Trust model: on pull_request, both jobs overlay ci/gates/ from the PR base ref before any
-# python3 ci/gates or pytest run. The PR tree is data under test (diffs, receipts, paths);
-# the gate implementations are never taken from the PR.
+# Trust model: on pull_request, the jobs overlay trusted code from the PR base ref before any
+# python3 ci/gates or pytest run. The gates job takes ci/gates/ and ownership.yaml; gate-self-test
+# takes ci/gates/, ci/tests/, tests/conftest.py and pyproject.toml. The PR tree is data under test
+# (diffs, receipts, paths); the gate implementations and the suite that checks them never come
+# from the PR.
 #
 # Runners are GitHub-hosted (ubuntu-latest). Pull requests from forks are skipped on every job.
 
@@ -183,7 +185,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use trusted gate scripts from base ref
+      - name: Use trusted gate code, tests and config from base ref
         if: github.event_name == 'pull_request'
         # Same trust rule as the gates job: PR-authored gate modules must not run here.
         env:
@@ -195,9 +197,9 @@ jobs:
             echo "::error::origin/$BASE_REF has no ci/gates/. Land the trusted gate scripts on $BASE_REF first."
             exit 1
           fi
-          rm -rf ci/gates
-          git checkout "origin/$BASE_REF" -- ci/gates/
-          echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
+          rm -rf ci/gates ci/tests
+          git checkout "origin/$BASE_REF" -- ci/gates/ ci/tests/ tests/conftest.py pyproject.toml
+          echo "Trusted ci/gates, ci/tests, tests/conftest.py and pyproject.toml overlay from origin/$BASE_REF (gate-self-test)"
 
       - uses: actions/setup-python@v5
         with:
@@ -207,4 +209,4 @@ jobs:
       - name: Install the project so every owning test module collects
         run: uv sync --frozen
       - name: Gate test suite
-        run: uv run pytest ci/tests/ -v
+        run: uv run --frozen pytest ci/tests/ -v
