@@ -402,9 +402,7 @@ class TestExceptionsGateRunsOnRealClock:
             if any("check_exceptions.py" in s.get("run", "") for s in job.get("steps", []))
         ]
         assert len(jobs) == 1
-        gate_runs = [
-            s["run"] for s in jobs[0]["steps"] if "python3" in s.get("run", "")
-        ]
+        gate_runs = [s["run"] for s in jobs[0]["steps"] if "python3" in s.get("run", "")]
         assert gate_runs == ["python3 ci/security/check_exceptions.py"]
 
     def test_pull_requests_run_the_base_copy_of_the_gate(self, security_pr):
