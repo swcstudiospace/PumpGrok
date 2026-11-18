@@ -31,6 +31,7 @@ from pumpgrok.datafeed.price import LivePriceSource, ReservesCache
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
+from pumpgrok.execution.entry_hook import EntryGate
 from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel, read_ata_rent
 from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.execution.paper_factory import build_paper_adapter
@@ -99,6 +100,7 @@ async def build_live_paper_root(
     max_age_s: float,
     max_observations: int,
     rent_rpc: RentRpc | None = None,
+    entry_gate: EntryGate | None = None,
 ) -> LivePaperRoot:
     """Build the live-data paper root over a read-only ``endpoint`` and ``transport``.
 
@@ -160,6 +162,7 @@ async def build_live_paper_root(
             rng=rng,
             live_source=prices,
             reserves_observer=reserves.observe,
+            entry_gate=entry_gate,
             fees=fees,
             source="paper",
         )
