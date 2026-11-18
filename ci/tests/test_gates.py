@@ -933,6 +933,8 @@ class TestG7DeskIntegrity:
                 ],
             },
         )
+        (tmp_path / "contracts" / "tool-packs").mkdir(parents=True)
+        (tmp_path / "grokbot" / "templates").mkdir(parents=True)
         problems, counts = integrity_gate.run(
             tmp_path,
             rosters,

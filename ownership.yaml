@@ -493,6 +493,8 @@ contract_consumers:
     - bot-07-shill
     - bot-08-signal
     - bot-09-journal
+  "contracts/tool-packs/**":
+    - bot-02-risk
   "openapi.yaml":
     - bot-00-chief
     - bot-09-journal
