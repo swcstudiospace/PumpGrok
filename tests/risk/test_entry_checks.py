@@ -278,3 +278,17 @@ def test_mint_lists_with_non_string_entry_raises(tmp_path: Path) -> None:
     path.write_text("deny = [1]\nwarn = []\n", encoding="utf-8")
     with pytest.raises(ValueError, match="non-empty mint strings"):
         load_mint_lists(path)
+
+
+def test_holder_blind_advisory_leaves_verdict_unchanged() -> None:
+    """T3: the advisory flag changes no verdict that has no BLIND holder row."""
+    live_mint = _evidence(authorities={"has_mint_authority": True, "has_freeze_authority": False})
+    for evidence in (_evidence(), live_mint):
+        advisory = _verdict(evidence, holder_blind_advisory=True)
+        strict = _verdict(evidence, holder_blind_advisory=False)
+        assert advisory == strict
+
+
+def test_omitting_holder_blind_advisory_raises_type_error() -> None:
+    with pytest.raises(TypeError):
+        evaluate_entry(_evidence(), EMPTY_LISTS, THRESHOLDS)  # type: ignore[call-arg]
