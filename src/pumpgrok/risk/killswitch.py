@@ -16,8 +16,8 @@ The alert command (``KILL <reason>`` / ``KILL FLATTEN <reason>``, exact
 shape per T-04-10) is a writer, not a separate source: :func:`engage_from_alert`
 writes the latch file, so the next engine check sees it. The file source is
 authoritative and the switch survives restarts. First observation of an
-active switch appends ``KillSwitchSet``; clear is human-only and refused
-while any live source is still set. ``flatten_request`` waits on the
+active switch appends ``KillSwitchSet``; clear is human-only and refused while an env or alert
+source is still set; a clear removes the latch file it found. ``flatten_request`` waits on the
 in-flight barrier and then closes every open position with reason
 ``kill_flatten``; the order-building half lives here, the driving loop
 with the supervisor/adapter.
@@ -79,18 +79,84 @@ class FlattenOrder:
     approval: ApprovalRecord
 
 
+#: A reason that leads with the ``FLATTEN`` keyword, as ``_file_state`` reads it back.
+_FLATTEN_LEAD_RE = re.compile(r"FLATTEN(?:[\s:]|$)")
+
+
 def parse_kill_line(line: str) -> tuple[bool, str] | None:
-    """Parse an alert line: ``(flatten, reason)`` or ``None`` when not a command."""
+    """Parse an alert line: ``(flatten, reason)`` or ``None`` when not a command.
+
+    A reason that still leads with ``FLATTEN`` after the flag is not a command (a bare
+    ``KILL FLATTEN``): the latch file would hold it as a flatten request.
+    """
     match = KILL_LINE_RE.match(line.strip())
     if match is None:
         return None
+    reason = match.group("reason").strip()
+    if _FLATTEN_LEAD_RE.match(reason):
+        return None
     head = line.strip().split(None, 2)[:2]
-    return ("FLATTEN" in head, match.group("reason").strip())
+    return ("FLATTEN" in head, reason)
 
 
 def kill_file_text(reason: str, flatten: bool) -> str:
-    """File body for an engagement: plain reason, or ``FLATTEN <reason>``."""
+    """File body for an engagement: plain reason, or ``FLATTEN <reason>``.
+
+    Refuses a reason that leads with ``FLATTEN`` for either flag, so the latch file never holds
+    a plain reason that ``_file_state`` reads back as a flatten request.
+    """
+    if _FLATTEN_LEAD_RE.match(reason.strip()):
+        raise ValueError(f"kill reason must not lead with FLATTEN: {reason!r}")
     return f"FLATTEN {reason}" if flatten else reason
+
+
+def _fsync_dir(directory: Path) -> None:
+    """Make a directory entry change (rename or unlink) durable."""
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_durable(path: Path, text: str) -> None:
+    """Replace ``path`` with ``text`` atomically and durably; the one latch and escalation writer.
+
+    The tmp file is fsynced before the rename and the directory after it. A failure before the
+    rename removes the tmp file and leaves ``path`` as it was.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    _fsync_dir(path.parent)
+
+
+def _remove_durable(path: Path) -> None:
+    """Remove the latch file durably; a missing file is a no-op."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    _fsync_dir(path.parent)
+
+
+def _remove_if_unchanged(path: Path, expected: str | None) -> None:
+    """Remove the latch only while it still holds ``expected``; a latch written since is kept."""
+    if expected is None:
+        return
+    try:
+        current = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if current == expected:
+        _remove_durable(path)
 
 
 #: Latch file name inside the operational data directory (``var/desk`` in the desk).
@@ -113,7 +179,7 @@ def latch_from_alert(line: str, path: Path) -> tuple[bool, str] | None:
         return None
     flatten, reason = parsed
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(kill_file_text(reason, flatten), encoding="utf-8")
+    _write_durable(path, kill_file_text(reason, flatten))
     return parsed
 
 
@@ -256,9 +322,7 @@ class KillSwitch:
         if self._path is not None:
             try:
                 self._path.parent.mkdir(parents=True, exist_ok=True)
-                tmp = self._path.with_name(self._path.name + ".tmp")
-                tmp.write_text(kill_file_text(reason, True), encoding="utf-8")
-                os.replace(tmp, self._path)
+                _write_durable(self._path, kill_file_text(reason, True))
             except OSError as exc:
                 log.warning("alert KILL FLATTEN not persisted: %s", type(exc).__name__)
                 return False
@@ -387,7 +451,10 @@ class KillSwitch:
         """Append ``KillSwitchCleared`` plus the ``killswitch_clear`` approval.
 
         Human-only: ``cleared_by`` must start with ``human:`` and must not
-        match a seat id (the G-2 rule). Refused while any live source persists.
+        match a seat id (the G-2 rule). Refused while an env or alert source persists. The latch
+        file is not a refusal: the clear removes it after the batch, only if its content is
+        unchanged since the clear began. A retry with the same approval removes the latch and
+        returns the row the first attempt wrote.
         Both rows land in one atomic batch: a duplicate clear key is an
         explicit refusal ("already cleared, re-poll"), never a false success.
         """
@@ -396,16 +463,27 @@ class KillSwitch:
             raise ClearRefused(f"clear must come from a human, got {by!r}")
         if approval.kind != "killswitch_clear":
             raise ClearRefused(f"clear needs a killswitch_clear approval, got {approval.kind!r}")
-        live = self.live_sources()
+        live = [source for source in self.live_sources() if source != "file"]
         if live:
             raise ClearRefused(f"live sources still set: {','.join(live)}")
         if self._store is None:
             raise ClearRefused("no ledger bound")
+        # The latch content as the clear found it: removal deletes only this content.
+        latch_text = self._latch_text()
+        prior = self._clear_for_approval(approval.id)
+        if prior is not None:
+            # A retry: this approval's clear already landed, so only the latch removal is left.
+            if self._path is not None:
+                _remove_if_unchanged(self._path, latch_text)
+            return prior
+        # The epoch scopes the clear key as it scopes the set key: a re-clear after a re-engage
+        # is its own row and does not collide with the clear it follows.
+        epoch = self._clear_epoch()
         cleared: dict[str, Any] = {
             "ts_utc": ts_utc,
             "source": source,
             "correlation_id": correlation_id,
-            "idempotency_key": kill_switch_key("clear", reason, ts_utc[:10]),
+            "idempotency_key": kill_switch_key("clear", reason, ts_utc[:10], epoch=epoch),
             "type": "KillSwitchCleared",
             "payload": {
                 "source": source,
@@ -441,6 +519,10 @@ class KillSwitch:
         if self._store.by_key(str(consumed["idempotency_key"])) is not None:
             raise ClearRefused(f"killswitch_clear approval {approval.id} is already consumed")
         self._store.append_batch([cleared, consumed])
+        # The clear removes the latch it found, through the durable writer. A latch written
+        # since the clear began holds different content and is kept.
+        if self._path is not None:
+            _remove_if_unchanged(self._path, latch_text)
         return cleared
 
     def _latest_set(self) -> dict[str, Any] | None:
@@ -459,6 +541,23 @@ class KillSwitch:
         """Count of ``KillSwitchCleared`` rows; each clear starts a new set-key epoch."""
         assert self._store is not None
         return len(self._store.read(types=["KillSwitchCleared"], limit=None))
+
+    def _latch_text(self) -> str | None:
+        """The latch file's content now, or None when there is no latch file."""
+        if self._path is None:
+            return None
+        try:
+            return self._path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
+
+    def _clear_for_approval(self, approval_id: str) -> dict[str, Any] | None:
+        """The ``KillSwitchCleared`` row this approval already wrote, if any."""
+        assert self._store is not None
+        for row in self._store.read(types=["KillSwitchCleared"], limit=None):
+            if row["payload"].get("approval_id") == approval_id:
+                return row
+        return None
 
 
 class InflightBarrier:

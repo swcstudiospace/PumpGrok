@@ -281,7 +281,7 @@ async def test_kill_flatten_closes_every_position(tmp_path: Path) -> None:
 
 
 def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> None:
-    """INV-R-03: clear is CLI-only and human-only; refused while any source persists."""
+    """INV-R-03: clear is CLI-only and human-only; refused while env or alert is still set."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
@@ -295,14 +295,16 @@ def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> N
         with pytest.raises(ValidationError):
             _clear_approval(clock, ids, "bot-02-risk")
         with pytest.raises(ClearRefused):
-            switch.request_clear(
+            KillSwitch(
+                clock, store=store, killswitch_path=kill_file, env={"PUMPGROK_KILLSWITCH": "1"}
+            ).request_clear(
                 _clear_approval(clock, ids, "human:alice"),
-                "human clear while set",
+                "human clear while env set",
                 ts_utc=format_ts_utc(clock.now()),
                 source="paper",
                 correlation_id="test",
             )
-        kill_file.unlink()
+        # The clear removes the latch file it finds; the file alone no longer refuses.
         switch.request_clear(
             _clear_approval(clock, ids, "human:alice"),
             "all clear",
@@ -310,6 +312,7 @@ def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> N
             source="paper",
             correlation_id="test",
         )
+        assert not kill_file.exists()
         cleared = store.read(types=["KillSwitchCleared"], limit=None)
         assert len(cleared) == 1
         recorded = store.read(types=["ApprovalRecorded"], limit=None)
