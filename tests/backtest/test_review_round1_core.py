@@ -27,7 +27,6 @@ from pumpgrok.backtest.evaluate import (
 )
 from pumpgrok.backtest.harness import run_search
 from pumpgrok.backtest.metrics import MetricsReport
-from pumpgrok.cli.backtest import _window_curve
 from pumpgrok.ledger.autonomy import autonomy_rows
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
@@ -40,6 +39,7 @@ from pumpgrok.upgrade.gate import (
     evaluate_candidate,
 )
 from pumpgrok.upgrade.params import ParamSet
+from pumpgrok.upgrade.window_metrics import window_curve
 
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
@@ -285,7 +285,7 @@ def _ledger_nets(path: Path, opening: int) -> tuple[int, int]:
     finally:
         store.close()
     genesis = initial_state(source="backtest", initial_equity_lamports=opening, day_utc="")
-    return (_net_lamports(path), _window_curve(genesis, rows)[-1] - opening)
+    return (_net_lamports(path), window_curve(genesis, rows)[-1] - opening)
 
 
 def test_buy_and_hold_is_not_a_loss_in_selection(tmp_path: Path) -> None:

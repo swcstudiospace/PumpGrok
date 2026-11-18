@@ -9,6 +9,7 @@ value, and the allowed range; values are never clamped silently.
 
 from __future__ import annotations
 
+import math
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,11 @@ def default_bounds_path() -> Path:
     return Path(__file__).resolve().parents[1] / "config" / "upgrade_bounds.toml"
 
 
+def _is_finite(number: float | int) -> bool:
+    """False for NaN and the infinities; every int is finite."""
+    return not isinstance(number, float) or math.isfinite(number)
+
+
 def _parse_key_bound(section: str, key: str, raw: Any) -> KeyBound:
     """Parse one bound entry table with inclusive min and max."""
     if not isinstance(raw, dict):
@@ -73,6 +79,8 @@ def _parse_key_bound(section: str, key: str, raw: Any) -> KeyBound:
         return KeyBound(minimum=minimum, maximum=maximum)
     if not isinstance(minimum, (int, float)) or not isinstance(maximum, (int, float)):
         raise ValueError(f"bounds {section}.{key}: min and max must be numbers")
+    if not _is_finite(minimum) or not _is_finite(maximum):
+        raise ValueError(f"bounds {section}.{key}: min and max must be finite numbers")
     if minimum > maximum:
         raise ValueError(f"bounds {section}.{key}: min {minimum!r} is above max {maximum!r}")
     return KeyBound(minimum=minimum, maximum=maximum)
@@ -141,6 +149,11 @@ def _check_section(
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise OutOfBoundsError(
                 f"out of bounds: {section}.{key}={shown} must be a number, "
+                f"allowed range [{bound.minimum}, {bound.maximum}]"
+            )
+        if not _is_finite(value):
+            raise OutOfBoundsError(
+                f"out of bounds: {section}.{key}={shown} must be finite, "
                 f"allowed range [{bound.minimum}, {bound.maximum}]"
             )
         if value < bound.minimum or value > bound.maximum:
