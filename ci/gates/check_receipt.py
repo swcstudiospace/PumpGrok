@@ -42,9 +42,9 @@ BYPASS_PATTERNS: list[tuple[str, str]] = [
     (r"--force\b", "forces past a safety check"),
     (r"-f\s+--", "forces past a safety check"),
     (r"--ignore-errors", "continues past failures"),
-    (r"pytest.*--co\b", "collect-only: no tests actually ran"),
+    (r"pytest.*--co(?:llect-only)?\b", "collect-only: no tests actually ran"),
     (r"--dry-run(?!=server)", "dry run: nothing actually executed"),
-    (r"PUMPGROK_LIVE_ENABLE=(?:1|true)", "sets the live flag inline"),
+    (r"PUMPGROK_LIVE_ENABLE=(?i:1|true)", "sets the live flag inline"),
     (r"--i-understand-the-risk", "vendor live bypass flag"),
 ]
 
