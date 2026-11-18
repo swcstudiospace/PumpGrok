@@ -50,7 +50,9 @@ RouteStatus = Literal["submitted", "duplicate", "refused"]
 
 
 class _RiskCheck(Protocol):
-    def check(self, order: OrderRequest, *, source: str, correlation_id: str) -> RiskDecision: ...
+    def check(
+        self, order: OrderRequest, *, source: str, correlation_id: str, strategy_id: str
+    ) -> RiskDecision: ...
 
 
 @dataclass(frozen=True)
@@ -133,7 +135,9 @@ class IntentRouter:
             approval_id=f"apr-{self._ids.ulid()}",
             correlation_id=CORRELATION,
         )
-        decision = self._risk.check(order, source=SOURCE, correlation_id=CORRELATION)
+        decision = self._risk.check(
+            order, source=SOURCE, correlation_id=CORRELATION, strategy_id=intent.strategy_id
+        )
         if not decision.passed:
             return self._refuse(intent, decision.reason, ticket_id)
         approval = decision.approval
