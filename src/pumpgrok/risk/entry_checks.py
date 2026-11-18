@@ -170,10 +170,10 @@ def _check_required(
         reasons.append("safety report missing")
         return
     by_id: dict[str, CheckResult] = {}
-    for row in checks:
-        if row.id in by_id:
-            reasons.append(f"duplicate result for check {row.id}")
-        by_id[row.id] = row
+    for result in checks:
+        if result.id in by_id:
+            reasons.append(f"duplicate result for check {result.id}")
+        by_id[result.id] = result
     for check_id in sorted(REQUIRED_IDS):
         row = by_id.get(check_id)
         if row is None:
