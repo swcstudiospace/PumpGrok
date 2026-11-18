@@ -330,6 +330,78 @@ def staged_blobs() -> dict[str, str]:
     return {path: sha for path, mode, sha in _raw_entries(raw) if mode != "160000"}
 
 
+def committed_blobs(base: str) -> list[tuple[str, str, str]]:
+    """Return (commit, path, blob) for each file that a commit in base..HEAD adds or modifies.
+
+    The net diff of base...HEAD misses a secret that a later commit removes: the object stays in
+    history and reaches every clone. Each commit is therefore diffed on its own, against its first
+    parent, and its blob is scanned. The commit list comes from rev-list, oldest first. A
+    (path, blob) pair is returned once, under the commit that first introduced it.
+    """
+    seen: set[tuple[str, str]] = set()
+    found: list[tuple[str, str, str]] = []
+    for commit in _git(["rev-list", "--reverse", f"{base}..HEAD"]).split():
+        raw = _git(
+            [
+                "diff-tree",
+                "-r",
+                "-z",
+                "--raw",
+                "--no-renames",
+                "--no-commit-id",
+                "--root",
+                "--diff-merges=first-parent",
+                "--diff-filter=ACMT",
+                commit,
+            ]
+        )
+        for path, dst_mode, dst_sha in _raw_entries(raw):
+            if dst_mode == "160000" or (path, dst_sha) in seen:
+                continue
+            seen.add((path, dst_sha))
+            found.append((commit, path, dst_sha))
+    return found
+
+
+def _tree_files(root: Path) -> list[str]:
+    """Worktree files under root for --all. SKIP_DIRS matches path parts relative to root only,
+    so a checkout that lives under a directory named build/ or vendor/ is still scanned."""
+    rels = [p.relative_to(root) for p in root.rglob("*") if p.is_file()]
+    return [str(rel) for rel in rels if not SKIP_DIRS.intersection(rel.parts)]
+
+
+def _select_jobs(args: argparse.Namespace, root: Path) -> list[tuple[str, str | None, str | None]]:
+    """Choose what to scan. A job is (path, blob, commit): blob is None when the worktree file is
+    scanned; commit is None unless the blob comes from a commit in base..HEAD."""
+    if args.files is not None:
+        return [(rel, None, None) for rel in args.files]
+    if args.staged:
+        # The index is what a commit records; the working tree may hold something else.
+        return [(rel, blob, None) for rel, blob in staged_blobs().items()]
+    if args.all:
+        return [(rel, None, None) for rel in _tree_files(root)]
+    return [(rel, blob, commit) for commit, rel, blob in committed_blobs(args.base)]
+
+
+def _report(findings: list[dict]) -> None:
+    print(f"G-3 FAIL — {len(findings)} potential secret(s)", file=sys.stderr)
+    for f in findings:
+        loc = f"{f['file']}:{f['line']}" if f["line"] else f["file"]
+        if f["commit"]:
+            loc += f" (commit {f['commit'][:12]})"
+        print(f"  {loc}", file=sys.stderr)
+        print(f"    {f['rule']}: {f['desc']}", file=sys.stderr)
+        if f["excerpt"]:
+            print(f"    {f['excerpt']}", file=sys.stderr)
+    print(
+        "\n  If a hit is real, the secret is COMPROMISED. "
+        "Rotate it first, then clean history.\n"
+        "  If it is a false positive, add '# pragma: allowlist secret' with a reason.\n"
+        "  See skills/security/secrets-handling/SKILL.md",
+        file=sys.stderr,
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Gate G-3: committed secrets")
     ap.add_argument("--base", default="origin/main")
