@@ -1,7 +1,7 @@
 # Phase 17 Context: Risk hardening and promotion lifecycle
 
 Status: discussed 2026-11-18. The owner accepted every grey-area default (HTIL, 2026-11-18). No code yet.
-Requirements: RSK-01, RSK-02, RSK-03, RSK-04, RSK-05, RSK-08, PRM-01 to PRM-06, RT-03, RT-04 (ROADMAP.md Phase 17; REQUIREMENTS.md).
+Requirements: RSK-01, RSK-02, RSK-03, RSK-05, RSK-08, PRM-01 to PRM-06, RT-03, RT-04 (ROADMAP.md Phase 17; REQUIREMENTS.md). RSK-04 moved to Phase 18 by owner decision (2026-11-18).
 Plans: 17-01 to 17-07 in six waves. The plan list of record is in ROADMAP.md; plan contents come from the planning step.
 
 ## Decisions

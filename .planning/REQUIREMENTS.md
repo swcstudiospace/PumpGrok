@@ -99,7 +99,7 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] RSK-01: The strategy exposure slice is enforced in the engine with its reason on an existing row. Check: `uv run pytest -q tests/risk/test_strategy_slice.py`
 - [ ] RSK-02: A strategy kill is written to and read from the ledger and cleared only by a human. Check: `uv run pytest -q tests/risk/test_strategy_kill.py`
 - [ ] RSK-03: Feed staleness is lazy and idle-quiet and a never-ticked required feed fails closed in live mode. Check: `uv run pytest -q tests/risk/test_feed_health.py`
-- [ ] RSK-04: Live failure classes feed exec_errors and any UNKNOWN sets a halt. Check: `uv run pytest -q tests/risk/test_exec_failure_breaker.py`
+- [ ] RSK-04: Live failure classes feed exec_errors and any live-path UNKNOWN sets a halt. Moved to Phase 18 by owner decision (2026-11-18); the paper-path UNKNOWN is unchanged. Check: defined in Phase 18.
 - [ ] RSK-05: Entry checks reject authority, extension, holder, list and BLIND cases. Check: `uv run pytest -q tests/risk/test_entry_checks.py tests/execution/test_entry_gate_hook.py`
 - [ ] RSK-06: No order reaches a signer past a failed check, including frames sent straight to the signer. Check: `uv run pytest -q tests/safety/test_risk_choke_point.py tests/safety/test_signer_only_bypass.py`
 - [ ] RSK-08: The 19 STEP_IDS and the risk_json row shape are unchanged (pinned in Phase 11, re-run in Phase 17). Check: `uv run pytest -q tests/risk/test_step_rows_stable.py`
@@ -337,7 +337,7 @@ Which phases cover which requirements. Populated from the v4 plan index, which i
 | RSK-01 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RSK-02 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RSK-03 | Phase 17 Risk hardening and promotion lifecycle | Pending |
-| RSK-04 | Phase 17 Risk hardening and promotion lifecycle | Pending |
+| RSK-04 | Phase 18 Dormant live path, amendment-gated | Pending |
 | RSK-05 | Phase 17 Risk hardening and promotion lifecycle | Pending |
 | RSK-06 | Phase 18 Dormant live path, amendment-gated | Pending |
 | RSK-08 | Phase 17 Risk hardening and promotion lifecycle | Pending |
@@ -444,6 +444,6 @@ Which phases cover which requirements. Populated from the v4 plan index, which i
 | 14 Event-driven desk and Grok gateway | 26 |
 | 15 Strategy framework and multi-strategy paper | 8 |
 | 16 Backtest v2 and autonomous evaluation | 8 |
-| 17 Risk hardening and promotion lifecycle | 14 |
-| 18 Dormant live path, amendment-gated | 21 |
+| 17 Risk hardening and promotion lifecycle | 13 |
+| 18 Dormant live path, amendment-gated | 22 |
 | 19 Observability, docs, hardening and milestone audit | 24 |

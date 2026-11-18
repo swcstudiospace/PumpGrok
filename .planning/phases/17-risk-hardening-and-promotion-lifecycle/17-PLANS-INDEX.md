@@ -29,7 +29,7 @@ Six waves, seven plans. Wave 1 holds two plans; their file lists are disjoint (c
 |---|---|---|
 | 1 | 17-07 | Orchestrator final gate. D17-2: paper smoke deferred to deployment. |
 | 2 | 17-01 | Strategy slice and kill tests. |
-| 3 | 17-02 | Feed health and exec-failure breaker tests. |
+| 3 | 17-02 | Feed health, loss-velocity reset and halt-verdict tests (criterion 3 amended by owner decision 2026-11-18; RSK-04 moved to Phase 18). |
 | 4 | 17-03 | Entry checks and mint list. |
 | 5 | 17-01 | STEP_IDS and risk_json stability. |
 | 6 | 17-04 | Stages, thresholds, gate reuse, upgrade tests. |
@@ -38,7 +38,7 @@ Six waves, seven plans. Wave 1 holds two plans; their file lists are disjoint (c
 | 9 | 17-04 | Writer discipline. |
 | 10 | 17-05 | Event desk e2e and idle tests. |
 | 11 | 17-06 | Restart recovery and exit deadlines. |
-| 12 | 17-07 | Contracts diff check. No plan's file list includes `contracts/`. Criterion text names PRM-01; mapped as written. |
+| 12 | 17-07 | Contracts diff check: the amended criterion 12 (owner, 2026-11-18). Only the two strategy-kill event schemas and one change document under `contracts/changes/` may differ from `v4-base`. Criterion text names PRM-01; mapped as written. |
 | 13 | 17-07 | Smoke-10m pin pair, with the D17-1 literal substitution (Finding 1). |
 | 14 | 17-07 | Live refusal, orchestrator run. |
 
@@ -49,7 +49,7 @@ Six waves, seven plans. Wave 1 holds two plans; their file lists are disjoint (c
 | RSK-01 | 17-01 | |
 | RSK-02 | 17-01 | |
 | RSK-03 | 17-02 | |
-| RSK-04 | 17-02 | |
+| RSK-04 | Phase 18 (live parts; moved by owner decision 2026-11-18) | live failure producers and the live-path UNKNOWN halt; the paper-path UNKNOWN is unchanged |
 | RSK-05 | 17-03 | |
 | RSK-06 | 17-03 | Partial; traceability row says Phase 18 (Finding 3). |
 | RSK-07 | 17-07 | No requirement row. Named as a design id that PRC-03 enforces. |
@@ -137,3 +137,5 @@ These are not in any Phase 17 plan. Each is a post-Phase-17 sweep unit with its 
 - Item 3, 17-01 stays one plan with two commits: S-K1 to S-K4 first, then RSK-01, RSK-02, RSK-08, S-K5 and S-K6. Deviation to confirm: the RSK tasks were not named in Main's split, so they are placed in commit 2 with S-K5 and S-K6.
 - Item 4, 17-01 T6 unblocked by the owner: the strategy-kill clear extends the existing `killswitch clear` verb with `--strategy <id>` and `--by human:<name>`; same human-only check and existing approval path; no new phrase grammar. T6 stays in commit 2. Recorded in 17-01 T6 and Finding 7.
 - Item 5, Main (IRC): 17-01 T4 clear contract refuses only for env and alert sources, removes the latch by compare-and-delete, and makes a retry idempotent; the three existing clear tests move to the new contract; commit 1 includes tools/risk/kill_switch.py. 17-03: authority sources are tools/onchain/authorities.py, authorities_tool.py and checks/authority.py; readers.py holds extensions only; list keys are deny and warn; a BLIND top-10 holder row warns when no paid RPC provider is recorded, and an absent required row rejects. 17-05 T5 passes the holder-pair flag from the composition root.
+- Item 6, owner: criterion 12 amended for Phase 17 to allow exactly `contracts/events/strategy_kill_set.schema.json`, `contracts/events/strategy_kill_cleared.schema.json` and one change document under `contracts/changes/`. Recorded in ROADMAP Phase 17 criterion 12, 17-07, and 17-01 T6 (bot-02 files; generator run, not edited).
+- Item 7, owner (2026-11-18): RSK-04 moves to Phase 18 (live failure producers and the live-path UNKNOWN halt). Criterion 3 is amended to `tests/risk/test_feed_health.py`, `tests/risk/test_loss_velocity_reset.py`, `tests/risk/test_evaluate_halts_verdict.py` and `tests/supervisor/test_review_scheduler.py`. 17-02 T2 and T3 are deferred: the live adapter is the refusing stub `LiveAdapterStub`, and UNKNOWN is produced on the paper path only.
