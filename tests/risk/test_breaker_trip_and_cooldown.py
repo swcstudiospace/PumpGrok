@@ -225,14 +225,8 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
             )
         assert engine._breakers.by_name(breaker).state == "closed"
         resets = store.read(types=["BreakerReset"], limit=None)
-        if breaker == "loss_velocity":
-            # Threshold-1 expiry converges to closed without a reset
-            # transition (no half-open probe cycle); trip idempotency above
-            # is this breaker's edge guarantee.
-            assert resets == []
-        else:
-            assert len(resets) == 1
-            assert resets[0]["payload"]["breaker"] == breaker
+        assert len(resets) == 1
+        assert resets[0]["payload"]["breaker"] == breaker
     finally:
         store.close()
 

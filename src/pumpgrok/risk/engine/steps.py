@@ -32,6 +32,9 @@ from pumpgrok.risk.engine.constants import (
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
 from pumpgrok.risk.strategy_slice import strategy_cap, strategy_held_basis
 
+# Verdict of ``evaluate_halts`` when a halt is already latched; never a breach reason.
+HALT_ALREADY_ACTIVE = "already_active"
+
 
 class _EngineSteps:
     """The 19 R34 step checks plus halt detection."""
@@ -86,18 +89,17 @@ class _EngineSteps:
     def evaluate_halts(self, *, source: str = "paper", correlation_id: str = "desk") -> str | None:
         """Detect fresh daily-loss and drawdown breaches and append ``HaltSet``.
 
-        Returns the breach reason (``daily_loss`` or ``drawdown``) or ``None``.
-        Raises ``CorruptState`` when day-start equity is not positive.
+        Returns the breach reason (``daily_loss`` or ``drawdown``), ``HALT_ALREADY_ACTIVE``
+        when a halt is already latched, or ``None`` when no breach is found.
+        Raises ``LedgerInconsistent`` on a corrupt ledger and ``CorruptState`` when
+        day-start equity is not positive.
         Never clears: UTC rollover and the passage of time leave halts latched
         until the human halt-clear path appends ``HaltCleared`` (R5).
         """
-        try:
-            self._store.verify()
-        except LedgerInconsistent:
-            return None
+        self._store.verify()
         state = self._fold()
         if state.halt.active:
-            return None
+            return HALT_ALREADY_ACTIVE
         equity = self._equity_for_halts(state)
         return self._detect_breach(
             state, equity, ts_utc=self._now_ts(), source=source, correlation_id=correlation_id
