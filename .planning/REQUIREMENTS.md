@@ -241,7 +241,7 @@ Source: owner decisions of 2026-10-28 (live is armed once by a human and then au
 - [ ] RT-01: Event-mode seat cycle bodies exist for all ten seats and run on wakes. Check: `uv run pytest -q tests/desk/test_event_cycles.py tests/desk/test_event_cycles_aux.py`
 - [ ] RT-02: Strategy Intents reach exec.place only through the router with ticket and approval allocation. Check: `uv run pytest -q tests/desk/test_intent_router.py tests/desk/test_ticket_approval_allocation.py`
 - [ ] RT-03: The event desk composition root wires bus, sources, runtime, gateway, router and promotion edges and refuses to build unless paper. Check: `uv run pytest -q tests/desk/test_event_desk_e2e.py tests/desk/test_event_desk_idle.py`
-- [ ] RT-04: Restart recovery re-arms deadlines and restores tapes, peaks, probation and the watch set. Check: `uv run pytest -q tests/strategies/test_recovery.py tests/desk/test_restart_recovery.py tests/desk/test_restart_exit_deadlines.py`
+- [ ] RT-04: Restart recovery re-arms exit deadlines and restores probation, the watch set and exit peaks from the ledger; tapes start empty. Scope note (owner decision 2026-11-18): Phase 17 covers the ledger-derived state; tape restore is Phase 18. Check: `uv run pytest -q tests/strategies/test_recovery.py tests/desk/test_restart_recovery.py tests/desk/test_restart_exit_deadlines.py`
 
 ## Standing process rules from v3
 
