@@ -2,7 +2,7 @@
 
 Regression for the review finding that WeeklyReport copied profit, fees, win
 rate and trade rows from the Sunday daily report. The reporting week is the
-ISO week starting Monday (weekly.py ``_iso_monday``, paper-engine 8.1).
+ISO week starting Monday (weekly.py, paper-engine 8.1).
 """
 
 from __future__ import annotations
