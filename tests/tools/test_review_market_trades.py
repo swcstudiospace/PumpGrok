@@ -7,7 +7,19 @@ trader's own change (by owner, or by the SOL-matching side) classifies it.
 
 from __future__ import annotations
 
-from pumpgrok.tools.market.trades import parse_trade_tx
+import asyncio
+import json
+import random
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import httpx
+import pytest
+
+from pumpgrok.core.errors import DataStale
+from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.tools.market.trades import fetch_trades, parse_trade_tx
+from pumpgrok.tools.onchain.rpc import RpcClient
 
 MINT = "M" * 44
 TRADER = "T" * 44
@@ -101,3 +113,99 @@ def test_pool_only_movement_without_trader_is_not_a_trade() -> None:
         keys=[TRADER, POOL],
     )
     assert parse_trade_tx(MINT, "sig-none", 0, tx) is None
+
+
+START = 1469918176.385
+RpcAnswer = Callable[[str, list[Any]], Awaitable[Any]]
+
+
+class _RpcFailure(Exception):
+    """Scripted RPC-level failure for one request."""
+
+
+def _buy_tx(block_time: int | None) -> dict:
+    tx = _tx(
+        sol_pre=100,
+        sol_post=90,
+        pre_tokens=[_balance(1, 0, TRADER), _balance(2, 9_000_000, POOL)],
+        post_tokens=[_balance(1, 1_000_000, TRADER), _balance(2, 8_000_000, POOL)],
+        keys=[TRADER, POOL, OTHER],
+    )
+    if block_time is None:
+        del tx["blockTime"]
+    else:
+        tx["blockTime"] = block_time
+    return tx
+
+
+def _answer(
+    signatures: list[dict],
+    transactions: dict[str, dict],
+    failing: frozenset[str] = frozenset(),
+) -> RpcAnswer:
+    async def answer(method: str, params: list[Any]) -> Any:
+        if method == "getSignaturesForAddress":
+            return signatures
+        if params[0] in failing:
+            raise _RpcFailure
+        return transactions.get(params[0])
+
+    return answer
+
+
+def _rpc(answer: RpcAnswer) -> RpcClient:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        try:
+            result = await answer(body["method"], body["params"])
+        except _RpcFailure:
+            error = {"code": -32005, "message": "unavailable"}
+            return httpx.Response(
+                200, json={"jsonrpc": "2.0", "id": body.get("id"), "error": error}
+            )
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": body.get("id"), "result": result})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))  # type: ignore[arg-type]
+    return RpcClient(
+        ["https://a.invalid", "https://b.invalid"],
+        client,
+        FixtureClock(start=START),
+        rng=random.Random(5),
+    )
+
+
+async def test_failed_transaction_fetch_raises_instead_of_dropping_the_trade() -> None:
+    signatures = [{"signature": "s1", "blockTime": 1000}, {"signature": "s2", "blockTime": 1060}]
+    rpc = _rpc(_answer(signatures, {"s1": _buy_tx(1000)}, failing=frozenset({"s2"})))
+    with pytest.raises(DataStale):
+        await fetch_trades(MINT, rpc)
+
+
+async def test_movement_without_block_time_is_not_placed_at_epoch() -> None:
+    signatures = [{"signature": "s1", "blockTime": 1000}, {"signature": "s2"}]
+    rpc = _rpc(_answer(signatures, {"s1": _buy_tx(1000), "s2": _buy_tx(None)}))
+    trades = await fetch_trades(MINT, rpc)
+    assert [t.signature for t in trades] == ["s1"]
+
+
+async def test_transaction_fetches_overlap_within_the_tool_timeout() -> None:
+    signatures = [{"signature": f"s{i}", "blockTime": 1000 + i} for i in range(8)]
+    in_flight = 0
+    peak = 0
+    overlapped = asyncio.Event()
+
+    async def answer(method: str, params: list[Any]) -> Any:
+        nonlocal in_flight, peak
+        if method == "getSignaturesForAddress":
+            return signatures
+        in_flight += 1
+        peak = max(peak, in_flight)
+        if in_flight >= 4:
+            overlapped.set()
+        await overlapped.wait()
+        in_flight -= 1
+        return _buy_tx(1000)
+
+    trades = await asyncio.wait_for(fetch_trades(MINT, _rpc(answer)), timeout=5)
+    assert len(trades) == 8
+    assert peak >= 4
