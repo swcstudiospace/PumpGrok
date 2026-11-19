@@ -12,7 +12,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from pumpgrok.config.settings import FilterSettings
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.engine.monitor import passes_filter
 from pumpgrok.engine.pipeline import (
     BUY,
@@ -113,3 +116,19 @@ def test_decide_replay_with_no_events_skips() -> None:
 def test_format_decision_renders_checkpoint_line() -> None:
     line = format_decision(EngineDecision(decision="buy", reason="ok", mint="M"))
     assert line == "engine decision=buy reason=ok"
+
+
+def test_missing_ts_utc_is_a_typed_error_naming_the_fixture_row() -> None:
+    events = [_smoke_events()[0], {"mint": BETA, "S": 9_800_000_000}]
+    with pytest.raises(PumpgrokError, match="fixture row 1") as exc:
+        evaluate_candidates(events, _filter())
+    assert exc.value.code == "invalid_replay_tick"
+    assert exc.value.fields == {"row": 1}
+
+
+@pytest.mark.parametrize("bad_ts", ["not-a-time", "2026-01-01T00:00:00", "", 1_767_225_600])
+def test_malformed_ts_utc_is_a_typed_error_naming_the_fixture_row(bad_ts: object) -> None:
+    event = {**_smoke_events()[0], "ts_utc": bad_ts}
+    with pytest.raises(PumpgrokError, match="fixture row 0") as exc:
+        evaluate_candidates([event], _filter())
+    assert exc.value.code == "invalid_replay_tick"

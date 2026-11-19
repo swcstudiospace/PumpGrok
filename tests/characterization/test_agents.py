@@ -17,6 +17,7 @@ so there is no retry loop and no backoff.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -33,7 +34,13 @@ from pumpgrok.core.budget import CallBudget
 from pumpgrok.core.llm import GrokOps
 from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.engine.agents.auditor import AuditorAgent
-from pumpgrok.engine.agents.base import extract_json, result_schemas, system_prompts
+from pumpgrok.engine.agents.base import (
+    _AGENT_TYPES,
+    GrokAgent,
+    extract_json,
+    result_schemas,
+    system_prompts,
+)
 from pumpgrok.engine.agents.checker import CheckerAgent
 from pumpgrok.engine.agents.narrative import NarrativeAgent
 from pumpgrok.engine.agents.timing import TimingAgent
@@ -470,3 +477,54 @@ def test_extract_json_accepts_fenced_and_bare_objects() -> None:
         extract_json("no object here")
     with pytest.raises(ValueError):
         extract_json('{"a": 1')
+
+
+# --- regression: unit, registry and clock contracts -------------------------
+
+
+_TIMING_OK: dict[str, object] = {
+    "market_sentiment": 0.5,
+    "meme_season": 0.5,
+    "volume_level": 0.5,
+    "anomalies": [],
+    "reasoning": "calm",
+}
+
+
+def test_narrative_payload_reports_market_cap_in_sol(tmp_path: Path) -> None:
+    narrative, _, _, _ = _agents(tmp_path, [], _ok({}))
+    token = Token(mint="M", market_cap_sol=35_000_000_000)
+    payload = json.loads(narrative.build_user_message(token))
+    assert payload["market_cap_sol"] == 35.0
+
+
+def test_duplicate_agent_name_is_refused_and_first_binding_kept(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Restores the registry at teardown even when the unfixed code rebinds the name.
+    monkeypatch.setitem(_AGENT_TYPES, NarrativeAgent.name, NarrativeAgent)
+    with pytest.raises(ValueError, match="already bound"):
+
+        class ImpostorNarrative(GrokAgent):
+            name = "narrative"
+
+    assert _AGENT_TYPES["narrative"] is NarrativeAgent
+
+
+async def test_backward_clock_step_refreshes_the_cached_verdict(tmp_path: Path) -> None:
+    seen: list[httpx.Request] = []
+    clock = ImmediateClock(now=2_000.0)
+    _, _, timing, _ = _agents(tmp_path, seen, _ok(_TIMING_OK), clock=clock)
+    await timing.get(now=2_000.0, **_at(clock, 2_000.0))
+    await timing.get(now=1_000.0, **_at(clock, 1_000.0))
+    assert len(seen) == 2
+
+
+async def test_concurrent_identical_timing_calls_share_one_gateway_call(tmp_path: Path) -> None:
+    seen: list[httpx.Request] = []
+    _, _, timing, _ = _agents(tmp_path, seen, _ok(_TIMING_OK))
+    first, second = await asyncio.gather(
+        timing.get(now=NOW, **_admit()), timing.get(now=NOW, **_admit())
+    )
+    assert len(seen) == 1
+    assert first.market_sentiment == second.market_sentiment == 0.5
