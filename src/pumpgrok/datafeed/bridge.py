@@ -3,7 +3,8 @@
 Curve observations are recorded durably first, then handed to the live price source,
 then published as ``curve_tick``. Portal and trade facts publish as the existing
 ``token_created``, ``migration`` and ``trade`` kinds without a recorder: they carry no
-reserves and never authorize a price.
+reserves and never authorize a price. Price capacity overflow is counted inside
+``LivePriceSource.observe`` (EVT-D-03) and never raises here.
 """
 
 from __future__ import annotations

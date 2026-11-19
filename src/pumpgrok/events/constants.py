@@ -27,4 +27,4 @@ EVENTS_SIDECAR_PATH = Path("var") / "desk" / "events.sqlite"
 
 def path_is_paper_ledger(path: Path) -> bool:
     """True when `path` is the paper ledger. Callers must refuse it, not open it."""
-    return Path(path) == PAPER_LEDGER_PATH
+    return Path(path).expanduser().resolve() == PAPER_LEDGER_PATH.expanduser().resolve()

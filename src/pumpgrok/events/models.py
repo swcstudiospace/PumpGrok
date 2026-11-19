@@ -142,8 +142,10 @@ def derive_event_id(
 ) -> str:
     """sha256 prefix of kind, entity_id, payload, and required occurred_at.
 
-    correlation_id is excluded. Two identical payloads at different occurred_at
-    values are different ids.
+    correlation_id and the money fields (lamports, size_lamports,
+    fee_lamports, token_units) are excluded from the id by design (EVT-D-11:
+    including them would move replay pins; pins are a hard stop).
+    Two identical payloads at different occurred_at values are different ids.
     """
     body = {
         "kind": str(kind),

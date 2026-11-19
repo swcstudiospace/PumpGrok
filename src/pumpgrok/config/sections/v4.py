@@ -8,7 +8,14 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+try:
+    from pumpgrok.events.constants import EVENTS_SIDECAR_PATH as _SIDECAR
+
+    _DEFAULT_SIDECAR_PATH = str(_SIDECAR)
+except Exception:
+    _DEFAULT_SIDECAR_PATH = "var/desk/events.sqlite"
 
 #: Supervisor wake modes. `cadence` is the default and stays byte-identical; `event` wakes seats
 #: from the event bus (EVT-10). Selected by `--wake-mode` or `events.wake_mode`.
@@ -29,7 +36,7 @@ class EventsSettings(BaseModel):
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
     wake_mode: WakeMode = "cadence"
-    sidecar_path: str = "var/desk/events.sqlite"
+    sidecar_path: str = Field(default_factory=lambda: _DEFAULT_SIDECAR_PATH)
 
 
 class GrokGatewaySettings(BaseModel):
@@ -42,35 +49,30 @@ class GrokGatewaySettings(BaseModel):
 class DatafeedSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
 class RecorderSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
 class StrategiesSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
 class BacktestV2Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
 class RiskStrategySettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
@@ -79,14 +81,12 @@ class PromotionSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 
 class SignerSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool = False
     allowlist: tuple[str, ...] = ()
 
 

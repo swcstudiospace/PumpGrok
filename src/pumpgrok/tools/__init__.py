@@ -30,7 +30,9 @@ from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.datafeed.price import ReservesCache
+
+if TYPE_CHECKING:
+    from pumpgrok.datafeed.price import ReservesCache
 from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.operator_choices import OperatorGrants
@@ -383,6 +385,8 @@ def build_operator_registry(
         raise ValueError("pass a verified replay or a price source, not both")
     if live_source is not None and (replay is not None or price_source is not None):
         raise ValueError("live composition takes the live source alone")
+    from pumpgrok.datafeed.price import ReservesCache  # noqa: PLC0415 - circular import
+
     reserves_cache = ReservesCache(capacity=RESERVES_CACHE_CAPACITY)
     curves = _CachingPriceSource(price_source, reserves_cache)
     reserves = replay.curves.reserves if replay is not None else reserves_cache.get

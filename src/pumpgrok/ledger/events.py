@@ -39,8 +39,10 @@ def _reject_float(value: Any) -> Any:
 
 
 MoneyInt = Annotated[int, Field(strict=True)]
+Seconds = Annotated[int, Field(strict=True)]
 StrictBool = Annotated[bool, Field(strict=True)]
 PriceDecimal = Annotated[Decimal, BeforeValidator(_reject_float)]
+Side = Literal["buy", "sell"]
 
 
 class _ClosedModel(BaseModel):
@@ -96,9 +98,9 @@ class OrderPlaced(_ClosedModel):
     order_id: str
     decision_id: str
     ticket_id: str
-    side: str = Field(description="buy | sell")
+    side: Side = Field(description="buy | sell")
     mint: str
-    slippage_bps: MoneyInt
+    slippage_bps: Seconds
     size_lamports: MoneyInt | None = None
     token_units: MoneyInt | None = None
     quote_json: str = ""
@@ -127,7 +129,7 @@ class FillRecorded(_ClosedModel):
     source: EventSource
     order_id: str
     decision_id: str
-    side: str = Field(description="buy | sell")
+    side: Side = Field(description="buy | sell")
     mint: str
     filled_lamports: MoneyInt
     filled_units: MoneyInt
@@ -143,7 +145,7 @@ class FillRecorded(_ClosedModel):
     curve_after_s: MoneyInt = Field(default=0, description="S1 CONFIRMING reserves, lamports")
     curve_after_t: MoneyInt = Field(default=0, description="T1 CONFIRMING reserves, token units")
     route: str = Field(default="curve", description="fill basis; always curve (R38)")
-    realised_slippage_bps: MoneyInt = 0
+    realised_slippage_bps: Seconds = 0
 
 
 class PositionOpened(_ClosedModel):
@@ -174,7 +176,7 @@ class PositionClosed(_ClosedModel):
         " | kill_flatten | blind_flatten | graduated | manual"
     )
     pnl_pct: PriceDecimal = Decimal("0")
-    hold_seconds: MoneyInt = 0
+    hold_seconds: Seconds = 0
     venue_tx_ref: str = ""
 
 
@@ -274,7 +276,7 @@ class BreakerTripped(_ClosedModel):
     breaker: str = Field(description="data_stale | loss_velocity | exec_errors")
     metric: str
     threshold: str
-    cooldown_s: MoneyInt
+    cooldown_s: Seconds
 
 
 class BreakerReset(_ClosedModel):
@@ -282,7 +284,7 @@ class BreakerReset(_ClosedModel):
 
     source: EventSource
     breaker: str
-    after_s: MoneyInt
+    after_s: Seconds
     probe_ok: StrictBool = False
 
 
@@ -351,7 +353,7 @@ class ApprovalRecorded(_ClosedModel):
     mint: str = ""
     size_lamports: MoneyInt = 0
     token_units: MoneyInt
-    max_slippage_bps: MoneyInt = 0
+    max_slippage_bps: Seconds = 0
     exit_rule_id: str = ""
     raw_message: str = ""
     consumed: StrictBool = False
@@ -387,9 +389,6 @@ _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")
 def event_type_to_snake(event_type: EventType) -> str:
     """CamelCase type to snake_case contract file stem (OrderPlaced -> order_placed)."""
     return _CAMEL_BOUNDARY.sub("_", event_type.value).lower()
-
-
-EVENT_TYPE_SNAKE: dict[EventType, str] = {t: event_type_to_snake(t) for t in EventType}
 
 
 def event_json_schemas() -> dict[str, dict[str, Any]]:

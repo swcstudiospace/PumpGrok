@@ -51,6 +51,29 @@ def _is_reserve(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+_BOUND_INDEX: dict[int, dict[tuple[str, float], set[tuple[int, int, bool]]]] = {}
+
+
+def _bound_index(replay: "VerifiedReplay") -> dict[tuple[str, float], set[tuple[int, int, bool]]]:
+    key = id(replay)
+    cached = _BOUND_INDEX.get(key)
+    if cached is not None:
+        return cached
+    index: dict[tuple[str, float], set[tuple[int, int, bool]]] = {}
+    for event in replay.dataset.events:
+        s, t = event.get("S"), event.get("T")
+        if not (_is_reserve(s) and _is_reserve(t)):
+            continue
+        assert s is not None and t is not None
+        index.setdefault((str(event.get("mint")), float(event_epoch(event))), set()).add(
+            (int(s), int(t), bool(event.get("complete", False)))
+        )
+    if len(_BOUND_INDEX) > 4:
+        _BOUND_INDEX.clear()
+    _BOUND_INDEX[key] = index
+    return index
+
+
 def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
     """True when ``snapshot`` equals a tick of the dataset ``replay`` verified.
 
@@ -60,19 +83,10 @@ def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
     stamp = snapshot.ts
     if stamp is None or not math.isfinite(stamp):
         return False
-    for event in replay.dataset.events:
-        if event.get("mint") != snapshot.mint:
-            continue
-        s, t = event.get("S"), event.get("T")
-        if not (_is_reserve(s) and _is_reserve(t)):
-            continue
-        if (
-            (s, t) == (snapshot.s_lamports, snapshot.t_units)
-            and bool(event.get("complete", False)) == snapshot.complete
-            and event_epoch(event) == stamp
-        ):
-            return True
-    return False
+    bucket = _bound_index(replay).get((snapshot.mint, float(stamp)))
+    if bucket is None:
+        return False
+    return (snapshot.s_lamports, snapshot.t_units, snapshot.complete) in bucket
 
 
 def _provenance(

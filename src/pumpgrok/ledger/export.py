@@ -21,6 +21,8 @@ from pumpgrok.ledger.store import LedgerStore
 
 EXPORT_SEQ_KEY = "export_seq"
 DRY_RUN_TX = "dry_run"
+# Ledger prices are lamports per token base unit; vendor price renders scaled by 1000.
+_PRICE_SCALE = Decimal(1000)
 
 
 def _sol_str(lamports: int | str) -> str:
@@ -30,7 +32,7 @@ def _sol_str(lamports: int | str) -> str:
 
 def _price_str(value: Any) -> str:
     """Scaled ledger price to an exact decimal price string (INT-01, no float division)."""
-    return str(Decimal(str(value if value is not None else 0)) / 1000)
+    return str(Decimal(str(value if value is not None else 0)) / _PRICE_SCALE)
 
 
 def _epoch(ts_utc: str) -> float:
@@ -150,7 +152,7 @@ def _close_line(event: dict[str, Any]) -> dict[str, Any]:
         "entry_price": "0",
         "exit_price": _price_str(payload.get("price_exit", "0")),
         "pnl_sol": _sol_str(payload.get("realized_pnl_lamports", 0)),
-        "pnl_pct": float(payload.get("pnl_pct", "0")),
+        "pnl_pct": str(Decimal(str(payload.get("pnl_pct", "0")))),
         "hold_seconds": int(payload.get("hold_seconds", 0)),
         "reason": str(payload.get("reason", "")),
         # Bare tx_hash keeps the evidence tooling matching; the unique paper

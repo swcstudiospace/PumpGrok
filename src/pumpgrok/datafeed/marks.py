@@ -12,13 +12,12 @@ import asyncio
 import math
 from contextlib import suppress
 
-from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.graduation import GapSettings, PositionAction, position_action
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.execution.paper_adapter.models import _ledger_mark_epoch
 from pumpgrok.execution.paper_factory import VerifiedReplay
 from pumpgrok.ledger.reducer import PositionView
-from pumpgrok.replay.clock import parse_ts_utc
+from pumpgrok.replay.clock import Clock, parse_ts_utc
 
 
 class InMemoryTimeoutSink:
@@ -33,7 +32,7 @@ class InMemoryTimeoutSink:
 
 
 class HeldMarkScheduler:
-    """Mark admitted held curves at most 60 seconds apart while the book is open."""
+    """Test-only scheduler (no production constructor; EVT-D-06 keeps it for coverage)."""
 
     def __init__(
         self,
@@ -186,7 +185,8 @@ class HeldMarkScheduler:
             await self._adapter.mark_open_positions(snapshots=snapshots)
             self._degraded.difference_update(snapshots)
             for mint, snapshot in snapshots.items():
-                assert snapshot.ts is not None
+                if snapshot.ts is None:
+                    raise RuntimeError("snapshot ts is required")
                 self._last_trusted[mint] = snapshot.ts
         remaining = [
             stamp + self._settings.timeout_after_s - now
@@ -255,7 +255,8 @@ class HeldMarkScheduler:
                 continue
             ledger_time = _ledger_mark_epoch(pos)
             cached_time = self._adapter._last_price_ts.get(mint)
-            assert snapshot.ts is not None
+            if snapshot.ts is None:
+                raise RuntimeError("snapshot ts is required")
             if (ledger_time is not None and snapshot.ts < ledger_time) or (
                 cached_time is not None and snapshot.ts < cached_time
             ):
@@ -267,7 +268,8 @@ class HeldMarkScheduler:
         }
         for mint, snapshot in list(graduated.items()):
             if mint in current and current[mint].token_units > 0 and not current[mint].mtm_frozen:
-                assert snapshot.ts is not None
+                if snapshot.ts is None:
+                    raise RuntimeError("snapshot ts is required")
                 self._last_trusted[mint] = max(self._last_trusted[mint], snapshot.ts)
             else:
                 del graduated[mint]

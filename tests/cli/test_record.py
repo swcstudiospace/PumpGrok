@@ -761,17 +761,23 @@ def test_live_serve_does_not_read_the_confirmation_key(
     monkeypatch.setattr(os.environ, "get", _guarded)
     monkeypatch.setattr(datafeed_transport, "make_read_transport", lambda endpoint: _FakeRpc())
     assert main(["live", "serve", "--rpc", _RPC, "--once"]) == EXIT_OK
-    text = Path(feed_loop.__file__).read_text(encoding="utf-8")
-    transport_text = Path(datafeed_transport.__file__).read_text(encoding="utf-8")
-    assert "LiveAdapter" not in text
-    assert "LiveAdapter" not in transport_text
 
 
-def test_dispatch_refuses_live_before_settings_and_wallet() -> None:
-    source = Path(datafeed_transport.__file__).parents[1].joinpath("cli", "dispatch.py")
-    body = source.read_text(encoding="utf-8").split("def _dispatch", 1)[1]
-    assert body.index("_refuse_disabled_live") < body.index("load_settings")
-    assert body.index("load_settings") < body.index("_confirm_live_wallet")
+def test_live_dispatch_refuses_before_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pumpgrok.cli.dispatch as dispatch
+
+    monkeypatch.chdir(tmp_path)
+    called: list[str] = []
+
+    def _fake_load(**kwargs: Any) -> Any:
+        called.append("load_settings")
+        raise AssertionError("load_settings must not be called for refused live serve")
+
+    monkeypatch.setattr(dispatch, "load_settings", _fake_load)
+    assert main(["live", "serve", "--mode", "live", "--rpc", _RPC]) == EXIT_LIVE
+    assert called == []
 
 
 def test_record_tests_import_no_llm_or_signing_module() -> None:

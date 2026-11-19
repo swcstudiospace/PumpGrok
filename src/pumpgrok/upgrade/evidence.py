@@ -67,7 +67,8 @@ def bounds_snapshot(bounds: Bounds) -> dict[str, dict[str, list[Any]]]:
 
     Keys sort so identical bounds always snapshot identically. Bool bounds
     keep their bool type; the snapshot is evidence of the exact ranges the
-    gate enforced, never a score.
+    gate enforced, never a score. The strategy section is intentionally not
+    included: adding it would change manifest bytes (EVT-D-07).
     """
     return {
         section: {key: [bound.minimum, bound.maximum] for key, bound in sorted(entries.items())}
@@ -108,6 +109,11 @@ def _create_exclusive(path: Path, data: bytes) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.link(tmp, path)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     finally:
         tmp.unlink(missing_ok=True)
 

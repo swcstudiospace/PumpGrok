@@ -36,13 +36,15 @@ vendor ``evaluate``        R34 id
 
 from __future__ import annotations
 
-# Below this size a trade makes no sense: fees and tips would eat it.
-# Vendor MIN_TRADE_SOL = 0.01 (risk.py:36).
-MIN_TRADE_LAMPORTS = 10_000_000
+from decimal import ROUND_HALF_UP, Decimal
+
+from pumpgrok.risk.limits import EngineLimits
+
+# Minimum trade: derived from EngineLimits (RISK-R-14).
+MIN_TRADE_LAMPORTS: int = int(EngineLimits.model_fields["min_trade_lamports"].default)
 
 # Share of the remaining daily-loss budget risked on one trade.
-# Vendor-identical (risk.py:33).
-MAX_SHARE_OF_REMAINING_BUDGET = 0.30
+MAX_SHARE_OF_REMAINING_BUDGET = Decimal("0.30")
 
 # Vendor ``RiskManager.evaluate`` reason prefix to R34 id (paper-engine 5.2).
 # Unknown prefixes raise in :func:`to_r34_reason`: an unmapped reason is a
@@ -67,12 +69,12 @@ def position_size_lamports(
 
     ``by_score`` scales the per-trade ceiling by the clamped score;
     ``by_budget`` takes at most 30 percent of what is left of the daily-loss
-    budget. The smaller wins, exactly like the vendor formula.
+    budget. The smaller wins. Exact Decimal arithmetic (RISK-R-14).
     """
-    clamped = max(0.0, min(1.0, score))
-    by_score = max_trade_lamports * clamped
-    by_budget = remaining_budget_lamports * MAX_SHARE_OF_REMAINING_BUDGET
-    return round(min(by_score, by_budget))
+    clamped = max(Decimal("0"), min(Decimal("1"), Decimal(str(score))))
+    by_score = Decimal(max_trade_lamports) * clamped
+    by_budget = Decimal(remaining_budget_lamports) * MAX_SHARE_OF_REMAINING_BUDGET
+    return int(min(by_score, by_budget).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def to_r34_reason(vendor_reason: str) -> str:
