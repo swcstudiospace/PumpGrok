@@ -8,6 +8,7 @@ and no websocket tail exist in this module (R44, R46, R47).
 
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -22,6 +23,7 @@ from pumpgrok.tools._common import J4, SOLANA_RPC_SOURCE, MintStr, meta_now
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 _TX_LIMIT_PER_MINT = 200
+_TX_FETCH_CONCURRENCY = 8
 
 
 class Trade(BaseModel):
@@ -158,8 +160,8 @@ def _classify(token_net: int, sol_delta: int) -> Literal["buy", "sell"] | None:
     return None
 
 
-def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> Trade | None:
-    """Classify one parsed transaction; ``None`` when it is not a trade."""
+def parse_trade_tx(mint: str, signature: str, fallback_ts: int | None, tx: object) -> Trade | None:
+    """Classify one parsed transaction; ``None`` when it is not a trade or has no block time."""
     if not isinstance(tx, dict):
         return None
     meta = tx.get("meta")
@@ -178,9 +180,12 @@ def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> T
     side = _classify(token_net, sol_delta)
     if side is None:
         return None
-    ts = tx.get("blockTime")
+    block_time = tx.get("blockTime")
+    ts = block_time if isinstance(block_time, int) else fallback_ts
+    if ts is None:
+        return None
     return Trade(
-        ts=ts if isinstance(ts, int) else fallback_ts,
+        ts=ts,
         side=side,
         wallet=keys[0],
         sol_lamports=abs(sol_delta),
@@ -189,10 +194,28 @@ def parse_trade_tx(mint: str, signature: str, fallback_ts: int, tx: object) -> T
     )
 
 
+async def _get_transaction(rpc: RpcClient, mint: str, signature: str) -> object:
+    """Fetch one parsed transaction; an RPC failure is a stale stream, never a silent skip."""
+    try:
+        return await rpc.call(
+            "getTransaction",
+            [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+        )
+    except RpcError as exc:
+        raise DataStale(f"market.trades transaction failed mint={mint}") from exc
+
+
 async def fetch_trades(
     mint: str, rpc: RpcClient, *, limit: int = 200, since_ts: int | None = None
 ) -> list[Trade]:
-    """Fetch and classify up to ``limit`` movements for ``mint`` (RPC only)."""
+    """Fetch and classify up to ``limit`` movements for ``mint`` (RPC only).
+
+    Transactions are fetched with at most ``_TX_FETCH_CONCURRENCY`` in flight and
+    classified in signature order. A failed transaction fetch raises
+    :class:`DataStale` rather than dropping that trade, so the buy/sell ratio is
+    never presented as complete. A movement with no block time on either the
+    signature or the transaction cannot be placed in time and is dropped.
+    """
     try:
         sigs = await rpc.call(
             "getSignaturesForAddress", [mint, {"limit": min(limit, _TX_LIMIT_PER_MINT)}]
@@ -201,28 +224,30 @@ async def fetch_trades(
         raise DataStale(f"market.trades signatures failed mint={mint}") from exc
     if not isinstance(sigs, list):
         raise DataStale(f"market.trades signatures malformed mint={mint}")
-    trades: list[Trade] = []
+    candidates: list[tuple[str, int | None]] = []
     for entry in sigs[:limit]:
         if not isinstance(entry, dict) or not isinstance(entry.get("signature"), str):
             continue
         block_time = entry.get("blockTime")
-        ts = block_time if isinstance(block_time, int) else 0
-        if since_ts is not None and ts < since_ts:
+        ts = block_time if isinstance(block_time, int) else None
+        if since_ts is not None and (ts is None or ts < since_ts):
             continue
-        try:
-            tx = await rpc.call(
-                "getTransaction",
-                [
-                    entry["signature"],
-                    {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
-                ],
-            )
-        except RpcError:
-            continue
-        trade = parse_trade_tx(mint, entry["signature"], ts, tx)
-        if trade is not None:
-            trades.append(trade)
-    return trades
+        candidates.append((entry["signature"], ts))
+    gate = asyncio.Semaphore(_TX_FETCH_CONCURRENCY)
+
+    async def _classify(signature: str, ts: int | None) -> Trade | None:
+        async with gate:
+            tx = await _get_transaction(rpc, mint, signature)
+        return parse_trade_tx(mint, signature, ts, tx)
+
+    tasks = [asyncio.ensure_future(_classify(sig, ts)) for sig, ts in candidates]
+    try:
+        results = await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        raise
+    return [trade for trade in results if trade is not None]
 
 
 async def run_trades(inp: TradesIn, rpc: RpcClient) -> dict[str, Any]:

@@ -237,7 +237,7 @@ async def test_holders_snapshot_converts_to_ratios() -> None:
     assert [h.share for h in out.holders] == [Decimal("0.5"), Decimal("0.3"), Decimal("0.2")]
     assert out.top5_share == Decimal("1")
     assert out.creator is None
-    assert out.creator_share == Decimal(0)
+    assert out.creator_share is None
     assert out.meta.source == "solana_rpc"
 
 
