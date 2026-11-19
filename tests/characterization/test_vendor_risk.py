@@ -292,6 +292,3 @@ def test_same_day_keeps_counters(harness: RiskHarness) -> None:
 # ``state halt --clear --by human:<name>``. These rows pin the exclusion:
 # they mirror the vendor scenarios, and un-skipping one fails, proving the
 # auto-clear path does not exist.
-
-
-

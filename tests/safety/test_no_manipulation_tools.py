@@ -102,24 +102,18 @@ def test_social_has_no_manipulation_helpers() -> None:
     for path in sorted(SOCIAL.glob("*.py")):
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, filename=str(path))
-        identifiers = {
-            node.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Attribute)
-        } | {
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        } | {
-            node.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Name)
-        }
+        identifiers = (
+            {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+            | {
+                node.name
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            }
+            | {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        )
         for stem in _STEMS:
             assert not any(
-                ident == stem
-                or ident.startswith(stem + "_")
-                or ident.endswith("_" + stem)
+                ident == stem or ident.startswith(stem + "_") or ident.endswith("_" + stem)
                 for ident in identifiers
             ), f"{path.name} uses manipulation identifier {stem!r}"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -262,6 +256,7 @@ async def test_notify_posts_nothing_to_a_non_allowlisted_destination(tmp_path: P
         "ok": False,
         "error": "not_allowlisted",
     }
+
 
 def test_browser_ops_skill_has_no_posting_or_wallet_procedure() -> None:
     """browser-ops skill text states detection only (R39); wallet UI is refusal-framed."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from decimal import Decimal
 
 from pumpgrok.backtest.divergence import (
@@ -80,12 +81,12 @@ def test_gaps_inside_defaults_pass_without_blocking() -> None:
 
 
 def test_breach_sets_flag_line_and_exit() -> None:
-    import dataclasses
-
     verdict = check(_metrics("0.10", "1.0"), _metrics("0.08", "1.0"))
     # EXEC-EX-48: with_divergence deleted; the blocking flag is the caller's
     # replace on promotion_eligible while the line/exit halves stay here.
-    blocked = dataclasses.replace(_report(), promotion_eligible=False, divergence_reasons=verdict.reasons)
+    blocked = dataclasses.replace(
+        _report(), promotion_eligible=False, divergence_reasons=verdict.reasons
+    )
     assert blocked.promotion_eligible is False
     assert "DIVERGENCE BREACH" in (breach_line(verdict) or "")
     assert enforce(verdict) == 1

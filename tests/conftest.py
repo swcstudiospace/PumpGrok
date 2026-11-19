@@ -19,6 +19,7 @@ import websockets.asyncio.client
 import pumpgrok.datafeed.transport
 import pumpgrok.engine.monitor
 from harness import NetworkBlocked
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.ledger import operator_choices as oc
 
 _MESSAGE = "outbound network is blocked in tests; use httpx.MockTransport"
@@ -40,9 +41,6 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(websockets, "connect", _blocked_sync)
     monkeypatch.setattr(pumpgrok.engine.monitor, "connect", _blocked_sync)
     monkeypatch.setattr(pumpgrok.datafeed.transport, "connect", _blocked_sync)
-
-
-
 
 
 @pytest.fixture
