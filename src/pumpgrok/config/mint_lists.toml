@@ -1,0 +1,12 @@
+# Mint lists consulted at entry by pumpgrok.risk.entry_checks (D17-6).
+#
+# The file must exist. load_mint_lists() raises when it is missing or
+# unreadable, so the desk refuses to enter rather than entering with no list.
+#
+# deny: a mint listed here is rejected at entry.
+# warn: a mint listed here is entered with a warning only.
+#
+# Both lists ship empty. Add a mint only with a recorded decision.
+
+deny = []
+warn = []
