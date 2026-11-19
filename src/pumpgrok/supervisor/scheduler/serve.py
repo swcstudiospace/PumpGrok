@@ -17,6 +17,7 @@ from pumpgrok.engine.pipeline import BUY, evaluate_candidates
 from pumpgrok.ledger.active_set import load_verified_param_set, read_active_set
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
+from pumpgrok.ledger.views import drawdown_fraction, equity_lamports
 from pumpgrok.replay.clock import FixtureClock, WallClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
 from pumpgrok.replay.recorder import load_llm_records
@@ -26,7 +27,7 @@ from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.health import HealthServer
 from pumpgrok.supervisor.lifecycle import install_signal_handlers, shutdown
 from pumpgrok.supervisor.metrics import Metrics
-from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
+from pumpgrok.supervisor.scheduler.degraded import DegradedState, fold_latches, kill_switch_engaged
 from pumpgrok.supervisor.scheduler.orders import _check_cycle_rows, _replay_trading
 from pumpgrok.supervisor.scheduler.replay_cycles import _replay_cycles
 from pumpgrok.supervisor.scheduler.replay_runtime import (
@@ -338,12 +339,22 @@ def _build_serve(
         )
 
         def _snapshot() -> dict[str, Any]:
-            """Scrape-time gauges: ledger_seq is real; kill switch matches the health body."""
+            """Scrape-time gauges, read from the same ledger folds as the health body."""
             try:
                 seq = store.count()
             except Exception:
                 seq = 0
-            return {"ledger_seq": seq, "kill_switch": kill_switch_engaged(store)}
+            snap: dict[str, Any] = {"ledger_seq": seq, "kill_switch": kill_switch_engaged(store)}
+            try:
+                latches = fold_latches(store)
+                state = supervisor.fold_ledger(supervisor.clock.now())
+            except Exception as exc:
+                log.warning("metrics state unavailable: %s", exc)
+                return snap
+            snap["breakers"] = dict(latches.breakers)
+            snap["equity_lamports"] = equity_lamports(state)
+            snap["drawdown_pct"] = float(drawdown_fraction(state)) * 100.0
+            return snap
 
         metrics = Metrics(snapshot=_snapshot, event_mode=wake_mode == "event")
         supervisor = Supervisor(
@@ -503,10 +514,10 @@ async def serve_replay(
         supervisor.ready,
         get_metrics=metrics.exposition,
     )
-    bound = await server.start(host, port)
-    log.info("serve listening on %s:%d (ledger_source=replay)", host, bound)
-    install_signal_handlers(supervisor.request_stop)
     try:
+        bound = await server.start(host, port)
+        log.info("serve listening on %s:%d (ledger_source=replay)", host, bound)
+        install_signal_handlers(supervisor.request_stop)
         await serve_fixture_timeline(
             supervisor,
             dataset_stamps(load_dataset(Path(dataset_dir))),
