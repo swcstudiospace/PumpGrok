@@ -81,7 +81,7 @@ def exit_deadline(position: ExitPosition, cfg: ExitsSettings) -> float | None:
     The deadline is the opening time plus the hold cap, read from the ledger's PositionOpened
     row, so a restart re-arms the deadline the position was opened with.
     """
-    if not cfg.max_hold_seconds or not position.opened_at:
+    if not cfg.max_hold_seconds or position.opened_at is None:
         return None
     return position.opened_at + cfg.max_hold_seconds
 
