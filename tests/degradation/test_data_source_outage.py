@@ -1,6 +1,6 @@
 """INV-R-32: data-source outage trips DataStale, serves last-good, then recovers.
 
-WS silence is driven through DegradedState and the product DataStaleBreaker;
+WS silence is driven through the product DataStaleBreaker;
 REST outage through FaultyDataSource/FaultyPriceSource; adversarial payloads
 through parse_upstream(CurveSnapshot). The blind window closes with a ledger
 Escalation, and recovery needs three fresh ticks.
@@ -21,7 +21,6 @@ from pumpgrok.execution.paper_adapter import CurveSnapshot
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.breakers import DataStaleBreaker
-from pumpgrok.supervisor.scheduler import DegradedState
 from pumpgrok.supervisor.seat_relay import append_escalation
 
 BASE = 1767225600.0
@@ -33,16 +32,6 @@ def _store(tmp_path: Path) -> LedgerStore:
     path = tmp_path / "ledger.sqlite"
     recreate_ledger_db(path)
     return LedgerStore(str(path))
-
-
-def test_ws_silence_trips_data_stale_with_recovery() -> None:
-    degraded = DegradedState()
-    assert degraded.ws_data_stale(10_000.0) is False
-    degraded.note_ws_frame(0.0)
-    assert degraded.ws_data_stale(119.0) is False
-    assert degraded.ws_data_stale(121.0) is True
-    degraded.note_ws_frame(121.0)
-    assert degraded.ws_data_stale(122.0) is False
 
 
 def test_ws_silence_trips_product_breaker_and_recovers() -> None:
@@ -125,12 +114,3 @@ def test_adversarial_edge_records_are_flagged_by_caller() -> None:
     assert unicodedata.normalize("NFKC", confusable.mint) == confusable.mint
     negative = parse_upstream(CurveSnapshot, by_name["negative_reserves"]["payload"])
     assert negative.s_lamports < 0
-
-
-def test_recovery_after_three_fresh_ticks() -> None:
-    degraded = DegradedState()
-    degraded.note_ws_frame(0.0)
-    assert degraded.ws_data_stale(200.0) is True
-    for tick in (200.0, 210.0, 220.0):
-        degraded.note_ws_frame(tick)
-    assert degraded.ws_data_stale(221.0) is False

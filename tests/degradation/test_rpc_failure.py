@@ -20,26 +20,21 @@ BASE = 1767225600.0
 
 async def test_rpc_rate_limit_and_failover_then_blind() -> None:
     fake = FaultyRpcClient([FaultMode.RATE_LIMIT, FaultMode.RAISE])
-    degraded = DegradedState(rpc_endpoints=[True, True])
     with pytest.raises(RpcError):
         await fake.call("getAccountInfo", ["mint"])
     assert fake.fired == 2
     assert fake.attempts == [0, 1]
-    degraded.note_rpc_result(0, False)
-    assert degraded.rpc_blind is False
-    degraded.note_rpc_result(1, False)
-    assert degraded.rpc_blind is True
+    assert DegradedState(rpc_endpoints=[False, True]).rpc_blind is False
+    assert DegradedState(rpc_endpoints=[False, False]).rpc_blind is True
 
 
-async def test_rpc_blind_recovers_on_healthy_probe() -> None:
-    degraded = DegradedState(rpc_endpoints=[False, False])
-    assert degraded.rpc_blind is True
+async def test_rpc_blind_clears_when_an_endpoint_is_healthy() -> None:
+    assert DegradedState(rpc_endpoints=[False, False]).rpc_blind is True
     fake = FaultyRpcClient([None])
     result = await fake.call("getAccountInfo", ["mint"])
     assert result["endpoint"] == 0
     assert fake.fired == 0
-    degraded.note_rpc_result(0, True)
-    assert degraded.rpc_blind is False
+    assert DegradedState(rpc_endpoints=[True, False]).rpc_blind is False
 
 
 def test_exec_errors_breaker_trips_at_third_rpc_error() -> None:

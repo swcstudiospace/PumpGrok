@@ -94,10 +94,9 @@ def test_rule_fallback_scores_missing_components_at_zero() -> None:
     assert scores.timing == 0.0
 
 
-async def test_require_llm_is_observe_only_for_buys() -> None:
+async def test_llm_down_without_require_llm_falls_back_to_rules() -> None:
     _, degraded = await _drive_down(FaultMode.TIMEOUT)
-    degraded.require_llm = True
-    assert degraded.signal_scoring_mode(replay=False) == "observe_only_buys"
+    assert degraded.signal_scoring_mode(replay=False) == "rule_fallback"
     degraded.llm_available = True
     assert degraded.signal_scoring_mode(replay=False) == "llm"
 
