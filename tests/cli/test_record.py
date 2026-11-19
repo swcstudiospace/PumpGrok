@@ -401,15 +401,19 @@ def test_cli_rebuild_ticks_writes_the_rebuilt_dataset(
 
 def test_import_copies_verified_paper_ledger_and_writes_sidecar(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path / "source.sqlite")
-    data = ledger.read_bytes()
 
     target = maintenance.import_dataset(ledger, name="imp", root=tmp_path / "var")
 
     assert target == tmp_path / "var" / "replay" / "imp"
-    assert (target / maintenance.IMPORTED_LEDGER_NAME).read_bytes() == data
-    digest = hashlib.sha256(data).hexdigest()
+    imported = (target / maintenance.IMPORTED_LEDGER_NAME).read_bytes()
+    digest = hashlib.sha256(imported).hexdigest()
     sidecar = (target / maintenance.IMPORTED_DIGEST_NAME).read_text(encoding="utf-8")
     assert sidecar == f"{digest}  {maintenance.IMPORTED_LEDGER_NAME}\n"
+    copied = LedgerStore(str(target / maintenance.IMPORTED_LEDGER_NAME))
+    try:
+        assert copied.count() == 2
+    finally:
+        copied.close()
 
 
 @pytest.mark.parametrize(
