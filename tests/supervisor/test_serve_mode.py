@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import socket
 import urllib.request
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -27,7 +28,7 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.supervisor.health import HealthServer
 from pumpgrok.supervisor.metrics import NINE_FAMILIES
-from pumpgrok.supervisor.scheduler import ROSTER, build_serve_replay
+from pumpgrok.supervisor.scheduler import ROSTER, build_serve_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 
 SMOKE = Path(__file__).resolve().parent.parent / "fixtures" / "replay" / "smoke"
@@ -257,3 +258,56 @@ def test_serve_snapshot_and_body_reflect_kill_switch(tmp_path: Path) -> None:
         assert "pumpgrok_kill_switch 0.0" in metrics.exposition().decode("utf-8")
     finally:
         store.close()
+
+
+def _gauge_value(body: str, name: str) -> float:
+    for line in body.splitlines():
+        if line.startswith(f"{name} "):
+            return float(line.split()[1])
+    raise AssertionError(f"{name} has no sample line")
+
+
+def test_serve_gauges_carry_equity_from_the_ledger(tmp_path: Path) -> None:
+    clock = FixtureClock(start=1_700_000_000.0)
+    _supervisor, metrics, store = build_serve_replay(
+        SMOKE,
+        FilterSettings(),
+        seed=20260101,
+        clock=clock,
+        ledger_path=tmp_path / "ledger.sqlite",
+    )
+    try:
+        body = metrics.exposition().decode("utf-8")
+    finally:
+        store.close()
+    assert _gauge_value(body, "pumpgrok_equity_sol") > 0.0
+
+
+async def test_failed_bind_still_closes_the_ledger_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    closed: list[Path] = []
+    real_close = LedgerStore.close
+
+    def _recording_close(self: LedgerStore) -> None:
+        closed.append(self.path)
+        real_close(self)
+
+    monkeypatch.setattr(LedgerStore, "close", _recording_close)
+    busy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    busy.bind(("127.0.0.1", 0))
+    busy.listen(1)
+    try:
+        with pytest.raises(OSError):
+            await serve_replay(
+                SMOKE,
+                FilterSettings(),
+                seed=20260101,
+                host="127.0.0.1",
+                port=busy.getsockname()[1],
+                ledger_path=tmp_path / "ledger.sqlite",
+                health_path=tmp_path / "health.json",
+            )
+    finally:
+        busy.close()
+    assert closed
