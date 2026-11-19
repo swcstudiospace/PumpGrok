@@ -137,7 +137,7 @@ class RedactionFilter(logging.Filter):
             try:
                 redacted: Any = redact_value(key, getattr(record, key))
             except Exception:  # fail closed: a value that cannot render is never emitted
-                redacted = REDACTED
+                redacted = _unrenderable_field()
             setattr(record, key, redacted)
         return True
 
@@ -148,3 +148,8 @@ def _template_text(msg: object) -> str:
         return str(msg)
     except Exception:
         return f"<unprintable {type(msg).__name__}>"
+
+
+def _unrenderable_field() -> str:
+    """Placeholder for a field that cannot render: its value is never emitted."""
+    return REDACTED
