@@ -184,13 +184,12 @@ def resolve_thresholds(
     return SafetyThresholds(**merged)
 
 
-def _blind(check_id: CheckId, weight: Decimal, reason: str) -> CheckResult:
+def _blind(check_id: CheckId, reason: str) -> CheckResult:
     return CheckResult(
         id=check_id,
         status="blind",
         value=None,
         threshold=None,
-        weight=weight,
         reason=reason,
     )
 
@@ -254,13 +253,12 @@ def _reader_row(
     evaluate: Callable[[dict[str, Any]], CheckResult],
     clock: Clock,
     *,
-    weight: Decimal,
     blind_reason: str,
     evidence: list[Evidence],
 ) -> CheckResult:
     """Score a check from its reader, or blind it; a live reading leaves evidence."""
     if reading is None:
-        return _blind(check_id, weight, blind_reason)
+        return _blind(check_id, blind_reason)
     evidence.append(
         Evidence(check=check_id, source=SOLANA_RPC_SOURCE, slot=None, fetched_at=utcnow(clock))
     )
@@ -285,7 +283,6 @@ def _reader_rows(
                 readings.auth,
                 check_mint_authority,
                 clock,
-                weight=Decimal("0.15"),
                 blind_reason="mint authority unreadable",
                 evidence=evidence,
             )
@@ -297,7 +294,6 @@ def _reader_rows(
                 readings.auth,
                 check_freeze_authority,
                 clock,
-                weight=Decimal("0.15"),
                 blind_reason="freeze authority unreadable",
                 evidence=evidence,
             )
@@ -309,7 +305,6 @@ def _reader_rows(
                 readings.lp,
                 check_lp_status,
                 clock,
-                weight=Decimal("0.15"),
                 blind_reason="curve account unreadable",
                 evidence=evidence,
             )
@@ -321,7 +316,6 @@ def _reader_rows(
                 readings.top,
                 lambda top: check_top10_concentration(top, active),
                 clock,
-                weight=Decimal("0.15"),
                 blind_reason="holder sample unreadable",
                 evidence=evidence,
             )
@@ -331,7 +325,6 @@ def _reader_rows(
             rows.append(
                 _blind(
                     "deployer_history",
-                    Decimal("0.10"),
                     "creator not supplied; window unscanned",
                 )
             )
@@ -342,7 +335,6 @@ def _reader_rows(
                     readings.dep,
                     check_deployer_history,
                     clock,
-                    weight=Decimal("0.10"),
                     blind_reason="creator window unreadable",
                     evidence=evidence,
                 )
@@ -354,7 +346,6 @@ def _reader_rows(
                 readings.meta,
                 check_token2022_extensions,
                 clock,
-                weight=Decimal("0.05"),
                 blind_reason="mint metadata unreadable",
                 evidence=evidence,
             )
@@ -366,7 +357,6 @@ def _reader_rows(
                 readings.liq,
                 lambda liq: check_liquidity_depth(liq, inp.intended_size_lamports, active),
                 clock,
-                weight=Decimal("0.15"),
                 blind_reason="liquidity unreadable",
                 evidence=evidence,
             )
@@ -375,7 +365,7 @@ def _reader_rows(
 
 
 def _advisory_rows(wanted: set[str], evidence: list[Evidence], clock: Clock) -> list[CheckResult]:
-    """Advisory checks are blind by construction in Phase 3 and carry no weight."""
+    """Advisory checks are blind by construction in Phase 3."""
     rows: list[CheckResult] = []
     for check_id in CHECK_IDS:
         if check_id in ADVISORY_IDS and check_id in wanted:
@@ -385,7 +375,6 @@ def _advisory_rows(wanted: set[str], evidence: list[Evidence], clock: Clock) -> 
                     status="blind",
                     value=None,
                     threshold=None,
-                    weight=Decimal(0),
                     reason="no Phase-3 data source; advisory blind",
                 )
             )
