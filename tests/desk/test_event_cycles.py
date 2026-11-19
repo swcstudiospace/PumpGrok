@@ -374,11 +374,64 @@ async def test_bound_cycles_are_exactly_the_registered_event_seats(tmp_path: Pat
         await _close(h)
 
 
-def test_event_cycles_use_only_the_injected_clock() -> None:
-    tree = ast.parse(EVENT_CYCLES.read_text(encoding="utf-8"))
-    forbidden = {"time", "asyncio.sleep", "datetime.now", "datetime.utcnow"}
+#: Modules whose clocks event cycles must never read, and the asyncio sleep they must never call.
+_CLOCK_MODULES = frozenset({"time", "datetime"})
+_CLOCK_CALLS = frozenset({"asyncio.sleep"})
+
+
+def _is_clock_source(qualified: str) -> bool:
+    return qualified.partition(".")[0] in _CLOCK_MODULES or qualified in _CLOCK_CALLS
+
+
+def _qualified_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
+    """Dotted name of a Name or Attribute chain, its root resolved through the import aliases."""
+    attrs: list[str] = []
+    while isinstance(node, ast.Attribute):
+        attrs.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return ".".join([aliases.get(node.id, node.id), *reversed(attrs)])
+
+
+def _clock_reads(source: str) -> list[str]:
+    """Every import and name in ``source`` that resolves to a forbidden clock source."""
+    tree = ast.parse(source)
+    aliases: dict[str, str] = {}
+    imported: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            assert not {alias.name for alias in node.names} & {"time", "datetime"}
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            assert f"{node.value.id}.{node.attr}" not in forbidden
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = alias.name
+                imported.append(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                qualified = f"{node.module}.{alias.name}"
+                aliases[alias.asname or alias.name] = qualified
+                imported.append(qualified)
+    reads = [name for name in imported if _is_clock_source(name)]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Name, ast.Attribute)):
+            qualified = _qualified_name(node, aliases)
+            if qualified is not None and _is_clock_source(qualified):
+                reads.append(qualified)
+    return reads
+
+
+def test_event_cycles_use_only_the_injected_clock() -> None:
+    assert _clock_reads(EVENT_CYCLES.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from time import monotonic\nmonotonic()\n",
+        "import time as t\nt.monotonic()\n",
+        "from asyncio import sleep\nasync def f():\n    await sleep(1)\n",
+        "import asyncio as aio\naio.sleep(1)\n",
+        "import datetime\n",
+        "from datetime import datetime as dt\ndt.now()\n",
+    ],
+)
+def test_clock_guard_resolves_every_import_form(source: str) -> None:
+    assert _clock_reads(source) != []
