@@ -28,8 +28,12 @@ import pytest
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.engine.analyzer import (
+    CARD_ENDPOINT,
+    HOLDERS_ENDPOINT,
+    TRADES_ENDPOINT,
     Analyzer,
     _veto_reason,
+    _wallet_diversity,
     compute_metrics,
     enrich_token,
     parse_holder,
@@ -92,8 +96,8 @@ async def test_fetch_hits_three_endpoints(analyzer_parts: tuple) -> None:
     assert holders[0].is_creator
     assert holders[1].share == pytest.approx(0.18)
     assert trades[0].wallet == "w1"
-    assert analyzer.source_health("/coins/Mint1") is True
-    assert analyzer.source_health("/coins/Mint1/holders") is True
+    assert analyzer.source_health(CARD_ENDPOINT) is True
+    assert analyzer.source_health(HOLDERS_ENDPOINT) is True
 
 
 async def test_failed_request_degrades_to_empty(analyzer_parts: tuple) -> None:
@@ -107,7 +111,7 @@ async def test_failed_request_degrades_to_empty(analyzer_parts: tuple) -> None:
     async with analyzer:
         info, holders, trades = await analyzer.fetch("Mint1")
     assert (info, holders, trades) == ({}, [], [])
-    assert analyzer.source_health("/coins/Mint1") is False
+    assert analyzer.source_health(CARD_ENDPOINT) is False
 
 
 async def test_analyze_rejects_token_without_trades(analyzer_parts: tuple) -> None:
@@ -172,7 +176,7 @@ def test_enrich_fills_only_missing_fields() -> None:
     tok = token(description="already here")
     enrich_token(
         tok,
-        {"description": "card", "twitter": "t", "virtual_sol_reserves": 30_000_000_000},
+        {"description": "card", "twitter": "t", "virtual_sol_reserves": 30},
     )
     assert tok.description == "already here"
     assert tok.twitter == "t"
@@ -286,3 +290,68 @@ def test_socials_lower_risk() -> None:
         healthy_trades(),
     )
     assert social.risk_score < bare.risk_score
+
+
+# --- sweep regressions (MISC-ANA-01..05) -------------------------------------------
+
+
+async def test_health_is_keyed_by_endpoint_template(analyzer_parts: tuple) -> None:
+    """ANA-02: one health entry per endpoint, not one per mint."""
+    data, filter_cfg = analyzer_parts
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    analyzer = Analyzer(data, filter_cfg, client(handler))
+    async with analyzer:
+        await analyzer.fetch("MintA")
+        await analyzer.fetch("MintB")
+    assert set(analyzer.health) == {CARD_ENDPOINT, HOLDERS_ENDPOINT, TRADES_ENDPOINT}
+
+
+async def test_non_list_payload_is_no_rows_and_a_failed_source(analyzer_parts: tuple) -> None:
+    """ANA-01: a 200 whose body is not a list yields no rows and marks that source failed."""
+    data, filter_cfg = analyzer_parts
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/holders"):
+            return httpx.Response(200, json=42)
+        return httpx.Response(200, json=[])
+
+    analyzer = Analyzer(data, filter_cfg, client(handler))
+    async with analyzer:
+        _, holders, trades = await analyzer.fetch("Mint1")
+    assert holders == []
+    assert trades == []
+    assert analyzer.source_health(HOLDERS_ENDPOINT) is False
+    assert analyzer.source_health(TRADES_ENDPOINT) is True
+
+
+async def test_usage_error_outside_context_is_not_a_provider_failure() -> None:
+    """ANA-05: fetch outside ``async with`` is a usage error and records no provider outage."""
+    analyzer = Analyzer(DataSettings(), FilterSettings())
+    with pytest.raises(RuntimeError, match="async with"):
+        await analyzer.fetch("Mint1")
+    assert analyzer.health == {}
+
+
+def test_empty_wallet_buys_do_not_dilute_diversity() -> None:
+    """ANA-03: buys with no wallet count neither as identities nor in the concentration volume."""
+    named = [
+        Trade(wallet=f"w{i}", is_buy=True, sol_amount=1_000_000_000, timestamp=NOW - i)
+        for i in range(8)
+    ]
+    anonymous = [
+        Trade(wallet="", is_buy=True, sol_amount=1_000_000_000, timestamp=NOW - 100 - i)
+        for i in range(4)
+    ]
+    assert _wallet_diversity(named) == pytest.approx(0.875)
+    assert _wallet_diversity(named + anonymous) == pytest.approx(0.875)
+
+
+def test_enrich_reads_reserves_as_sol_and_refreshes_progress() -> None:
+    """ANA-05: provider reserves are SOL; they are scaled to lamports before curve progress."""
+    tok = token()
+    enrich_token(tok, {"virtual_sol_reserves": 42.5})
+    assert tok.sol_in_curve == 42_500_000_000
+    assert tok.curve_progress == pytest.approx(0.5)
