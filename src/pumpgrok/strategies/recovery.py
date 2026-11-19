@@ -6,6 +6,10 @@ the strategy has made in each mint. save_state writes the book to the strategy_s
 (ledger/strategy_state.py, one row per strategy id); restore_state reads it back and replaces the
 strategy's book. A row whose body no longer matches its hash is refused on read.
 
+restore_from_ledger rebuilds probation and the open mints from the ledger rows alone, so a restart
+still refuses a second entry into a mint already entered. The ledger holds no tapes or exact peaks;
+those come only from strategy_state.
+
 Peaks are bookkeeping: the baseline exit rules read entry prices, not peaks. The launch sniper
 reads probation to enter each mint once. exact() reads a float parameter or tick value by its
 shortest decimal form, so every rule comparison is exact rational arithmetic.
@@ -18,16 +22,22 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any, ClassVar, Protocol
 
+from pumpgrok.ledger.reducer import PositionView, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.strategy_state import read_state, write_state
+from pumpgrok.ledger.ticket_refs import load_refs
 from pumpgrok.strategies.base import TapePoint
 from pumpgrok.strategies.tape import DEFAULT_TAPE_CAPACITY, Tape
 
 __all__ = [
     "BookedStrategy",
+    "LedgerStrategyState",
     "Position",
     "StrategyBook",
+    "desk_watch_set",
     "exact",
+    "ledger_strategy_state",
+    "restore_from_ledger",
     "restore_state",
     "save_state",
 ]
@@ -147,3 +157,62 @@ def restore_state(store: LedgerStore, strategy: BookedStrategy) -> bool:
         return False
     strategy.book = StrategyBook.from_dict(data)
     return True
+
+
+@dataclass(frozen=True)
+class LedgerStrategyState:
+    """What the ledger alone proves about one strategy after a restart.
+
+    ``probation`` counts the strategy's entries per mint: each PositionOpened row whose ticket is
+    attributed to the strategy in strategy_ticket_refs. ``open_mints`` is the strategy's watch set:
+    each mint with an open position in the fold whose ticket is attributed to the strategy.
+    """
+
+    strategy_id: str
+    probation: dict[str, int]
+    open_mints: frozenset[str]
+
+
+def ledger_strategy_state(store: LedgerStore, strategy_id: str) -> LedgerStrategyState:
+    """Rebuild the strategy's probation and open mints from the ledger rows alone.
+
+    Counts fills, not intents: a buy the desk refused writes no PositionOpened row, while the live
+    book counted it at intent time. The ledger keeps no structured record of a refused intent.
+    """
+    owned = {ticket for ticket, sid in load_refs(store).items() if sid == strategy_id}
+    probation: dict[str, int] = {}
+    for row in store.read(types=["PositionOpened"], limit=None):
+        payload = row["payload"]
+        if str(payload.get("ticket_id", "")) in owned:
+            mint = str(payload["mint"])
+            probation[mint] = probation.get(mint, 0) + 1
+    open_views = _open_positions(store)
+    open_mints = frozenset(mint for mint, view in open_views.items() if view.ticket_id in owned)
+    return LedgerStrategyState(strategy_id=strategy_id, probation=probation, open_mints=open_mints)
+
+
+def desk_watch_set(store: LedgerStore) -> frozenset[str]:
+    """Every mint with an open position in the fold, desk-wide, whatever its ticket.
+
+    TODO(owner): watch-set definition (index Finding 7). Default: every open position in the fold
+    (token_units > 0). The bot-00 restart calls this; it is desk-wide, not per strategy.
+    """
+    return frozenset(_open_positions(store))
+
+
+def _open_positions(store: LedgerStore) -> dict[str, PositionView]:
+    """The fold's open positions (token_units > 0), keyed by mint."""
+    state = initial_state(source="paper", initial_equity_lamports=0, day_utc="")
+    for event in store.read(limit=None):
+        state = reduce(state, event)
+    return {mint: view for mint, view in state.positions.items() if view.token_units > 0}
+
+
+def restore_from_ledger(store: LedgerStore, strategy: BookedStrategy) -> LedgerStrategyState:
+    """Replace the strategy's probation with the ledger count and return the rebuilt state.
+
+    Positions, peaks and the tape are left as they are: the ledger does not record them exactly.
+    """
+    rebuilt = ledger_strategy_state(store, strategy.strategy_id)
+    strategy.book.probation = dict(rebuilt.probation)
+    return rebuilt
