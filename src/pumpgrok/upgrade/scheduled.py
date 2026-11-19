@@ -16,6 +16,7 @@ supervisor or cli at runtime.
 from __future__ import annotations
 
 import math
+from contextlib import suppress
 from typing import TYPE_CHECKING, Literal
 
 from pumpgrok.ledger.active_set import record_active_set
@@ -88,18 +89,19 @@ def apply_candidate(
             correlation_id=correlation_id,
         )
         return "escalated"
-    record_promotion(
-        store,
-        candidate_hash=candidate_hash,
-        run_id=run_id,
-        holdout_id=holdout_id,
-        divergence=divergence,
-        trial_count=trial_count,
-        bounds=bounds,
-        ts_utc=ts_utc,
-        source=source,
-        correlation_id=correlation_id,
-    )
+    with suppress(FileExistsError):
+        record_promotion(
+            store,
+            candidate_hash=candidate_hash,
+            run_id=run_id,
+            holdout_id=holdout_id,
+            divergence=divergence,
+            trial_count=trial_count,
+            bounds=bounds,
+            ts_utc=ts_utc,
+            source=source,
+            correlation_id=correlation_id,
+        )
     record_active_set(
         store,
         param_set,
@@ -116,7 +118,8 @@ def due(store: LedgerStore, clock: Clock, interval_s: float) -> bool:
 
     A malformed or non-finite stored time counts as due: the check still runs
     only when the autonomy level allows it, so a corrupt meta row cannot
-    promote anything on its own.
+    promote anything on its own. A future last-check time (clock step back)
+    counts as due.
     """
     raw = store.get_meta(LAST_CHECK_META_KEY)
     if raw is None:
@@ -127,7 +130,10 @@ def due(store: LedgerStore, clock: Clock, interval_s: float) -> bool:
         return True
     if not math.isfinite(last):
         return True
-    return clock.now() - last >= interval_s
+    now = clock.now()
+    if last > now:
+        return True
+    return now - last >= interval_s
 
 
 def mark(store: LedgerStore, clock: Clock) -> None:

@@ -54,7 +54,10 @@ def restore_active_set(
     desk JournalNote, so the restore is itself ledger history. Fails closed
     before any append, and writes nothing, on a malformed prior hash, on a
     caller that is not a human: or gate: writer, and on a prior hash with no
-    valid stored content.
+    valid stored content. The active-set read and the pair append are one
+    idempotent batch keyed by ts_utc; a concurrent promotion between the read
+    and the append records a stale old_hash, but the pair still commits
+    atomically and a retry with the same ts_utc is a no-op.
     """
     if not isinstance(prior_hash, str) or not _HASH_RE.fullmatch(prior_hash):
         raise ValueError("prior_hash must be a 64-hex content hash")

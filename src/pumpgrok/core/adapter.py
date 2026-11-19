@@ -123,8 +123,9 @@ class Fill(BaseModel):
 
 
 class Position(BaseModel):
-    """Integer base units plus marks. `mtm_frozen` is set by the `graduated` and
-    `blind_flatten` paths (R8, R25)."""
+    """Integer base units plus marks. `mtm_frozen` is retained for compatibility;
+    no writer sets it (RISK-R-17). Readers treat it as never-frozen; removing
+    the field requires updating reporting/marks readers in other seats."""
 
     model_config = ConfigDict(frozen=True)
 

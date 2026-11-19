@@ -111,7 +111,10 @@ class Endpoint:
         return {"scheme": self.scheme, "host": self.host, "port": self.port}
 
     def label(self) -> str:
-        return f"{self.scheme}://{self.host}:{self.port}"
+        host = self.host
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"{self.scheme}://{host}:{self.port}"
 
 
 @dataclass(frozen=True)
@@ -264,13 +267,25 @@ def _latest_scope_rows(rows: Iterable[Mapping[str, Any]]) -> dict[str, Mapping[s
 def _ledger_scope_rows(ledger_path: Path) -> dict[str, Mapping[str, Any]]:
     if not ledger_path.exists():
         return {}
-
-    store = LedgerStore(ledger_path)
+    conn = sqlite3.connect(f"file:{ledger_path}?mode=ro", uri=True)
     try:
-        rows = store.read(types=["ConfigChanged"], limit=None)
+        rows = conn.execute(
+            "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
+            " type, payload_json, prev_hash, hash FROM events"
+            " WHERE type = 'ConfigChanged' ORDER BY seq ASC;"
+        ).fetchall()
+        events = [
+            {
+                "seq": r[0],
+                "idempotency_key": r[4],
+                "type": r[5],
+                "payload": json.loads(r[6]),
+            }
+            for r in rows
+        ]
     finally:
-        store.close()
-    return _latest_scope_rows(rows)
+        conn.close()
+    return _latest_scope_rows(events)
 
 
 def _authority(

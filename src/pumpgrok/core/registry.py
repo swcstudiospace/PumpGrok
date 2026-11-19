@@ -39,7 +39,7 @@ from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec
 from pumpgrok.logging.spans import bind_clock, span
 from pumpgrok.replay.rng import make_rng
 
-_DEFAULT_PER_MINUTE = 60.0  # skeleton budget until config tools.* lands (Phase 3)
+_DEFAULT_PER_MINUTE = 60.0  # Fixed 60/min for all keys (RISK-D-27).
 
 log = logging.getLogger("pumpgrok.core")
 
@@ -152,7 +152,8 @@ class ToolRegistry:
 
         An exact name must match exactly; a namespace prefix resolves to the first
         granted tool in that namespace whose side effect does not exceed
-        `max_side_effect`.
+        `max_side_effect`. A live-write sibling in the namespace refuses the
+        whole grant (fail closed, RISK-D-28) with an audit row.
         """
         cid = current_correlation()
         candidates = [

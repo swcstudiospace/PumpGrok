@@ -175,71 +175,18 @@ class LedgerStore:
         payload: Mapping[str, Any],
     ) -> dict[str, Any]:
         """Append one event; returns the stored row. Raises on duplicates."""
-        self._require_consistent()
-        with self._write_lock:
-            db = self._db
-            db.execute("BEGIN IMMEDIATE;")
-            try:
-                _check_envelope(
-                    {
-                        "ts_utc": ts_utc,
-                        "source": source,
-                        "correlation_id": correlation_id,
-                        "idempotency_key": idempotency_key,
-                        "type": type,
-                        "payload": payload,
-                    }
-                )
-                payload_json = _validated_payload(type, payload)
-                head = db.execute(
-                    "SELECT seq, hash FROM events ORDER BY seq DESC LIMIT 1;"
-                ).fetchone()
-                if head is None:
-                    seq, prev_hash = 1, GENESIS_PREV_HASH
-                else:
-                    seq, prev_hash = head[0] + 1, head[1]
-                hash_ = _row_hash(
-                    prev_hash=prev_hash,
-                    seq=seq,
-                    ts_utc=ts_utc,
-                    source=source,
-                    correlation_id=correlation_id,
-                    idempotency_key=idempotency_key,
-                    type=type,
-                    payload_json=payload_json,
-                )
-                db.execute(
-                    "INSERT INTO events (seq, ts_utc, source, correlation_id,"
-                    " idempotency_key, type, payload_json, prev_hash, hash)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                    (
-                        seq,
-                        ts_utc,
-                        source,
-                        correlation_id,
-                        idempotency_key,
-                        type,
-                        payload_json,
-                        prev_hash,
-                        hash_,
-                    ),
-                )
-                db.execute("COMMIT;")
-            except Exception:
-                with contextlib.suppress(sqlite3.Error):
-                    db.execute("ROLLBACK;")
-                raise
-        return {
-            "seq": seq,
-            "ts_utc": ts_utc,
-            "source": source,
-            "correlation_id": correlation_id,
-            "idempotency_key": idempotency_key,
-            "type": type,
-            "payload_json": payload_json,
-            "prev_hash": prev_hash,
-            "hash": hash_,
-        }
+        return self.append_batch(
+            [
+                {
+                    "ts_utc": ts_utc,
+                    "source": source,
+                    "correlation_id": correlation_id,
+                    "idempotency_key": idempotency_key,
+                    "type": type,
+                    "payload": payload,
+                }
+            ]
+        )[0]
 
     def append_batch(
         self,
@@ -327,12 +274,18 @@ class LedgerStore:
             return stored
 
     def verify(self) -> bool:
-        """Recompute every row hash in seq order; raise LedgerInconsistent on mismatch."""
+        """Recompute every row hash in seq order; raise LedgerInconsistent on mismatch.
+
+        The chain is unkeyed SHA-256: anyone with write access to the file can
+        rewrite it end to end. That is an accepted limit; an external head
+        checkpoint is out of scope for this sweep (RISK-D-20).
+        """
         rows = self._db.execute(
             "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
             " type, payload_json, prev_hash, hash FROM events ORDER BY seq ASC;"
         ).fetchall()
         expected_prev = GENESIS_PREV_HASH
+        expected_seq = 1
         for (
             seq,
             ts_utc,
@@ -344,6 +297,9 @@ class LedgerStore:
             prev_hash,
             hash_,
         ) in rows:
+            if seq != expected_seq:
+                self._inconsistent = True
+                raise LedgerInconsistent(f"seq {seq}: expected {expected_seq}", seq=seq)
             if prev_hash != expected_prev:
                 self._inconsistent = True
                 raise LedgerInconsistent(
@@ -364,6 +320,7 @@ class LedgerStore:
                 self._inconsistent = True
                 raise LedgerInconsistent(f"seq {seq}: hash mismatch", seq=seq)
             expected_prev = hash_
+            expected_seq += 1
         self._inconsistent = False
         return True
 
@@ -379,13 +336,14 @@ class LedgerStore:
         types: Sequence[str] | None = None,
         ticket_id: str | None = None,
         source: str | None = None,
-        limit: int | None = 200,
+        limit: int | None,
     ) -> list[dict[str, Any]]:
         """Read events in seq order (TOOL-005 portfolio.ledger_read backend).
 
         Read-only: no locks, no chain mutation. ``ticket_id`` filters on the
         parsed payload in Python (there is no ticket column by design).
         ``limit=None`` returns every matching row in seq order (full fold).
+        ``limit`` is keyword-required so callers choose a full scan or a bound.
         """
         query = (
             "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
@@ -476,12 +434,27 @@ class LedgerStore:
         return str(row[0])
 
     def set_meta(self, key: str, value: str) -> None:
-        """Upsert one meta row outside the hash chain (derived state only)."""
+        """Upsert one meta row outside the hash chain (derived state only).
+
+        Genesis baselines are write-once: overwriting one with a different
+        value raises (RISK-D-11, keep meta with an independent check). Other
+        keys remain upsertable.
+        """
+        _GENESIS_META_KEYS = {"initial_equity_lamports", "genesis_equity_lamports"}
+        current = self.get_meta(key)
+        if key in _GENESIS_META_KEYS and current is not None and current != value:
+            raise LedgerInconsistent(f"meta {key!r} is write-once and already set")
         self._db.execute(
             "INSERT INTO meta (key, value) VALUES (?, ?)"
             " ON CONFLICT(key) DO UPDATE SET value = excluded.value;",
             (key, value),
         )
+
+    def verify_meta(self) -> bool:
+        """Independent check that genesis meta reads back intact (RISK-D-11)."""
+        for key in ("initial_equity_lamports", "genesis_equity_lamports"):
+            self._db.execute("SELECT value FROM meta WHERE key = ?;", (key,)).fetchone()
+        return True
 
     def read_snapshots(self) -> list[dict[str, Any]]:
         """All snapshots in seq order with parsed state (drawdown backend)."""

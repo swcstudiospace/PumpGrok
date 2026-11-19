@@ -11,6 +11,7 @@ ambiguous in reverse).
 
 from __future__ import annotations
 
+import functools
 import importlib
 import pkgutil
 from pathlib import Path
@@ -74,6 +75,7 @@ def seat_to_short(contracts_dir: Path | str | None = None) -> dict[str, str]:
     return {seat: short for short, seat in short_to_seat(contracts_dir).items()}
 
 
+@functools.cache
 def implementation_specs() -> dict[str, ToolSpec]:
     """Every catalog ``ToolSpec`` keyed by dotted name, read from the tool modules.
 

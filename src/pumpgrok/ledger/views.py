@@ -123,8 +123,10 @@ def win_rate(
     return Decimal(winners) / Decimal(len(closed))
 
 
-def profit_factor(events: Sequence[Mapping[str, Any]], *, since_ts: str, until_ts: str) -> str:
-    """Sum(gains) / abs(sum(losses)); "n/a" when there are no losses."""
+def profit_factor(
+    events: Sequence[Mapping[str, Any]], *, since_ts: str, until_ts: str
+) -> Decimal | None:
+    """Sum(gains) / abs(sum(losses)); None when there are no losses."""
     closed = _closed_in_range(events, since_ts, until_ts)
     gains = sum(
         int(row.get("realized_pnl_lamports", 0))
@@ -137,5 +139,5 @@ def profit_factor(events: Sequence[Mapping[str, Any]], *, since_ts: str, until_t
         if int(row.get("realized_pnl_lamports", 0)) < 0
     )
     if losses == 0:
-        return "n/a"
-    return str(Decimal(gains) / Decimal(abs(losses)))
+        return None
+    return Decimal(gains) / Decimal(abs(losses))

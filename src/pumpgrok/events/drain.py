@@ -40,9 +40,8 @@ def _defer_mark(
 def drain(events: Sequence[Event], clock: FixtureClock, rng: random.Random) -> DrainBytes:
     """Publish in input order and return canonical delivery bytes.
 
-    A second call with the same events and seed returns equal bytes. It does not
-    append to a previous result. Already delivered ids are not appended again.
-    Pending is zero when this returns.
+    Caller must pass a fresh clock per call; drain advances it. A second
+    call with the same events and seed and a fresh clock returns equal bytes.
     """
     pending = 0
     seen: set[str] = set()
@@ -89,8 +88,6 @@ def drain(events: Sequence[Event], clock: FixtureClock, rng: random.Random) -> D
     if mark_due:
         clock.advance_to(max(mark_due.values()))
         _due(clock.now())
-    elif deliveries:
-        clock.advance_to(clock.now())
 
     payload = canonical_json({"deliveries": deliveries}).encode()
     return DrainBytes(payload, pending)

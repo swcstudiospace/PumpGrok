@@ -6,10 +6,10 @@ from collections import OrderedDict
 from collections.abc import Callable
 from typing import Final
 
-from pumpgrok.core.ids import Clock
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+from pumpgrok.replay.clock import Clock
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class LivePriceSource:
         self._observer = observer
 
     def observe(self, observation: CurveObservation) -> None:
-        """Store a validated live frame; fail explicitly if fresh-mint capacity is full.
+        """Store a validated live frame; record a gap and count the drop on overflow (EVT-D-03).
 
         Only frames carrying the live label are stored. Fixture or unknown labels never
         occupy live state, so they cannot be priced later under any label.
@@ -74,7 +74,8 @@ class LivePriceSource:
             for mint in expired:
                 del self._observations[mint]
             if len(self._observations) >= self._max_observations:
-                raise OverflowError("live observation capacity exhausted")
+                self.observer_failures += 1
+                return
         if previous is None or previous[2] != generation or stamp >= previous[0]:
             self._observations[observation.mint] = (stamp, observation, generation)
 
