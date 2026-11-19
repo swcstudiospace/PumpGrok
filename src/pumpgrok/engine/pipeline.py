@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pumpgrok.config.settings import FilterSettings
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS, passes_filter
 from pumpgrok.replay.clock import parse_ts_utc
@@ -34,6 +35,12 @@ BUY = "buy"
 
 #: Reason a candidate carries no buyer evidence; the checkpoint asserts it.
 DATA_UNAVAILABLE = "data_unavailable"
+
+
+class ReplayTickError(PumpgrokError):
+    """A fixture tick has no usable ``ts_utc``; the replay stops and names the row."""
+
+    code = "invalid_replay_tick"
 
 
 @dataclass(frozen=True)
@@ -75,6 +82,17 @@ def _created_epoch(value: object) -> float:
         return 0.0
 
 
+def _tick_time(row: int, event: Mapping[str, Any]) -> float:
+    """Judge time from a tick's ``ts_utc``; a missing or unparseable one is a typed error."""
+    text = _text(event.get("ts_utc"))
+    if text is None:
+        raise ReplayTickError(f"fixture row {row} has no ts_utc", row=row)
+    try:
+        return parse_ts_utc(text)
+    except ValueError as exc:
+        raise ReplayTickError(f"fixture row {row} has an unparseable ts_utc", row=row) from exc
+
+
 def tick_to_candidate(event: Mapping[str, Any]) -> Token:
     """Map one replay tick to a candidate carrying exactly the evidence it records."""
     mint = str(event.get("mint", ""))
@@ -110,8 +128,8 @@ def evaluate_candidates(
 ) -> list[CandidateVerdict]:
     """Judge every tick as its own candidate, at that tick's own time, in stored order."""
     verdicts: list[CandidateVerdict] = []
-    for event in events:
-        ts = parse_ts_utc(str(event["ts_utc"]))
+    for row, event in enumerate(events):
+        ts = _tick_time(row, event)
         token = tick_to_candidate(event)
         verdicts.append(
             CandidateVerdict(ts=ts, token=token, verdict=decide_token(token, filter_cfg, ts))

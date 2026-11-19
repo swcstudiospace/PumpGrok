@@ -9,8 +9,10 @@ low score, never an average one; clones of popular tickers score harshly.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any, ClassVar
 
+from pumpgrok.core.units import lamports_to_sol
 from pumpgrok.engine.agents.base import JSON_ONLY, GrokAgent
 from pumpgrok.engine.models import NarrativeResult, Token
 
@@ -63,7 +65,7 @@ class NarrativeAgent(GrokAgent):
             },
             "age_seconds": round(token.age_seconds(self._clock.now())),
             "unique_buyers": token.unique_buyers,
-            "market_cap_sol": round(token.market_cap_sol, 3),
+            "market_cap_sol": round(float(lamports_to_sol(Decimal(token.market_cap_sol))), 3),
         }
         if market_context:
             payload["market_context"] = market_context

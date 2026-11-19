@@ -81,7 +81,9 @@ class TimingAgent(GrokAgent):
         """Whether the cached verdict still covers ``now``."""
         if self._cached is None:
             return False
-        return (now - self._cached.fetched_at) < self.cache_seconds
+        age = now - self._cached.fetched_at
+        # A clock stepped back before the fetch has a negative age: not fresh.
+        return 0.0 <= age < self.cache_seconds
 
     async def get(
         self,
@@ -93,9 +95,10 @@ class TimingAgent(GrokAgent):
     ) -> TimingResult:
         """A fresh market verdict: from cache or from a new call.
 
-        Concurrent launches share one refresh: the check-then-call sequence
-        needs no lock here because a duplicate refresh only costs one extra
-        call, while a lock would serialize every launch on the clock.
+        Concurrent callers share one model call only when the gateway coalesces
+        their admitted requests (identical text, in flight together). Otherwise
+        each caller that finds the cache stale makes its own call. No lock is
+        taken: a lock would serialize every launch on the clock.
         """
         if self.cache_is_fresh(now):
             cached = self._cached
