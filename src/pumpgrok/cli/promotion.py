@@ -28,7 +28,6 @@ from pumpgrok.cli.backtest import (
     _evaluate_holdout,
     _paper_gate,
     _read_window_ledger,
-    _row_stamp,
     _run_lock,
 )
 from pumpgrok.config.settings import ConfigError
@@ -45,6 +44,7 @@ from pumpgrok.upgrade.bounds import load_bounds
 from pumpgrok.upgrade.gate import REQUIRED_AUTONOMY_LEVEL, evaluate_candidate
 from pumpgrok.upgrade.params import ParamSet
 from pumpgrok.upgrade.scheduled import CheckOutcome, apply_candidate
+from pumpgrok.upgrade.window_metrics import row_stamp
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -105,7 +105,7 @@ def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float
     as the paper gate does.
     """
     rows, _, _ = _read_window_ledger(paper_path, verify=True)
-    stamps = [_row_stamp(row) for row in rows]
+    stamps = [row_stamp(row) for row in rows]
     reached_end = any(stamp >= window_end for stamp in stamps)
     observed = any(cutoff <= stamp < window_end for stamp in stamps)
     return reached_end and observed

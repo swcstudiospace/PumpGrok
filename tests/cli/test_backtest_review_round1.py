@@ -26,16 +26,15 @@ from pumpgrok.cli.backtest import (
     _backtest_dataset,
     _Dataset,
     _evaluate_holdout,
-    _fills_from_rows,
     _paper_gate,
     _paper_window,
     _rejection_fees,
-    _window_curve,
 )
 from pumpgrok.ledger.reducer import LedgerState, initial_state
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
+from pumpgrok.upgrade.window_metrics import fills_from_rows, window_curve
 
 REPO = Path(__file__).resolve().parents[2]
 _GENESIS_EQUITY = 1_000_000
@@ -119,7 +118,7 @@ def test_refused_attempt_fee_reduces_the_curve_and_the_report_total() -> None:
     ]
 
     assert _rejection_fees(rows) == 300
-    assert _window_curve(_genesis(), rows) == (_GENESIS_EQUITY - 300,)
+    assert window_curve(_genesis(), rows) == (_GENESIS_EQUITY - 300,)
 
 
 def test_purchase_is_not_a_loss_and_a_losing_sale_is_one() -> None:
@@ -131,7 +130,7 @@ def test_purchase_is_not_a_loss_and_a_losing_sale_is_one() -> None:
         _row(4, "PositionClosed", _closed_payload()),
     ]
 
-    assert _window_curve(_genesis(), rows) == (_GENESIS_EQUITY, _GENESIS_EQUITY - 50_000)
+    assert window_curve(_genesis(), rows) == (_GENESIS_EQUITY, _GENESIS_EQUITY - 50_000)
 
 
 def test_paper_window_opens_at_cutoff_and_stops_at_the_window_end() -> None:
@@ -161,9 +160,9 @@ def test_paper_window_opens_at_cutoff_and_stops_at_the_window_end() -> None:
 
     assert opening.cash_lamports == _GENESIS_EQUITY - 500
     assert [row["seq"] for row in window_rows] == [2, 3]
-    fills, _ = _fills_from_rows(window_rows)
+    fills, _ = fills_from_rows(window_rows)
     assert len(fills) == 1
-    assert _window_curve(opening, window_rows) == (_GENESIS_EQUITY - 500,)
+    assert window_curve(opening, window_rows) == (_GENESIS_EQUITY - 500,)
 
 
 def test_forced_close_row_becomes_a_fill_without_an_order_decision() -> None:
@@ -190,7 +189,7 @@ def test_forced_close_row_becomes_a_fill_without_an_order_decision() -> None:
         },
     )
 
-    fills, latencies = _fills_from_rows([row])
+    fills, latencies = fills_from_rows([row])
 
     assert len(fills) == 1
     assert fills[0].decision_id == ""

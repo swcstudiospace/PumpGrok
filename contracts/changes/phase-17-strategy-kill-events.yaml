@@ -3,15 +3,18 @@ proposed_by: bot-02-risk
 surface: contracts/events/strategy_kill_set.schema.json
 surfaces:
 - contracts/events/strategy_kill_cleared.schema.json
+- contracts/events/promotion_stage_set.schema.json
 breaking: false
 version: "1.2.0"
 previous_version: "1.1.0"
 summary: >-
-  Adds two event types for the strategy kill pair (RSK-02): StrategyKillSet, a human-set kill
-  that refuses one strategy's buys and never its sells, and StrategyKillCleared, a human clear
-  that consumes a killswitch_clear approval. Additive and non-breaking: no existing event schema
-  changes, and the desk-wide KillSwitchSet and KillSwitchCleared are untouched. Version 1.2.0 is
-  the next minor after 1.1.0 of contracts/changes/phase-3-seat-manifests.yaml, the latest change
+  Adds three event types. StrategyKillSet and StrategyKillCleared are the strategy kill pair
+  (RSK-02): a human-set kill that refuses one strategy's buys and never its sells, and a human
+  clear that consumes a killswitch_clear approval. PromotionStageSet is one strategy stage change
+  with its decision log (PRM-01). Additive and non-breaking: no existing event schema changes, and
+  the desk-wide KillSwitchSet and KillSwitchCleared are untouched. PromotionStageSet ships in the
+  same unreleased 1.2.0 as the strategy kill pair; this is not a new release. Version 1.2.0 is the
+  next minor after 1.1.0 of contracts/changes/phase-3-seat-manifests.yaml, the latest change
   document whose surfaces include contracts/events/**.
 semantic_changes: []
 migration_note: ""

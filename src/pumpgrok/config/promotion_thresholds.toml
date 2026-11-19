@@ -1,0 +1,12 @@
+# Promotion thresholds (PRM-02, D17-3). Version-controlled.
+#
+# Each value must be at least as strict as the LiveGate floor it mirrors
+# (MIN_PAPER_DAYS, MIN_CLOSED_TRADES, MIN_PROFIT_FACTOR, MAX_DRAWDOWN_FRACTION in
+# pumpgrok.execution.live.live_gate). A looser value refuses to load. The paper
+# record starts at the strategy's first paper fill.
+
+[paper]
+min_days = 14
+min_closed_trades = 50
+min_profit_factor = 1.2
+max_drawdown_fraction = 0.15
