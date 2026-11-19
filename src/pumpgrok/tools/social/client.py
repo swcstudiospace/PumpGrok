@@ -58,6 +58,14 @@ class VenueHolder(UpstreamModel):
     amount: str | None = None
 
 
+def _rows(body: object, key: str, label: str, mint: str) -> list[object]:
+    """Unwrap a bare-array or ``{key: [...]}`` venue body into its row list."""
+    rows = body.get(key, []) if isinstance(body, dict) else body
+    if not isinstance(rows, list):
+        raise DataStale(f"social {label} rows malformed mint={mint}")
+    return rows
+
+
 async def fetch_coin(
     client: httpx.AsyncClient,
     mint: str,
@@ -93,9 +101,7 @@ async def fetch_recent_trades(
         body = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
         raise DataStale(f"social trade rows failed mint={mint}") from exc
-    rows = body if isinstance(body, list) else body.get("trades", [])
-    if not isinstance(rows, list):
-        raise DataStale(f"social trade rows malformed mint={mint}")
+    rows = _rows(body, "trades", "trade", mint)
     return [parse_upstream(VenueTrade, row, blind=True) for row in rows[:bounded]]
 
 
@@ -119,7 +125,5 @@ async def fetch_top_holders(
         body = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
         raise DataStale(f"social holder rows failed mint={mint}") from exc
-    rows = body if isinstance(body, list) else body.get("holders", [])
-    if not isinstance(rows, list):
-        raise DataStale(f"social holder rows malformed mint={mint}")
+    rows = _rows(body, "holders", "holder", mint)
     return [parse_upstream(VenueHolder, row, blind=True) for row in rows[:bounded]]
