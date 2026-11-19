@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from pathlib import Path
 
 from pumpgrok.backtest.grading import APPROVED_THRESHOLDS, CanaryResult, grade
 from pumpgrok.replay.clock import format_ts_utc
+from pumpgrok.replay.live_recorder import seal_directory
 
 _PASS = CanaryResult(passed=True)
 _FAIL = CanaryResult(passed=False)
@@ -80,28 +83,43 @@ def test_failed_canary_is_research_only(tmp_path: Path) -> None:
     assert "canary" in result.reasons
 
 
-def test_promotion_eligible_only_when_a_recorded_dataset_exists() -> None:
-    """No recorded non-synthetic dataset is in the repo. Do not invent one."""
-    candidate = _recorded_candidate()
-    if candidate is None:
-        return
-    result = grade(candidate, _PASS, APPROVED_THRESHOLDS)
-    assert result.verdict == "promotion_eligible"
-    assert result.reasons == ()
-
-
-def _recorded_candidate() -> Path | None:
-    if not _FIXTURES.is_dir():
-        return None
-    for manifest_path in sorted(_FIXTURES.glob("*/manifest.json")):
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        name = str(raw.get("dataset", manifest_path.parent.name))
-        if name.startswith("smoke"):
-            continue
-        if raw.get("provenance") != "recorded":
-            continue
-        return manifest_path.parent
-    return None
+def test_promotion_eligible_for_a_synthetic_recorded_long_window() -> None:
+    """TEST-T13: build a sealed, recorded, long-window dataset so the positive
+    promotion_eligible branch is exercised in CI (no recorded dataset ships in
+    the repo). The directory lives under the repo tree, not the temp root:
+    grade() marks temp-root datasets synthetic by design."""
+    start = 1_700_000_000.0
+    duration = APPROVED_THRESHOLDS.long_s + 120.0
+    scratch = Path(tempfile.mkdtemp(dir=Path(__file__).resolve().parent))
+    dataset = scratch / "recorded-synthetic"
+    dataset.mkdir()
+    try:
+        events = [
+            {
+                "ts": start + step * 120.0,
+                "ts_utc": format_ts_utc(start + step * 120.0),
+                "mint": "MintRecorded",
+                "price": 1,
+            }
+            for step in range(int(duration // 120) + 1)
+        ]
+        (dataset / "events.jsonl").write_text(
+            "\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        seal_directory(
+            dataset,
+            recorded_from_utc=format_ts_utc(start),
+            recorded_to_utc=format_ts_utc(start + duration),
+            sources={"rest": "recorded"},
+            notes="synthetic test dataset",
+            seed_hint=1,
+        )
+        result = grade(dataset, _PASS, APPROVED_THRESHOLDS)
+        assert result.verdict == "promotion_eligible"
+        assert result.reasons == ()
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _write_events(directory: Path, events: list[dict[str, object]]) -> None:

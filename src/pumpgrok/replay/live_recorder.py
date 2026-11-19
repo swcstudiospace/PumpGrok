@@ -100,14 +100,20 @@ def _append_record(path: Path, data: bytes) -> None:
 
 
 def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
-    """Digest every permitted data file. Any other *.jsonl is refused, never omitted."""
+    """Digest every permitted data file in chunks. Any other *.jsonl is refused, never omitted."""
     if any(path.name not in _DATA_FILES for path in dataset_dir.glob("*.jsonl")):
         raise ValueError("dataset contains an unlisted JSONL file")
-    return {
-        name: hashlib.sha256((dataset_dir / name).read_bytes()).hexdigest()
-        for name in _DATA_FILES
-        if (dataset_dir / name).exists()
-    }
+    digests: dict[str, str] = {}
+    for name in _DATA_FILES:
+        path = dataset_dir / name
+        if not path.exists():
+            continue
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(65_536):
+                digest.update(chunk)
+        digests[name] = digest.hexdigest()
+    return digests
 
 
 def _is_resumable(path: Path) -> bool:
@@ -149,15 +155,33 @@ def _intact_length(name: str, data: bytes) -> int:
 
 def _recover_torn_tail(path: Path) -> int:
     """Truncate a torn final line durably. Returns the bytes dropped; 0 when the file is intact."""
-    data = path.read_bytes()
-    kept = _intact_length(path.name, data)
-    if kept == len(data):
+    total = path.stat().st_size
+    kept = 0
+    position = 0
+    number = 0
+    with path.open("rb") as stream:
+        while True:
+            line = stream.readline()
+            if not line:
+                break
+            number += 1
+            terminated = line.endswith(b"\n")
+            body = line[:-1] if terminated else line
+            is_last = (position + len(line)) >= total
+            if _is_record(body):
+                kept = position + len(line)
+            elif is_last:
+                break
+            else:
+                raise CorruptFixture("line is not valid JSON", file=path.name, line=number)
+            position += len(line)
+    if kept == total:
         return 0
     with path.open("r+b") as stream:
         stream.truncate(kept)
         stream.flush()
         os.fsync(stream.fileno())
-    return len(data) - kept
+    return total - kept
 
 
 def seal_directory(
@@ -245,22 +269,25 @@ class LiveRecorder:
         path = self.dataset_dir / EVENTS_NAME
         if not path.is_file():
             return
-        for number, line in enumerate(path.read_bytes().splitlines(), 1):
-            try:
-                record = json.loads(line)
-                stamp, source = record["ts_utc"], record["source"]
-                epoch = parse_ts_utc(stamp)
-                if not isinstance(source, str):
-                    raise TypeError("source is not a string")
-            except (KeyError, TypeError, ValueError):
-                raise CorruptFixture(
-                    "event record cannot be resumed", file=EVENTS_NAME, line=number
-                ) from None
-            if self._first_utc is None:
-                self._first_utc = stamp
-            self._last_utc = stamp
-            self._last_epoch = epoch
-            self._sources[source] = source
+
+        with path.open("rb") as stream:
+            for number, raw_line in enumerate(stream, 1):
+                line = raw_line.strip()
+                try:
+                    record = json.loads(line)
+                    stamp, source = record["ts_utc"], record["source"]
+                    epoch = parse_ts_utc(stamp)
+                    if not isinstance(source, str):
+                        raise TypeError("source is not a string")
+                except (KeyError, TypeError, ValueError):
+                    raise CorruptFixture(
+                        "event record cannot be resumed", file=EVENTS_NAME, line=number
+                    ) from None
+                if self._first_utc is None:
+                    self._first_utc = stamp
+                self._last_utc = stamp
+                self._last_epoch = epoch
+                self._sources[source] = source
 
     def record(self, observation: CurveObservation) -> None:
         if self._sealed or self._failed:

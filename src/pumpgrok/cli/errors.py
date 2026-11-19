@@ -59,8 +59,15 @@ def _not_implemented(verb: str, intent: dict[str, Any] | None = None) -> int:
 
 
 def _refuse_forbidden_seat(seat: str, verb: str) -> int | None:
-    """Refuse forbidden_owners callers (jobs.yaml) with exit 1. None means allowed."""
-    if seat in FORBIDDEN_OWNERS:
+    """Refuse forbidden_owners callers (jobs.yaml) with exit 1. None means allowed.
+
+    The comparison normalizes to the seat class: a full seat id such as
+    ``bot-04-sniper`` matches the ``sniper`` class (DESK-R-58).
+    """
+    normalized = seat.strip().lower()
+    if normalized.startswith("bot-"):
+        normalized = normalized.rsplit("-", 1)[-1]
+    if normalized in FORBIDDEN_OWNERS:
         _say(sys.stderr, f"refused: seat {seat!r} is a forbidden owner for `{verb}`")
         return EXIT_CONFIG
     return None

@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 _SEARCH_ROOTS: tuple[str, ...] = ("docs", "skills", "contracts")
+_MAX_FILE_BYTES = 1_000_000
 
 
 class DocsSearchIn(ToolInput):
@@ -58,14 +59,26 @@ DOCS_SEARCH_SPEC = ToolSpec(
 
 def _iter_text_files(repo_root: Path) -> list[Path]:
     files: list[Path] = []
+    resolved_root = repo_root.resolve()
     for root in _SEARCH_ROOTS:
         base = repo_root / root
-        if not base.is_dir():
+        if not base.is_dir() or base.is_symlink():
             continue
         for path in sorted(base.rglob("*")):
-            if not path.is_file():
+            if not path.is_file() or path.is_symlink():
                 continue
             if ".git" in path.parts or "__pycache__" in path.parts:
+                continue
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if resolved != resolved_root and resolved_root not in resolved.parents:
+                continue
+            try:
+                if path.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+            except OSError:
                 continue
             files.append(path)
     return files
@@ -77,7 +90,7 @@ async def run_docs_search(inp: DocsSearchIn, repo_root: Path, clock: Clock) -> d
     chunks: list[dict[str, str | int]] = []
     for path in _iter_text_files(repo_root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = path.read_bytes()[: _MAX_FILE_BYTES + 1].decode("utf-8", errors="replace")
         except OSError:
             continue
         for lineno, line in enumerate(text.splitlines(), start=1):

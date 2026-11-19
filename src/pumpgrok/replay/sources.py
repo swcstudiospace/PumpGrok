@@ -14,7 +14,7 @@ from typing import Any
 
 from pumpgrok.core.ids import Clock
 from pumpgrok.execution.paper_adapter import CurveSnapshot
-from pumpgrok.replay.fixtures import FixtureDataset, event_epoch
+from pumpgrok.replay.fixtures import CorruptFixture, FixtureDataset, event_epoch
 
 __all__ = ["FixtureCurveSource", "FixtureEventSource"]
 
@@ -51,6 +51,8 @@ class FixtureCurveSource:
 
     def __init__(self, dataset: FixtureDataset, clock: Clock) -> None:
         self._clock = clock
+        for event in dataset.events:
+            _validate_reserves(event)
         self._ticks = [
             (event_epoch(event), event) for event in dataset.events if _has_reserves(event)
         ]
@@ -102,6 +104,17 @@ class FixtureCurveSource:
         if best is None:
             return None
         return int(best["S"]), int(best["T"])
+
+
+def _validate_reserves(event: dict[str, Any]) -> None:
+    """A tick that carries reserves must carry them as integers (DESK-R-27)."""
+    for key in ("S", "T"):
+        if key in event:
+            value = event[key]
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise CorruptFixture(
+                    f"fixture tick has malformed {key} reserve", file="events.jsonl"
+                )
 
 
 def _has_reserves(event: dict[str, Any]) -> bool:

@@ -25,7 +25,7 @@ from typing import IO, Any
 from pumpgrok.core.datasource import Freshness, Health, HealthStatus
 from pumpgrok.core.errors import DataStale
 from pumpgrok.execution.paper_adapter import CurveSnapshot
-from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
+from pumpgrok.replay.clock import Clock, format_ts_utc, parse_ts_utc
 from pumpgrok.tools.onchain.rpc import RpcError
 
 
@@ -237,17 +237,25 @@ class FaultyDataSource:
         *,
         name: str = "pumpfun_rest",
         last_good: Any = None,
+        clock: Clock | None = None,
     ) -> None:
         self.name = name
         self.rate_limit_key = name
         self._mode = mode
         self._last_good = last_good
+        self._clock = clock
         self.fetches = 0
         self.fired = 0
 
+    def _fetched_at(self) -> datetime:
+        # TEST-T40: the injected clock decides the stamp, never the wall clock.
+        if self._clock is not None:
+            return datetime.fromtimestamp(self._clock.now(), UTC)
+        return datetime.now(UTC)
+
     def _freshness(self, *, stale: bool) -> Any:
         age = 121.0 if stale else 0.0
-        return Freshness(fetched_at=datetime.now(UTC), age_s=age, max_age_s=120.0)
+        return Freshness(fetched_at=self._fetched_at(), age_s=age, max_age_s=120.0)
 
     async def fetch(self, request: Mapping[str, Any], *, max_age_s: float) -> tuple[Any, Any]:
         """Return the cached value with a stale marker, or raise DataStale."""
@@ -279,7 +287,7 @@ class FaultyDataSource:
         status = HealthStatus.DOWN if self.fired else HealthStatus.OK
         return Health(
             status=status,
-            checked_at=datetime.now(UTC),
+            checked_at=self._fetched_at(),
             consecutive_failures=self.fired,
         )
 

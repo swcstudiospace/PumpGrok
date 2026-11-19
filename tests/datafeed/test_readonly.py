@@ -5,6 +5,8 @@ import traceback
 
 import pytest
 
+import pumpgrok.datafeed.transport
+from harness import NetworkBlocked
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary
 
 
@@ -129,7 +131,9 @@ async def test_transport_failures_do_not_echo_credentials() -> None:
     boundary = ReadOnlyBoundary(
         endpoint="https://rpc.example.invalid", transport=FailingTransport()
     )
-    with pytest.raises(Exception) as raised:
+    # TEST-T23: narrow to the boundary's exception type so an unrelated error
+    # cannot satisfy the no-credential-echo assertions.
+    with pytest.raises(RuntimeError) as raised:
         await boundary.rpc("getAccountInfo", ["Account111"])
     assert "example-secret" not in str(raised.value)
     assert "example-secret" not in "".join(traceback.format_exception(raised.value))
@@ -151,6 +155,12 @@ async def test_queries_are_refused_even_when_not_recognized_as_secrets() -> None
             endpoint="https://rpc.example.invalid?cluster=mainnet", transport=transport
         )
     assert transport.frames == []
+
+
+async def test_datafeed_transport_connect_stays_offline() -> None:
+    """TEST-T08: the name bound in datafeed.transport cannot reach a real socket."""
+    with pytest.raises(NetworkBlocked):
+        pumpgrok.datafeed.transport.connect("wss://example.invalid/socket")
 
 
 async def test_rpc_request_ids_are_distinct() -> None:

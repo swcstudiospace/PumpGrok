@@ -6,12 +6,21 @@ and the conversion is exact or rounds with the one ROUND_HALF_UP rule in core/un
 
 from __future__ import annotations
 
+import os
 from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
+
+# TEST-T36: a pinned seed (derandomize) in CI, so a failing example is
+# reproducible from a fresh checkout.
+if os.environ.get("CI"):
+    settings.register_profile(
+        "ci", settings(max_examples=300, deadline=None, derandomize=True)
+    )
+    settings.load_profile("ci")
 
 from pumpgrok.core.units import (
     LAMPORTS_PER_SOL,

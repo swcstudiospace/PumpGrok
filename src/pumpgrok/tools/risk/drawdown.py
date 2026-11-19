@@ -37,20 +37,25 @@ class DrawdownIn(ToolInput):
 
 
 class DrawdownOut(ToolOutput):
-    """Peak/current equity, drawdown fraction and loss velocity."""
+    """Peak/current equity, drawdown fraction and loss rate since the peak.
+
+    ``loss_lamports_per_h_from_peak`` is the reporting-only average loss rate
+    over the whole post-peak drawdown divided by the window; it is not a
+    windowed peak velocity (DESK-D-43 renamed it from ``loss_velocity``).
+    """
 
     peak_equity_lamports: int = Field(ge=0)
     current_equity_lamports: int = Field(ge=0)
     drawdown_fraction: Decimal = Field(ge=0, le=1)
-    loss_velocity_lamports_per_h: int = 0
+    loss_lamports_per_h_from_peak: int = 0
     halted: bool = False
 
 
 DRAWDOWN_SPEC = ToolSpec(
     name="risk.drawdown",
     description=(
-        "Drawdown from peak equity and loss per hour for the loss_velocity "
-        "breaker. Read only; snapshots are the source."
+        "Drawdown from peak equity and average loss per hour since the peak "
+        "for reporting. Read only; snapshots are the source."
     ),
     input_model=DrawdownIn,
     output_model=DrawdownOut,
@@ -69,14 +74,14 @@ async def run_drawdown(
     current = equity_lamports(state)
     peak = max(int(state.peak_equity_lamports), current)
     drawdown = max(drawdown_fraction(state), Decimal("0"))
-    loss_velocity = max(peak - current, 0) // inp.window_hours
+    loss_rate = max(peak - current, 0) // inp.window_hours
     ambient = ambient_correlation()
     return DrawdownOut.model_validate(
         {
             "peak_equity_lamports": peak,
             "current_equity_lamports": current,
             "drawdown_fraction": drawdown,
-            "loss_velocity_lamports_per_h": loss_velocity,
+            "loss_lamports_per_h_from_peak": loss_rate,
             "halted": drawdown >= budget.drawdown_halt_fraction,
             "meta": meta_now(
                 "ledger", inp.correlation_id or (str(ambient) if ambient else None), clock
