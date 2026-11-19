@@ -35,6 +35,7 @@ class _BuyMixin:
         _inflight: _InflightOrders
         _last_price_ts: dict[str, float]
         _last_reserves: dict[str, tuple[int, int]]
+        _latency_done: set[str]
         _owned_order: dict[object, str]
         _risk: RiskEngine
         _source: Literal["paper", "replay", "manual"]
@@ -196,6 +197,7 @@ class _BuyMixin:
         order_id = self._owned_order.pop(owner, None)
         if order_id is not None:
             self._inflight.discard(order_id)
+            self._latency_done.discard(order_id)
 
     async def _order_risk_decision(
         self,
@@ -396,7 +398,13 @@ class _BuyMixin:
         exit_reason: str | None,
         creator: str | None,
     ) -> Fill | tuple[str, str]:
-        """Write the ACCEPTED batch; a repeated decision returns its first Fill."""
+        """Write the ACCEPTED batch; a repeated decision returns its first Fill.
+
+        The row records the decision-time quote (``quote`` below); when
+        CONFIRMING recomputes a smaller cap, the settled fill is priced from
+        the recomputed CONFIRMING quote instead (EX-28), and the ACCEPTED row
+        remains the record of the decision-time terms.
+        """
         order_id = self._ids.ulid()
         quote_id = self._ids.ulid()
         try:
@@ -452,6 +460,22 @@ class _BuyMixin:
         )
         priced = self._buy_recap(quote, curve0, cap_now)
         out1 = buy_out(curve1.s_lamports, curve1.t_units, priced.x_net)
+        if out1 <= 0:
+            self._inflight.discard(order_id)
+            raise await self._reject(
+                request,
+                request.decision_id,
+                "zero_output",
+                f"confirm output {out1} is not positive",
+                stage="CONFIRMING",
+                order_id=order_id,
+                quote_out=priced.out0,
+                threshold=priced.threshold,
+                confirm_out=out1,
+                fees=self._fees.network_cost(),
+                source=ledger_source,
+                correlation_id=correlation_id,
+            )
         await self._buy_guard_slippage(
             request,
             order_id=order_id,
@@ -658,17 +682,30 @@ class _BuyMixin:
         creator: str | None,
         order_id: str,
     ) -> Fill:
-        """Ledger append and Fill for a confirmed BUY."""
-        first_buy = self._is_first_buy(request.mint)
-        # The network cost includes the ATA rent on a first buy; the position holds that
-        # rent as its deposit asset until it closes.
+        """Ledger append and Fill for a confirmed BUY.
+
+        ``price_avg`` is net of the venue fee: ``x_net`` lamports entered the
+        curve for ``out1`` units. The ATA rent is charged on every (re-)entry
+        while the mint is flat, matching on-chain ATA recreation
+        (charge_on_reentry); an add to an already-open position pays none.
+        """
+        if confirmed.out1 <= 0:
+            raise OrderRejectedError(
+                "zero_output",
+                f"confirm output {confirmed.out1} is not positive",
+                stage="CONFIRMING",
+            )
+        had_position = self._has_open_position(request.mint)
+        first_buy = not had_position
+        # The network cost includes the ATA rent whenever this (re-)entry opens
+        # a flat mint; the position holds that rent as its deposit asset until
+        # it closes.
         network_cost = self._fees.buy_network_cost(first_buy=first_buy)
         deposit = self._fees.ata_deposit_term(first_buy=first_buy)
         cash_debit = confirmed.filled + network_cost
         price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
         slipped = self._buy_slippage_bps(confirmed)
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
-        had_position = self._has_open_position(request.mint)
         rows = self._buy_fill_rows(
             request,
             order_id=order_id,
@@ -749,17 +786,6 @@ class _BuyMixin:
         """True when the ledger fold holds a non-empty position in ``mint``."""
         state = self._fold_state()
         return bool(state.positions.get(mint) is not None and state.positions[mint].token_units > 0)
-
-    def _is_first_buy(self, mint: str) -> bool:
-        """True when the ledger holds no FillRecorded BUY for ``mint``.
-
-        Decided from ledger fills, so a restart over the same ledger reaches the same answer.
-        """
-        for row in self._store.read(types=["FillRecorded"], limit=None):
-            payload = row["payload"]
-            if payload.get("side") == "buy" and payload.get("mint") == mint:
-                return False
-        return True
 
     async def _place_buy(
         self,
