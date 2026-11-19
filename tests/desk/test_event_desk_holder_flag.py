@@ -7,7 +7,6 @@ runs in its own temporary directory.
 
 from __future__ import annotations
 
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -39,7 +38,6 @@ def _blind_holder_evidence() -> EntryEvidence:
         CheckResult(
             id=check_id,  # type: ignore[arg-type]
             status="blind" if check_id == "top10_concentration" else "pass",
-            weight=Decimal("0.1"),
             reason=f"{check_id} test row",
         )
         for check_id in _REQUIRED_IDS
