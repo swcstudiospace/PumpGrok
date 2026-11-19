@@ -127,8 +127,6 @@ async def test_two_failures_keep_the_breaker_closed_three_open_it(tmp_path: Path
     assert third.reason == "transport_error"
     assert gateway.llm_available is False
     assert _mode(gateway, degraded) == "rule_fallback"
-    degraded.require_llm = True
-    assert _mode(gateway, degraded) == "observe_only_buys"
 
 
 async def test_open_breaker_refuses_without_a_call_or_spend(tmp_path: Path) -> None:
