@@ -35,7 +35,7 @@ from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.redaction import redact_text
-from pumpgrok.risk.killswitch import InflightBarrier, env_engaged, kill_file_text
+from pumpgrok.risk.killswitch import InflightBarrier, _write_durable, env_engaged, kill_file_text
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.tools._common import meta_now
 
@@ -271,6 +271,8 @@ async def run_kill_switch(
     ts_utc = datetime.fromtimestamp(clock.now(), UTC).isoformat()
     key = kill_switch_key(inp.action, inp.reason, clock)
     flatten = inp.action == "flatten_request"
+    # A FLATTEN-led reason is refused here, before the ledger row below is written.
+    text = kill_file_text(inp.reason, flatten)
     # Same minute repeat: the stored row already carries this intent.
     with contextlib.suppress(sqlite3.IntegrityError):
         store.append(
@@ -288,8 +290,7 @@ async def run_kill_switch(
             },
         )
     if killswitch_path is not None:
-        text = kill_file_text(inp.reason, flatten)
-        await asyncio.to_thread(killswitch_path.write_text, text, encoding="utf-8")
+        await asyncio.to_thread(_write_durable, killswitch_path, text)
     result: FlattenResult | None = None
     if flatten:
         if close_position is None:

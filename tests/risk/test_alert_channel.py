@@ -299,11 +299,11 @@ def test_restart_does_not_reengage_a_consumed_kill(tmp_path: Path) -> None:
     try:
         first = _engine(store, clock, killswitch_path=latch, alert_channel=_channel(fake, desk))
         assert first.check(_buy(clock, ids), seat="bot-04-sniper").reason == "kill_switch"
-        # A human clears the switch: the latch file is removed and the ledger is cleared.
-        latch.unlink()
+        # A human clears the switch: the clear records the ledger row and removes the latch.
         KillSwitch(clock, store=store, killswitch_path=latch, env={}).request_clear(
             _human_clear(clock, ids), "all clear", ts_utc=format_ts_utc(clock.now())
         )
+        assert not latch.exists()
         # The process restarts: a new channel instance on the same desk dir.
         restarted = _engine(store, clock, killswitch_path=latch, alert_channel=_channel(fake, desk))
         decision = restarted.check(_buy(clock, ids), seat="bot-04-sniper")
