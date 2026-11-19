@@ -21,6 +21,7 @@ network connection of its own.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -40,7 +41,12 @@ from pumpgrok.grok.budget import LayeredBudget
 from pumpgrok.grok.cache import ResponseCache
 from pumpgrok.grok.gateway import Candidate, GrokGateway, GrokRequest, GrokTransport
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.promotion.evaluator import TRIGGER_TYPES, EvidenceSource, PromotionEvaluator
+from pumpgrok.promotion.evaluator import (
+    EVALUATOR_BY,
+    TRIGGER_TYPES,
+    EvidenceSource,
+    PromotionEvaluator,
+)
 from pumpgrok.promotion.thresholds import load_thresholds
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
@@ -50,6 +56,7 @@ from pumpgrok.strategies.base import Intent, Strategy, TickSnapshot
 from pumpgrok.strategies.runtime import StrategyRuntime
 from pumpgrok.supervisor.intent_router import ExecPlace, IntentRouter
 from pumpgrok.supervisor.live_paper import LivePaperRoot, build_live_paper_root
+from pumpgrok.supervisor.recovery import RecoveredState, rebuild_desk_state
 from pumpgrok.tools.exec.place import PlaceIn, build_place_tool
 from pumpgrok.tools.safety.provider import paid_rpc_provider_recorded
 
@@ -141,25 +148,66 @@ class SafetyEntryCheck:
         return None if verdict.ok else "; ".join(verdict.reasons)
 
 
+#: Meta key for the promotion feed's cursor. Meta sits outside the hash chain: derived state only.
+PROMOTION_CURSOR_KEY = "promotion_feed_cursor"
+
+
+def _read_cursor(store: LedgerStore) -> tuple[int, int | None] | None:
+    """The saved ``(next_seq, pending_seq)`` pair, or None when no cursor was saved."""
+    raw = store.get_meta(PROMOTION_CURSOR_KEY)
+    if raw is None:
+        return None
+    body = json.loads(raw)
+    pending = body["pending_seq"]
+    return int(body["next_seq"]), None if pending is None else int(pending)
+
+
+def _write_cursor(store: LedgerStore, next_seq: int, pending_seq: int | None) -> None:
+    body = {"next_seq": next_seq, "pending_seq": pending_seq}
+    store.set_meta(PROMOTION_CURSOR_KEY, json.dumps(body, sort_keys=True))
+
+
+def _transition_recorded(store: LedgerStore, pending_seq: int) -> bool:
+    """Whether the evaluator wrote a stage row after the pending trigger row."""
+    rows = store.read(since_seq=pending_seq + 1, types=["PromotionStageSet"], limit=None)
+    return any(row["payload"].get("by") == EVALUATOR_BY for row in rows)
+
+
 class PromotionFeed:
     """Hands the evaluator each ledger row of TRIGGER_TYPES appended since its last look.
 
-    The cursor starts after the trigger rows already in the ledger, so rows written before
-    the desk started are not re-evaluated.
+    The cursor is saved to the store's meta table as ``next_seq`` and ``pending_seq``. Before a
+    trigger row is handled, ``pending_seq`` is saved as that row's seq. After the handle returns,
+    ``pending_seq`` is cleared and ``next_seq`` moves past the row. On start with no saved cursor,
+    the cursor starts after the trigger rows already in the ledger. With a pending row saved, the
+    desk resumes after it if the evaluator wrote a stage row after it (the transition was
+    recorded), and handles it again otherwise.
     """
 
     def __init__(self, store: LedgerStore, evaluator: PromotionEvaluator) -> None:
         self._store = store
         self._evaluator = evaluator
-        existing = store.read(types=sorted(TRIGGER_TYPES), limit=None)
-        self._next_seq = int(existing[-1]["seq"]) + 1 if existing else 0
+        saved = _read_cursor(store)
+        if saved is None:
+            existing = store.read(types=sorted(TRIGGER_TYPES), limit=None)
+            next_seq = int(existing[-1]["seq"]) + 1 if existing else 0
+            pending_seq = None
+        else:
+            next_seq, pending_seq = saved
+            if pending_seq is not None and _transition_recorded(store, pending_seq):
+                next_seq, pending_seq = pending_seq + 1, None
+        self._next_seq = next_seq
+        _write_cursor(store, next_seq, pending_seq)
 
     def drain(self) -> int:
         """Evaluate each new trigger row once, in seq order; return how many were read."""
         rows = self._store.read(since_seq=self._next_seq, types=sorted(TRIGGER_TYPES), limit=None)
         for row in rows:
+            seq = int(row["seq"])
+            _write_cursor(self._store, seq, seq)
             self._evaluator.handle(row)
-            self._next_seq = int(row["seq"]) + 1
+            self._next_seq = seq + 1
+            _write_cursor(self._store, self._next_seq, None)
         return len(rows)
 
 
@@ -176,6 +224,8 @@ class EventDesk:
     promotion: PromotionEvaluator
     feed: PromotionFeed
     entry_gate: EntryGate
+    #: What the desk rebuilt from the ledger at start. Probation is already in the strategy books.
+    recovered: RecoveredState
 
     async def start(self) -> None:
         await self.bus.start()
@@ -269,6 +319,7 @@ def _compose(
 ) -> EventDesk:
     """Wire the edges over the live root. Every collaborator is built or injected here."""
     rng = make_rng(settings.replay.seed)
+    recovered = rebuild_desk_state(root.store, strategies, settings.exits)
     ids = IdFactory(clock, rng)
     router = IntentRouter(
         exec_place=_exec_place(build_place_tool(root.adapter, lambda: settings.risk, clock)),
@@ -316,6 +367,7 @@ def _compose(
         promotion=promotion,
         feed=feed,
         entry_gate=entry_gate,
+        recovered=recovered,
     )
 
 
