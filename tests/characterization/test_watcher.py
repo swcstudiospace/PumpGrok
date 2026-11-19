@@ -11,6 +11,8 @@ Divergences from the oracle (deliberate):
   Phase 4 implements the real book.
 - ``check_once`` takes ``now`` explicitly; the poll loop sleeps on the
   injected clock.
+- A real zero price is a quote, not a miss: the oracle counted
+  ``price <= 0`` as no quote. ``None`` and negative prices are misses.
 """
 
 from __future__ import annotations
@@ -204,12 +206,12 @@ def test_position_without_price_is_reported_blind() -> None:
     assert watcher.blind == ["A"]
 
 
-def test_zero_price_counts_as_missing() -> None:
+def test_none_price_counts_as_missing() -> None:
     book = FakeBook(exits())
     book.add(position("A", entry=1.0))
 
-    async def price_fn(mint: str) -> int:
-        return 0
+    async def price_fn(mint: str) -> int | None:
+        return None
 
     async def sell_fn(pos: ExitPosition, price: int, reason: str) -> None:
         raise AssertionError("must not sell")
@@ -223,20 +225,25 @@ def test_zero_price_counts_as_missing() -> None:
 def test_recovered_price_clears_blindness() -> None:
     book = FakeBook(exits())
     book.add(position("A", entry=1.0, opened_at=NOW - 10))
-    quotes = [0, 0, _px(1.1)]
+    quotes: list[int | None] = [None, None, 0, None, None]
 
-    async def price_fn(mint: str) -> int:
-        return quotes.pop(0) if quotes else _px(1.1)
+    async def price_fn(mint: str) -> int | None:
+        return quotes.pop(0)
 
     async def sell_fn(pos: ExitPosition, price: int, reason: str) -> None:
-        raise AssertionError("must not sell")
+        pass  # a zero quote may exit under the exit rules; this test is about the counter
 
     watcher = PositionWatcher(book, price_fn, sell_fn, FixtureClock())
-    asyncio.run(watcher.check_once(NOW))
-    asyncio.run(watcher.check_once(NOW))
+    for _ in range(2):
+        asyncio.run(watcher.check_once(NOW))
     assert watcher.blind == []
-    asyncio.run(watcher.check_once(NOW))
+    asyncio.run(watcher.check_once(NOW))  # the zero quote clears the counter
     assert "A" not in watcher.price_failures
+    for _ in range(2):
+        asyncio.run(watcher.check_once(NOW))
+    # Counting restarted at the zero quote: two misses are not blind yet.
+    assert watcher.price_failures == {"A": 2}
+    assert watcher.blind == []
 
 
 def test_closed_position_is_not_blind() -> None:
