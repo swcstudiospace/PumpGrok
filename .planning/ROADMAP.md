@@ -371,11 +371,11 @@ Ship checkpoints, where the owner approves receipts in batches as human:SomeRand
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 11. Engineering foundation and quality | 11/11 | Complete (PR #55 merged 2026-11-03) | 2026-11-03 |
-| 12. Event runtime core | 5/5 | Verified 12/12; ship checkpoint (draft PRs), owner approval pending | - |
-| 13. Curve truth, live market data and recorder | 11/11 | Complete (gates green; VERIFIED flips by human:Ove) | 2026-11-13 |
-| 14. Event-driven desk and Grok gateway | 0/9 | Not started | - |
-| 15. Strategy framework and multi-strategy paper | 0/8 | Not started | - |
-| 16. Backtest v2 and autonomous evaluation | 0/7 | Not started | - |
+| 12. Event runtime core | 5/5 | Complete: PRs #61, #62 and #63 merged to main 2026-11-10 | 2026-11-10 |
+| 13. Curve truth, live market data and recorder | 11/11 | Implemented on draft PRs #64-#70 and #73 (open, not merged); VERIFIED flip pending human:Ove | - |
+| 14. Event-driven desk and Grok gateway | 9/9 | Closed 2026-11-14 on integration branch v4-phase-14 (14-09-INTEGRATION-RECEIPT); criterion 1e deferred to deployment; integration PR #75 open (draft), not merged | - |
+| 15. Strategy framework and multi-strategy paper | 8/8 | Closed 2026-11-15 on integration branch v4-phase-14 (15-08-SUMMARY); criterion 1 deferred to deployment; integration PR #75 open (draft), not merged | - |
+| 16. Backtest v2 and autonomous evaluation | 8/8 | Implemented on integration branch v4-phase-14: plans 16-01 to 16-08 with code and gates-receipt commits; no SUMMARY or VERIFICATION file on disk; integration PR #75 open (draft), not merged | - |
 | 17. Risk hardening and promotion lifecycle | 7/7 | Code complete on stack head 71ac14d (32 commits): make lint, typecheck, test (coverage 91.45% against the 89.9% floor) and audit pass; check.sh passes; criterion 14 exits 3; criterion 12 lists six contract files; criterion 13 measured (smoke-10m 1dffa784, trading-smoke a4461e80). Draft PRs #76-#100 (code, merge in order) and #101 (planning) are open; nothing merged. Criterion 1 deferred to deployment (D17-2). Phase closes on owner merge. | - |
 | 18. Dormant live path, amendment-gated | 0/11 | Not started | - |
 | 19. Observability, docs, hardening and milestone audit | 0/9 | Not started | - |
