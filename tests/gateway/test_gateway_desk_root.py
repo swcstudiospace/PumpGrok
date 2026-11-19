@@ -7,8 +7,8 @@ reports and the kill latch use the root one. The service's environment is select
 ``services/`` and ``src/``, not ``tests/``.
 """
 
-from __future__ import annotations
-
+import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,8 +18,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _make_dry_run(target: str) -> str:
+def _make_tokens(target: str) -> list[str]:
     make = shutil.which("make")
+    # TEST-D-10: one policy — fail when make is absent in CI, skip locally.
+    if make is None and os.environ.get("CI"):
+        pytest.fail("make is required in CI")
     if make is None:
         pytest.skip("make is not installed")
     result = subprocess.run(  # fixed argv, no shell
@@ -31,16 +34,22 @@ def _make_dry_run(target: str) -> str:
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    return result.stdout
+    tokens: list[str] = []
+    for line in result.stdout.splitlines():
+        if line.strip():
+            tokens.extend(shlex.split(line))
+    return tokens
 
 
 def test_make_gateway_does_not_change_directory() -> None:
-    recipe = _make_dry_run("gateway")
-    assert "desk-gateway" in recipe, recipe
-    assert "cd " not in recipe, recipe
+    # TEST-T24: assert on parsed argv tokens — no `cd` token, not a substring.
+    tokens = _make_tokens("gateway")
+    assert "services/desk-gateway" in tokens, tokens
+    assert "cd" not in tokens, tokens
 
 
 def test_make_gateway_selects_service_environment_with_project() -> None:
-    recipe = _make_dry_run("gateway")
-    assert "--project services/desk-gateway" in recipe, recipe
-    assert "desk_gateway" in recipe, recipe
+    tokens = _make_tokens("gateway")
+    assert "--project" in tokens
+    assert tokens[tokens.index("--project") + 1] == "services/desk-gateway"
+    assert "desk_gateway" in tokens, tokens

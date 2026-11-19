@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import json
 import logging
 import sys
 from collections.abc import Iterator
@@ -200,10 +201,14 @@ def _backtest_plan(args: argparse.Namespace, settings: Settings) -> _Plan:
 
 
 def _run_trials(plan: _Plan) -> HarnessResult:
-    """Record the single trial, check it won, and write the run manifest (BT-06)."""
+    """Record the trial against the accumulated ledger and write the run manifest.
+
+    Trials accumulate per run directory, which is keyed by dataset, seed and
+    parameter set (DESK-D-03): a prior run's ``trials.jsonl`` is validated and
+    kept, so ``MAX_ELIGIBLE_TRIALS`` can trip across runs.
+    """
     trials_path = plan.run_dir / "trials.jsonl"
-    if trials_path.exists():
-        trials_path.unlink()
+    _validate_prior_trials(trials_path)
     harness_result = run_search(
         plan.dataset.ref,
         [plan.params_mapping],
@@ -221,6 +226,22 @@ def _run_trials(plan: _Plan) -> HarnessResult:
         canonical_json(plan.manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
     )
     return harness_result
+
+
+def _validate_prior_trials(trials_path: Path) -> None:
+    """Every prior trial row must parse; a corrupt ledger fails closed, never resets."""
+    if not trials_path.exists():
+        return
+
+    for line in trials_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError as exc:
+            raise ConfigError([f"prior trials ledger is corrupt: {trials_path}"]) from exc
+        if not isinstance(row, dict) or not isinstance(row.get("params_hash"), str):
+            raise ConfigError([f"prior trials ledger row lacks params_hash: {trials_path}"])
 
 
 def _settle(

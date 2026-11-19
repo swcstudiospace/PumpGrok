@@ -294,21 +294,4 @@ def test_same_day_keeps_counters(harness: RiskHarness) -> None:
 # auto-clear path does not exist.
 
 
-@pytest.mark.skip(reason="intentional non-port per R5: no auto-clear on UTC rollover")
-def test_new_day_resets_counters_and_unhalts(harness: RiskHarness) -> None:
-    harness.register_open("A", size_lamports=100_000_000)
-    harness.register_close("X", pnl_lamports=-2_000_000_000)
-    assert harness.halted
-    # No roll_day_if_needed exists by design (R5). The vendor assertion
-    # below is preserved as documentation and never runs.
-    assert harness.evaluate("B", 0.9)[0] is True
 
-
-@pytest.mark.skip(reason="intentional non-port per R5: no auto-clear on UTC rollover")
-def test_day_roll_keeps_open_positions(harness: RiskHarness) -> None:
-    harness.register_open("A", size_lamports=100_000_000)
-    harness.realized_pnl_lamports = -2_000_000_000
-    # No roll_day_if_needed exists by design (R5). The vendor assertions
-    # below are preserved as documentation and never run.
-    assert "A" in harness.positions
-    assert harness.trades_today == 0

@@ -61,10 +61,13 @@ class TestConsumersCannotBeShrunk:
         assert any("no acknowledgement from 'bot-09-journal'" in p for p in problems)
 
     def test_document_may_add_a_consumer_without_dropping_manifest_ones(self):
-        acks = [{"bot": b, "ack": True} for b in BOTS if b != "bot-00-chief"]
-        doc = _breaking(consumers_required=["bot-09-journal"], acknowledgements=acks)
+        # TEST-T45: the ADD direction — the document adds bot-05-rug to the
+        # manifest's consumers, every consumer acks, so the exact result is
+        # no problems at all (not a drop-direction missing-ack problem).
+        acks = [{"bot": b, "ack": True} for b in (*BOTS, "bot-05-rug")]
+        doc = _breaking(consumers_required=["bot-05-rug"], acknowledgements=acks)
         problems = gate.check_change_doc(doc, MANIFEST)
-        assert any("no acknowledgement from 'bot-00-chief'" in p for p in problems)
+        assert problems == [], problems
 
 
 # Finding 7: a breaking major bump must be verifiable against a previous version.

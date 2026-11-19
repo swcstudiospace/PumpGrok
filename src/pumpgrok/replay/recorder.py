@@ -36,7 +36,7 @@ LLM_OUTCOMES = frozenset({"ok", "timeout", "error"})
 
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
 _VOLATILE_RE = re.compile(
-    r"(?i)(timestamp|^ts$|_ts$|^ts_|_ts_|_at$|_time$|time_utc|utc_now"
+    r"(?i)(timestamp|^ts$|_ts$|_at$|_time$|time_utc|utc_now"
     r"|correlation|ulid|decision_id|order_id|request_id|nonce|seed|span)"
 )
 

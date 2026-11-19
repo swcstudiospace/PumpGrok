@@ -28,7 +28,7 @@ from pumpgrok.config.settings import Settings
 from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModelV2
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import WallClock
 from pumpgrok.strategies.base import Strategy, version_id
 from pumpgrok.strategies.registry import STRATEGIES
 
@@ -121,11 +121,12 @@ def _params_hash(params: Mapping[str, Any]) -> str:
 
 
 def _invoke_scheduler(edge: Edge) -> None:
-    """One scheduler call. The clock is virtual and is never slept on."""
+    """One scheduler call. Ledger writes use the wall clock: a virtual clock
+    would stamp 1970-01-01 into the operator ledger (DESK-R-02)."""
     store = ResultStore()
     ledger = _ledger()
     try:
-        run_edge(edge, store, ledger, FixtureClock(0.0))
+        run_edge(edge, store, ledger, WallClock())
     finally:
         ledger.close()
 

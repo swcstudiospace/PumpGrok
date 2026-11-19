@@ -8,6 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
+from pydantic import ValidationError
+
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
@@ -146,18 +149,15 @@ async def test_halt_survives_utc_rollover_until_human_clear(tmp_path: Path) -> N
         status = await run_halt_status(HaltStatusIn(), store, None, clock)
         assert status["halted"] is True
         assert status["daily_loss_halt"] is True
-        bot_clear = None
-        try:
-            bot_clear = ApprovalRecord(
+        # TEST-T22: the bot clear must fail for the specific reason, not any error.
+        with pytest.raises(ValidationError, match="human approval must be signed by a human"):
+            ApprovalRecord(
                 id=f"apr-{ids.ulid()}",
                 kind="halt_clear",
                 approved_by="bot-02-risk",
                 raw_message="bot clear",
                 at=datetime.fromtimestamp(clock.now(), UTC),
             )
-        except Exception:
-            bot_clear = None
-        assert bot_clear is None
         human = ApprovalRecord(
             id=f"apr-{ids.ulid()}",
             kind="halt_clear",

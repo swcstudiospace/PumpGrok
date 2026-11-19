@@ -157,7 +157,11 @@ def test_undeclared_required_field_is_refused_without_a_gate():
 
 
 def test_non_string_required_entry_is_reported_not_raised():
+    # TEST-T45: assert the exact problem text, not just that problems exist.
     tool = _tool("journal.append", kind="write", gates=[], required=[], properties=[])
     tool["input"]["required"] = [["nested"]]
     problems = gate.check_tool(tool, 0)
-    assert problems, "a non-string required entry must be reported"
+    assert problems == [
+        "tool 'journal.append' requires ['nested'] but input.properties does not "
+        "declare it — additionalProperties: false would reject every call"
+    ], problems

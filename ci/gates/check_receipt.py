@@ -5,9 +5,12 @@ The gate this system exists for. A coding agent's characteristic failure is not 
 it is writing plausible code, reasoning convincingly about why it works, and reporting success
 without ever executing it.
 
-This gate does not ask whether the bot verified something. It asks for the exit code, and CI can
-re-run the command. A model can be confident about a claim it never tested; it cannot fabricate a
-0 that survives re-execution.
+This gate does not ask whether the bot verified something. It asks for the exit code. The exit
+codes are self-reported by the agent in the receipt (TEST-D-04: CI does not re-execute the
+cited commands); the gate checks their presence, type and consistency with the claims, and
+rejects bypass patterns and unquoted pipes without recorded ``pipefail`` evidence. A model can
+be confident about a claim it never tested; the receipt's claims must still cite commands whose
+cited evidence covers the claimed scope.
 
     python3 ci/gates/check_receipt.py --receipt .receipts/task.json --bot bot-03-android
 """
@@ -711,6 +714,16 @@ def _bypass_problems(commands: object) -> list[str]:
                 problems.append(
                     f"command[{i}] contains a bypass: {cmd_str!r}\n    matched {pattern!r} - {why}"
                 )
+        # An unquoted pipe whose left-hand exit code is masked by the right-hand
+        # command (e.g. pytest | tail) needs recorded pipefail evidence (TEST-D-03).
+        unquoted = _strip_quoted(cmd_str)
+        if re.search(r"(?<!\|)\|(?!\|)", unquoted):
+            output_tail = str(cmd.get("output_tail", "")) if isinstance(cmd, dict) else ""
+            if "pipefail" not in cmd_str and "pipefail" not in output_tail:
+                problems.append(
+                    f"command[{i}] contains an unquoted pipe without pipefail evidence: "
+                    f"{cmd_str!r} — record 'pipefail' in the command or its output"
+                )
     return problems
 
 
@@ -876,6 +889,20 @@ def _exhaustive_problems(
             f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
             f"only {len(commands)} command(s)"
         ]
+    # TEST-D-05: two commands are not enough on their own — the cited command
+    # set must cover the enumerated scope. When the claim enumerates its scope
+    # after a colon ("all of: a, b, c"), every enumerated item must appear in
+    # some cited command's text.
+    scope_text = text.split(":", 1)[1] if ":" in text else ""
+    items = [item.strip() for item in re.split(r"[,;]| and ", scope_text) if len(item.strip()) >= 3]
+    if items:
+        command_texts = [str(c.get("cmd", "")) if isinstance(c, dict) else str(c) for c in commands]
+        uncovered = [item for item in items if not any(item in t for t in command_texts)]
+        if uncovered:
+            return [
+                f"claim[{i}] {text!r} asserts exhaustiveness over {items} but the cited "
+                f"commands do not cover {uncovered}"
+            ]
     return []
 
 

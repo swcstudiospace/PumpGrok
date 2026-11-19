@@ -4,7 +4,8 @@ Reports every R34 rule in engine order with pass/fail/skip. Phase 3 has no
 RiskEngine, so only structural checks evaluate (ledger consistency,
 approval presence, size, seat budget); every engine rule reports ``skip``.
 The enforcing run lives inside ``PaperAdapter.place`` in Phase 4 — this tool
-authorises nothing.
+authorises nothing: when any rule is not evaluated, ``approved`` is false
+with a ``deferred:`` reason (DESK-D-08).
 """
 
 from __future__ import annotations
@@ -114,6 +115,13 @@ async def run_check_limits(
         evaluations["seat_may_trade"] = "pass"
     rules = [_row(rule_id, evaluations[rule_id]) for rule_id in R34_RULE_IDS]
     first_fail = next((r["id"] for r in rules if r["status"] == "fail"), None)
+    first_skip = next((r["id"] for r in rules if r["status"] == "skip"), None)
+    if first_fail is not None:
+        approved, reason = False, first_fail
+    elif first_skip is not None:
+        approved, reason = False, f"deferred: {first_skip} not evaluated"
+    else:
+        approved, reason = True, None
     ambient = ambient_correlation()
     limits = {
         "max_trade_fraction": str(budget.max_trade_fraction),
@@ -128,8 +136,8 @@ async def run_check_limits(
     }
     return CheckLimitsOut.model_validate(
         {
-            "approved": first_fail is None,
-            "reason": first_fail,
+            "approved": approved,
+            "reason": reason,
             "rules": rules,
             "limits": limits,
             "meta": meta_now(

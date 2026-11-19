@@ -8,6 +8,7 @@ baseline from its first commit. Entries may be removed as files are simplified, 
 
 from __future__ import annotations
 
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -102,6 +103,33 @@ def test_c901_baseline_only_shrinks() -> None:
     current = _baseline_paths()
     grown = sorted(current - LEGACY_C901_BASELINE)
     assert not grown, f"new C901 baseline entries are not allowed (D-14): {grown}"
+
+
+def _base_per_file_ignores() -> dict[str, list[str]]:
+    """The base ref's per-file-ignores; falls back to the frozen legacy set."""
+    try:
+        out = subprocess.run(
+            ["git", "show", "origin/main:pyproject.toml"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=REPO_ROOT,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        out = None
+    if out is None or out.returncode != 0:
+        return {path: ["C901"] for path in LEGACY_C901_BASELINE}
+    parsed = tomllib.loads(out.stdout)
+    lint = parsed.get("tool", {}).get("ruff", {}).get("lint", {})
+    return lint.get("per-file-ignores") or {}
+
+
+def test_c901_baseline_does_not_grow_vs_base_ref() -> None:
+    """TEST-T09: compare the working tree against the base ref, not a copy the PR can edit."""
+    base = frozenset(path for path, codes in _base_per_file_ignores().items() if "C901" in codes)
+    grown = sorted(_baseline_paths() - base)
+    assert not grown, f"C901 entries grew vs origin/main: {grown}"
 
 
 def test_c901_baseline_is_lowered_when_entries_are_fixed() -> None:

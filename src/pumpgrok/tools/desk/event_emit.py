@@ -36,7 +36,9 @@ __all__ = [
 
 _PAYLOAD_CAP_BYTES = 4096
 
-_SECRET_KEY_RE = re.compile(r"(?i)(token|secret|private_key|seed|mnemonic|keypair)")
+_SECRET_KEY_RE = re.compile(
+    r"(?i)(token|secret|private_key|api[_-]?key|passw|auth|credential|seed|mnemonic|keypair)"
+)
 
 
 class EventEmitIn(ToolInput):
@@ -76,21 +78,30 @@ def scrub_payload(payload: dict[str, Any]) -> dict[str, Any]:
     Long strings are shortened in place so the event schema still validates;
     the key set never changes.
     """
-    scrubbed = {
-        key: ("***" if _SECRET_KEY_RE.search(key) else value) for key, value in payload.items()
-    }
-    for key, value in scrubbed.items():
+
+    def scrub(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: ("***" if _SECRET_KEY_RE.search(str(key)) else scrub(item))
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [scrub(item) for item in value]
         if isinstance(value, str) and len(value) > 1024:
-            scrubbed[key] = value[:1024] + "…[truncated]"
+            return value[:1024] + "…[truncated]"
+        return value
+
+    scrubbed: dict[str, Any] = scrub(dict(payload))
     while len(json.dumps(scrubbed, sort_keys=True).encode("utf-8")) > _PAYLOAD_CAP_BYTES:
-        longest = max(
-            (key for key, val in scrubbed.items() if isinstance(val, str) and len(val) > 64),
-            key=lambda key: len(scrubbed[key]),
-            default=None,
-        )
-        if longest is None:
+        candidates = [
+            key for key, val in scrubbed.items() if isinstance(val, str) and len(val) > 64
+        ]
+        if not candidates:
             break
+        longest = max(candidates, key=lambda key: len(scrubbed[key]))
         scrubbed[longest] = scrubbed[longest][: len(scrubbed[longest]) // 2] + "…[truncated]"
+    if len(json.dumps(scrubbed, sort_keys=True).encode("utf-8")) > _PAYLOAD_CAP_BYTES:
+        raise ValueError(f"event payload exceeds the {_PAYLOAD_CAP_BYTES} byte cap after scrubbing")
     return scrubbed
 
 

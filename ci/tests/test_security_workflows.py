@@ -276,9 +276,14 @@ class TestSecurityGatesStillBlock:
         assert "ignore-unfixed" not in with_
 
     def test_pip_audit_scans_the_uv_lock_export_strictly(self, security_pr):
+        # TEST-T39: assert on parsed step arguments, not an exact command string.
         run = _step(security_pr, "pip-audit")["run"]
-        assert "uv export --frozen --no-dev --no-emit-project" in run
-        assert "pip-audit -r req.txt --strict" in run
+        tokens = shlex.split(run)
+        assert tokens[:2] == ["uv", "export"], tokens[:4]
+        for flag in ("--frozen", "--no-dev", "--no-emit-project"):
+            assert flag in tokens, f"{flag} missing from parsed step args"
+        audit_at = tokens.index("pip-audit")
+        assert {"-r", "req.txt", "--strict"} <= set(tokens[audit_at:])
 
     def test_semgrep_and_bandit_configs_are_referenced_and_present(self, security_pr):
         runs = " ".join(_run_blocks(security_pr))
@@ -483,3 +488,54 @@ class TestReceiptDirectories:
         }
         admitted = LEGACY_TRACKED_RECEIPTS | OWNER_ADMITTED_RECEIPTS
         assert unadmitted <= admitted, sorted(unadmitted - admitted)
+
+
+def _load_gate_module(name: str):
+    spec = importlib.util.spec_from_file_location(name, REPO_ROOT / "ci" / "gates" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestSweepB02bGateRegressions:
+    """B02b regression tests for the receipt and rollback gates."""
+
+    @pytest.fixture(scope="class")
+    def receipt_gate(self):
+        return _load_gate_module("check_receipt")
+
+    @pytest.fixture(scope="class")
+    def rollback_gate(self):
+        return _load_gate_module("check_rollback")
+
+    def test_unquoted_pipe_without_pipefail_is_flagged(self, receipt_gate):
+        # TEST-T06: on the base the bypass check only matched `||` forms.
+        commands = [{"cmd": "uv run pytest -q | tail -3", "exit_code": 0}]
+        problems = receipt_gate._bypass_problems(commands)
+        assert any("pipefail" in p for p in problems), problems
+
+    def test_pipe_with_pipefail_evidence_is_accepted(self, receipt_gate):
+        commands = [{"cmd": "set -o pipefail; uv run pytest -q | tail -3", "exit_code": 0}]
+        assert receipt_gate._bypass_problems(commands) == []
+
+    def test_exhaustive_claim_must_cover_enumerated_scope(self, receipt_gate):
+        commands = [
+            {"cmd": "pytest tests/a -q", "exit_code": 0},
+            {"cmd": "pytest tests/b -q", "exit_code": 0},
+        ]
+        claims = [
+            {
+                "claim": "all of: tests/a, tests/b, tests/c checks passed",
+                "evidence_command_index": 0,
+            }
+        ]
+        problems = receipt_gate._claim_problems(claims, commands, strict=True)
+        assert any("tests/c" in p for p in problems), problems
+
+    @pytest.mark.parametrize(
+        "command",
+        ["git clean -fdx", "find . -delete", "unlink old.log", "shred secret.key"],
+    )
+    def test_destructive_command_set_is_flagged(self, rollback_gate, command):
+        hits = rollback_gate.find_matches([{"cmd": command}], rollback_gate.DESTRUCTIVE_PATTERNS)
+        assert hits, command

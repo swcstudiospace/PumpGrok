@@ -10,8 +10,11 @@ row explaining why, instead of returning a faked prompt.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
@@ -132,7 +135,18 @@ def _register_rows(
             }
         ]
     if record.is_file():
-        stored = json.loads(record.read_text(encoding="utf-8"))
+        try:
+            stored = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            stored = None
+        if not isinstance(stored, dict):
+            return False, [
+                {
+                    "check": "register",
+                    "status": "fail",
+                    "detail": "binding record is unreadable or corrupt",
+                }
+            ]
         ok = digest_compare(binding, str(stored.get("binding", "")))
         return ok, [
             {
@@ -141,12 +155,20 @@ def _register_rows(
                 "detail": "binding verified" if ok else "binding mismatch",
             }
         ]
-    record.write_text(
-        json.dumps(
-            {"agent_uuid": inp.agent_uuid, "channel_id": inp.channel_id, "binding": binding}
-        ),
-        encoding="utf-8",
-    )
+    encoded = json.dumps(
+        {"agent_uuid": inp.agent_uuid, "channel_id": inp.channel_id, "binding": binding}
+    ).encode("utf-8")
+    handle, tmp_name = tempfile.mkstemp(dir=bindings_dir, prefix=f".{agent}.", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(tmp_name, record)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
     return True, [{"check": "register", "status": "ok", "detail": "binding recorded"}]
 
 
