@@ -86,6 +86,31 @@ async def test_authority_malformed_value_is_typed_false() -> None:
     assert result == {"ok": False, "error": "authority check failed", "mint": MINT}
 
 
+_MINT_INFO = {
+    "mintAuthority": None,
+    "freezeAuthority": None,
+    "decimals": 6,
+    "supply": "1000",
+    "isInitialized": True,
+}
+
+
+def _mint_info(info: dict[str, Any]) -> RpcClient:
+    return _result({"data": {"parsed": {"info": info}}})
+
+
+@pytest.mark.parametrize("missing", ["mintAuthority", "freezeAuthority"])
+async def test_authority_missing_key_fails_closed(missing: str) -> None:
+    info = {key: value for key, value in _MINT_INFO.items() if key != missing}
+    result = await check_mint(MINT, _mint_info(info))
+    assert result == {"ok": False, "error": "authority fields missing from mint account"}
+
+
+async def test_authority_uninitialized_mint_is_rejected() -> None:
+    result = await check_mint(MINT, _mint_info({**_MINT_INFO, "isInitialized": False}))
+    assert result == {"ok": False, "error": "mint account is not initialized"}
+
+
 async def test_authority_unexpected_error_propagates() -> None:
     with pytest.raises(RuntimeError, match="unexpected"):
         await check_mint(MINT, _raising(_http_status(200)))
