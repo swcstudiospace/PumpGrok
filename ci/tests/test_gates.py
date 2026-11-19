@@ -260,7 +260,7 @@ class TestG2Receipts:
 
     def test_live_flag_and_risk_flag_are_in_the_bypass_list(self, receipt_gate):
         patterns = [p for p, _ in receipt_gate.BYPASS_PATTERNS]
-        assert r"PUMPGROK_LIVE_ENABLE=(?:1|true)" in patterns
+        assert r"PUMPGROK_LIVE_ENABLE=(?i:1|true)" in patterns
         assert r"--i-understand-the-risk" in patterns
 
     @pytest.mark.parametrize(
