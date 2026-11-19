@@ -1,4 +1,10 @@
-"""PRC-11: the ten v4 sections exist once and load off when TOML omits them."""
+"""PRC-11: the ten v4 sections exist once and load off when TOML omits them.
+
+R-29 deleted the ``enabled`` flag from seven sections (datafeed, recorder,
+strategies, backtest_v2, risk_strategy, promotion, signer); those sections
+are off by construction (no flag field). Only events, grok_gateway and
+paper_fees retain ``enabled is False``.
+"""
 
 from __future__ import annotations
 
@@ -45,7 +51,11 @@ def test_each_v4_section_class_exists_once() -> None:
 def test_each_v4_section_defaults_off() -> None:
     for field_name, class_name in V4_FIELDS:
         section = getattr(v4, class_name)()
-        assert section.enabled is False
+        if "enabled" in section.model_fields:
+            assert section.enabled is False
+        else:
+            # R-29: flag deleted; the section has no on/off switch.
+            assert "enabled" not in section.model_fields
         assert section.allowlist == ()
         bound = Settings.model_fields[field_name].annotation
         assert bound is getattr(v4, class_name)
@@ -55,7 +65,11 @@ def test_absent_toml_leaves_v4_sections_off(clean_env: None) -> None:
     settings = load_settings()
     for field_name, _class_name in V4_FIELDS:
         section = getattr(settings, field_name)
-        assert section.enabled is False
+        if hasattr(section, "enabled"):
+            assert section.enabled is False
+        else:
+            # R-29: deleted flag; off by construction.
+            assert not hasattr(section, "enabled")
         assert section.allowlist == ()
     assert settings.paper_fees.model == "v2"
     assert "interval" not in v4.PromotionSettings.model_fields

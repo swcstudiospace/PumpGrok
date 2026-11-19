@@ -171,5 +171,6 @@ async def test_drawdown_reports_loss_on_funded_ledger(tmp_path: Path) -> None:
     assert out.peak_equity_lamports == 1_000_000_000
     assert out.current_equity_lamports == 700_000_000
     assert out.drawdown_fraction == Decimal("0.3")
-    assert out.loss_velocity_lamports_per_h == 12_500_000
+    # DESK-D-43: loss_velocity renamed to loss_lamports_per_h_from_peak.
+    assert out.loss_lamports_per_h_from_peak == 12_500_000
     assert out.halted is True

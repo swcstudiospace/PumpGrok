@@ -1,4 +1,7 @@
-"""Refusal slice: forbidden names, unknown keys, key-bearing URLs, bad types."""
+"""Refusal slice: forbidden names, unknown keys, key-bearing URLs, bad types.
+
+R-30: ``refuse_forbidden_env`` only scans ``PUMPGROK_*`` names; bare names are ignored.
+"""
 
 from __future__ import annotations
 
@@ -19,10 +22,10 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize(
     "name",
     [
-        "PRIVATE_KEY",
-        "WALLET_SECRET",
-        "MY_MNEMONIC_BACKUP",
-        "phantom_url",
+        "PUMPGROK_PRIVATE_KEY",
+        "PUMPGROK_WALLET_SECRET",
+        "PUMPGROK_MY_MNEMONIC_BACKUP",
+        "PUMPGROK_PHANTOM_URL",
         "PUMPGROK_SOLANA__SECRET_KEY",  # pragma: allowlist secret: forbidden env-name fixture
         "PUMPGROK_KEYPAIR_PATH",  # pragma: allowlist secret: forbidden env-name fixture
     ],
@@ -42,6 +45,14 @@ def test_forbidden_env_name_refuses_without_value(
 def test_replay_seed_exempt(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PUMPGROK_REPLAY__SEED", "7")
     assert load_settings().replay.seed == 7
+
+
+def test_bare_forbidden_name_is_ignored(
+    clean_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-30: names without the PUMPGROK_ prefix are not scanned, so they load."""
+    monkeypatch.setenv("PRIVATE_KEY", "PLANTED-SECRET-9f3k7z-no-echo")  # pragma: allowlist secret
+    assert load_settings() is not None
 
 
 @pytest.mark.parametrize("name", ["PUMPGROK_BOGUS", "PUMPGROK_RISK__BOGUS"])

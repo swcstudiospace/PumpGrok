@@ -42,7 +42,8 @@ PRE_V4_FIELDS: tuple[str, ...] = (
 
 PINNED_SECTION_DIGESTS: dict[str, str] = {
     "execution": "717144ed733a9c81a960bc445d94f19a79e7677cdc6b0070847d659e51f5fb2c",
-    "risk": "7b73f8ebece3612a00b973f1f402c9174c6b43bcaa4cb367bf6acf0eb3ee723e",
+    # RISK-R-15: halt fractions gt=0 (was ge=0); schema moves so the pin is updated.
+    "risk": "3a02a9b2f46067652fc6e2777355051165f8cb283eb1775d58b1885ef1163d94",
     "limits": "005a5d70a24265958cef1441c5aa0d0ced919986defa941091361598e51c5557",
     "replay": "4e949265d09c7f086f0568a752a46ffc91eafba9541f0cdf453eb53db5d230ba",
     "live": "d06968acdda3fe67966ab7d79cfac8cf03cb7c60bf803972a661296ff021bfe2",

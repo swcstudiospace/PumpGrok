@@ -49,13 +49,19 @@ def test_sbom_job_skips_fork_pull_requests(sbom_job: dict):
 def test_sbom_is_generated_from_the_locked_export(sbom_run: str):
     # Assert on parsed step arguments (TEST-T39), not an exact command string:
     # a comment carrying the text must not pass, whitespace must not fail.
-    tokens = shlex.split(sbom_run)
+    # The step is a multi-line run block (set -euo pipefail ...); parse the
+    # `uv export` line itself, not the block head (same shape as the pip-audit fix).
+    lines = [line.strip() for line in sbom_run.splitlines() if line.strip()]
+    export = next(line for line in lines if line.startswith("uv export"))
+    tokens = shlex.split(export)
     assert tokens[:2] == ["uv", "export"], tokens[:4]
     for flag in ("--frozen", "--no-dev", "--no-emit-project", "--no-hashes"):
         assert flag in tokens, f"{flag} missing from parsed step args"
     assert tokens[tokens.index("--format") + 1] == "requirements-txt"
+    generator_line = next(line for line in lines if "cyclonedx-py" in line)
+    generator_tokens = shlex.split(generator_line)
     generator = ["cyclonedx-py", "requirements", "req.txt"]
-    assert all(token in tokens for token in generator), tokens
+    assert all(token in generator_tokens for token in generator), generator_tokens
 
 
 def test_sbom_generator_is_pinned_and_run_ephemerally(sbom_run: str):

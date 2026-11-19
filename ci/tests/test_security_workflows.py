@@ -144,10 +144,12 @@ class TestWorkflowsParseAndRunOnHostedRunners:
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
     def test_fork_pull_requests_are_skipped(self, name):
         # A job that can run on pull_request must skip a fork's PR, so fork code never runs in
-        # this repository's CI. A schedule-only job cannot run on pull_request at all.
+        # this repository's CI. A schedule-only job cannot run on pull_request at all, and a
+        # push-only job (TEST-D-08 post-merge-gates) cannot run on pull_request either: on
+        # push there is no pull_request payload, and only trusted main code is checked out.
         for job_name, job in _load_yaml(name)["jobs"].items():
             condition = job.get("if", "")
-            if condition == "github.event_name == 'schedule'":
+            if condition in ("github.event_name == 'schedule'", "github.event_name == 'push'"):
                 continue
             assert SAME_REPO_GUARD in condition, job_name
 
@@ -277,13 +279,19 @@ class TestSecurityGatesStillBlock:
 
     def test_pip_audit_scans_the_uv_lock_export_strictly(self, security_pr):
         # TEST-T39: assert on parsed step arguments, not an exact command string.
+        # The step is a multi-line run block (set -euo pipefail ...); parse the
+        # `uv export` line itself, not the block head.
         run = _step(security_pr, "pip-audit")["run"]
-        tokens = shlex.split(run)
+        lines = [line.strip() for line in run.splitlines() if line.strip()]
+        export = next(line for line in lines if line.startswith("uv export"))
+        tokens = shlex.split(export)
         assert tokens[:2] == ["uv", "export"], tokens[:4]
         for flag in ("--frozen", "--no-dev", "--no-emit-project"):
             assert flag in tokens, f"{flag} missing from parsed step args"
-        audit_at = tokens.index("pip-audit")
-        assert {"-r", "req.txt", "--strict"} <= set(tokens[audit_at:])
+        audit_line = next(line for line in lines if "pip-audit" in line)
+        audit_tokens = shlex.split(audit_line)
+        audit_at = audit_tokens.index("pip-audit")
+        assert {"-r", "req.txt", "--strict"} <= set(audit_tokens[audit_at:])
 
     def test_semgrep_and_bandit_configs_are_referenced_and_present(self, security_pr):
         runs = " ".join(_run_blocks(security_pr))

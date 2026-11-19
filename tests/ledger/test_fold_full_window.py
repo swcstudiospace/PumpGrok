@@ -125,7 +125,7 @@ def test_unbounded_read_returns_full_window(tmp_path: Path) -> None:
     store = _build_store(tmp_path)
     try:
         assert store.count() == FILLERS + 5
-        assert len(store.read()) == 200
+        assert len(store.read(limit=200)) == 200
         assert len(store.read(limit=None)) == FILLERS + 5
     finally:
         store.close()
