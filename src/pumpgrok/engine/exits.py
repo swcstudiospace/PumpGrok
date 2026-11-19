@@ -45,25 +45,24 @@ def pnl_pct(position: ExitPosition, price: int) -> float:
     return (price - position.entry_price) / position.entry_price * 100.0
 
 
-def stop_loss_triggered(position: ExitPosition, price: int, stop_loss_pct: float) -> bool:
-    if position.entry_price <= 0 or price <= 0 or stop_loss_pct <= 0:
-        return False
-    return -pnl_pct(position, price) >= stop_loss_pct
-
-
 def exit_signal(
     position: ExitPosition,
-    price: int,
+    price: int | None,
     cfg: ExitsSettings,
     now: float,
 ) -> ExitSignal | None:
     """Whether to exit and why. None means hold.
 
+    ``price`` None is no quote: there is nothing to measure, so hold. A
+    zero price is a real quote (a drained curve) and is a full loss, so
+    it reaches the stop-loss like any other price.
+
     Stop-loss is only one of four rules here. Without the rest, a
     position that tripled would have no way to close green: it would
     just wait to slide back to the stop.
     """
-    if price <= 0 or position.entry_price <= 0:
+    # No quote, or an invalid entry with no percent vs entry to measure: hold.
+    if price is None or position.entry_price <= 0:
         return None
 
     change = pnl_pct(position, price)
@@ -98,7 +97,7 @@ def exit_signal(
 
 def apply_price(
     position: ExitPosition,
-    price: int,
+    price: int | None,
     cfg: ExitsSettings,
     now: float,
 ) -> ExitSignal | None:
@@ -108,8 +107,11 @@ def apply_price(
     caller that only calls it must replicate the ratchet or the trailing
     stop never advances. Call this instead: the mutation is the contract,
     and the watcher routes through here so the invariant lives in one
-    place instead of two modules.
+    place instead of two modules. A ``None`` price (no quote) leaves the
+    peak untouched.
     """
+    if price is None:
+        return None
     position.peak_price = max(position.peak_price, price)
     return exit_signal(position, price, cfg, now)
 
