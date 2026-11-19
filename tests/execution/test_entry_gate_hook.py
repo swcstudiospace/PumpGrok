@@ -21,7 +21,7 @@ from pumpgrok.core.adapter import Fill, OrderRequest, Side
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution import build_paper_adapter
-from pumpgrok.execution.entry_hook import BoundEntryPolicy
+from pumpgrok.execution.entry_hook import BoundEntryPolicy, EntryGate
 from pumpgrok.execution.paper_adapter import CurveSnapshot, OrderRejectedError, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
@@ -343,3 +343,87 @@ async def test_protective_sell_fills_while_entry_policy_is_installed(tmp_path: P
     sold = await _place(adapter, clock, sell, seat="bot-06-exit", exit_reason="stop_loss")
     assert sold.filled_units > 0
     assert _rejections(store) == []
+
+
+class _RecordingCheck:
+    """Test-owned EntryCheck: records each call and returns one fixed refusal."""
+
+    def __init__(self, reason: str | None) -> None:
+        self._reason = reason
+        self.calls: list[tuple[str, bool]] = []
+
+    def refusal(
+        self,
+        mint: str,
+        source: object,
+        snapshot: CurveSnapshot,
+        *,
+        holder_blind_advisory: bool,
+    ) -> str | None:
+        self.calls.append((mint, holder_blind_advisory))
+        return self._reason
+
+
+class _RaisingCheck:
+    """Test-owned EntryCheck whose evaluation fails."""
+
+    def refusal(
+        self,
+        mint: str,
+        source: object,
+        snapshot: CurveSnapshot,
+        *,
+        holder_blind_advisory: bool,
+    ) -> str | None:
+        raise RuntimeError("check broke")
+
+
+@pytest.mark.parametrize("advisory", [True, False])
+def test_holder_blind_advisory_reaches_entry_check_unchanged(advisory: bool) -> None:
+    check = _RecordingCheck(reason=None)
+    policy = BoundEntryPolicy(
+        ScriptedCurves([_snap("rpc")]),
+        supported=(ScriptedCurves,),
+        gate=EntryGate(check=check, holder_blind_advisory=advisory),
+    )
+    # Provenance still refuses: a check admission is not a replay admission.
+    assert policy.check_snapshot(_snap("rpc")) == "curve layout rpc reads are ASSUMED"
+    assert check.calls == [(MINT, advisory)]
+
+
+def test_entry_gate_without_holder_flag_is_refused() -> None:
+    with pytest.raises(TypeError):
+        EntryGate(check=_RecordingCheck(reason=None))  # type: ignore[call-arg]
+
+
+def test_injected_check_refusal_is_returned_as_the_entry_denial() -> None:
+    policy = BoundEntryPolicy(
+        ScriptedCurves([_snap("rpc")]),
+        supported=(ScriptedCurves,),
+        gate=EntryGate(
+            check=_RecordingCheck(reason="top-10 holders 30%"),
+            holder_blind_advisory=False,
+        ),
+    )
+    assert policy.check_snapshot(_snap("rpc")) == "top-10 holders 30%"
+
+
+def test_raising_entry_check_denies_the_buy() -> None:
+    policy = BoundEntryPolicy(
+        ScriptedCurves([_snap("rpc")]),
+        supported=(ScriptedCurves,),
+        gate=EntryGate(check=_RaisingCheck(), holder_blind_advisory=True),
+    )
+    assert policy.check_snapshot(_snap("rpc")) == "entry check failed: RuntimeError"
+
+
+def test_entry_check_is_never_consulted_for_source_checks() -> None:
+    check = _RecordingCheck(reason="refused")
+    source = ScriptedCurves([_snap("rpc")])
+    policy = BoundEntryPolicy(
+        source,
+        supported=(ScriptedCurves,),
+        gate=EntryGate(check=check, holder_blind_advisory=True),
+    )
+    assert policy.check_source(source) is None
+    assert check.calls == []

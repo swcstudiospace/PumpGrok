@@ -12,6 +12,7 @@ but its curve reads carry no verified provenance and every BUY is refused.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from pumpgrok.tools.onchain.curve_layout import CurveProvenance, rpc_curve_price_allowed
@@ -22,7 +23,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BoundEntryPolicy",
+    "EntryCheck",
     "EntryDenied",
+    "EntryGate",
     "EntryPolicy",
     "bound_replay_source",
     "entry_provenance",
@@ -47,6 +50,32 @@ class EntryPolicy(Protocol):
         """Refusal detail for an entry snapshot; None admits it."""
 
 
+class EntryCheck(Protocol):
+    """Injected BUY verdict: a refusal detail for one entry snapshot, or None to admit."""
+
+    def refusal(
+        self,
+        mint: str,
+        source: object,
+        snapshot: CurveSnapshot,
+        *,
+        holder_blind_advisory: bool,
+    ) -> str | None:
+        """Refusal detail for this BUY read; None admits it."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class EntryGate:
+    """An injected entry check and the holder flag the composition root computed.
+
+    ``holder_blind_advisory`` has no default: the composition root must pass it, and the
+    policy hands it to the check unchanged.
+    """
+
+    check: EntryCheck
+    holder_blind_advisory: bool
+
+
 class BoundEntryPolicy:
     """Entry policy bound to one source object and the exact classes it may be.
 
@@ -58,7 +87,7 @@ class BoundEntryPolicy:
     verified replay. A policy built without the token admits nothing.
     """
 
-    __slots__ = ("_bound", "_provenance", "_supported")
+    __slots__ = ("_bound", "_gate", "_provenance", "_supported")
 
     def __init__(
         self,
@@ -66,6 +95,7 @@ class BoundEntryPolicy:
         *,
         supported: tuple[type, ...],
         replay: VerifiedReplay | None = None,
+        gate: EntryGate | None = None,
     ) -> None:
         if not supported:
             raise ValueError("entry policy needs at least one supported source class")
@@ -82,6 +112,7 @@ class BoundEntryPolicy:
                 raise ValueError("entry policy replay token does not bind this source")
             self._provenance = CurveProvenance.VERIFIED_REPLAY
         self._bound = source
+        self._gate = gate
 
     @property
     def source(self) -> object:
@@ -101,6 +132,18 @@ class BoundEntryPolicy:
         return None
 
     def check_snapshot(self, snapshot: CurveSnapshot) -> str | None:
+        if self._gate is not None:
+            try:
+                refusal = self._gate.check.refusal(
+                    snapshot.mint,
+                    self._bound,
+                    snapshot,
+                    holder_blind_advisory=self._gate.holder_blind_advisory,
+                )
+            except Exception as exc:
+                return f"entry check failed: {type(exc).__name__}"
+            if refusal is not None:
+                return refusal
         if not rpc_curve_price_allowed(curve_source=snapshot.source, provenance=self._provenance):
             return f"curve layout {snapshot.source} reads are ASSUMED"
         return None
