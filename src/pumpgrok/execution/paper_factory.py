@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Final, Literal
 
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.entry_hook import BoundEntryPolicy, EntryPolicy
+from pumpgrok.execution.entry_hook import BoundEntryPolicy, EntryGate, EntryPolicy
 from pumpgrok.execution.fees import FeeModel, fee_model_for
 from pumpgrok.execution.latency import P_DROP
 from pumpgrok.execution.paper_adapter import PaperAdapter, PriceSource
@@ -112,6 +112,7 @@ def _compose_live(
     price_source: PriceSource | None,
     source: Literal["paper", "replay", "manual"],
     reserves_observer: Callable[[CurveSnapshot], None] | None,
+    entry_gate: EntryGate | None,
 ) -> tuple[EntryPolicy, PriceSource]:
     """Compose the exact live source: entry policy and the price source it serves."""
     # Lazy: datafeed.price imports pumpgrok.execution.paper_adapter.models, so a
@@ -124,7 +125,7 @@ def _compose_live(
         raise ValueError("live composition composes only the paper ledger source")
     if type(live_source) is not LivePriceSource:
         raise ValueError("live source must be the exact LivePriceSource")
-    policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,))
+    policy = BoundEntryPolicy(live_source, supported=(LivePriceSource,), gate=entry_gate)
     live_source.set_observer(reserves_observer)
     return policy, live_source
 
@@ -151,6 +152,7 @@ def build_paper_adapter(
     live_source: LivePriceSource | None = None,
     fees: FeeModel | None = None,
     reserves_observer: Callable[[CurveSnapshot], None] | None = None,
+    entry_gate: EntryGate | None = None,
     source: Literal["paper", "replay", "manual"] = "paper",
     p_drop: float = P_DROP,
 ) -> PaperAdapter:
@@ -169,6 +171,12 @@ def build_paper_adapter(
     default is ``paper_fee_model(settings)``: v2 unless ``paper_fees.model`` is v1. The operator
     risk budget and engine limits come from ``settings`` (``risk`` / ``limits``); objects without
     those attributes fall back to defaults.
+
+    ``entry_gate`` (optional) is handed to the bound entry policy of the replay and
+    live compositions. Each BUY read the policy admits is then checked by the gate's
+    injected check; a refusal denies the BUY before any order is placed. Without a
+    replay or live source every BUY is already refused, so the gate changes nothing.
+    ``None`` (the default) leaves every composition unchanged.
     """
     if reserves_observer is not None and live_source is None:
         raise ValueError("reserves observer needs the exact live source")
@@ -180,6 +188,7 @@ def build_paper_adapter(
             price_source=price_source,
             source=source,
             reserves_observer=reserves_observer,
+            entry_gate=entry_gate,
         )
     elif replay is None:
         policy = _NoReplayEntries()
@@ -190,7 +199,12 @@ def build_paper_adapter(
             raise ValueError("price source is not the verified replay curve source")
         from pumpgrok.replay.sources import FixtureCurveSource  # noqa: PLC0415 - circular import
 
-        policy = BoundEntryPolicy(replay.curves, supported=(FixtureCurveSource,), replay=replay)
+        policy = BoundEntryPolicy(
+            replay.curves,
+            supported=(FixtureCurveSource,),
+            replay=replay,
+            gate=entry_gate,
+        )
         price_source = replay.curves
     budget = getattr(settings, "risk", None)
     if budget is None:
