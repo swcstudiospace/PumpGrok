@@ -8,10 +8,11 @@ parameters named api-key, key or token are replaced with REDACTED.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-from collections.abc import AsyncIterator, Mapping
-from typing import Protocol
+from collections.abc import AsyncIterator, Callable, Mapping
+from typing import NamedTuple, Protocol
 
 import httpx
 from websockets.asyncio.client import connect
@@ -20,7 +21,9 @@ from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport, _validat
 from pumpgrok.replay.clock import Clock
 from pumpgrok.replay.live_recorder import TRANSACTION_STREAM
 
-_QUERY_RE = re.compile(r"(?i)(?P<name>api-key|token|(?<![A-Za-z_-])key)=(?P<value>[^&\s\"']*)")
+_QUERY_RE = re.compile(
+    r"(?i)(?P<name>api[-_]?key|secret|token|(?<![A-Za-z_-])key)=(?P<value>[^&\s\"']*)"
+)
 # Header names and a nested headers object. Dropped whole so no header value is recorded.
 _DROPPED_KEYS = frozenset(
     {
@@ -41,14 +44,8 @@ class _FrameRecorder(Protocol):
     def record_frame(self, raw: dict[str, object]) -> None: ...
 
 
-class _Pinnable(Protocol):
-    def pin(self) -> None: ...
-
-    def release(self) -> None: ...
-
-
 def redact_text(text: str) -> str:
-    """Replace api-key, key and token query values. The parameter name stays."""
+    """Replace API key, secret, token and key query values. The parameter name stays."""
     return _QUERY_RE.sub(lambda match: f"{match.group('name')}=REDACTED", text)
 
 
@@ -111,39 +108,46 @@ async def open_websocket(url: str, *, stream: str) -> AsyncIterator[object]:
             yield message
 
 
-class RecordingWebSocket:
-    """Yield inbound frames only after ``record_frame`` has persisted each one.
+class Arrival(NamedTuple):
+    """One decoded inbound frame, or the end of one socket, stamped with its arrival time.
 
-    The clock is pinned across the yield, so the consumer can pump the frame and
-    stamp its observation with the same ts the frame was recorded under. The pin
-    releases when the consumer asks for the next frame.
+    ``payload`` is None only on a socket's final arrival. ``failure`` is set when the
+    socket ended by raising instead of closing.
     """
 
-    def __init__(
-        self,
-        frames: AsyncIterator[object],
-        recorder: _FrameRecorder,
-        *,
-        stream: str,
-        clock: _Pinnable,
-    ) -> None:
-        self._frames = frames
-        self._recorder = recorder
-        self._stream = stream
-        self._clock = clock
+    stream: str
+    ts: float
+    payload: dict[str, object] | None = None
+    failure: BaseException | None = None
 
-    def __aiter__(self) -> AsyncIterator[dict[str, object]]:
-        return self._iterate()
 
-    async def _iterate(self) -> AsyncIterator[dict[str, object]]:
-        async for raw in self._frames:
-            payload = _object_payload(raw)
-            self._clock.pin()
-            try:
-                self._recorder.record_frame({"stream": self._stream, "payload": payload})
-                yield payload
-            finally:
-                self._clock.release()
+async def read_arrivals(
+    frames: AsyncIterator[object],
+    *,
+    stream: str,
+    now: Callable[[], float],
+    inbox: asyncio.Queue[Arrival],
+    wake: asyncio.Event,
+) -> None:
+    """Drain one socket into ``inbox`` as ``Arrival`` records, then mark its end.
+
+    Runs as its own task. Every queued arrival sets ``wake`` so the consumer can wait on
+    both sockets at once. The consumer waits only on ``wake`` and ``inbox``, so a consumer
+    timeout never cancels the socket generator and a quiet socket is not finalised. A decode
+    failure or socket error is queued as the last arrival and re-raised by the consumer.
+    Cancellation is not caught; it ends the task at shutdown.
+    """
+    try:
+        async for message in frames:
+            ts = now()
+            await inbox.put(Arrival(stream, ts, _object_payload(message)))
+            wake.set()
+    except Exception as exc:
+        await inbox.put(Arrival(stream, now(), failure=exc))
+        wake.set()
+        return
+    await inbox.put(Arrival(stream, now()))
+    wake.set()
 
 
 class RecordingJsonRpc:

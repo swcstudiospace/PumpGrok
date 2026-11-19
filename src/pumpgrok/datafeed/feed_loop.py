@@ -27,7 +27,7 @@ from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.datafeed.portal import PortalFeed
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport
 from pumpgrok.datafeed.resync import RollingWindowLimiter
-from pumpgrok.datafeed.transport import RecordingJsonRpc, RecordingWebSocket
+from pumpgrok.datafeed.transport import Arrival, RecordingJsonRpc, read_arrivals
 from pumpgrok.datafeed.watchset import WatchSet
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
@@ -49,30 +49,7 @@ _RATE_LIMIT = 10_000
 _RATE_WINDOW_S = 10.0
 _MAX_AGE_S = 10.0
 _MAX_OBSERVATIONS = 4
-
-
-class _CycleCount:
-    """Paper cycles finished by the latest serve_once. Compared as an int."""
-
-    __slots__ = ("value",)
-
-    def __init__(self) -> None:
-        self.value = 0
-
-    def __eq__(self, other: object) -> bool:
-        return self.value == other
-
-    __hash__ = None  # type: ignore[assignment]
-
-    def __int__(self) -> int:
-        return self.value
-
-
-# How many paper cycles the most recent serve_once call completed.
-cycles_run = _CycleCount()
-
-_CLOSED = object()
-_WAIT = object()
+_INBOX_DEPTH = 16
 
 
 class PinnedClock:
@@ -82,8 +59,8 @@ class PinnedClock:
         self._inner = inner
         self._pinned: float | None = None
 
-    def pin(self) -> None:
-        self._pinned = self._inner.now()
+    def pin(self, ts: float) -> None:
+        self._pinned = ts
 
     def release(self) -> None:
         self._pinned = None
@@ -127,7 +104,7 @@ def _portal_allowed(payload: dict[str, object], mints: frozenset[str] | None) ->
 
 
 class _PushFrames:
-    """One frame is pushed, then pump_once reads it. An empty pull is a hard error."""
+    """One frame is pushed, then pump_once reads it. An empty pull is a programming error."""
 
     def __init__(self) -> None:
         self._pending: deque[object] = deque()
@@ -137,7 +114,7 @@ class _PushFrames:
 
     async def next_frame(self) -> object:
         if not self._pending:
-            raise RuntimeError("pump_once with no pushed frame")
+            raise AssertionError("pump_once with no pushed frame")
         return self._pending.popleft()
 
     async def reconnect(self) -> None:
@@ -152,20 +129,27 @@ def _refuse_dead_letter(event: Event) -> None:
     raise RuntimeError(f"record session has no dead-letter sink for {event.kind}")
 
 
-async def _pull(agen: AsyncIterator[dict[str, object]], clock: Clock, seconds: float) -> object:
-    """Next frame, ``_CLOSED`` when the source ends, or ``_WAIT`` on timeout."""
-    if seconds <= 0:
-        return _WAIT
+def _take_next(inboxes: dict[str, asyncio.Queue[Arrival]], last: str) -> Arrival | None:
+    """The next queued arrival. The socket after ``last`` goes first, so a burst on one socket
+    yields to the other on every turn."""
+    other = LOGS_STREAM if last == PORTAL_STREAM else PORTAL_STREAM
+    for stream in (other, last):
+        inbox = inboxes[stream]
+        if not inbox.empty():
+            return inbox.get_nowait()
+    return None
+
+
+async def _wait_for_arrival(wake: asyncio.Event, clock: PinnedClock, seconds: float) -> None:
+    """Wait until a reader queues an arrival, or ``seconds`` pass on ``clock``."""
     try:
         async with clock.timeout(seconds):
-            return await anext(agen)
-    except StopAsyncIteration:
-        return _CLOSED
+            await wake.wait()
     except TimeoutError:
-        return _WAIT
+        return
 
 
-async def _aclose(agen: AsyncIterator[dict[str, object]]) -> None:
+async def _aclose(agen: AsyncIterator[object]) -> None:
     """Close an async generator. aiter() is typed as AsyncIterator, which has no aclose."""
     close = getattr(agen, "aclose", None)
     if close is None:
@@ -182,78 +166,86 @@ async def _apply(
     await feed.pump_once()
 
 
-async def _take_portal(
-    agen: AsyncIterator[dict[str, object]],
-    clock: PinnedClock,
-    seconds: float,
-    feed: PortalFeed,
-    frames: _PushFrames,
-    *,
-    mints: frozenset[str] | None,
-) -> object:
-    """Pump one ready portal frame. Returns closed, wait, or the handled frame."""
-    item = await _pull(agen, clock, seconds)
-    if item is _CLOSED or item is _WAIT:
-        return item
-    if isinstance(item, dict) and _portal_allowed(item, mints):
-        await _apply(feed, frames, item)
-    return item
-
-
-async def _take_logs(
-    agen: AsyncIterator[dict[str, object]],
-    clock: PinnedClock,
-    seconds: float,
-    feed: LogsFeed,
-    frames: _PushFrames,
-) -> bool:
-    """Pump one ready logs frame. False when the source has ended."""
-    item = await _pull(agen, clock, seconds)
-    if item is _CLOSED:
-        return False
-    if item is not _WAIT and isinstance(item, dict):
-        await _apply(feed, frames, item)
-    return True
-
-
 async def _pump(
     *,
     clock: PinnedClock,
+    arrivals: Clock,
     deadline: float,
     portal: PortalFeed,
     logs: LogsFeed,
+    recorder: LiveRecorder,
     portal_frames: _PushFrames,
     logs_frames: _PushFrames,
-    portal_socket: RecordingWebSocket,
-    logs_socket: RecordingWebSocket,
+    portal_socket: AsyncIterator[object],
+    logs_socket: AsyncIterator[object],
     mints: frozenset[str] | None,
 ) -> None:
-    """Pump portal frames first when they are ready, then logs, until duration or close."""
-    portal_agen = aiter(portal_socket)
-    logs_agen = aiter(logs_socket)
-    portal_open = True
-    logs_open = True
+    """Feed each arrival to its feed, alternating between sockets, until the deadline or both end.
+
+    Each socket is drained by its own reader task into its own bounded inbox. When both have
+    arrivals queued, the turn passes to the other socket, so a burst on one cannot run ahead
+    of the other. A quiet poll never cancels a socket. A frame is recorded and pumped while the
+    clock is pinned to its arrival ts, and the pin releases before the next arrival is taken.
+    """
+    wake = asyncio.Event()
+    inboxes: dict[str, asyncio.Queue[Arrival]] = {
+        PORTAL_STREAM: asyncio.Queue(maxsize=_INBOX_DEPTH),
+        LOGS_STREAM: asyncio.Queue(maxsize=_INBOX_DEPTH),
+    }
+    readers = [
+        asyncio.create_task(
+            read_arrivals(
+                portal_socket,
+                stream=PORTAL_STREAM,
+                now=arrivals.now,
+                inbox=inboxes[PORTAL_STREAM],
+                wake=wake,
+            )
+        ),
+        asyncio.create_task(
+            read_arrivals(
+                logs_socket,
+                stream=LOGS_STREAM,
+                now=arrivals.now,
+                inbox=inboxes[LOGS_STREAM],
+                wake=wake,
+            )
+        ),
+    ]
+    open_streams = {PORTAL_STREAM, LOGS_STREAM}
+    last = LOGS_STREAM
     try:
-        while clock.monotonic() < deadline and (portal_open or logs_open):
+        while open_streams:
             remaining = deadline - clock.monotonic()
             if remaining <= 0:
                 break
-            if portal_open:
-                slice_s = min(_POLL_S, remaining) if logs_open else remaining
-                status = await _take_portal(
-                    portal_agen, clock, slice_s, portal, portal_frames, mints=mints
-                )
-                if status is _CLOSED:
-                    portal_open = False
-                elif status is not _WAIT:
-                    continue
-            if logs_open:
-                left = deadline - clock.monotonic()
-                slice_s = min(_POLL_S, left) if portal_open else left
-                logs_open = await _take_logs(logs_agen, clock, slice_s, logs, logs_frames)
+            arrival = _take_next(inboxes, last)
+            if arrival is None:
+                await _wait_for_arrival(wake, clock, min(_POLL_S, remaining))
+                wake.clear()
+                continue
+            last = arrival.stream
+            payload = arrival.payload
+            if payload is None:
+                if arrival.failure is not None:
+                    raise arrival.failure
+                open_streams.discard(arrival.stream)
+                continue
+            clock.pin(arrival.ts)
+            try:
+                recorder.record_frame({"stream": arrival.stream, "payload": payload})
+                if arrival.stream != PORTAL_STREAM:
+                    await _apply(logs, logs_frames, payload)
+                elif _portal_allowed(payload, mints):
+                    await _apply(portal, portal_frames, payload)
+            finally:
+                clock.release()
     finally:
-        await _aclose(portal_agen)
-        await _aclose(logs_agen)
+        for reader in readers:
+            reader.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
+        await _aclose(portal_socket)
+        await _aclose(logs_socket)
 
 
 async def _record_session(
@@ -270,7 +262,7 @@ async def _record_session(
     rng_seed: int,
     max_age_s: float,
     max_observations: int,
-    ws_url: str,
+    portal_ws_url: str,
 ) -> Path:
     pinned = PinnedClock(clock)
     recorder = recorder_factory(dataset_dir, clock=pinned)
@@ -325,27 +317,21 @@ async def _record_session(
                     bridge=bridge,
                     limiter=limiter,
                 )
-                portal_socket = RecordingWebSocket(
-                    feed_transport.open_websocket(ws_url, stream=PORTAL_STREAM),
-                    recorder,
-                    stream=PORTAL_STREAM,
-                    clock=pinned,
-                )
-                logs_socket = RecordingWebSocket(
-                    feed_transport.open_websocket(_ws_url(endpoint), stream=LOGS_STREAM),
-                    recorder,
-                    stream=LOGS_STREAM,
-                    clock=pinned,
-                )
                 await _pump(
                     clock=pinned,
+                    arrivals=clock,
                     deadline=deadline,
                     portal=portal,
                     logs=logs,
+                    recorder=recorder,
                     portal_frames=portal_frames,
                     logs_frames=logs_frames,
-                    portal_socket=portal_socket,
-                    logs_socket=logs_socket,
+                    portal_socket=feed_transport.open_websocket(
+                        portal_ws_url, stream=PORTAL_STREAM
+                    ),
+                    logs_socket=feed_transport.open_websocket(
+                        _ws_url(endpoint), stream=LOGS_STREAM
+                    ),
                     mints=mints,
                 )
             recorder.seal(portal.gaps, logs.gaps)
@@ -368,7 +354,7 @@ def record_session(
     rng_seed: int = 0,
     max_age_s: float = _MAX_AGE_S,
     max_observations: int = _MAX_OBSERVATIONS,
-    ws_url: str | None = None,
+    portal_ws_url: str | None = None,
 ) -> Path:
     """Record a paper session into ``dataset_dir`` and seal it.
 
@@ -377,7 +363,7 @@ def record_session(
     """
     if isinstance(duration_s, bool) or not isinstance(duration_s, (int, float)) or duration_s <= 0:
         raise ValueError("duration_s must be positive")
-    portal_url = ws_url if ws_url is not None else _ws_url(endpoint)
+    portal_url = portal_ws_url if portal_ws_url is not None else _ws_url(endpoint)
     return asyncio.run(
         _record_session(
             dataset_dir,
@@ -392,7 +378,7 @@ def record_session(
             rng_seed=rng_seed,
             max_age_s=max_age_s,
             max_observations=max_observations,
-            ws_url=portal_url,
+            portal_ws_url=portal_url,
         )
     )
 
@@ -406,11 +392,14 @@ async def _paper_cycle(root: object) -> None:
         "logsSubscribe",
         [{"mentions": [PUMP_PROGRAM_ID]}, {"commitment": "confirmed"}],
     )
-    cycles_run.value += 1
 
 
 async def _until_stopped(root: object, clock: Clock) -> None:
-    """Repeat the paper cycle until SIGTERM or SIGINT, then return."""
+    """Subscribe once, then wait until SIGTERM or SIGINT.
+
+    The subscriptions are sent once. The wait only checks for a stop signal, so repeated
+    cycles never stack server-side subscriptions.
+    """
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     installed: list[signal.Signals] = []
@@ -421,10 +410,8 @@ async def _until_stopped(root: object, clock: Clock) -> None:
             continue
         installed.append(sig)
     try:
+        await _paper_cycle(root)
         while not stop.is_set():
-            await _paper_cycle(root)
-            if stop.is_set():
-                break
             await clock.sleep(1.0)
     finally:
         for sig in installed:
@@ -481,10 +468,9 @@ def serve_once(
 ) -> int:
     """Build the live-data paper root and run one cycle, or until a stop signal.
 
-    ``once`` is exactly one paper cycle. Without it, the same cycle repeats
-    until SIGTERM or SIGINT. Returns 0. ``cycles_run`` is the count from this call.
+    ``once`` is exactly one paper cycle. Without it, the subscriptions are sent once and
+    the process waits until SIGTERM or SIGINT. Returns 0.
     """
-    cycles_run.value = 0
     asyncio.run(
         _serve(
             endpoint=endpoint,
