@@ -28,13 +28,17 @@ async def check_mint(mint: str, rpc: RpcClient) -> dict[str, Any]:
         parsed = data.get("parsed", {}) if isinstance(data, dict) else {}
         info = parsed.get("info", {})
 
-        mint_authority = info.get("mintAuthority")
-        freeze_authority = info.get("freezeAuthority")
+        if "mintAuthority" not in info or "freezeAuthority" not in info:
+            return {"ok": False, "error": "authority fields missing from mint account"}
+        mint_authority = info["mintAuthority"]
+        freeze_authority = info["freezeAuthority"]
         decimals = info.get("decimals")
         supply = info.get("supply")
         is_initialized = info.get("isInitialized")
         if decimals is None or is_initialized is None:
             return {"ok": False, "error": "Mint account not found or not a token mint"}
+        if is_initialized is not True:
+            return {"ok": False, "error": "mint account is not initialized"}
         extensions = info.get("extensions") or []
 
         return {
