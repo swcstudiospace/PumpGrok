@@ -8,7 +8,8 @@ Deliberate divergences from the oracle:
 - The pump.fun ``Bearer`` header is dropped: no settings field carries a
   pump.fun key, so there is nothing to send.
 - Every ``_get`` call records a per-source health flag in
-  ``Analyzer.health`` (keyed by endpoint path, ``True`` on success). No
+  ``Analyzer.health``, keyed by endpoint template (``/coins/{mint}``) so the
+  map stays bounded by endpoint count, not by mint; ``True`` on success. No
   entry decision may rest solely on pump.fun REST (R47); the flag lets the
   pipeline tell a healthy empty answer from a failed provider.
 - ``_veto_reason`` returns ASCII codes (``creator_share_veto``,
@@ -34,6 +35,7 @@ import httpx
 from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
+from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +52,11 @@ HOLDER_LIMIT = 50
 # so they set the maximum risk instead of adding to it.
 CREATOR_SHARE_VETO = 0.25
 TOP5_SHARE_VETO = 0.80
+
+# Health keys: endpoint templates, so ``Analyzer.health`` is bounded by endpoint count.
+CARD_ENDPOINT = "/coins/{mint}"
+HOLDERS_ENDPOINT = "/coins/{mint}/holders"
+TRADES_ENDPOINT = "/trades/all/{mint}"
 
 
 class Analyzer:
@@ -89,42 +96,52 @@ class Analyzer:
             raise RuntimeError("Analyzer used outside `async with`")
         return self._client
 
-    def source_health(self, path: str) -> bool:
-        """Last fetch ok for this endpoint path; True when never fetched."""
-        return self.health.get(path, True)
+    def source_health(self, endpoint: str) -> bool:
+        """Last fetch ok for this endpoint template; True when never fetched."""
+        return self.health.get(endpoint, True)
 
     # -- network -----------------------------------------------------------
 
-    async def _get(self, path: str, **params: Any) -> Any:
+    async def _get(self, path: str, *, health_key: str | None = None, **params: Any) -> Any:
+        """GET one endpoint. Its health is recorded under ``health_key``, default the path."""
+        key = health_key or path
+        client = self.client  # a usage error, not a provider outage: raised before the try
         try:
-            resp = await self.client.get(path, params=params)
+            resp = await client.get(path, params=params)
             resp.raise_for_status()
-            self.health[path] = True
+            self.health[key] = True
             return resp.json()
         except Exception as exc:
             log.warning("request %s failed: %s", path, type(exc).__name__)
-            self.health[path] = False
+            self.health[key] = False
             return None
+
+    def _rows(self, endpoint: str, payload: Any) -> list[Any]:
+        """Rows of a list payload. Any other shape is a failed source: no rows, health False."""
+        if isinstance(payload, list):
+            return payload
+        self.health[endpoint] = False
+        return []
 
     async def fetch(self, mint: str) -> tuple[dict[str, Any], list[Holder], list[Trade]]:
         """Card, holders, and trades: three parallel requests."""
         info, holders_raw, trades_raw = await asyncio.gather(
-            self._get(f"/coins/{mint}"),
-            self._get(f"/coins/{mint}/holders", limit=HOLDER_LIMIT),
-            self._get(f"/trades/all/{mint}", limit=TRADE_LIMIT),
+            self._get(f"/coins/{mint}", health_key=CARD_ENDPOINT),
+            self._get(f"/coins/{mint}/holders", health_key=HOLDERS_ENDPOINT, limit=HOLDER_LIMIT),
+            self._get(f"/trades/all/{mint}", health_key=TRADES_ENDPOINT, limit=TRADE_LIMIT),
         )
         if not isinstance(info, dict):
             info = {}
         holders = [
             parsed
-            for h in (holders_raw or [])
+            for h in self._rows(HOLDERS_ENDPOINT, holders_raw)
             if isinstance(h, dict)
             for parsed in [_safe_parse(parse_holder, h)]
             if parsed is not None
         ]
         trades = [
             parsed
-            for t in (trades_raw or [])
+            for t in self._rows(TRADES_ENDPOINT, trades_raw)
             if isinstance(t, dict)
             for parsed in [_safe_parse(parse_trade, t)]
             if parsed is not None
@@ -238,7 +255,10 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
             token.market_cap_sol = _to_lamports(info["market_cap"])
     if info.get("virtual_sol_reserves") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            token.sol_in_curve = _to_base_units(info["virtual_sol_reserves"])
+            # Provider reserves are lamports (the repo convention in datafeed/logs.py): an
+            # integer amount with no SOL scaling. Curve progress is derived from it, so refresh it.
+            token.sol_in_curve = _to_int_units(info["virtual_sol_reserves"], per_unit=1)
+            token.curve_progress = min(1.0, token.sol_in_curve / CURVE_COMPLETION_LAMPORTS)
     return token
 
 
@@ -317,7 +337,8 @@ def _wallet_diversity(buys: list[Trade]) -> float:
 
     volume: dict[str, int] = {}
     for t in buys:
-        volume[t.wallet] = volume.get(t.wallet, 0) + t.sol_amount
+        if t.wallet:  # no identity, no concentration: the same rule as the uniqueness count
+            volume[t.wallet] = volume.get(t.wallet, 0) + t.sol_amount
     total = sum(volume.values())
     concentration = max(volume.values()) / total if total else 1.0
     return max(0.0, min(1.0, uniqueness * (1.0 - concentration)))
