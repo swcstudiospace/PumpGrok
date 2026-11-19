@@ -13,7 +13,8 @@ import asyncio
 import contextlib
 import os
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,7 +23,10 @@ from pydantic import Field
 from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
+from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
+from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.views import drawdown_fraction
 from pumpgrok.tools._common import meta_now
 
 __all__ = [
@@ -94,11 +98,50 @@ def _write_report(reports_dir: Path, target: Path, body: str) -> None:
         raise
 
 
+def _period_start(period: Literal["daily", "weekly"], as_of: datetime) -> datetime:
+    """UTC start of the calendar day or ISO week (Monday) holding ``as_of``."""
+    day = as_of.date()
+    first = day if period == "daily" else day - timedelta(days=day.weekday())
+    return datetime(first.year, first.month, first.day, tzinfo=UTC)
+
+
+def _period_max_drawdown(
+    store: LedgerStore, period: Literal["daily", "weekly"], as_of: datetime
+) -> Decimal:
+    """Largest drawdown of the ledger fold over the report period, through ``as_of``.
+
+    The fold starts at genesis, so peaks set before the period still count. The
+    drawdown in force when the period opens is kept even when no event falls
+    inside it. Events after ``as_of`` are not folded.
+    """
+    start = _period_start(period, as_of)
+    state = initial_state(
+        source=store.get_meta("source") or "paper",
+        initial_equity_lamports=int(store.get_meta("initial_equity_lamports") or 0),
+        day_utc=as_of.strftime("%Y-%m-%d"),
+    )
+    deposits = position_deposits_by_seq(store)
+    worst = Decimal("0")
+    for event in store.read(limit=None):
+        ts = datetime.fromisoformat(event["ts_utc"])
+        if ts > as_of:
+            continue
+        state = reduce(state, event, deposits)
+        drawdown = drawdown_fraction(state)
+        # The last event before the period sets the opening drawdown; in-period events raise it.
+        worst = drawdown if ts < start else max(worst, drawdown)
+    return worst
+
+
 async def run_render_report(
     inp: RenderReportIn, store: LedgerStore, clock: Clock, reports_dir: Path
 ) -> dict[str, Any]:
     """Fold the ledger, render markdown, write atomically."""
     as_of = inp.as_of or datetime.fromtimestamp(clock.now(), UTC)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=UTC)
+    as_of = as_of.astimezone(UTC)
+    max_drawdown = _period_max_drawdown(store, inp.period, as_of)
     day = as_of.strftime("%Y-%m-%d")
     trades = 0
     closed = 0
@@ -134,7 +177,7 @@ async def run_render_report(
         open_positions=open_positions,
         rejected=rejected,
         halts=halts,
-        drawdown="0",
+        drawdown=str(max_drawdown),
         delivery=delivery,
     )
     target = report_path_for(reports_dir, inp.period, day)
@@ -146,7 +189,7 @@ async def run_render_report(
         "win_rate": None,
         "profit_factor": None,
         "realised_lamports": realised,
-        "max_drawdown_fraction": "0",
+        "max_drawdown_fraction": str(max_drawdown),
         "rejected_signals": rejected,
         "open_positions": open_positions,
         "halts": halts,
