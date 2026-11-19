@@ -11,7 +11,11 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
+from pumpgrok.core.errors import DataStale
 from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
+
+# Payload shapes the fee parser cannot walk; each becomes a failed estimate.
+_MALFORMED = (ArithmeticError, TypeError, ValueError)
 
 
 async def estimate_priority_fee(
@@ -62,7 +66,7 @@ async def estimate_priority_fee(
                 "Use with ComputeBudgetProgram.set_compute_unit_price."
             ),
         }
-    except RpcError as exc:
+    except (RpcError, DataStale) as exc:
         return {"ok": False, "error": str(exc)}
-    except Exception:
+    except _MALFORMED:
         return {"ok": False, "error": "priority fee estimate failed"}
