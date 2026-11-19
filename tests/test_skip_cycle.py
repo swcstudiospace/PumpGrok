@@ -324,6 +324,9 @@ def test_doctor_reports_absent_subsystems_as_warnings(
     assert "ok    tools (pumpgrok.tools)" in out
     assert "ok    engine (pumpgrok.engine)" in out
     assert "ok    supervisor (pumpgrok.supervisor)" in out
-    for absent in ("gateway", "reports"):
-        assert f"warn  {absent} (pumpgrok.{absent}): not-yet-implemented" in out
+    # DOC-01 moved gateway -> pumpgrok.grok.gateway and reports -> pumpgrok.reporting
+    # (src/pumpgrok/doctor.py SUBSYSTEMS); both modules now resolve, so the doctor
+    # reports them ok under their new paths instead of warn/not-yet-implemented.
+    assert "ok    gateway (pumpgrok.grok.gateway)" in out
+    assert "ok    reports (pumpgrok.reporting)" in out
     assert not (tmp_path / "var").exists()
