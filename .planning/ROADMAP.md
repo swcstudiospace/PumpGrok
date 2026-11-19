@@ -376,6 +376,6 @@ Ship checkpoints, where the owner approves receipts in batches as human:SomeRand
 | 14. Event-driven desk and Grok gateway | 0/9 | Not started | - |
 | 15. Strategy framework and multi-strategy paper | 0/8 | Not started | - |
 | 16. Backtest v2 and autonomous evaluation | 0/7 | Not started | - |
-| 17. Risk hardening and promotion lifecycle | 7/7 | Implemented on seat branches at integration head c53d3c0; make lint, typecheck, test (91.37% against the 89.9% floor) and audit pass; check.sh passes; criterion 14 exits 3; criterion 12 lists four contract files; criterion 13 measured (smoke-10m 1dffa784, trading-smoke a4461e80); criterion 1 deferred to deployment (D17-2). Branches await draft PRs and owner merge. | - |
+| 17. Risk hardening and promotion lifecycle | 7/7 | Code complete on stack head 71ac14d (32 commits): make lint, typecheck, test (coverage 91.45% against the 89.9% floor) and audit pass; check.sh passes; criterion 14 exits 3; criterion 12 lists six contract files; criterion 13 measured (smoke-10m 1dffa784, trading-smoke a4461e80). Draft PRs #76-#100 (code, merge in order) and #101 (planning) are open; nothing merged. Criterion 1 deferred to deployment (D17-2). Phase closes on owner merge. | - |
 | 18. Dormant live path, amendment-gated | 0/11 | Not started | - |
 | 19. Observability, docs, hardening and milestone audit | 0/9 | Not started | - |
