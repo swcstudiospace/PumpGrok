@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 class _ConfirmStagesMixin:
     if TYPE_CHECKING:
         _cancelled: set[str]
+        _latency_done: set[str]
         _entry_policy: EntryPolicy | None
         _clock: Clock
         _inflight: _InflightOrders
@@ -89,6 +90,7 @@ class _ConfirmStagesMixin:
                 f"order_id={order_id} outcome UNKNOWN; never retried",
                 stage="CONFIRMING",
             ) from None
+        self._latency_done.add(order_id)
         return latency_s, dropped
 
     async def _confirm_refuse(
@@ -161,7 +163,17 @@ class _ConfirmStagesMixin:
                     correlation_id=correlation_id,
                 ) from None
         else:
-            curve1 = await self._read_curve(request.mint)
+            try:
+                curve1 = await self._read_curve(request.mint)
+            except Exception as exc:
+                raise await self._confirm_refuse(
+                    request,
+                    order_id=order_id,
+                    reason="data_unavailable",
+                    detail=f"SELL CONFIRMING curve read failed: {type(exc).__name__}",
+                    ledger_source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
         if curve1 is None:
             raise await self._confirm_refuse(
                 request,

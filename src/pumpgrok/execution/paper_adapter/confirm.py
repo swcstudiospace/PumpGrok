@@ -60,4 +60,9 @@ class _ConfirmMixin(_ConfirmStagesMixin):
             ledger_source=ledger_source,
             correlation_id=correlation_id,
         )
+        # Settlement re-check: a cancel recorded after the first check must
+        # refuse here rather than be silently ignored (EX-03).
+        await self._confirm_cancel_check(
+            request, order_id=order_id, ledger_source=ledger_source, correlation_id=correlation_id
+        )
         return (curve1, latency_s, recheck.size_lamports)
