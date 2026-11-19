@@ -84,22 +84,30 @@ def test_stale_rent_is_not_used_anywhere_in_the_default() -> None:
 
 def test_ata_rent_is_charged_on_first_buy_only() -> None:
     fees = FeeModelV2()
-    first = fees.buy_debit_v2(SIZE, first_buy=True)
-    repeat = fees.buy_debit_v2(SIZE, first_buy=False)
+    # EXEC-D-36: FeeModelV2.buy_debit_v2 was deleted; buy_network_cost is the successor.
+    assert not hasattr(FeeModelV2, "buy_debit_v2")
+    assert not hasattr(fees, "buy_debit_v2")
+    # v1 buy_debit excludes rent and stays the base debit.
+    assert fees.buy_debit(SIZE) == SIZE + fees.network_cost()
+    assert fees.buy_network_cost(first_buy=True) == fees.network_cost() + ATA_RENT_OFFLINE_LAMPORTS
+    assert fees.buy_network_cost(first_buy=False) == fees.network_cost()
+    first = SIZE + fees.buy_network_cost(first_buy=True)
+    repeat = SIZE + fees.buy_network_cost(first_buy=False)
     assert first == SIZE + fees.network_cost() + ATA_RENT_OFFLINE_LAMPORTS
     assert repeat == SIZE + fees.network_cost()
     assert type(first) is int and type(repeat) is int
 
 
 def test_pumpportal_term_is_zero_unless_the_builder_is_selected() -> None:
-    assert FeeModelV2().pumpportal_fee_bps == 0
-    base = FeeModelV2().buy_debit_v2(SIZE, first_buy=False)
-    assert FeeModelV2().buy_debit_v2(SIZE, first_buy=False, pumpportal_builder=True) == base
-    priced = FeeModelV2(pumpportal_fee_bps=100)
-    assert priced.buy_debit_v2(SIZE, first_buy=False, pumpportal_builder=False) == base
-    assert priced.buy_debit_v2(SIZE, first_buy=False, pumpportal_builder=True) == (
-        base + SIZE * 100 // 10_000
+    # PumpPortal term removed: no pumpportal_fee_bps field and no builder switch on buy_debit_v2.
+    assert not hasattr(FeeModelV2(), "pumpportal_fee_bps")
+    assert not hasattr(FeeModelV2, "buy_debit_v2")
+    # v2 network cost carries only base+priority plus the ATA rent on a (re-)entry.
+    assert FeeModelV2().buy_network_cost(first_buy=False) == FeeModelV2().network_cost()
+    assert FeeModelV2().buy_network_cost(first_buy=True) == (
+        FeeModelV2().network_cost() + ATA_RENT_OFFLINE_LAMPORTS
     )
+    assert FeeModel().network_cost() == BASE_FEE_LAMPORTS + FeeModel().priority_fee()
 
 
 def test_priority_cost_is_clamped_to_the_cap_before_the_formula() -> None:
@@ -212,7 +220,8 @@ def test_rent_follows_the_first_buy_of_a_mint_across_a_restart(tmp_path: Any) ->
             seat="bot-06-exit",
         )
         # A restart composes a new adapter over the same ledger; the first-buy decision
-        # reads the recorded fills, so the repeat buy of the same mint pays no rent.
+        # reads the recorded fills. The mint was fully closed (flat), so the repeat buy is
+        # a re-entry and pays the ATA rent again (charge_on_reentry, B04b EX-06).
         second = await _place(
             _adapter(store, clock, replay), clock, _order(TICKET_B, Side.BUY, ids.ulid())
         )
@@ -221,11 +230,12 @@ def test_rent_follows_the_first_buy_of_a_mint_across_a_restart(tmp_path: Any) ->
     first, sold, second = asyncio.run(scenario())
     assert sold.filled_units == first.filled_units
     assert first.network_cost_lamports == base + ATA_RENT_OFFLINE_LAMPORTS
-    assert second.network_cost_lamports == base
+    assert second.network_cost_lamports == base + ATA_RENT_OFFLINE_LAMPORTS
+    assert second.network_cost_lamports == 1_497_440
     fills = _buy_fill_payloads(store)
     assert [f["network_cost_lamports"] for f in fills] == [
         base + ATA_RENT_OFFLINE_LAMPORTS,
-        base,
+        base + ATA_RENT_OFFLINE_LAMPORTS,
     ]
     assert fills[0]["cash_delta_lamports"] == -(
         fills[0]["filled_lamports"] + base + ATA_RENT_OFFLINE_LAMPORTS
