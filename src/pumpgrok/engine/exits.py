@@ -84,7 +84,8 @@ def exit_signal(
                 detail=f"drawdown {drawdown:.1f}% from peak {pnl_pct(position, peak):+.1f}%",
             )
 
-    if cfg.max_hold_seconds and position.opened_at:
+    # Unknown entry time (None): the time rule holds the position.
+    if cfg.max_hold_seconds and position.opened_at is not None:
         held = now - position.opened_at
         if held >= cfg.max_hold_seconds:
             return ExitSignal(
