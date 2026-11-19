@@ -731,7 +731,8 @@ tools:
 Differences from the programming-desk file that the port must carry: `name` is the dotted
 registry id and `backend` repeats it (the gateway is a thin wrapper over the in-process
 `ToolRegistry`, D2 `services/desk-gateway/`; the ported G-7 `TOOL_NAME_RE` accepts dots,
-R19); `packs_allowed: false` for every pumpgrok seat (no tool-packs in D2); `approval_id`
+R19); `packs_allowed: false` for every pumpgrok seat (`contracts/tool-packs/` is required by
+G-7 but holds no pack in D2); `approval_id`
 pattern `apr-<16 hex>` is the `ApprovalRecord.id` format in `docs/design/interfaces.md`
 section 9; `decision_id`, `order_id` and `correlation_id` are ULIDs from
 `src/pumpgrok/core/ids.py` (R29; child spans `<ulid>.<n>`); money fields are integers in
