@@ -28,7 +28,6 @@ BASELINE: Counter[tuple[str, str]] = Counter(
         ("supervisor/scheduler/supervisor.py", "autonomy_level"): 1,
         ("supervisor/scheduler/supervisor.py", "ready"): 1,
         ("supervisor/seat_task.py", "_latch_unreadable_ledger"): 1,
-        ("tools/onchain/priority_fee.py", "estimate_priority_fee"): 1,
     }
 )
 

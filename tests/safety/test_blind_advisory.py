@@ -71,6 +71,7 @@ def _handler(
                 result = {
                     "context": {"slot": 11},
                     "value": {
+                        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                         "data": {
                             "parsed": {
                                 "info": {
@@ -82,7 +83,7 @@ def _handler(
                                     "extensions": [],
                                 }
                             }
-                        }
+                        },
                     },
                 }
             else:
