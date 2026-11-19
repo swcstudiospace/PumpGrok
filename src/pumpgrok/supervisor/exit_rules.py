@@ -200,10 +200,15 @@ class ExitRules:
         """Replace the exit thresholds; peaks, held-out sells and open positions carry over."""
         self._book.exits = exits
 
-    async def _price(self, mint: str) -> int:
+    async def _price(self, mint: str) -> int | None:
+        """The curve's price at ``PRICE_SCALE``, or None when there is no quote.
+
+        None is no quote: the watcher holds the position, with no sell and no peak change.
+        A real zero price is a quote and stays 0.
+        """
         snapshot = await self._curves.curve(mint)
         if snapshot is None or snapshot.t_units <= 0:
-            return 0
+            return None
         return _scaled_price(spot(snapshot.s_lamports, snapshot.t_units))
 
     async def _sell(self, position: ExitPosition, price: int, reason: str) -> None:
