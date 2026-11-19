@@ -346,3 +346,29 @@ async def test_shutdown_never_cancels_a_caller_outside_the_supervisor(tmp_path: 
         assert await caller == "returned"
     finally:
         store.close()
+
+
+def test_evaluate_halts_reports_an_already_active_halt(tmp_path: Path) -> None:
+    """S-B2: a halt already latched returns the explicit verdict, not None."""
+    clock = FixtureClock(start=DAY_ONE)
+    store = _store(tmp_path)
+    try:
+        store.append(
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
+            correlation_id="test",
+            idempotency_key="halt|manual",
+            type="HaltSet",
+            payload={
+                "source": "paper",
+                "reason": "manual",
+                "detail": "operator",
+                "equity_lamports": EQUITY,
+                "day_start_equity_lamports": EQUITY,
+                "set_by": "risk_engine",
+            },
+        )
+        assert _engine(store, clock).evaluate_halts() == "already_active"
+        assert len(store.read(types=["HaltSet"], limit=None)) == 1
+    finally:
+        store.close()
