@@ -176,7 +176,7 @@ def test_enrich_fills_only_missing_fields() -> None:
     tok = token(description="already here")
     enrich_token(
         tok,
-        {"description": "card", "twitter": "t", "virtual_sol_reserves": 30_000_000_000},
+        {"description": "card", "twitter": "t", "virtual_sol_reserves": 30},
     )
     assert tok.description == "already here"
     assert tok.twitter == "t"
@@ -349,9 +349,9 @@ def test_empty_wallet_buys_do_not_dilute_diversity() -> None:
     assert _wallet_diversity(named + anonymous) == pytest.approx(0.875)
 
 
-def test_enrich_reads_reserves_as_lamports_and_refreshes_progress() -> None:
-    """ANA-04 / MISC-D-03: reserves are lamports, and curve progress follows them."""
+def test_enrich_reads_reserves_as_sol_and_refreshes_progress() -> None:
+    """ANA-05: provider reserves are SOL; they are scaled to lamports before curve progress."""
     tok = token()
-    enrich_token(tok, {"virtual_sol_reserves": 42_500_000_000})
+    enrich_token(tok, {"virtual_sol_reserves": 42.5})
     assert tok.sol_in_curve == 42_500_000_000
     assert tok.curve_progress == pytest.approx(0.5)
