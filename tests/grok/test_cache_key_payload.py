@@ -35,7 +35,7 @@ def test_key_is_canonical_request_hash_over_the_reviewed_payload() -> None:
             "prompt_sha": PROMPT_SHA,
             "schema": "verdict.v1",
             "sanitizer_version": "1",
-            "input": {"mint": "M1", "buyers": 9, "prerank": "0.80"},
+            "input": {"mint": "M1", "buyers": 9, "prerank": {"decimal": "0.80"}},
         }
     )
     assert cache_key(**base_kwargs()) == expected
@@ -45,13 +45,19 @@ def test_decimal_is_stringified_and_scalars_pass_through() -> None:
     assert scalar_fields({"a": 1, "b": "x", "c": Decimal("0.50")}) == {
         "a": 1,
         "b": "x",
-        "c": "0.50",
+        "c": {"decimal": "0.50"},
     }
 
 
-def test_payload_holds_only_ints_and_strings() -> None:
+def test_payload_holds_only_ints_strings_and_decimal_tags() -> None:
     payload = scalar_fields({"a": 1, "b": "x", "c": Decimal("2.5")})
-    assert all(type(value) in (int, str) for value in payload.values())
+    assert all(type(value) in (int, str, dict) for value in payload.values())
+
+
+def test_decimal_and_matching_string_have_different_keys() -> None:
+    decimal_key = cache_key(**base_kwargs(fields={"prerank": Decimal("0.5")}))
+    string_key = cache_key(**base_kwargs(fields={"prerank": "0.5"}))
+    assert decimal_key != string_key
 
 
 @pytest.mark.parametrize(

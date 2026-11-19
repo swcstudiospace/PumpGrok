@@ -308,7 +308,7 @@ def _result(
 ) -> StrategyRun:
     rows = store.read(limit=None)
     book = round_trips(rows, load_refs(store))
-    curve = _equity_curve(store)
+    curve = _equity_curve(store, rows)
     elapsed = _elapsed_days(source.events)
     metrics = summarize_v2(
         book,
@@ -336,11 +336,11 @@ def _net(store: LedgerStore) -> int:
     return desk_net_lamports(store)
 
 
-def _equity_curve(store: LedgerStore) -> tuple[int, ...]:
+def _equity_curve(store: LedgerStore, rows: Sequence[Mapping[str, Any]]) -> tuple[int, ...]:
     deposits = position_deposits_by_seq(store)
     state = _genesis(store)
     points: list[int] = []
-    for row in store.read(limit=None):
+    for row in rows:
         state = reduce(state, row, deposits)
         if row.get("type") == "FillRecorded":
             points.append(equity_lamports(state))
@@ -350,8 +350,9 @@ def _equity_curve(store: LedgerStore) -> tuple[int, ...]:
 def _elapsed_days(events: Sequence[Mapping[str, Any]]) -> Decimal:
     if not events:
         return Decimal(0)
-    start = Decimal(str(_event_stamp(events[0])))
-    end = Decimal(str(_event_stamp(events[-1])))
+    # EXEC-EX-40: order-free min/max; first/last assume a sorted loader.
+    stamps = [Decimal(str(_event_stamp(event))) for event in events]
+    start, end = min(stamps), max(stamps)
     if end < start:
         return Decimal(0)
     return (end - start) / _SECONDS_PER_DAY

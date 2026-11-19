@@ -31,6 +31,7 @@ from pumpgrok.datafeed.transport import Arrival, RecordingJsonRpc, read_arrivals
 from pumpgrok.datafeed.watchset import WatchSet
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
+from pumpgrok.events.store import EventStore
 from pumpgrok.replay.clock import Clock, format_ts_utc
 from pumpgrok.replay.live_recorder import (
     CONFIG_STREAM,
@@ -289,12 +290,16 @@ async def _record_session(
             limiter = RollingWindowLimiter(pinned, limit=_RATE_LIMIT, window_s=_RATE_WINDOW_S)
             watch = WatchSet(max_watched_mints=WATCH_CAPACITY)
             mintbook = MintBook(watch=watch)
+            # EVT-SW-02/03: wire the sidecar bus durably and drain it; the supervisor
+            # live_paper root needs the same wiring (cross-seat, reported separately).
+            event_store = EventStore(scratch_path / "feed-events.sqlite")
             bridge = build_observation_bridge(
                 clock=pinned,
                 handler=_no_event_consumers,
                 dlq=_refuse_dead_letter,
                 recorder=recorder,
                 price=root.prices,
+                store=event_store,
             )
             portal_frames, logs_frames = _PushFrames(), _PushFrames()
             cursor = scratch_path / "feed-cursor.sqlite"
@@ -317,6 +322,8 @@ async def _record_session(
                     bridge=bridge,
                     limiter=limiter,
                 )
+                await bridge.recover()
+                await bridge.start()
                 await _pump(
                     clock=pinned,
                     arrivals=clock,
@@ -336,6 +343,7 @@ async def _record_session(
                 )
             recorder.seal(portal.gaps, logs.gaps)
         finally:
+            await bridge.close()
             root.close()
     return dataset_dir
 

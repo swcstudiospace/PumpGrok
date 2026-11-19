@@ -121,16 +121,12 @@ def evaluate_candidate(
             reason=REASON_OUT_OF_BOUNDS,
             detail=str(err),
         )
-    if (
-        search.trial_count > MAX_ELIGIBLE_TRIALS
-        or search.trial_count > MAX_ALLOWED_TRIALS
-        or not search.eligible_for_promotion
-    ):
+    if search.trial_count > MAX_ELIGIBLE_TRIALS or not search.eligible_for_promotion:
         return GateVerdict(
             promotion_eligible=False,
             reason=REASON_TOO_MANY_TRIALS,
             detail=(
-                f"trial_count {search.trial_count} passes the "
+                f"trial_count {search.trial_count} exceeds the "
                 f"{MAX_ELIGIBLE_TRIALS} eligible-trial limit "
                 f"(ledger refuses past {MAX_ALLOWED_TRIALS})"
             ),

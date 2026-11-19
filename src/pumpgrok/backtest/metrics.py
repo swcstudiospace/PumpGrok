@@ -1,9 +1,12 @@
-"""Bounded backtest metrics with stated annualization (BT-05).
+"""Bounded backtest metrics v1 with stated annualization (BT-05).
 
-Summarizes one evaluation window from its fills plus the equity curve the
-window produced. Money stays integer base units (lamports, token units);
-Decimal is used only for ratios. Every reported figure describes realized
-history; the module offers no forward-looking statements.
+EXEC-EX-16 / EXEC-D-16: v1 (per-fill Sharpe/win-rate) versus v2 (per-closed-trip
+in backtest/metrics_v2.py) now report under distinct names so one window can
+never yield two ambiguous Sharpes. Summarizes one evaluation window from its
+fills plus the equity curve the window produced. Money stays integer base
+units (lamports, token units); Decimal is used only for ratios. Every reported
+figure describes realized history; the module offers no forward-looking
+statements.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ __all__ = [
     "MetricsContext",
     "MetricsReport",
     "summarize",
+    "summarize_v1",
 ]
 
 #: Days per year used to annualize the Sharpe-style ratio. Crypto markets
@@ -129,7 +133,7 @@ def _sharpe_ratio(returns: Sequence[Decimal], elapsed_days: Decimal) -> Decimal:
     return mean / dispersion * scale
 
 
-def summarize(fills: Sequence[Fill], ctx: MetricsContext) -> MetricsReport:
+def summarize_v1(fills: Sequence[Fill], ctx: MetricsContext) -> MetricsReport:
     """Summarize one realized window from its fills and context curve.
 
     Raises ValueError when the curve length differs from the fill count,
@@ -188,3 +192,9 @@ def summarize(fills: Sequence[Fill], ctx: MetricsContext) -> MetricsReport:
         exposure_lamports=exposure,
         turnover_lamports=turnover,
     )
+
+
+# EXEC-EX-16 / EXEC-D-16: v1 keeps its per-fill Sharpe/win-rate definitions under
+# this distinct name; v2 (metrics_v2) is canonical. Alias retained for callers
+# outside this sweep batch (upgrade/window_metrics, cli).
+summarize = summarize_v1

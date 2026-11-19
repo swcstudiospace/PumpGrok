@@ -62,10 +62,16 @@ _SHA_RE = re.compile(r"[0-9a-f]{64}")
 
 
 def sanitize(text: str) -> str:
-    """NFKC-normalise, then drop control and format characters. Tab and newline survive."""
+    """NFKC-normalise, then drop control, format and surrogate characters.
+
+    EXEC-EX-17: Cs (lone surrogates) are dropped so the digest encode later
+    cannot raise UnicodeEncodeError out of admit().
+    """
     normalized = unicodedata.normalize("NFKC", text)
     return "".join(
-        ch for ch in normalized if ch in "\t\n" or unicodedata.category(ch) not in {"Cc", "Cf"}
+        ch
+        for ch in normalized
+        if ch in "\t\n" or unicodedata.category(ch) not in {"Cc", "Cf", "Cs"}
     )
 
 
@@ -172,6 +178,7 @@ class CircuitBreaker:
         self._failures = 0
         self._opened_at: float | None = None
         self._probe = False
+        self._generation = 0
 
     @property
     def llm_available(self) -> bool:
@@ -184,17 +191,30 @@ class CircuitBreaker:
             return False
         return self._clock.now() - self._opened_at >= BREAKER_COOLDOWN_S
 
-    def start(self) -> None:
-        """Mark a call as started. While half-open this is the single probe."""
+    def start(self) -> int:
+        """Mark a call as started. While half-open this is the single probe.
+
+        EXEC-EX-45: returns a start token; only the probe's own settle may clear
+        the flag, so a racing failure cannot free a probe still in flight.
+        """
         if self._opened_at is not None:
             self._probe = True
+        self._generation += 1
+        return self._generation
 
-    def record_success(self) -> None:
+    def _owns(self, token: int | None) -> bool:
+        return token is None or token == self._generation
+
+    def record_success(self, token: int | None = None) -> None:
+        if not self._owns(token):
+            return
         self._failures = 0
         self._opened_at = None
         self._probe = False
 
-    def record_failure(self) -> None:
+    def record_failure(self, token: int | None = None) -> None:
+        if not self._owns(token):
+            return
         now = self._clock.now()
         if self._opened_at is not None:
             self._opened_at = now
@@ -204,8 +224,10 @@ class CircuitBreaker:
         if self._failures >= BREAKER_FAILURES:
             self._opened_at = now
 
-    def abandon(self) -> None:
+    def abandon(self, token: int | None = None) -> None:
         """A started call was cancelled before any verdict; free the probe slot."""
+        if not self._owns(token):
+            return
         self._probe = False
 
 
@@ -238,22 +260,33 @@ class GrokGateway:
             return GrokOutcome("prefilter_skip", request.event_id, None, verdict.reason)
 
         text = sanitize(request.text)
-        try:
-            key = _request_key(request, text)
-            cached = self._cache.get(key)
-        except CacheUnavailable:
-            return _fallback(request, "cache_unavailable")
-
-        if cached is not None:
-            if cached.status == "ok":
-                return GrokOutcome("cache_hit", request.event_id, cached.response, None)
-            return _fallback(request, "cached_transport_error")
+        key, cached_outcome = self._lookup_cached(request, text)
+        if cached_outcome is not None:
+            return cached_outcome
+        assert key is not None
 
         pending = self._inflight.get(key)
         if pending is not None:
             return await _join_inflight(request, pending)
 
         return await self._own(request, text, key)
+
+    def _lookup_cached(
+        self, request: GrokRequest, text: str
+    ) -> tuple[str | None, GrokOutcome | None]:
+        try:
+            key = _request_key(request, text)
+            cached = self._cache.get(key)
+        except CacheUnavailable:
+            return None, _fallback(request, "cache_unavailable")
+        except UnicodeEncodeError:
+            # EXEC-EX-17: refuse rather than raise out of admit().
+            return None, _fallback(request, "invalid_text")
+        if cached is not None:
+            if cached.status == "ok":
+                return key, GrokOutcome("cache_hit", request.event_id, cached.response, None)
+            return key, _fallback(request, "cached_transport_error")
+        return key, None
 
     async def _own(self, request: GrokRequest, text: str, key: str) -> GrokOutcome:
         future: asyncio.Future[GrokOutcome] = asyncio.get_running_loop().create_future()
@@ -271,7 +304,7 @@ class GrokGateway:
     async def _call(self, request: GrokRequest, text: str, key: str) -> GrokOutcome:
         if not self._breaker.admits():
             return _fallback(request, "breaker_open")
-        started = False
+        token: int | None = None
         try:
             # The deadline covers the wait for an in-flight slot: a queued call is
             # bounded like any other and cannot reach the transport after its deadline.
@@ -281,21 +314,20 @@ class GrokGateway:
                 refusal = self._transport_refusal(request)
                 if refusal is not None:
                     return _fallback(request, refusal)
-                self._breaker.start()
-                started = True
+                token = self._breaker.start()
                 response: object = await self._transport(request, text)
         except TimeoutError:
-            if not started:  # timed out in the slot queue; the transport never ran
+            if token is None:  # timed out in the slot queue; the transport never ran
                 return _fallback(request, "timeout")
-            return self._failed(request, key, "timeout")
+            return self._failed(request, key, "timeout", token)
         except Exception:
-            return self._failed(request, key, "transport_error")
+            return self._failed(request, key, "transport_error", token)
         except BaseException:
-            if started:  # only the call that took the half-open probe may release it
-                self._breaker.abandon()
+            if token is not None:  # only the probe's own settle may release it
+                self._breaker.abandon(token)
             raise
         else:
-            return self._settled(request, key, response)
+            return self._settled(request, key, response, token)
 
     def _transport_refusal(self, request: GrokRequest) -> str | None:
         """Reason the transport may not run now, or None once one call is charged."""
@@ -309,18 +341,22 @@ class GrokGateway:
             return "budget_exhausted"
         return None
 
-    def _settled(self, request: GrokRequest, key: str, response: object) -> GrokOutcome:
+    def _settled(
+        self, request: GrokRequest, key: str, response: object, token: int | None = None
+    ) -> GrokOutcome:
         """Book a finished transport call. A reply that is not text is a transport failure."""
         if not isinstance(response, str):
-            return self._failed(request, key, "transport_error")
-        self._breaker.record_success()
+            return self._failed(request, key, "transport_error", token)
+        self._breaker.record_success(token)
         # The response is valid and already paid for; only the reuse is lost if caching fails.
         with contextlib.suppress(CacheUnavailable):
             self._cache.put_ok(key, agent=request.agent, response=response)
         return GrokOutcome("fresh", request.event_id, response, None)
 
-    def _failed(self, request: GrokRequest, key: str, reason: str) -> GrokOutcome:
-        self._breaker.record_failure()
+    def _failed(
+        self, request: GrokRequest, key: str, reason: str, token: int | None = None
+    ) -> GrokOutcome:
+        self._breaker.record_failure(token)
         with contextlib.suppress(CacheUnavailable):
             self._cache.put_error(key, agent=request.agent)
         return _fallback(request, reason)

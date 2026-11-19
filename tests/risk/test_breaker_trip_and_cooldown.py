@@ -184,7 +184,8 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
         assert refused.reason == "breaker_open"
         assert {row["id"]: row["status"] for row in refused.evaluated}["breaker_open"] == "fail"
         assert len(store.read(types=["BreakerTripped"], limit=None)) == 1
-        rebuilt = BreakerSet.rebuild(store, FixtureClock(start=clock.now()))
+        rebuilt = BreakerSet(store, FixtureClock(start=clock.now()))
+        rebuilt.sync_from_ledger()
         assert rebuilt.by_name(breaker).is_open is True
         clock.advance_to(clock.now() + _cooldown(breaker) + 1.0)
         probe = engine._breakers.by_name(breaker)

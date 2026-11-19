@@ -19,15 +19,17 @@ class RiskBudget(BaseModel):
 
     Fractions are of equity in 0..1 (never percent). Money is `int`; prices are
     `Decimal`. `paper_equity_sol` is the one SOL-denominated config value; it is
-    converted to lamports once at load (R28).
+    converted to lamports once at load (R28). Halt fractions (daily loss,
+    drawdown) must be strictly positive (RISK-R-15 / RISK-D-15): a zero fraction
+    would latch a halt on any non-positive loss, so it is refused at load.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     max_trade_fraction: Decimal = Field(default=Decimal("0.02"), ge=0, le=1)
     max_token_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)
-    daily_loss_halt_fraction: Decimal = Field(default=Decimal("0.05"), ge=0, le=1)
-    drawdown_halt_fraction: Decimal = Field(default=Decimal("0.15"), ge=0, le=1)
+    daily_loss_halt_fraction: Decimal = Field(default=Decimal("0.05"), gt=0, le=1)
+    drawdown_halt_fraction: Decimal = Field(default=Decimal("0.15"), gt=0, le=1)
     max_open_positions: int = Field(default=3, ge=0)
     max_trades_per_day: int = Field(default=20, ge=0)
     liquidity_floor_multiple: int = Field(default=10, ge=1)

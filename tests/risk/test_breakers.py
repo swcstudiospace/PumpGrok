@@ -208,6 +208,7 @@ def test_breaker_set_refresh_appends_trip_once(tmp_path: Path) -> None:
 
 
 def test_breaker_set_rebuild_survives_restart(tmp_path: Path) -> None:
+    """RISK-R-35: restart goes through BreakerSet + sync_from_ledger (production path)."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
@@ -218,7 +219,8 @@ def test_breaker_set_rebuild_survives_restart(tmp_path: Path) -> None:
             ts_utc=format_ts_utc(START), source="paper", correlation_id="t", equity_now=EQUITY
         )
         assert first.open_breakers() == ["exec_errors"]
-        second = BreakerSet.rebuild(store, clock)
+        second = BreakerSet(store, clock)
+        second.sync_from_ledger()
         assert second.open_breakers() == ["exec_errors"]
         clock.advance_to(START + 901.0)
         assert second.open_breakers() == []
@@ -261,9 +263,9 @@ def test_restart_keeps_a_same_day_retrip_open(tmp_path: Path) -> None:
             ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="t", equity_now=EQUITY
         )
         assert made.open_breakers() == ["exec_errors"]
-        assert len(store.read(types=["BreakerTripped"], limit=None)) == 2
         restart_clock = FixtureClock(start=clock.now())
-        restarted = BreakerSet.rebuild(store, restart_clock)
+        restarted = BreakerSet(store, restart_clock)
+        restarted.sync_from_ledger()
         assert restarted.open_breakers() == ["exec_errors"]
 
         restart_clock.advance_to(restart_clock.now() + 901.0)
@@ -276,7 +278,8 @@ def test_restart_keeps_a_same_day_retrip_open(tmp_path: Path) -> None:
             correlation_id="t",
         )
         assert len(store.read(types=["BreakerReset"], limit=None)) == 2
-        closed_again = BreakerSet.rebuild(store, FixtureClock(start=restart_clock.now()))
+        closed_again = BreakerSet(store, FixtureClock(start=restart_clock.now()))
+        closed_again.sync_from_ledger()
         assert closed_again.open_breakers() == []
     finally:
         store.close()

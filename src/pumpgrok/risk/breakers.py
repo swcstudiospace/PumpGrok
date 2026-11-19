@@ -28,6 +28,7 @@ import hashlib
 import sqlite3
 from collections import deque
 from collections.abc import Callable, Collection
+from fractions import Fraction
 
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, parse_ts_utc
@@ -283,8 +284,8 @@ class LossVelocityBreaker(Breaker):
         while len(self._points) > 1 and self._points[0][0] < ts - horizon:
             self._points.popleft()
 
-    def _window_loss(self, now: float, window_s: float) -> float | None:
-        """(oldest - latest) / oldest over the window; None without history."""
+    def _window_loss(self, now: float, window_s: float) -> Fraction | None:
+        """(oldest - latest) / oldest over the window; None without history (RISK-R-13)."""
         in_window = [(ts, eq) for ts, eq in self._points if ts >= now - window_s]
         if len(in_window) < 2:
             return None
@@ -292,17 +293,17 @@ class LossVelocityBreaker(Breaker):
         new = in_window[-1][1]
         if old <= 0:
             return None
-        return (old - new) / old
+        return Fraction(old - new, old)
 
     def evaluate(self, now: float) -> str:
         """Trip on a fast drop; reset when the short window calms down."""
         if self.is_open or self.half_open:
             reset_loss = self._window_loss(now, self.reset_window_s)
-            if reset_loss is not None and reset_loss < self.reset_loss_fraction:
+            if reset_loss is not None and reset_loss < Fraction(str(self.reset_loss_fraction)):
                 self.record_success()
             return self.state
         loss = self._window_loss(now, self.window_s)
-        if loss is not None and loss >= self.loss_fraction:
+        if loss is not None and loss >= Fraction(str(self.loss_fraction)):
             self.trip(now)
         return self.state
 
@@ -498,40 +499,9 @@ class BreakerSet:
         elif after == "closed":
             self._append_reset(name, ts_utc, source, correlation_id, probe_ok)
 
-    @classmethod
-    def rebuild(
-        cls,
-        store: LedgerStore,
-        clock: Clock,
-        *,
-        live: bool = False,
-        required_feeds: frozenset[str] = frozenset(),
-    ) -> BreakerSet:
-        """Rebuild openness from ledger events (restart cannot bypass cooldown)."""
-        made = cls(store, clock, live=live, required_feeds=required_feeds)
-        open_since: dict[str, float] = {}
-        trips: dict[str, int] = {}
-        for event in store.read(limit=None):
-            payload = event.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            name = str(payload.get("breaker", ""))
-            if name not in BREAKER_NAMES:
-                continue
-            if event["type"] == "BreakerTripped":
-                try:
-                    open_since[name] = parse_ts_utc(str(event.get("ts_utc", "")))
-                except ValueError:
-                    continue
-                trips[name] = trips.get(name, 0) + 1
-            elif event["type"] == "BreakerReset":
-                open_since.pop(name, None)
-        for name, since in open_since.items():
-            breaker = made.by_name(name)
-            breaker.opened_at = since
-            breaker.trips = trips.get(name, 1)
-            breaker.consecutive_failures = breaker.threshold
-        return made
+    # RISK-R-35: BreakerSet.rebuild deleted (test-only path; production restarts
+    # through sync_from_ledger via RiskEngine.check). Tests now cover restart
+    # through RiskEngine.check.
 
     def _occurrence(self, event_type: str, name: str) -> int:
         """1-based index of the next ``event_type`` row for ``name`` in the ledger."""
