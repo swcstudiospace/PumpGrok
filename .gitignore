@@ -15,6 +15,11 @@ var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
+<<<<<<< HEAD
 
 .coverage
 coverage.xml
+=======
+!.receipts/bot-02-risk/00057-omega-ci-runners.json
+!.receipts/bot-02-risk/T1482-be.json
+>>>>>>> d2c5860 (feat(be): consume M-2026-1120 indexes in ledger _SCHEMA (T1482-be, 1482cee0))
