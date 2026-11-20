@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import secrets
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -178,7 +179,7 @@ def test_contract_jsonrpc_validation() -> None:
     with pytest.raises(ValueError, match="event_hash"):
         JsonRpcResult.from_json({"ok": True, "event_hash": "xyz"})
     with pytest.raises(ValueError, match="method"):
-        GatewayClient("http://127.0.0.1:8787").call("sniper", "tok", "exec/live", {})
+        GatewayClient("http://127.0.0.1:8787").call("sniper", secrets.token_hex(4), "exec/live", {})
 
 
 def test_token_binding_no_raw_literals_outside_root() -> None:
