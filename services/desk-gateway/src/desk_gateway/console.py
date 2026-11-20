@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from html import escape
+from typing import Any
 
 import httpx
 
@@ -178,7 +179,7 @@ def screen_by_id(screen_id: str) -> Screen:
     raise ValueError(f"unknown screen: {screen_id}")
 
 
-def token_css(tokens: dict) -> str:
+def token_css(tokens: dict[str, Any]) -> str:
     """Build the :root custom properties from tokens.json v1.0.0.
 
     Every style declaration below the token layer references a var(--token);
@@ -343,7 +344,7 @@ _ROW_PREFIX: dict[str, str] = {
 }
 
 
-def render_screen(screen: Screen, state: str, tokens: dict, rows: list[list[str]]) -> str:
+def render_screen(screen: Screen, state: str, tokens: dict[str, Any], rows: list[list[str]]) -> str:
     """Render one screen in one ux.spec state as a complete ASCII HTML page."""
     if state not in screen.states:
         raise ValueError(f"state {state} not in ux.spec states for {screen.screen_id}")
@@ -507,14 +508,14 @@ class GatewayClient:
         return Health.from_json(payload)
 
     def call(
-        self, short: str, token: str, method: str, params: dict | None = None
+        self, short: str, token: str, method: str, params: dict[str, Any] | None = None
     ) -> JsonRpcResult:
         """POST /mcp/{short} JSON-RPC tools/list or tools/call (postMcpToolsCall)."""
         if method not in ("tools/list", "tools/call"):
             raise ValueError(f"method {method} is not in the v1.0.0 contract")
         if not short or not all(char in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in short):
             raise ValueError(f"seat short does not match ^[a-z0-9-]+$: {short}")
-        body: dict = {"jsonrpc": "2.0", "id": "console", "method": method}
+        body: dict[str, Any] = {"jsonrpc": "2.0", "id": "console", "method": method}
         if params is not None:
             body["params"] = params
         with httpx.Client(timeout=self._timeout_s) as client:
@@ -530,7 +531,7 @@ class GatewayClient:
         return JsonRpcResult.from_json(payload.get("result"))
 
 
-def load_tokens(path: str) -> dict:
+def load_tokens(path: str) -> dict[str, Any]:
     """Load tokens.json v1.0.0 from disk (fails closed on a bad file)."""
     with open(path, "rb") as handle:
         payload = json.loads(handle.read().decode("utf-8"))
