@@ -47,9 +47,7 @@ def test_replay_seed_exempt(clean_env: None, monkeypatch: pytest.MonkeyPatch) ->
     assert load_settings().replay.seed == 7
 
 
-def test_bare_forbidden_name_is_ignored(
-    clean_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_bare_forbidden_name_is_ignored(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """R-30: names without the PUMPGROK_ prefix are not scanned, so they load."""
     monkeypatch.setenv("PRIVATE_KEY", "PLANTED-SECRET-9f3k7z-no-echo")  # pragma: allowlist secret
     assert load_settings() is not None
