@@ -75,7 +75,7 @@ def probe_served_endpoints(port: int, *, timeout_s: float = 2.0) -> list[Endpoin
         url = f"http://127.0.0.1:{port}{path}"
         # Audited S310: url is a locally built loopback address, no external input.
         try:
-            with urllib.request.urlopen(url, timeout=timeout_s) as resp:
+            with urllib.request.urlopen(url, timeout=timeout_s) as resp:  # noqa: S310
                 code = resp.status
         except urllib.error.HTTPError as exc:
             probes.append(EndpointProbe(name=path, ok=False, detail=f"HTTP {exc.code}"))

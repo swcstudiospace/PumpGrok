@@ -300,16 +300,7 @@ class RiskEngine(_EngineSteps):
         """
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
-        # RISK-R-10: a buy must never carry an exit reason (mirrors the OrderRequest
-        # sells-only validator); autonomous-paper keeps its own minted approvals with
-        # no exit_reason, so a buy + exit_reason is rejected outside that mode's
-        # normal path.
-        if (
-            order.side.value == "buy"
-            and exit_reason is not None
-            and self._autonomy != "autonomous-paper"
-        ):
-            raise ValueError("exit_reason applies to sells only")
+        self._guard_exit_reason(order, exit_reason)
         order_hash = order_hash_for(order)
         cache_key = self._cache_key(
             order,
@@ -338,6 +329,20 @@ class RiskEngine(_EngineSteps):
         while len(self._decisions) > _DECISION_CACHE_MAX:
             self._decisions.pop(next(iter(self._decisions)))
         return decision
+
+    def _guard_exit_reason(self, order: OrderRequest, exit_reason: str | None) -> None:
+        """A buy must never carry an exit reason (RISK-R-10).
+
+        Mirrors the OrderRequest sells-only validator; autonomous-paper keeps
+        its own minted approvals with no exit_reason, so a buy + exit_reason
+        is refused outside that mode's normal path.
+        """
+        if (
+            order.side.value == "buy"
+            and exit_reason is not None
+            and self._autonomy != "autonomous-paper"
+        ):
+            raise ValueError("exit_reason applies to sells only")
 
     def _cache_key(
         self,

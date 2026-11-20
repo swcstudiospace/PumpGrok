@@ -67,7 +67,9 @@ def check(backtest: MetricsReport, paper: MetricsReport) -> DivergenceVerdict:
     return_gap_pp = float(return_diff) * 100.0
     sharpe_gap = abs(float(backtest.sharpe_ratio - paper.sharpe_ratio))
     reasons: list[str] = []
-    if return_diff >= Decimal("0.02"):
+    # Exact Decimal threshold from the module constant (EXEC-EX-19) so an
+    # explicit/monkeypatched ABSOLUTE_RETURN_GAP_PP governs, not a hardcoded 2 pp.
+    if return_diff >= Decimal(str(ABSOLUTE_RETURN_GAP_PP)) / Decimal(100):
         reasons.append(
             f"return_gap_pp={return_gap_pp:.4f} at-or-past {ABSOLUTE_RETURN_GAP_PP:.1f}pp"
         )
