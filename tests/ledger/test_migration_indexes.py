@@ -8,6 +8,7 @@ set, and that the down file drops exactly those indexes (rows untouched).
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -40,6 +41,9 @@ def _event(**overrides):
     return base
 
 
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
 def _index_columns(db_path: Path) -> dict[str, list[str]]:
     conn = sqlite3.connect(str(db_path))
     try:
@@ -47,6 +51,10 @@ def _index_columns(db_path: Path) -> dict[str, list[str]]:
             "SELECT name FROM sqlite_master "
             "WHERE type='index' AND name NOT LIKE 'sqlite_autoindex_%'"
         ).fetchall()
+        # PRAGMA index_info cannot take a bound parameter, so the index name
+        # is interpolated; refuse anything that is not a bare identifier.
+        for (name,) in rows:
+            assert _IDENT_RE.fullmatch(name), f"unsafe index name: {name!r}"
         return {
             name: [row[2] for row in conn.execute(f"PRAGMA index_info({name})").fetchall()]
             for (name,) in rows
