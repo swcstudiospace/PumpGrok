@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 from collections.abc import Awaitable, Callable, Coroutine
 from enum import StrEnum
@@ -29,10 +30,16 @@ from pumpgrok.replay.rng import make_rng
 if TYPE_CHECKING:
     from pumpgrok.config.settings import Settings
 
+log = logging.getLogger(__name__)
+
 Handler = Callable[[Event], Awaitable[None]]
 Dlq = Callable[[Event], Awaitable[None] | None]
 
 _LANE_CAP = {0: P0_LANE_CAP, 1: P1_LANE_CAP}
+
+# EVT-SW-20: bounds for per-entity bookkeeping that must not grow without limit.
+_SEEN_CAP = 10_000
+_JITTER_CAP = 1_000
 
 
 class _Jitter(Protocol):
@@ -91,7 +98,8 @@ class EventBus:
         self._store = store
         self._rng = rng if rng is not None else make_rng()
         self.jitters: list[float] = []
-        self._seen: set[str] = set()
+        # EVT-SW-20: insertion-ordered dedup set, pruned oldest-first past the cap.
+        self._seen: dict[str, None] = {}
         self._lanes: dict[tuple[int, str], deque[Event]] = {}
         self._tasks: dict[tuple[int, str], asyncio.Task[None]] = {}
         self._p2: dict[str, deque[Event]] = {}
@@ -103,6 +111,8 @@ class EventBus:
         # Terminal reasons survive failed handoffs and are cleared only when settled.
         self._p2_failed: dict[str, str] = {}
         self._p2_locks: dict[str, asyncio.Lock] = {}
+        # EVT-SW-19: events whose DLQ sink raised without a store; retried at shutdown.
+        self._dlq_retained: list[Event] = []
         # Strong references to every worker task until it finishes.
         self._workers: set[asyncio.Task[None]] = set()
         # Workers suspended in a retry or debounce wait. Shutdown cancels these.
@@ -178,8 +188,18 @@ class EventBus:
             for task in list(self._in_handler):
                 task.cancel()
             await self._join_workers()
+            await self._retry_retained_dlq()
             self._persist_unfinished_p2()
             self._shut_down = True
+
+    async def _retry_retained_dlq(self) -> None:
+        """Retain-and-retry handoff for no-store DLQ sink failures (EVT-SW-19)."""
+        retained, self._dlq_retained = self._dlq_retained, []
+        for event in retained:
+            try:
+                await self._send_dlq(event)
+            except Exception as exc:
+                log.error("retained dlq retry failed for %s: %r", event.event_id, exc)
 
     async def recover(self) -> None:
         """Run every pending row in seq order. Call before publish() on a fresh bus."""
@@ -202,6 +222,12 @@ class EventBus:
             if not await self._run_once(event):
                 return
 
+    def _remember(self, event_id: str) -> None:
+        """Insert into the dedup set, evicting the oldest ids past the cap (EVT-SW-20)."""
+        self._seen[event_id] = None
+        while len(self._seen) > _SEEN_CAP:
+            self._seen.pop(next(iter(self._seen)))
+
     async def _publish_durable(self, event: Event, priority: int) -> None:
         full = _lane_full(priority, self.queued(priority))
         if self._store is not None:
@@ -218,20 +244,20 @@ class EventBus:
             return
         if event.event_id in self._seen:
             return
-        self._seen.add(event.event_id)
+        self._remember(event.event_id)
         if not full:
             self._enqueue(event, priority)
             return
         try:
             await self._send_dlq(event)
         except BaseException:
-            self._seen.discard(event.event_id)
+            self._seen.pop(event.event_id, None)
             raise
 
     def _publish_p2(self, event: Event) -> None:
         if event.event_id in self._seen:
             return
-        self._seen.add(event.event_id)
+        self._remember(event.event_id)
         self._coalesce(event)
 
     def _enqueue(self, event: Event, priority: int) -> None:
@@ -243,7 +269,7 @@ class EventBus:
         slot = self._p2.setdefault(key, deque())
         if len(slot) >= P2_COALESCE_CAP:
             replaced = slot.pop()
-            self._seen.discard(replaced.event_id)
+            self._seen.pop(replaced.event_id, None)
         slot.append(event)
         self._kick_p2(key, event.kind)
 
@@ -272,15 +298,22 @@ class EventBus:
 
     async def _drain(self, key: tuple[int, str]) -> None:
         lane = self._lanes[key]
-        while lane and not self._closing.is_set():
-            if not await self._run_once(lane.popleft()):
-                return
+        try:
+            while lane and not self._closing.is_set():
+                if not await self._run_once(lane.popleft()):
+                    return
+        finally:
+            # EVT-SW-20: a drained lane must not pin its entity bookkeeping forever.
+            if not lane and not self._closing.is_set():
+                self._lanes.pop(key, None)
+                self._tasks.pop(key, None)
 
     async def _deliver_p2(self, key: str, generation: int, *, debounce: bool) -> None:
         if debounce and not await self._pause(P2_DEBOUNCE_S):
             return
         claimed = await self._claim_and_attempt(key, generation)
         if claimed is None:
+            self._forget_idle_p2(key)
             return
         event, outcome = claimed
         if outcome is _Outcome.TRANSIENT:
@@ -291,6 +324,18 @@ class EventBus:
             lambda: self._retry_p2(key, generation, event),
             superseded=lambda: self._p2_gen.get(key) != generation,
         )
+        self._forget_idle_p2(key)
+
+    def _forget_idle_p2(self, key: str) -> None:
+        """Drop a settled P2 key's slot and lock when nothing is queued or active."""
+        slot = self._p2.get(key)
+        if slot:
+            return
+        for event in self._p2_active.values():
+            if _coalesce_key(event.kind, event.entity_id) == key:
+                return
+        self._p2.pop(key, None)
+        self._p2_locks.pop(key, None)
 
     async def _claim_and_attempt(self, key: str, generation: int) -> tuple[Event, _Outcome] | None:
         lock = self._p2_lock(key)
@@ -310,6 +355,9 @@ class EventBus:
         if not slot:
             return None
         event = slot.pop()
+        # EVT-SW-31: match _coalesce — ids dropped without delivery leave the dedup set.
+        for dropped in slot:
+            self._seen.pop(dropped.event_id, None)
         slot.clear()
         self._p2_active[event.event_id] = event
         return event
@@ -397,7 +445,8 @@ class EventBus:
 
     async def _backoff(self, step: int) -> bool:
         draw = self._rng.random()
-        self.jitters.append(draw)
+        if len(self.jitters) < _JITTER_CAP:
+            self.jitters.append(draw)
         return await self._pause(_retry_delay(step, draw))
 
     async def _pause(self, seconds: float) -> bool:
@@ -422,7 +471,7 @@ class EventBus:
             self._p2_active.pop(event.event_id, None)
             self._p2_retry_gen.pop(event.event_id, None)
             self._p2_failed.pop(event.event_id, None)
-            self._seen.discard(event.event_id)
+            self._seen.pop(event.event_id, None)
 
     def _succeed(self, event: Event) -> None:
         if priority_of(event.kind) == 2:
@@ -441,10 +490,21 @@ class EventBus:
         if self._store is not None:
             self._store.fail_to_dlq(event, reason=reason)
             self._forget_p2(event)
+            # EVT-SW-19: the DLQ row is durable; a raising sink must not kill the worker.
+            try:
+                await self._send_dlq(event)
+            except Exception as exc:
+                log.warning("dlq sink failed after durable handoff for %s: %r", event.event_id, exc)
+            return
+        try:
             await self._send_dlq(event)
-        else:
-            await self._send_dlq(event)
-            self._forget_p2(event)
+        except Exception:
+            # EVT-SW-19: without a store the sent row is the only copy of the event;
+            # retain it for a shutdown retry instead of dropping it silently.
+            log.error("dlq sink failed for %s; retained for shutdown retry", event.event_id)
+            self._dlq_retained.append(event)
+            return
+        self._forget_p2(event)
 
     async def _send_dlq(self, event: Event) -> None:
         result = self._dlq(event)

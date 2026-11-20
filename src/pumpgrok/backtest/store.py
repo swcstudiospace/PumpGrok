@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +48,7 @@ class ResultStore:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else DEFAULT_STORE_PATH
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        with closing(self._connect()) as db, db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS results ("
                 " dataset_digest TEXT NOT NULL,"
@@ -92,7 +93,7 @@ class ResultStore:
         """Insert canonical JSON, or return the existing row. Never updates."""
         checked = edge_key(*key)
         body = canonical_json(value)
-        with self._connect() as db:
+        with closing(self._connect()) as db, db:
             db.execute(
                 "INSERT INTO results (dataset_digest, strategy_version_id,"
                 " params_hash, grader_version, body) VALUES (?, ?, ?, ?, ?)"

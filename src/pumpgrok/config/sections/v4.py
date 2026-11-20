@@ -6,6 +6,7 @@ only when a section is explicitly enabled.
 
 from __future__ import annotations
 
+import logging
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +16,7 @@ try:
 
     _DEFAULT_SIDECAR_PATH = str(_SIDECAR)
 except Exception:
+    logging.getLogger(__name__).warning("events sidecar constant unavailable; using default path")
     _DEFAULT_SIDECAR_PATH = "var/desk/events.sqlite"
 
 #: Supervisor wake modes. `cadence` is the default and stays byte-identical; `event` wakes seats

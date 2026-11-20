@@ -185,7 +185,7 @@ async def test_event_emit_scrubs_and_caps(tmp_path: Path) -> None:
         )
     )
     assert out.seq == 1
-    event = store.read()[0]
+    event = store.read(limit=None)[0]
     assert event["payload"]["seat"] == "bot-01-scout"
     assert "***" in event["payload"]["text"]
     assert "secret-abc" not in event["payload"]["text"]
@@ -197,7 +197,7 @@ async def test_event_emit_scrubs_and_caps(tmp_path: Path) -> None:
         )
     )
     assert big.seq == 2
-    stored = store.read()[1]
+    stored = store.read(limit=None)[1]
     assert stored["type"] == "Escalation"
     assert len(stored["payload"]["detail"]) < 9000
     key = event_emit_key("bot-01-scout", "journal_note", "t-1", {"a": 1})

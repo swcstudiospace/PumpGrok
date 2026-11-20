@@ -316,7 +316,7 @@ async def test_first_attempt_poison_handoff_cannot_recover_over_newer_success(
     await _settle()
     assert calls == [1, 2]
     assert bus._p2_active == {stale.event_id: stale}
-    assert bus._seen == {stale.event_id}
+    assert set(bus._seen) == {stale.event_id}
     assert store.load_pending() == []
     assert not store.is_applied(newer.event_id)
 
@@ -325,7 +325,7 @@ async def test_first_attempt_poison_handoff_cannot_recover_over_newer_success(
             await bus.shutdown()
         assert calls == [1, 2]
         assert bus._p2_active == {stale.event_id: stale}
-        assert bus._seen == {stale.event_id}
+        assert set(bus._seen) == {stale.event_id}
         assert store.load_pending() == []
         assert dlq_calls == []
 
@@ -339,7 +339,7 @@ async def test_first_attempt_poison_handoff_cannot_recover_over_newer_success(
     assert store.load_pending() == []
     assert store.list_dlq() == [{"event_id": stale.event_id, "reason": "poison"}]
     assert bus._p2_active == {}
-    assert bus._seen == set()
+    assert set(bus._seen) == set()
     assert not store.is_duplicate(stale.event_id, clock.now())
     assert not store.is_applied(stale.event_id)
     assert stale.model_dump(mode="json") == original
@@ -462,7 +462,7 @@ async def test_superseded_retry_retains_running_handler_past_both_shutdown_bound
         assert completed.is_set()
         assert calls == [1, 1]
         assert bus._p2_active == {}
-        assert bus._seen == {newer.event_id}
+        assert set(bus._seen) == {newer.event_id}
         assert retry_workers[0] not in bus._workers
         assert store.list_dlq() == []
         assert store.move_dlq_to_pending(stale.event_id) is None
@@ -583,7 +583,7 @@ async def test_late_poison_handoff_retries_after_bounded_shutdown(
         assert not retry_workers[0].done()
         assert bus._p2_active == {stale.event_id: stale}
         assert bus._p2_failed == {}
-        assert bus._seen == {stale.event_id, newer.event_id}
+        assert set(bus._seen) == {stale.event_id, newer.event_id}
         assert [event.event_id for event in store.load_pending()] == [newer.event_id]
         assert store.list_dlq() == []
 
@@ -608,7 +608,7 @@ async def test_late_poison_handoff_retries_after_bounded_shutdown(
         assert bus._p2_active == {stale.event_id: stale}
         assert bus._p2_failed == {stale.event_id: "poison"}
         assert stale.event_id in bus._p2_retry_gen
-        assert bus._seen == {stale.event_id, newer.event_id}
+        assert set(bus._seen) == {stale.event_id, newer.event_id}
         assert [event.event_id for event in store.load_pending()] == [newer.event_id]
         assert dlq_calls == []
         assert calls == [1, 1]

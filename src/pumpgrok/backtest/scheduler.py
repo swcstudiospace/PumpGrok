@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -90,29 +91,38 @@ def run_edge(edge: Edge, store: ResultStore, ledger_store: Any, clock: Any) -> E
 
 
 def _result_body(edge: Edge, run: Any) -> dict[str, Any]:
-    """Grade the dataset and fold 16-01 metrics into one canonical mapping."""
-    book = run.round_trips if isinstance(getattr(run, "round_trips", None), RoundTrips) else None
-    counted = round_trips(())
-    if book is None:
-        book = counted
-    metrics = summarize_v2(
-        book,
-        MetricsContext(
-            initial_equity_lamports=0,
-            equity_curve_lamports=(),
-            elapsed_days=Decimal(0),
-        ),
-    )
+    """Grade the dataset plus the run's realized performance (EXEC-D-15: performance-graded)."""
+    # EXEC-EX-09: persist the run's own Metrics v2 flag; do not recompute it in a
+    # zero context (which is always invalid) or fall back to an empty book.
+    metrics_v2 = getattr(run, "metrics_v2", None)
+    if metrics_v2 is not None:
+        annualization_valid = bool(getattr(metrics_v2, "annualization_valid", False))
+    else:
+        round_trips_value = getattr(run, "round_trips", None)
+        book = run.round_trips if isinstance(round_trips_value, RoundTrips) else round_trips(())
+        metrics = summarize_v2(
+            book,
+            MetricsContext(
+                initial_equity_lamports=0,
+                equity_curve_lamports=(),
+                elapsed_days=Decimal(0),
+            ),
+        )
+        annualization_valid = bool(metrics.annualization_valid)
     segmentation = segment(
         edge.dataset_dir,
         None,
         APPROVED_THRESHOLDS.cooldown_s,
         APPROVED_THRESHOLDS.haircut_bps,
     )
+    # EXEC-EX-15 / EXEC-D-15: performance-graded — a losing or empty strategy never promotes.
+    net_lamports = getattr(run, "net_lamports", None)
+    performance_net = net_lamports if isinstance(net_lamports, int) else None
     graded = grade(
         edge.dataset_dir,
         CanaryResult(passed=edge.canary_passed),
         APPROVED_THRESHOLDS,
+        performance_net_lamports=performance_net,
     )
     result_id = _result_id(edge)
     return {
@@ -121,8 +131,9 @@ def _result_body(edge: Edge, run: Any) -> dict[str, Any]:
         "grade": graded.verdict,
         "grader_version": edge.grader_version,
         "kind": edge.kind,
-        "metrics_annualization_valid": metrics.annualization_valid,
+        "metrics_annualization_valid": annualization_valid,
         "params_hash": edge.params_hash,
+        "performance_net_lamports": performance_net,
         "reasons": list(graded.reasons),
         "result_id": result_id,
         "strategy_version_id": edge.strategy_version_id,
@@ -154,4 +165,21 @@ def _publish(ledger_store: Any, clock: Any, result_id: str, grade_name: str) -> 
         bot="desk",
         correlation_id=result_id,
     )
-    asyncio.run(run_journal_append(note, ledger_store, clock, journal_dir))
+    # EXEC-EX-41: sync publish must not die on asyncio.run inside a running loop.
+    _run_note(note, ledger_store, clock, journal_dir)
+
+
+def _run_note(note: JournalAppendIn, ledger_store: Any, clock: Any, journal_dir: Path) -> None:
+    """Run the journal append; thread-hop when already inside an event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(run_journal_append(note, ledger_store, clock, journal_dir))
+        return
+
+    thread = threading.Thread(
+        target=lambda: asyncio.run(run_journal_append(note, ledger_store, clock, journal_dir)),
+        daemon=True,
+    )
+    thread.start()
+    thread.join()

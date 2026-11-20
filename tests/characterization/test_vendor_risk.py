@@ -39,6 +39,7 @@ Adaptations from the oracle (deliberate):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 import pytest
 
@@ -130,7 +131,7 @@ def test_min_trade_matches_vendor_floor() -> None:
 
 
 def test_budget_share_matches_vendor() -> None:
-    assert pytest.approx(0.30) == MAX_SHARE_OF_REMAINING_BUDGET
+    assert Decimal("0.30") == MAX_SHARE_OF_REMAINING_BUDGET
 
 
 # --- position size ---------------------------------------------------------
@@ -292,6 +293,3 @@ def test_same_day_keeps_counters(harness: RiskHarness) -> None:
 # ``state halt --clear --by human:<name>``. These rows pin the exclusion:
 # they mirror the vendor scenarios, and un-skipping one fails, proving the
 # auto-clear path does not exist.
-
-
-

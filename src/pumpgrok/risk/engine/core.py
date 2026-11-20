@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -193,7 +194,15 @@ class RiskEngine(_EngineSteps):
                 continue
             if str(payload.get("note_kind", "")) != "verdict":
                 continue
-            match = KILL_VERDICT_RE.match(str(payload.get("text", "")))
+            # RISK-R-12: only the RISK seat's verdicts cover; refuse other seats' KILL notes.
+            if str(payload.get("seat", "")) != "bot-02-risk":
+                continue
+            text = str(payload.get("text", ""))
+            # RISK-R-12: a reason containing a newline makes the verdict silently
+            # unrecognised; reject it explicitly.
+            if "\n" in text:
+                continue
+            match = KILL_VERDICT_RE.match(text)
             if match is not None:
                 killed.add(match.group("mint"))
         return killed
@@ -291,6 +300,7 @@ class RiskEngine(_EngineSteps):
         """
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
+        self._guard_exit_reason(order, exit_reason)
         order_hash = order_hash_for(order)
         cache_key = self._cache_key(
             order,
@@ -319,6 +329,20 @@ class RiskEngine(_EngineSteps):
         while len(self._decisions) > _DECISION_CACHE_MAX:
             self._decisions.pop(next(iter(self._decisions)))
         return decision
+
+    def _guard_exit_reason(self, order: OrderRequest, exit_reason: str | None) -> None:
+        """A buy must never carry an exit reason (RISK-R-10).
+
+        Mirrors the OrderRequest sells-only validator; autonomous-paper keeps
+        its own minted approvals with no exit_reason, so a buy + exit_reason
+        is refused outside that mode's normal path.
+        """
+        if (
+            order.side.value == "buy"
+            and exit_reason is not None
+            and self._autonomy != "autonomous-paper"
+        ):
+            raise ValueError("exit_reason applies to sells only")
 
     def _cache_key(
         self,
@@ -519,24 +543,9 @@ class RiskEngine(_EngineSteps):
                 continue
             self.resolve_probe(name, ok, source=source, correlation_id=correlation_id)
 
-    def record_kill_verdict(
-        self, mint: str, reason: str, *, source: str = "paper", correlation_id: str = "desk"
-    ) -> None:
-        """Record a RISK KILL verdict on a mint; later buys for all seats refuse (RISK-005)."""
-        self._store.append(
-            ts_utc=self._now_ts(),
-            source=source,
-            correlation_id=correlation_id,
-            idempotency_key=f"kill-verdict|{mint}|{self._now_ts()[:10]}",
-            type="JournalNote",
-            payload={
-                "source": source,
-                "seat": "bot-02-risk",
-                "note_kind": "verdict",
-                "text": f"RISK verdict=KILL mint={mint} reason={reason}",
-                "refs": [],
-            },
-        )
+    # RISK-R-12 / RISK-D-12: record_kill_verdict deleted (no production caller);
+    # verdicts are written as JournalNote by the RISK seat's journal path and
+    # honoured by _killed_mints only when payload.seat == "bot-02-risk".
 
     def request_halt_clear(
         self,
@@ -561,16 +570,21 @@ class RiskEngine(_EngineSteps):
         if self._store.by_key(f"consumed|{approval.id}") is not None:
             raise ValueError(f"halt_clear approval {approval.id} is already consumed")
         ts_utc = self._now_ts()
-        self._store.append_batch(
-            self._halt_clear_rows(
-                approval,
-                reason=reason,
-                by=by,
-                source=source,
-                correlation_id=correlation_id,
-                ts_utc=ts_utc,
+        # RISK-R-37: a racing second clear raises IntegrityError from append_batch;
+        # map it to the same ValueError the pre-check raises.
+        try:
+            self._store.append_batch(
+                self._halt_clear_rows(
+                    approval,
+                    reason=reason,
+                    by=by,
+                    source=source,
+                    correlation_id=correlation_id,
+                    ts_utc=ts_utc,
+                )
             )
-        )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"halt_clear approval {approval.id} is already consumed") from exc
 
     @staticmethod
     def _halt_clear_rows(

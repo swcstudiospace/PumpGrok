@@ -506,7 +506,11 @@ def test_fraction_caps_use_decimal_math(tmp_path: Path) -> None:
     Decimal computation at this equity. Money stays int; ratios stay Decimal.
     """
     clock = FixtureClock(start=START)
-    store = _store(tmp_path)
+    # RISK-D-11 (B02a R-11): genesis meta is write-once, so build the store
+    # directly and write the custom equity once. _store() pre-seeds
+    # EQUITY, and a second differing write would raise LedgerInconsistent.
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("source", "paper")
     ids = IdFactory(clock, random.Random(11))
     try:
         store.set_meta("initial_equity_lamports", "592936786815")

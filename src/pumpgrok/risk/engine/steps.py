@@ -144,7 +144,7 @@ class _EngineSteps:
         # baseline meets the halt fraction without any float ratio.
         loss_lamports = day_start - equity
         limit = Fraction(str(self._budget.daily_loss_halt_fraction))
-        drawdown_limit = float(self._budget.drawdown_halt_fraction)
+        drawdown_limit = Fraction(str(self._budget.drawdown_halt_fraction))
         if loss_lamports * limit.denominator >= day_start * limit.numerator:
             with _suppress_integrity():
                 self._store.append(
@@ -159,13 +159,16 @@ class _EngineSteps:
                     )
                 )
             return "daily_loss"
-        drawdown = (peak - equity) / peak if peak > 0 else 0.0
-        if drawdown >= drawdown_limit:
+        # RISK-R-13: exact Fraction drawdown, matching the daily-loss arithmetic.
+        peak_loss = peak - equity
+        limit_frac = drawdown_limit
+        if peak > 0 and peak_loss * limit_frac.denominator >= peak * limit_frac.numerator:
+            drawdown = peak_loss / peak if peak > 0 else 0.0
             with _suppress_integrity():
                 self._store.append(
                     **self._halt_row(
                         reason="drawdown",
-                        detail=f"drawdown {drawdown:.4f} >= {drawdown_limit:.2f} of peak",
+                        detail=f"drawdown {drawdown:.4f} >= {float(drawdown_limit):.2f} of peak",
                         equity=equity,
                         day_start=day_start,
                         ts_utc=ts_utc,
@@ -267,6 +270,16 @@ class _EngineSteps:
         ctx.mark("approval_mismatch")
         approval = ctx.approval
         if approval is not None and approval.approved_by == "risk_engine":
+            # RISK-R-18: a risk_engine approval must still bind this order (ticket,
+            # mint, slippage); autonomous kind is side-agnostic so matches() cannot
+            # be used directly, but an unconsumed row for another order must fail.
+            order = ctx.order
+            if (
+                approval.ticket_id != order.ticket_id
+                or approval.mint != order.mint
+                or approval.max_slippage_bps != order.max_slippage_bps
+            ):
+                raise _Fail("approval_mismatch", "approval does not bind this order")
             return
         names_other_rule = (
             approval is not None

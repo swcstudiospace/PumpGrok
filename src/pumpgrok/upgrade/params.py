@@ -12,11 +12,13 @@ read it as quality.
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Self
 
 from pydantic import (
     BaseModel,
     ConfigDict,
+    PrivateAttr,
     SerializerFunctionWrapHandler,
     model_serializer,
     model_validator,
@@ -42,10 +44,25 @@ class ParamSet(BaseModel):
     exits: dict[str, Any] | None = None
     strategy: dict[str, dict[str, Any]] | None = None
 
+    _content_hash: str | None = PrivateAttr(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _deep_copy_mappings(cls, data: Any) -> Any:
+        """Copy the mappings so later caller mutation cannot reach inside (EVT-SW-41)."""
+        if not isinstance(data, dict):
+            return data
+        copied = dict(data)
+        for key in ("filter", "exits", "strategy"):
+            if key in copied and copied[key] is not None:
+                copied[key] = copy.deepcopy(copied[key])
+        return copied
+
     @model_validator(mode="after")
     def _refuse_unknown_and_inert(self) -> Self:
         """Validate overrides through CandidateParams at construction."""
-        CandidateParams(filter=self.filter, exits=self.exits, strategy=self.strategy)
+        candidate = CandidateParams(filter=self.filter, exits=self.exits, strategy=self.strategy)
+        object.__setattr__(self, "_content_hash", candidate.content_hash)
         return self
 
     @model_serializer(mode="wrap")
@@ -62,9 +79,12 @@ class ParamSet(BaseModel):
 
     @property
     def content_hash(self) -> str:
-        """sha256 over the canonical_json of the normalized overrides.
+        """sha256 over the canonical_json of the normalized overrides (cached at construction).
 
         Identity only: the digest names the exact set and never acts as
         a score, a metric, or a verdict.
         """
-        return self.candidate().content_hash
+        if self._content_hash is None:
+            object.__setattr__(self, "_content_hash", self.candidate().content_hash)
+        assert self._content_hash is not None
+        return self._content_hash

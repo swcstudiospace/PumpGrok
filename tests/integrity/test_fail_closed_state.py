@@ -88,10 +88,25 @@ def test_missing_and_corrupt_seat_equity_meta_raise(tmp_path: Path) -> None:
         store.set_meta("initial_equity_lamports", "not-a-number")
         with pytest.raises(CorruptState, match="corrupt initial_equity"):
             task._initial_equity()
-        store.set_meta("initial_equity_lamports", str(EQUITY))
-        assert task._initial_equity() == EQUITY
     finally:
         store.close()
+    # RISK-D-11 (B02a R-11): genesis meta is write-once, so the valid value
+    # is written once on a fresh ledger rather than overwriting the corrupt
+    # one, which would raise LedgerInconsistent.
+    valid_store = _store(tmp_path, "valid.sqlite")
+    try:
+        valid_store.set_meta("initial_equity_lamports", str(EQUITY))
+        valid_task = SeatTask(
+            "bot-04-sniper",
+            1.0,
+            _ok,
+            clock=clock,
+            rng=make_rng(11),
+            store=valid_store,
+        )
+        assert valid_task._initial_equity() == EQUITY
+    finally:
+        valid_store.close()
 
 
 def _supervisor(store: LedgerStore, clock: FixtureClock) -> Supervisor:

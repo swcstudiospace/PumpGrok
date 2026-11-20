@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+import pumpgrok.cli.dispatch as dispatch
 from pumpgrok.cli import main, verbs_state
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_LIVE, EXIT_OK
 from pumpgrok.datafeed import feed_loop
@@ -766,8 +767,6 @@ def test_live_serve_does_not_read_the_confirmation_key(
 def test_live_dispatch_refuses_before_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import pumpgrok.cli.dispatch as dispatch
-
     monkeypatch.chdir(tmp_path)
     called: list[str] = []
 

@@ -234,7 +234,9 @@ def test_identical_run_is_refused_while_the_run_directory_is_locked(
     assert (run_dir / "trials.jsonl").read_bytes() == trials_before
 
     assert main(["backtest", "--fixture", "smoke"]) == 0
-    assert capsys.readouterr().out == first_out
+    # DESK-D-03: trials accumulate per run directory, so the identical rerun
+    # records trial 2 and only the report's trial_count advances.
+    assert capsys.readouterr().out == first_out.replace("trial_count: 1\n", "trial_count: 2\n")
 
 
 def test_float_parameter_is_a_usage_error_not_a_traceback(

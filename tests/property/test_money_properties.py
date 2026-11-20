@@ -17,9 +17,7 @@ from pydantic import ValidationError
 # TEST-T36: a pinned seed (derandomize) in CI, so a failing example is
 # reproducible from a fresh checkout.
 if os.environ.get("CI"):
-    settings.register_profile(
-        "ci", settings(max_examples=300, deadline=None, derandomize=True)
-    )
+    settings.register_profile("ci", settings(max_examples=300, deadline=None, derandomize=True))
     settings.load_profile("ci")
 
 from pumpgrok.core.units import (

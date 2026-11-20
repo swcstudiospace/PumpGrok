@@ -24,6 +24,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from pumpgrok.backtest.trials import MAX_ELIGIBLE_TRIALS
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.upgrade.bounds import Bounds, load_bounds, validate_against_bounds
 from pumpgrok.upgrade.params import ParamSet
@@ -35,8 +36,9 @@ __all__ = [
     "load_declared_space",
 ]
 
-#: Most candidates one scheduled check searches. Equals the gate's eligible-trial limit.
-MAX_DECLARED_CANDIDATES = 20
+#: Most candidates one scheduled check searches. It is the gate's eligible-trial
+#: limit (EVT-SW-40: single-sourced from backtest.trials, never a second copy).
+MAX_DECLARED_CANDIDATES = MAX_ELIGIBLE_TRIALS
 
 #: The tables one candidate may declare; any other key fails the load.
 _TABLE_KEYS = ("filter", "exits")

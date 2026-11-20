@@ -15,6 +15,7 @@ no forward-looking language.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from pumpgrok.backtest.metrics import MetricsReport
 
@@ -55,12 +56,20 @@ def check(backtest: MetricsReport, paper: MetricsReport) -> DivergenceVerdict:
 
     Gaps at or past a D7 default alert and block promotion. Both inputs
     must summarize the same window; this function trusts the caller on
-    window identity the way `summarize` trusts its context curve.
+    window identity the way `summarize_v1` trusts its context curve.
+    Exact Decimal comparisons decide the boundary (EXEC-EX-19); floats are
+    display-only. Zero-trade windows never compare a synthetic zero
+    (EXEC-EX-49) and never block.
     """
-    return_gap_pp = abs(float(backtest.total_return - paper.total_return)) * 100.0
+    if backtest.trade_count == 0 or paper.trade_count == 0:
+        return DivergenceVerdict(blocks_promotion=False, return_gap_pp=0.0, sharpe_gap=0.0)
+    return_diff = abs(backtest.total_return - paper.total_return)
+    return_gap_pp = float(return_diff) * 100.0
     sharpe_gap = abs(float(backtest.sharpe_ratio - paper.sharpe_ratio))
     reasons: list[str] = []
-    if return_gap_pp >= ABSOLUTE_RETURN_GAP_PP:
+    # Exact Decimal threshold from the module constant (EXEC-EX-19) so an
+    # explicit/monkeypatched ABSOLUTE_RETURN_GAP_PP governs, not a hardcoded 2 pp.
+    if return_diff >= Decimal(str(ABSOLUTE_RETURN_GAP_PP)) / Decimal(100):
         reasons.append(
             f"return_gap_pp={return_gap_pp:.4f} at-or-past {ABSOLUTE_RETURN_GAP_PP:.1f}pp"
         )

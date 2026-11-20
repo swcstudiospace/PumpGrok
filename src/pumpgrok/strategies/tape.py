@@ -18,7 +18,12 @@ from pumpgrok.strategies.base import TapePoint
 
 __all__ = ["DEFAULT_TAPE_CAPACITY", "Tape", "TapeError"]
 
-DEFAULT_TAPE_CAPACITY = 64
+# EXEC-EX-10: sized to the largest lookback (7200 s at ~1 tick/s) so a window
+# with more than 64 ticks is never truncated by count mid-window.
+DEFAULT_TAPE_CAPACITY = 8192
+
+# EXEC-EX-42: bounds distinct mints for long soak runs (LRU by last record).
+_MAX_MINTS = 4096
 
 
 class TapeError(ValueError):
@@ -44,6 +49,7 @@ class Tape:
             raise TapeError("tape capacity must be a positive int")
         self._capacity = capacity
         self._series: dict[str, deque[TapePoint]] = {}
+        self._last_seen: dict[str, float] = {}
 
     @property
     def capacity(self) -> int:
@@ -56,6 +62,12 @@ class Tape:
         if series and point.ts < series[-1].ts:
             raise TapeError("tape points must not go back in time for one mint")
         series.append(point)
+        # EXEC-EX-42: evict the least-recently-recorded mint past the cap.
+        self._last_seen[mint] = point.ts
+        while len(self._series) > _MAX_MINTS:
+            oldest = min(self._last_seen, key=self._last_seen.__getitem__)
+            self._series.pop(oldest, None)
+            self._last_seen.pop(oldest, None)
 
     def points(self, mint: str) -> tuple[TapePoint, ...]:
         """The mint's recorded points, oldest first; empty when none were recorded."""

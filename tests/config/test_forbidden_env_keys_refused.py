@@ -1,9 +1,11 @@
 """Forbidden key names abort startup (INV-C-08).
 
-Any env var or TOML key whose name contains ``PRIVATE_KEY``,
-``SECRET_KEY``, ``SEED``, ``MNEMONIC``, ``PHANTOM``, ``WALLET_SECRET``
-or ``KEYPAIR`` aborts startup with exit 1 naming the key; the value is
-never printed. ``PUMPGROK_REPLAY__SEED`` is the one exemption.
+R-30 scopes ``refuse_forbidden_env`` to ``PUMPGROK_*`` names: bare
+``PRIVATE_KEY``-style variables are ignored, not refused. Only
+``PUMPGROK_*`` env var names containing ``PRIVATE_KEY``, ``SECRET_KEY``,
+``SEED``, ``MNEMONIC``, ``PHANTOM``, ``WALLET_SECRET`` or ``KEYPAIR``
+abort startup with exit 1 naming the key; the value is never printed.
+``PUMPGROK_REPLAY__SEED`` is the one exemption.
 """
 
 from __future__ import annotations
@@ -24,15 +26,15 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 NAMES = [
-    "PRIVATE_KEY",
-    "WALLET_PRIVATE_KEY",
-    "SOLANA_SECRET_KEY",
-    "MY_SEED_BACKUP",
+    "PUMPGROK_PRIVATE_KEY",
+    "PUMPGROK_WALLET_PRIVATE_KEY",
+    "PUMPGROK_SOLANA__SECRET_KEY",
+    "PUMPGROK_MY_SEED_BACKUP",
     "PUMPGROK_MNEMONIC",
-    "PHANTOM_AUTH",
+    "PUMPGROK_PHANTOM_AUTH",
     "PUMPGROK_WALLET_SECRET",  # pragma: allowlist secret: forbidden env-name fixture
     "PUMPGROK_KEYPAIR_PATH",  # pragma: allowlist secret: forbidden env-name fixture
-    "DEPLOYER_KEYPAIR",
+    "PUMPGROK_DEPLOYER_KEYPAIR",
 ]
 
 
@@ -60,3 +62,9 @@ def test_replay_seed_stays_exempt(clean_env: None, monkeypatch: pytest.MonkeyPat
     """INV-C-08: PUMPGROK_REPLAY__SEED is the one exemption."""
     monkeypatch.setenv("PUMPGROK_REPLAY__SEED", "7")
     assert load_settings().replay.seed == 7
+
+
+def test_bare_forbidden_name_is_ignored(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R-30: refuse_forbidden_env only scans PUMPGROK_* names; bare names load."""
+    monkeypatch.setenv("PRIVATE_KEY", "PLANTED-VALUE-9f3k7z-no-echo")
+    assert load_settings() is not None

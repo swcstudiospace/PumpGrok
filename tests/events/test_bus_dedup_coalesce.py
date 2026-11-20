@@ -297,7 +297,11 @@ async def test_failed_p2_ids_leave_dedup_only_after_successful_handoff(
     await bus.publish(tick)
     results = await asyncio.gather(*bus._workers, return_exceptions=True)
     assert len(results) == 1
-    assert isinstance(results[0], sqlite3.OperationalError if durable else OSError)
+    if durable:
+        assert isinstance(results[0], sqlite3.OperationalError)
+    else:
+        # EVT-SW-19: no-store sink failure is retained for shutdown retry, not raised.
+        assert results[0] is None
     assert bus._p2_active == {tick.event_id: tick}
     assert tick.event_id in bus._seen
     assert dlq_calls == []
@@ -316,7 +320,7 @@ async def test_failed_p2_ids_leave_dedup_only_after_successful_handoff(
         await bus.publish(_tick(n))
         await _spin()
     assert bus._p2_active == {}
-    assert bus._seen == set()
+    assert set(bus._seen) == set()
     assert len(dlq_calls) == 5
     if store is not None:
         assert len(store.list_dlq()) == 5

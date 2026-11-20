@@ -235,8 +235,9 @@ async def test_capacity_rejects_new_mints_without_evicting_fresh_data(source):
     health.note_frame()
     prices.observe(observation(clock))
     prices.observe(replace(observation(clock), mint="another-mint"))
-    with pytest.raises(OverflowError):
-        prices.observe(replace(observation(clock), mint="third-mint"))
+    prices.observe(replace(observation(clock), mint="third-mint"))
+    # SW-04/EVT-D-03: overflow drops and counts, never raises.
+    assert prices.observer_failures == 1
     assert await prices.curve(MINT) is not None
     assert await prices.curve("another-mint") is not None
     assert await prices.curve("third-mint") is None

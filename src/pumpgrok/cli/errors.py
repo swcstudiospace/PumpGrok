@@ -61,13 +61,16 @@ def _not_implemented(verb: str, intent: dict[str, Any] | None = None) -> int:
 def _refuse_forbidden_seat(seat: str, verb: str) -> int | None:
     """Refuse forbidden_owners callers (jobs.yaml) with exit 1. None means allowed.
 
-    The comparison normalizes to the seat class: a full seat id such as
-    ``bot-04-sniper`` matches the ``sniper`` class (DESK-R-58).
+    Exact match on the short owner classes in hermes/cron/jobs.yaml
+    (STRUCT-005, T-02-10): a full roster seat id such as ``bot-04-sniper``
+    is not a forbidden owner (tests/test_forbidden_owners.py), so it must
+    reach the registry grant check. The refusal keeps the JSON error
+    envelope on stdout (the CLI contract: stdout carries JSON, diagnostics
+    to stderr).
     """
-    normalized = seat.strip().lower()
-    if normalized.startswith("bot-"):
-        normalized = normalized.rsplit("-", 1)[-1]
-    if normalized in FORBIDDEN_OWNERS:
-        _say(sys.stderr, f"refused: seat {seat!r} is a forbidden owner for `{verb}`")
+    if seat in FORBIDDEN_OWNERS:
+        message = f"refused: seat {seat!r} is a forbidden owner for `{verb}`"
+        _say(sys.stdout, json.dumps({"ok": False, "code": "forbidden_owner", "message": message}))
+        _say(sys.stderr, message)
         return EXIT_CONFIG
     return None

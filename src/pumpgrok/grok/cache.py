@@ -61,9 +61,13 @@ class CachedResult:
     response: str | None
 
 
-def scalar_fields(fields: Mapping[str, object]) -> dict[str, int | str]:
-    """Reduce an input mapping to the reviewed scalar payload; refuse anything else."""
-    payload: dict[str, int | str] = {}
+def scalar_fields(fields: Mapping[str, object]) -> dict[str, object]:
+    """Reduce an input mapping to the reviewed scalar payload; refuse anything else.
+
+    EXEC-EX-44: Decimals are type-tagged (``{"decimal": "0.5"}``) so they can
+    never share a cache key with the string "0.5".
+    """
+    payload: dict[str, object] = {}
     for name, value in fields.items():
         if not isinstance(name, str) or not name:
             raise TypeError("input field names must be non-empty strings")
@@ -72,7 +76,7 @@ def scalar_fields(fields: Mapping[str, object]) -> dict[str, int | str]:
         if isinstance(value, Decimal):
             if not value.is_finite():
                 raise ValueError(f"input field {name!r} is a non-finite Decimal")
-            payload[name] = str(value)
+            payload[name] = {"decimal": str(value)}
         elif isinstance(value, bool) or not isinstance(value, (int, str)):
             raise TypeError(
                 f"input field {name!r} must be int, str or Decimal, got {type(value).__name__}"

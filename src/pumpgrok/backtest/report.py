@@ -18,10 +18,9 @@ Every figure describes the recorded evaluation, never a forecast.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from decimal import Decimal
 
-from pumpgrok.backtest.divergence import DivergenceVerdict
 from pumpgrok.backtest.metrics import ANNUALIZATION_DAYS_PER_YEAR, MetricsReport
 from pumpgrok.core.adapter import Fill
 
@@ -30,7 +29,6 @@ __all__ = [
     "BacktestReport",
     "build_report",
     "render",
-    "with_divergence",
 ]
 
 #: Rendered text for a metric the window cannot define (D-C5). Ratios
@@ -210,16 +208,7 @@ def build_report(
     )
 
 
-def with_divergence(report: BacktestReport, verdict: DivergenceVerdict) -> BacktestReport:
-    """Apply a divergence verdict to a report (G-08 flag half).
-
-    A blocking verdict clears promotion_eligible; a clean verdict leaves
-    the report unchanged. The stderr line and exit code halves live with
-    the caller via `breach_line` and `enforce`.
-    """
-    if not verdict.blocks_promotion:
-        return report
-    return replace(report, promotion_eligible=False)
+# EXEC-EX-48: with_divergence deleted (no src caller; left stale fields).
 
 
 def _bool(value: bool) -> str:
@@ -343,5 +332,6 @@ def render(report: BacktestReport) -> str:
         )
         parts.extend(f"{key}: {value}\n" for key, value in paper_rows)
     body = "".join(parts)
-    body.encode("ascii")
+    # EXEC-EX-47: removed the dead body.encode("ascii") probe; the report is
+    # unicode text and non-ASCII names render verbatim.
     return body

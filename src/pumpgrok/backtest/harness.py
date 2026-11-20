@@ -38,9 +38,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.backtest.evaluate import CandidateParams, evaluate_window, fold_windows
+from pumpgrok.backtest.evaluate import CandidateParams, FoldWindows, evaluate_window, fold_windows
 from pumpgrok.backtest.manifest import _resolve_dataset_dir
-from pumpgrok.backtest.split import holdout_split
+from pumpgrok.backtest.split import HoldoutSplit, holdout_split
 from pumpgrok.backtest.trials import MAX_ELIGIBLE_TRIALS, TrialLedger
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.ids import IdFactory
@@ -104,6 +104,116 @@ def _default_run_id(seed: int) -> str:
     return IdFactory(WallClock(), make_rng(seed)).ulid()
 
 
+def _check_windows(windows: FoldWindows, cutoff: float) -> None:
+    # EXEC-EX-05: explicit raises (asserts vanish under -O).
+    for window in windows.folds:
+        if window.end_ts > cutoff:
+            raise ValueError("tuning observed a holdout stamp")
+    if windows.holdout.start_ts < cutoff:
+        raise ValueError("holdout window is mixed up")
+
+
+def _prepare_windows(
+    dataset: str, n_trials: int, n_candidates: int, n_folds: int
+) -> tuple[HoldoutSplit, FoldWindows]:
+    if not dataset:
+        raise ValueError("dataset must be a non-empty path or fixture name")
+    if n_trials < 1:
+        raise ValueError(f"n_trials must be at least 1, found {n_trials}")
+    if n_trials > n_candidates:
+        raise ValueError(f"n_trials {n_trials} passes the {n_candidates} candidates in space")
+    stamps = _load_stamps(dataset)
+    split = holdout_split(stamps, dataset)
+    cutoff = split.holdout_start_ts
+    tuning_stamps = tuple(ts for ts in stamps if ts < cutoff)
+    holdout_stamps = tuple(ts for ts in stamps if ts >= cutoff)
+    # EXEC-EX-05: explicit raises (asserts vanish under -O) that check the fold
+    # windows and the holdout partition, not the filtered stamp lists.
+    if len(tuning_stamps) + len(holdout_stamps) != len(stamps):
+        raise ValueError("tuning and holdout must partition the dataset")
+    windows = fold_windows(stamps, dataset, n_folds)
+    _check_windows(windows, cutoff)
+    return split, windows
+
+
+def _tune_candidates(
+    dataset: str,
+    candidates: list[Mapping[str, Any]],
+    n_trials: int,
+    seed: int,
+    windows: FoldWindows,
+    *,
+    cutoff: float,
+    ledger: TrialLedger,
+    scratch_path: Path,
+    risk_budget: RiskBudget | None,
+    limits: EngineLimits | None,
+) -> tuple[CandidateParams, str, int]:
+    best_params_hash = ""
+    best_params: CandidateParams | None = None
+    best_mean = 0
+    for position in range(n_trials):
+        mapping = candidates[position]
+        try:
+            canonical_json(mapping)
+        except TypeError as err:
+            raise ValueError(f"candidate parameter set is not JSON-stable: {err}") from err
+        params = CandidateParams(**dict(mapping))
+        params_hash = params.content_hash
+        ledger.record_trial(params_hash)
+        total = 0
+        for fold_index, window in enumerate(windows.folds):
+            if window.end_ts > cutoff:
+                raise ValueError("tuning observed a holdout stamp")
+            total += evaluate_window(
+                dataset,
+                params,
+                seed=seed,
+                ledger_path=scratch_path / f"trial-{position}-fold-{fold_index}.sqlite",
+                window=window,
+                risk_budget=risk_budget,
+                limits=limits,
+            )
+        mean = total // len(windows.folds)
+        if best_params is None or mean > best_mean:
+            best_mean = mean
+            best_params_hash = params_hash
+            best_params = params
+    if best_params is None:
+        raise ValueError("need at least one scored candidate")
+    return best_params, best_params_hash, best_mean
+
+
+def _holdout_net(
+    dataset: str,
+    best_params: CandidateParams,
+    seed: int,
+    windows: FoldWindows,
+    cutoff: float,
+    *,
+    scratch_path: Path,
+    holdout_ledger_path: Path | None,
+    risk_budget: RiskBudget | None,
+    limits: EngineLimits | None,
+) -> int:
+    if windows.holdout.start_ts < cutoff:
+        raise ValueError("holdout window is mixed up")
+    if holdout_ledger_path is None:
+        holdout_path = scratch_path / "holdout.sqlite"
+    else:
+        holdout_path = Path(holdout_ledger_path)
+        holdout_path.parent.mkdir(parents=True, exist_ok=True)
+    return evaluate_window(
+        dataset,
+        best_params,
+        seed=seed,
+        ledger_path=holdout_path,
+        window=windows.holdout,
+        risk_budget=risk_budget,
+        limits=limits,
+    )
+
+
 def run_search(
     dataset: str,
     space: ParamSpace,
@@ -133,76 +243,41 @@ def run_search(
     replay defaults. holdout_ledger_path, when given, keeps the winner's holdout
     ledger at that path so the caller reads its rows without a second replay.
     """
-    if not dataset:
-        raise ValueError("dataset must be a non-empty path or fixture name")
     candidates = list(space)
-    if n_trials < 1:
-        raise ValueError(f"n_trials must be at least 1, found {n_trials}")
-    if n_trials > len(candidates):
-        raise ValueError(f"n_trials {n_trials} passes the {len(candidates)} candidates in space")
-    stamps = _load_stamps(dataset)
-    split = holdout_split(stamps, dataset)
+    split, windows = _prepare_windows(dataset, n_trials, len(candidates), n_folds)
     cutoff = split.holdout_start_ts
-    tuning_stamps = tuple(ts for ts in stamps if ts < cutoff)
-    holdout_stamps = tuple(ts for ts in stamps if ts >= cutoff)
-    assert len(tuning_stamps) + len(holdout_stamps) == len(stamps), (
-        "tuning and holdout must partition the dataset"
-    )
-    assert all(ts < cutoff for ts in tuning_stamps), "tuning read the holdout window"
-    windows = fold_windows(stamps, dataset, n_folds)
     ledger = TrialLedger(
         run_id=run_id if run_id is not None else _default_run_id(seed),
         path=ledger_path,
     )
-    best_params_hash = ""
-    best_params: CandidateParams | None = None
-    best_mean = 0
     with tempfile.TemporaryDirectory(prefix="pumpgrok-search-") as scratch:
         scratch_path = Path(scratch)
-        for position in range(n_trials):
-            mapping = candidates[position]
-            try:
-                canonical_json(mapping)
-            except TypeError as err:
-                raise ValueError(f"candidate parameter set is not JSON-stable: {err}") from err
-            params = CandidateParams(**dict(mapping))
-            params_hash = params.content_hash
-            ledger.record_trial(params_hash)
-            total = 0
-            for fold_index, window in enumerate(windows.folds):
-                assert window.end_ts <= cutoff, "tuning observed a holdout stamp"
-                total += evaluate_window(
-                    dataset,
-                    params,
-                    seed=seed,
-                    ledger_path=scratch_path / f"trial-{position}-fold-{fold_index}.sqlite",
-                    window=window,
-                    risk_budget=risk_budget,
-                    limits=limits,
-                )
-            mean = total // len(windows.folds)
-            if best_params is None or mean > best_mean:
-                best_mean = mean
-                best_params_hash = params_hash
-                best_params = params
-        assert best_params is not None, "need at least one scored candidate"
-        assert all(ts >= cutoff for ts in holdout_stamps), "holdout window is mixed up"
-        if holdout_ledger_path is None:
-            holdout_path = scratch_path / "holdout.sqlite"
-        else:
-            holdout_path = Path(holdout_ledger_path)
-            holdout_path.parent.mkdir(parents=True, exist_ok=True)
-        holdout_net = evaluate_window(
+        best_params, best_params_hash, best_mean = _tune_candidates(
+            dataset,
+            candidates,
+            n_trials,
+            seed,
+            windows,
+            cutoff=cutoff,
+            ledger=ledger,
+            scratch_path=scratch_path,
+            risk_budget=risk_budget,
+            limits=limits,
+        )
+        holdout_net = _holdout_net(
             dataset,
             best_params,
-            seed=seed,
-            ledger_path=holdout_path,
-            window=windows.holdout,
+            seed,
+            windows,
+            cutoff=cutoff,
+            scratch_path=scratch_path,
+            holdout_ledger_path=holdout_ledger_path,
             risk_budget=risk_budget,
             limits=limits,
         )
     eligible = all(verdict.eligible_for_promotion for verdict in ledger.trials)
-    assert eligible == (len(ledger) <= MAX_ELIGIBLE_TRIALS), "ledger verdicts disagree"
+    if eligible != (len(ledger) <= MAX_ELIGIBLE_TRIALS):
+        raise ValueError("ledger verdicts disagree")
     return HarnessResult(
         best_params_hash=best_params_hash,
         holdout_id=split.holdout_id,

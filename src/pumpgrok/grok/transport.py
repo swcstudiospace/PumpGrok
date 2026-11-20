@@ -14,6 +14,7 @@ costs one charge. Usage is counted on ``GrokOps`` without a second spend.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -110,23 +111,13 @@ class XaiTransport:
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        try:
-            response = await self._client.post(
-                self._endpoint,
-                headers=headers,
-                json=payload,
-                timeout=TRANSPORT_DEADLINE_S,
-            )
-        except httpx.HTTPError:
+        status, raw = await self._fetch_bytes(request, headers, payload)
+        if status != 200:
             self._failed(request)
-            raise GrokTransportError("x.ai request failed") from None
-
-        if response.status_code != 200 or len(response.content) > MAX_RESPONSE_BYTES:
-            self._failed(request)
-            raise GrokTransportError("x.ai answer refused", status=response.status_code)
+            raise GrokTransportError("x.ai answer refused", status=status)
 
         try:
-            body = response.json()
+            body = json.loads(raw)
             content = body["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError, TypeError):
             self._failed(request)
@@ -144,6 +135,29 @@ class XaiTransport:
         if self._ops is not None:
             self._ops.gateway_call(request.agent, _usage(body))
         return content
+
+    async def _fetch_bytes(
+        self, request: GrokRequest, headers: dict[str, str], payload: dict[str, Any]
+    ) -> tuple[int, bytes]:
+        try:
+            # EXEC-EX-18: stream and stop at the size cap; never buffer unbounded.
+            status = 0
+            chunks: list[bytes] = []
+            total = 0
+            async with self._client.stream(
+                "POST", self._endpoint, headers=headers, json=payload, timeout=TRANSPORT_DEADLINE_S
+            ) as response:
+                status = response.status_code
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > MAX_RESPONSE_BYTES:
+                        self._failed(request)
+                        raise GrokTransportError("x.ai answer refused", status=status) from None
+                    chunks.append(chunk)
+        except httpx.HTTPError:
+            self._failed(request)
+            raise GrokTransportError("x.ai request failed") from None
+        return status, b"".join(chunks)
 
     def _failed(self, request: GrokRequest) -> None:
         if self._ops is not None:

@@ -177,6 +177,8 @@ def test_export_money_renders_as_exact_decimal_strings(tmp_path: Path) -> None:
     assert int(Decimal(loss_line["pnl_sol"]) * 10**9) == -120_000_000
     assert Decimal(loss_line["exit_price"]) * 1000 == Decimal("4.1e-5")
 
-    # Ratios stay numeric; timestamps stay epoch floats.
-    assert isinstance(gain_line["pnl_pct"], float)
+    # R-24: pnl_pct is a Decimal string, not a float (matches vendor_log pin).
+    assert isinstance(gain_line["pnl_pct"], str)
+    assert gain_line["pnl_pct"] == "12.5"
+    # Timestamps stay epoch floats.
     assert isinstance(buy_line["ts"], float)
