@@ -367,7 +367,7 @@ class TestG3Secrets:
 
     def test_pragma_allowlist_marker_suppresses_a_line(self, secrets_gate):
         # Sampled at runtime: no synthetic credential literal lives in this file.
-        line = f'API_KEY = "{secrets.token_hex(16)}"  # pragma: allowlist secret'
+        line = 'API_KEY = "' + secrets.token_hex(16) + '"  # pragma: allowlist secret'
         assert secrets_gate.scan_line("fixture.py", 1, line) == []
 
     def test_placeholder_values_are_not_high_entropy_findings(self, secrets_gate):

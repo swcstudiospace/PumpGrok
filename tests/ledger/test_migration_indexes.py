@@ -8,7 +8,6 @@ set, and that the down file drops exactly those indexes (rows untouched).
 
 from __future__ import annotations
 
-import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -41,7 +40,14 @@ def _event(**overrides):
     return base
 
 
-_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# PRAGMA index_info cannot take a bound parameter, so a statement per index
+# is kept as a constant and looked up by name; anything else is rejected
+# before any query runs. No SQL text is ever built from a row value.
+_PRAGMA_INDEX_INFO: dict[str, str] = {
+    "idx_events_type_ts": "PRAGMA index_info(idx_events_type_ts)",
+    "idx_events_correlation": "PRAGMA index_info(idx_events_correlation)",
+    "idx_events_ts_seq": "PRAGMA index_info(idx_events_ts_seq)",
+}
 
 
 def _index_columns(db_path: Path) -> dict[str, list[str]]:
@@ -51,14 +57,13 @@ def _index_columns(db_path: Path) -> dict[str, list[str]]:
             "SELECT name FROM sqlite_master "
             "WHERE type='index' AND name NOT LIKE 'sqlite_autoindex_%'"
         ).fetchall()
-        # PRAGMA index_info cannot take a bound parameter, so the index name
-        # is interpolated; refuse anything that is not a bare identifier.
+        result: dict[str, list[str]] = {}
         for (name,) in rows:
-            assert _IDENT_RE.fullmatch(name), f"unsafe index name: {name!r}"
-        return {
-            name: [row[2] for row in conn.execute(f"PRAGMA index_info({name})").fetchall()]
-            for (name,) in rows
-        }
+            pragma = _PRAGMA_INDEX_INFO.get(name)
+            if pragma is None:
+                raise ValueError(f"unexpected index name: {name!r}")
+            result[name] = [row[2] for row in conn.execute(pragma).fetchall()]
+        return result
     finally:
         conn.close()
 
