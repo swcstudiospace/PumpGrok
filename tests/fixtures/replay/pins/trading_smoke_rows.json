@@ -1,0 +1,90 @@
+[
+  {
+    "idempotency_key": "ab51bbdc86dc16bebe9a072ea0701301",
+    "payload_sha256": "d0017d783186b9c36dbfe23e75bfb1684ceeac7971fc693f953f17fcbd6af5e4",
+    "seq": 1,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.000000Z",
+    "type": "JournalNote"
+  },
+  {
+    "idempotency_key": "005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725",
+    "payload_sha256": "a921c9d7dfc2112323fd3476a217db941a999dc847507b1007ef89561c8af4d1",
+    "seq": 2,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00.000000Z",
+    "type": "DailyRollover"
+  },
+  {
+    "idempotency_key": "reject|SOL-20260101-001|buy|01KDVDNCE43AJG3A63YQTGAZZE|ACCEPTED|post_graduation_no_reserves",
+    "payload_sha256": "f7e928051ff78c3cdd723515dfb39adf737a13d7ca44b6159374fec11a65d6c2",
+    "seq": 3,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:02.750000Z",
+    "type": "OrderRejected"
+  },
+  {
+    "idempotency_key": "6c0fdfec1710eb2320480c72c7df30bb",
+    "payload_sha256": "1eb3b82b3c1e7d8ae509d935306f3c42c07aa2e3d300755c7c2485650ca34ad0",
+    "seq": 4,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:03.250000Z",
+    "type": "OrderPlaced"
+  },
+  {
+    "idempotency_key": "fill|01KDVDND5JAPXD42TJSZCAN8FP",
+    "payload_sha256": "ba3d9f2c97c5123cea26e129947d94197be4a1317fe1ef603d269a82bb2cacdf",
+    "seq": 5,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:04.000000Z",
+    "type": "FillRecorded"
+  },
+  {
+    "idempotency_key": "position|01KDVDND5JAPXD42TJSZCAN8FP",
+    "payload_sha256": "7e7d2aa885fcaef2570e7cac9e6b89f4cded2d5efe238c2c19a21fd94b762880",
+    "seq": 6,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:04.000000Z",
+    "type": "PositionOpened"
+  },
+  {
+    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":10009000},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":24453593,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
+    "payload_sha256": "62115015566110ed25f0fa465a591f971f997fb58712e38982c023f17d11edad",
+    "seq": 7,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.000000Z",
+    "type": "MarkToMarket"
+  },
+  {
+    "idempotency_key": "consume|apr-01KDVDP7HAQ09T9J82FMQPRWQS",
+    "payload_sha256": "ae93cad283d89214841ed73a32375a18d763f521faae016159a7ce51bd18d41b",
+    "seq": 8,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.250000Z",
+    "type": "ApprovalRecorded"
+  },
+  {
+    "idempotency_key": "aea68c17eeaeb0972d242754d9ced5de",
+    "payload_sha256": "a44ab44a4ea34fb58f0b52e48fc5200a521930f088ce413d0f1a5cd34958358e",
+    "seq": 9,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.250000Z",
+    "type": "OrderPlaced"
+  },
+  {
+    "idempotency_key": "fill|01KDVDP7HAZ59CGEATNNFTR3DT",
+    "payload_sha256": "459325908aba01997b546c744b3f502dd01b10cc42748c1b6cfac4e6a43b3603",
+    "seq": 10,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.750000Z",
+    "type": "FillRecorded"
+  },
+  {
+    "idempotency_key": "close|01KDVDP7HAZ59CGEATNNFTR3DT",
+    "payload_sha256": "8f810005c6ff8665e0669ffa8bc3504d3ccdffe620ad1c9a5408baf21736d6d9",
+    "seq": 11,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.750000Z",
+    "type": "PositionClosed"
+  }
+]

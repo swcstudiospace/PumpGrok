@@ -18,7 +18,7 @@ from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor
-from pumpgrok.supervisor.seat_task import (
+from pumpgrok.supervisor.seat_relay import (
     KIND_LEDGER_READ_FAILED,
     KIND_RESTART_EXHAUSTED,
     append_escalation,

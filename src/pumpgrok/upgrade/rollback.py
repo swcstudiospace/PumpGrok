@@ -5,8 +5,6 @@ active-set row plus a ledger JournalNote, so the ledger keeps the full
 promotion history while the live value is exactly the prior content.
 No path in this module alters bounds, trials, or autonomy: it reads only
 the current active hash and appends only the active-set pair.
-A target whose recorded content is missing, undecodable, or does not hash to the
-target is refused with RollbackRefused before anything is appended.
 
 Hashes are identity only: they name exact sets and never act as a score,
 a metric, or a verdict.
@@ -17,29 +15,22 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from pumpgrok.core.errors import CorruptState, PumpgrokError
-from pumpgrok.ledger.active_set import ACTIVE_SET_KEY, load_verified_param_set, read_active_set
+from pumpgrok.ledger.active_set import (
+    ACTIVE_SET_KEY,
+    is_writer,
+    read_active_set,
+    verify_stored_content,
+)
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
 
 __all__ = [
-    "RollbackRefused",
     "restore_active_set",
     "rollback_note_text",
 ]
 
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
-
-
-class RollbackRefused(PumpgrokError):
-    """A rollback target cannot be restored; nothing is appended.
-
-    Raised when the target's recorded content is missing, undecodable, or does
-    not hash to the target. The current active set is left unchanged.
-    """
-
-    code = "rollback_refused"
 
 
 def rollback_note_text(prior_hash: str, source: str) -> str:
@@ -60,20 +51,16 @@ def restore_active_set(
 
     Appends a ConfigChanged row (keys_changed holding active_param_set,
     old_hash the current live hash, new_hash the exact prior hash) plus a
-    desk JournalNote, so the restore is itself ledger history. Fails closed: a
-    malformed prior hash raises ValueError, and a target whose recorded content
-    is missing or does not hash to it raises RollbackRefused. Nothing is written
-    in either case.
+    desk JournalNote, so the restore is itself ledger history. Fails closed
+    before any append, and writes nothing, on a malformed prior hash, on a
+    caller that is not a human: or gate: writer, and on a prior hash with no
+    valid stored content.
     """
     if not isinstance(prior_hash, str) or not _HASH_RE.fullmatch(prior_hash):
         raise ValueError("prior_hash must be a 64-hex content hash")
-    try:
-        load_verified_param_set(store, prior_hash)
-    except CorruptState as exc:
-        raise RollbackRefused(
-            f"rollback target {prior_hash} refused: {exc.message}",
-            prior_hash=prior_hash,
-        ) from exc
+    if not is_writer(by):
+        raise ValueError("restore needs a human: or gate: writer")
+    verify_stored_content(store, prior_hash)
     previous = read_active_set(store)
     rows: list[dict[str, Any]] = [
         {

@@ -1,0 +1,110 @@
+{
+  "task_id": "v3-closeout",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v3-closeout",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner decision 2026-11-01: archive v3 now with the audit debt recorded (tech_debt). Ship through the owner-authorized G-1 waiver (PR 28, merged as 9588bc0) with merge method merge.",
+  "commands": [
+    {
+      "cmd": "make check",
+      "exit_code": 0,
+      "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked; PumpGrok repository structure looks healthy. (run before the first documentation corrections)"
+    },
+    {
+      "cmd": "uv run pumpgrok verify --fixture smoke-10m",
+      "exit_code": 0,
+      "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d; verify=CONSISTENT seq=2 events=41"
+    },
+    {
+      "cmd": "uv run pumpgrok run --mode live --once",
+      "exit_code": 3,
+      "output_tail": "LIVE GATE: refusing to start in mode=live. 8 of 9 preconditions unmet"
+    },
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --bot bot-00-chief --base origin/main",
+      "exit_code": 1,
+      "output_tail": "G-1 FAIL \u2014 bot-00-chief: ten foreign files (bot-02-risk 8, bot-04-sniper 1, bot-09-journal 1)"
+    },
+    {
+      "cmd": "uv run python -m pytest tests/docs -q",
+      "exit_code": 0,
+      "output_tail": "44 tests, 0 failures, 0 errors, 0 skipped (junit, after the documentation corrections)"
+    },
+    {
+      "cmd": "./scripts/verify_doc_commands.sh",
+      "exit_code": 0,
+      "output_tail": "pass=2 skip=9 fail=0"
+    },
+    {
+      "cmd": "./scripts/check.sh",
+      "exit_code": 0,
+      "output_tail": "ok: 35 skills, 10 agents, 322 markdown files checked; PumpGrok repository structure looks healthy."
+    },
+    {
+      "cmd": "uv run python -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v3-closeout.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS \u2014 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "make check passed on the closeout tree before the first documentation corrections: lint, typecheck, tests, audit, generator checks and check.sh.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The replay verify is CONSISTENT with events.hash b69c2959...ad32d, unchanged from phase 6.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "run --mode live --once still refuses with exit 3 and names the unmet preconditions.",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-1 as built fails on ten foreign files; the PR 27 entry merged in PR 28 makes CI skip this PR's G-1 steps.",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "The corrected MILESTONES, CLAUDE.md, ARCHITECTURE, README, STATE and closeout records pass tests/docs (44 tests, no failures).",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The corrected documents keep the verify_doc_commands.sh expectations: pass=2 skip=9 fail=0.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The corrected documents pass check.sh: ASCII, placeholder, and structure checks over 322 markdown files.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The rollback plan passes the G-5 rule: it names the command, the expected recovery time and the data implications.",
+      "evidence_command_index": 7
+    }
+  ],
+  "unverified": [
+    "The PR 27 CI run on the fix commit has not been observed yet; the G-2 result and the Greptile score depend on it.",
+    "Greptile re-review of the fix commit (the six review comments are addressed in the fix commit) is not complete when this receipt is written.",
+    "The tag v3 is local and not pushed.",
+    "Live venue behaviour is not exercised; the live path stays refused.",
+    "INT-10 live-mainnet probe not run; recorded as debt in the closeout record and the audit correction.",
+    "make check ran before the documentation corrections; the corrections were re-checked by commands 4 to 6 only."
+  ],
+  "files_changed": [
+    ".planning/MILESTONES.md",
+    ".planning/STATE.md",
+    ".planning/ROADMAP.md",
+    ".planning/REQUIREMENTS.md (removed; archived as .planning/milestones/v3-REQUIREMENTS.md)",
+    ".planning/milestones/v3-ROADMAP.md",
+    ".planning/milestones/v3-REQUIREMENTS.md",
+    ".planning/milestones/v3-MILESTONE-AUDIT.md (moved from .planning/v3-MILESTONE-AUDIT.md; correction section added)",
+    ".planning/milestones/v3-phases/ (phase directories 06 to 10, 20 and 21 moved here)",
+    ".planning/milestones/v3-CLOSEOUT.md",
+    ".planning/milestones/v3-CLEANUP-REPORT.md",
+    "CLAUDE.md",
+    "ARCHITECTURE.md",
+    "README.md"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Rollback: revert the closeout merge commit on main with git revert. The recorded command pumpgrok run --mode live --once exits 3 and changes nothing, so no deployment happens. Expected recovery time: about 10 minutes (one git revert and one CI run). Data implications: none to the paper ledger or live state; the .planning archive comes back from git history."
+}

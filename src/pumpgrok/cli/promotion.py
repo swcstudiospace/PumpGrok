@@ -3,8 +3,9 @@
 run_promotion_check searches the declared space (upgrade/space.py) over one recorded
 dataset with the same holdout path as ``backtest``, takes the search winner alone, asks the
 gate for a verdict on that winner, and hands the verdict to upgrade.scheduled.apply_candidate.
-It acts only at the autonomous-paper level. A non-autonomous level, an empty space, or a
-winner already active returns skipped and writes nothing. Any exception returns failed and
+It acts only at the autonomous-paper level, read from the operator ledger. A non-autonomous
+level, an empty space, a winner already active, or a paper window that has not finished with
+at least one observation returns skipped and writes nothing. Any exception returns failed and
 promotes nothing.
 
 make_promotion_check wraps the check in a closure taking (store, clock). The closure runs the
@@ -13,6 +14,7 @@ check at most once per PROMOTION_CHECK_INTERVAL_S on the injected clock.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -22,7 +24,14 @@ from pumpgrok.backtest.evaluate import evaluated_settings_hash
 from pumpgrok.backtest.harness import run_search
 from pumpgrok.backtest.manifest import build_manifest, param_set_hash
 from pumpgrok.backtest.split import holdout_split
-from pumpgrok.cli.backtest import _backtest_dataset, _evaluate_holdout, _paper_gate, _run_lock
+from pumpgrok.cli.backtest import (
+    _backtest_dataset,
+    _evaluate_holdout,
+    _paper_gate,
+    _read_window_ledger,
+    _row_stamp,
+    _run_lock,
+)
 from pumpgrok.config.settings import ConfigError
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
@@ -55,7 +64,8 @@ log = logging.getLogger("pumpgrok.cli")
 
 #: Provenance written on every scheduled promotion row (human rows keep their own prefix).
 CHECK_BY = "gate:promotion-check"
-CHECK_SOURCE = "replay"
+# Operator-ledger source, the one state autonomy writes; a replay row fails the live gate.
+CHECK_SOURCE = "paper"
 CHECK_CORRELATION_ID = "upgrade-promotion-check"
 
 _MAX_DETAIL_CHARS = 200
@@ -71,27 +81,71 @@ def _declared_params(space: Sequence[Mapping[str, Any]]) -> dict[str, ParamSet]:
     return {params.content_hash: params for params in (ParamSet(**dict(entry)) for entry in space)}
 
 
+def canonical_space(space: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Declaration order and repeats do not change the search input, so one identity names one
+    search."""
+    by_hash = {
+        param_set_hash(canonical_json(dict(entry)).encode("utf-8")): dict(entry) for entry in space
+    }
+    return [by_hash[content_hash] for content_hash in sorted(by_hash)]
+
+
+def declared_space_identity(space: Sequence[Mapping[str, Any]]) -> str:
+    """Identity of a declared space: sha256 over the content hashes of its canonical entries.
+
+    The canonical entries are the distinct ones, in content-hash order (see canonical_space), so
+    a repeated entry and the order of the entries leave the identity unchanged, while a different
+    entry changes it.
+    """
+    entry_hashes = [
+        param_set_hash(canonical_json(entry).encode("utf-8")) for entry in canonical_space(space)
+    ]
+    payload = canonical_json({"entry_hashes": entry_hashes})
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _paper_window_complete(paper_path: Path, *, cutoff: float, window_end: float) -> bool:
+    """True when the paper ledger reached window_end and holds a row inside the window.
+
+    A paper window that has not finished, or that has no rows, is no evidence: the paper
+    summary would read as a flat zero return and zero Sharpe. The chain is verified first,
+    as the paper gate does.
+    """
+    rows, _ = _read_window_ledger(paper_path, verify=True)
+    stamps = [_row_stamp(row) for row in rows]
+    reached_end = any(stamp >= window_end for stamp in stamps)
+    observed = any(cutoff <= stamp < window_end for stamp in stamps)
+    return reached_end and observed
+
+
 def _check_and_apply(
     store: LedgerStore,
-    operator_store: LedgerStore,
+    operator: LedgerStore,
     dataset_dir: str | Path,
     *,
     clock: Clock,
     space: Sequence[Mapping[str, Any]],
     seed: int,
     initial_equity_lamports: int,
+    risk_budget: RiskBudget,
+    limits: EngineLimits,
 ) -> CheckOutcome:
-    """Search the declared space, gate its winner alone, and apply the verdict."""
+    """Search the declared space, gate its winner alone, and apply the verdict.
+
+    store is the serve's replay ledger: its rows are the paper window the holdout is compared
+    with. operator is the operator ledger: it holds the human autonomy level and the active
+    set the desk reads, and it is where a promotion is recorded.
+    """
     spec = _backtest_dataset(str(dataset_dir))
     declared = _declared_params(space)
-    risk_budget = RiskBudget()
-    limits = EngineLimits()
-    space_bytes = canonical_json({"candidates": [dict(entry) for entry in space]}).encode("utf-8")
+    ordered = canonical_space(space)
+    space_bytes = canonical_json({"candidates": ordered}).encode("utf-8")
+    space_hash = declared_space_identity(space)
     manifest = build_manifest(
         spec.ref,
         seed,
         evaluated_settings_hash(ParamSet().candidate(), risk_budget=risk_budget, limits=limits),
-        param_set_hash(space_bytes),
+        space_hash,
     )
     events = load_dataset(spec.directory)
     stamps = tuple(event_epoch(event) for event in events.events)
@@ -104,8 +158,8 @@ def _check_and_apply(
             trials_path.unlink()
         search = run_search(
             spec.ref,
-            space,
-            len(space),
+            ordered,
+            len(ordered),
             seed,
             run_id=manifest.run_id,
             risk_budget=risk_budget,
@@ -115,7 +169,12 @@ def _check_and_apply(
         winner = declared.get(search.best_params_hash)
         if winner is None:
             raise ConfigError(["promotion search winner is not in the declared space"])
-        if read_active_set(operator_store) == winner.content_hash:
+        manifest_path = run_dir / "manifest.json"
+        manifest_path.write_text(
+            canonical_json(manifest.model_dump(mode="json")) + "\n", encoding="utf-8"
+        )
+        (run_dir / "candidates.json").write_bytes(space_bytes)
+        if read_active_set(operator) == winner.content_hash:
             return "skipped"
         outcome = _evaluate_holdout(
             spec=spec,
@@ -126,6 +185,11 @@ def _check_and_apply(
             holdout_ledger=holdout_ledger,
             initial_fallback=initial_equity_lamports,
         )
+        if not _paper_window_complete(
+            store.path, cutoff=split.holdout_start_ts, window_end=outcome.window_end_ts
+        ):
+            log.info("promotion_check outcome=skipped detail=paper window not complete")
+            return "skipped"
         gate = _paper_gate(
             paper_ledger=str(store.path),
             dataset_name=spec.name,
@@ -146,12 +210,12 @@ def _check_and_apply(
             bounds=bounds,
             search=search,
             run_id=manifest.run_id,
-            store=operator_store,
+            store=operator,
             backtest=outcome.window_metrics,
             paper=gate.paper_metrics,
         )
         return apply_candidate(
-            operator_store,
+            operator,
             verdict,
             candidate_hash=winner.content_hash,
             run_id=manifest.run_id,
@@ -175,38 +239,47 @@ def run_promotion_check(
     space: Sequence[Mapping[str, Any]],
     seed: int,
     initial_equity_lamports: int,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> CheckOutcome:
     """Run one promotion check over the declared space; return its outcome.
 
-    The autonomy level, the active set and every promotion or escalation row live in the
-    operator paper ledger at PAPER_LEDGER_PATH, the store the desk's autonomy verb writes.
-    The paper window comes from store, the replay ledger the check is handed.
+    The autonomy level and the active set come from the operator ledger at PAPER_LEDGER_PATH,
+    the ledger ``state autonomy`` writes. store is the serve's replay ledger, whose rows are the
+    paper window. budget and limits default to the same RiskBudget() and EngineLimits() the
+    serve path uses when none is configured.
 
-    skipped: no operator ledger exists yet, the autonomy level is below autonomous-paper, the
-    declared space is empty, or the search winner is already the active set. Nothing is
-    written. failed: any exception; a structured line names its class, and nothing is
-    promoted. promoted or escalated: the gate's verdict on the search winner was applied
-    (see upgrade.scheduled.apply_candidate).
+    skipped: no operator ledger, the autonomy level is below autonomous-paper, the declared
+    space is empty, the search winner is already the active set, or the paper window is not
+    complete. Nothing is written. failed: any exception; a structured line names its class,
+    and nothing is promoted. promoted or escalated: the gate's verdict on the search winner was
+    applied (see upgrade.scheduled.apply_candidate).
     """
-    operator_store: LedgerStore | None = None
+    risk_budget = RiskBudget() if budget is None else budget
+    engine_limits = EngineLimits() if limits is None else limits
     try:
-        if not PAPER_LEDGER_PATH.exists():
-            return "skipped"
-        operator_store = LedgerStore(str(PAPER_LEDGER_PATH))
-        if read_autonomy(operator_store) != REQUIRED_AUTONOMY_LEVEL:
-            return "skipped"
         if not space:
             log.info("promotion_check outcome=skipped detail=no candidates declared")
             return "skipped"
-        outcome = _check_and_apply(
-            store,
-            operator_store,
-            dataset_dir,
-            clock=clock,
-            space=space,
-            seed=seed,
-            initial_equity_lamports=initial_equity_lamports,
-        )
+        if not PAPER_LEDGER_PATH.exists():
+            return "skipped"
+        operator = LedgerStore(str(PAPER_LEDGER_PATH))
+        try:
+            if read_autonomy(operator) != REQUIRED_AUTONOMY_LEVEL:
+                return "skipped"
+            outcome = _check_and_apply(
+                store,
+                operator,
+                dataset_dir,
+                clock=clock,
+                space=space,
+                seed=seed,
+                initial_equity_lamports=initial_equity_lamports,
+                risk_budget=risk_budget,
+                limits=engine_limits,
+            )
+        finally:
+            operator.close()
     except Exception as exc:
         log.error(
             "promotion_check outcome=failed error=%s detail=%s",
@@ -214,9 +287,6 @@ def run_promotion_check(
             _one_line(exc),
         )
         return "failed"
-    finally:
-        if operator_store is not None:
-            operator_store.close()
     log.info("promotion_check outcome=%s candidates=%d", outcome, len(space))
     return outcome
 
@@ -227,6 +297,8 @@ def make_promotion_check(
     space: Sequence[Mapping[str, Any]],
     seed: int,
     initial_equity_lamports: int,
+    budget: RiskBudget | None = None,
+    limits: EngineLimits | None = None,
 ) -> Callable[[LedgerStore, Clock], None]:
     """Return a closure taking (store, clock) that runs the check once per interval.
 
@@ -246,6 +318,8 @@ def make_promotion_check(
             space=space,
             seed=seed,
             initial_equity_lamports=initial_equity_lamports,
+            budget=budget,
+            limits=limits,
         )
         mark(store, clock)
 

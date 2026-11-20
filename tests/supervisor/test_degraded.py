@@ -34,7 +34,7 @@ from pumpgrok.supervisor.scheduler import (
     rollover_key,
     run_once_replay,
 )
-from pumpgrok.supervisor.seat_task import CLOCK_SKEW_S, ClockSkew, append_escalation
+from pumpgrok.supervisor.seat_relay import CLOCK_SKEW_S, ClockSkew, append_escalation
 
 SMOKE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke"
 

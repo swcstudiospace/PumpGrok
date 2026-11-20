@@ -25,7 +25,8 @@ from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.supervisor.scheduler import ROSTER, Supervisor
-from pumpgrok.supervisor.seat_task import ObserveOnly, RestartPolicy, SeatContext, SeatTask
+from pumpgrok.supervisor.seat_restart import ObserveOnly, RestartPolicy
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 from pumpgrok.tools.notify.notifier import Notifier
 
 

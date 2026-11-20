@@ -21,6 +21,8 @@ The gate evaluates `PRECONDITION_IDS` from `src/pumpgrok/execution/live/live_gat
 4. `performance_thresholds` -- closed count, profit factor, and drawdown on paper rows within limits.
 5. `wallet_allowlist` -- `live.wallet_allowlist` must hold at least one public key (base58, 32 bytes); it is empty by default.
 6. `notional_cap` -- `live.notional_cap_lamports` must be set with 0 < cap <= 1 SOL.
+5. `wallet_allowlist` -- `[wallet] allowlist` must hold at least one public key (base58, 32 bytes); it is empty by default.
+6. `notional_cap` -- `[live] notional_cap_lamports` must be set with 0 < cap <= 1 SOL.
 7. `confirmation_record` -- a fresh `var/live_confirmation.json` verifies against the config hash.
 8. `adapter_registered` -- a registered live adapter exists (no live adapter ships in this release).
 9. `no_active_stop` -- halt, kill switch, and breaker state all readable and clear (not readable in this release).

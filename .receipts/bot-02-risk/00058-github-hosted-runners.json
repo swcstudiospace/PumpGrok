@@ -1,0 +1,100 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "task_id": "00058-pumpgrok",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/00058-github-hosted-runners",
+  "approval_note": "Owner decision, fixed for this change: move every CI job from the omega-ci self-hosted pool to GitHub-hosted ubuntu-latest, one draft PR, no merge by the author. Reverses the 2026-10-24 owner rule recorded in .receipts/bot-02-risk/00057-omega-ci-runners.json because the omega-ci controller cannot reach the desktop agents that launch runners. Owner approval for merge, 2026-11-06 (approve_58): approved_by records the owner.",
+  "commands": [
+    {
+      "cmd": "actionlint .github/workflows/ci.yml .github/workflows/gates.yml .github/workflows/security-pr.yml",
+      "exit_code": 0,
+      "output_tail": "(no output)"
+    },
+    {
+      "cmd": "uv run python -c \"import glob,yaml; jobs=[(f,k,j) for f in sorted(glob.glob('.github/workflows/*.yml')) for k,j in yaml.safe_load(open(f))['jobs'].items()]; assert all(j['runs-on']=='ubuntu-latest' for _,_,j in jobs), jobs; print(len(jobs), 'jobs, all runs-on ubuntu-latest')\"",
+      "exit_code": 0,
+      "output_tail": "9 jobs, all runs-on ubuntu-latest"
+    },
+    {
+      "cmd": "uv run pytest ci/tests/test_security_workflows.py ci/tests/test_sbom_step.py -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "Pytest: 59 passed in 0.47s"
+    },
+    {
+      "cmd": "make lint",
+      "exit_code": 0,
+      "output_tail": "All checks passed! / 867 files already formatted"
+    },
+    {
+      "cmd": "make typecheck",
+      "exit_code": 0,
+      "output_tail": "Success: no issues found in 222 source files"
+    },
+    {
+      "cmd": "make test",
+      "exit_code": 0,
+      "output_tail": "Required test coverage of 89.9% reached. Total coverage: 91.40%"
+    },
+    {
+      "cmd": "make audit",
+      "exit_code": 0,
+      "output_tail": "No known vulnerabilities found"
+    },
+    {
+      "cmd": "uv run pytest ci/tests/test_security_workflows.py -k only_glob_admitted -o addopts= (receipt tracked, before the guard amendment)",
+      "exit_code": 1,
+      "output_tail": "Pytest: 0 passed, 1 failed; AssertionError: ['.receipts/bot-02-risk/00058-github-hosted-runners.json']"
+    },
+    {
+      "cmd": "uv run pytest ci/tests/test_security_workflows.py -k only_glob_admitted -o addopts= (after the guard amendment)",
+      "exit_code": 0,
+      "output_tail": "Pytest: 1 passed in 0.36s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The three workflow files parse as YAML and pass actionlint",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "All nine jobs across ci.yml, gates.yml and security-pr.yml run on ubuntu-latest; no omega-ci runner label remains in the workflows",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The workflow guard tests pass, including the fork-PR skip assertions and the Trivy trivy-action assertions (severity HIGH,CRITICAL, exit-code 1, no ignore-unfixed)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The canonical CI commands pass locally: lint, typecheck, the full test suite at 91.40% coverage, and pip-audit",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Before the guard amendment, test_only_glob_admitted_receipt_json_is_tracked fails on the tracked 00058 receipt",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    },
+    {
+      "claim": "After the guard amendment, test_only_glob_admitted_receipt_json_is_tracked passes with the 00058 receipt tracked. The amendment adds OWNER_ADMITTED_RECEIPTS, a frozenset holding exactly this receipt path, and admits it by that set; LEGACY_TRACKED_RECEIPTS, RECEIPT_GLOB and the allowlist are unchanged",
+      "evidence_command_index": 8
+    }
+  ],
+  "unverified": [
+    "The jobs on GitHub-hosted runners: checked by this PR's own CI run, not locally. Each job's result is reported from that run.",
+    "The Trivy scan through aquasecurity/trivy-action v0.36.0, and gitleaks, semgrep, bandit and pip-audit on GitHub-hosted runners: checked by CI, not locally.",
+    "The pinned trivy-action SHA ed142fd0673e97e23eac54620cfb913e5ce36c25 is the commit that the v0.36.0 tag peels to (checked against the GitHub API); the action itself has not been executed on this host.",
+    "The G-2 gate (ci/gates/check_receipt.py --strict) is run by gates.yml on the PR's committed diff. It was not re-run in this receipt; its outcome is reported from the PR 58 CI run. approved_by is absent by design: G-2 fails on it until the owner adds it after review.",
+    "The guard amendment admits only this one non-v4 receipt. Any other non-v4 receipt still needs its own owner decision and its own OWNER_ADMITTED_RECEIPTS entry.",
+    "The CHANGELOG entry for this change is not in this PR: CHANGELOG.md is owned by bot-09-journal, so the entry is routed through bot-00-chief.",
+    "Greptile review and the owner's approval: not run by the author; the PR is a draft."
+  ],
+  "files_changed": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/gates.yml",
+    ".github/workflows/security-pr.yml",
+    "ci/tests/test_security_workflows.py",
+    "ci/tests/test_sbom_step.py",
+    ".receipts/bot-02-risk/00058-github-hosted-runners.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this pull request's merge commit with git revert. The workflows return to the omega-ci pool values and the Trivy binary step, and the guard tests return to the omega-ci assertions. The receipt admission in the guard test is reverted with the same commit."
+}

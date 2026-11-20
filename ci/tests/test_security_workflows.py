@@ -1,7 +1,7 @@
 """Regression guard for the GitHub workflows and the scanner configs they depend on.
 
 The workflows are YAML, not ci/gates/*.py, so test_gates.py never parses them. A later edit could
-quietly drop a blocking flag, move a job off the Omega CI runner pool, or interpolate a branch
+quietly drop a blocking flag, reintroduce a self-hosted runner, or interpolate a branch
 name into shell source, and the gate suite would stay green. These tests assert what a diff
 review can miss.
 
@@ -13,6 +13,7 @@ They do not run the scanners (that needs network access and the tools installed)
 from __future__ import annotations
 
 import datetime
+import fnmatch
 import importlib.util
 import subprocess
 import tomllib
@@ -28,6 +29,50 @@ BANDIT_SARIF_CONVERTER = REPO_ROOT / "ci" / "security" / "bandit_json_to_sarif.p
 EXCEPTIONS_GATE = REPO_ROOT / "ci" / "security" / "check_exceptions.py"
 
 WORKFLOW_FILES = ["gates.yml", "security-pr.yml", "ci.yml"]
+
+# D-06: one glob admits every v4 receipt from every non-chief seat, so no seat edits .gitignore.
+# The v3 receipts tracked before the glob landed are frozen here: this set may shrink, never grow.
+RECEIPT_GLOB = "!.receipts/bot-0*/v4-p*.json"
+LEGACY_TRACKED_RECEIPTS = frozenset(
+    {
+        ".receipts/bot-00-chief/complete-phase-5.json",
+        ".receipts/bot-00-chief/desk-built-ins.json",
+        ".receipts/bot-00-chief/live-mark-at-fill.json",
+        ".receipts/bot-00-chief/phase-6.json",
+        ".receipts/bot-00-chief/phase-9-followups.json",
+        ".receipts/bot-00-chief/provider-record.json",
+        ".receipts/bot-00-chief/restore-hardening.json",
+        ".receipts/bot-00-chief/v3-closeout-followup.json",
+        ".receipts/bot-00-chief/v3-closeout.json",
+        ".receipts/bot-02-risk/00057-omega-ci-runners.json",
+        ".receipts/bot-02-risk/pr-27-followup.json",
+        ".receipts/bot-02-risk/pr-27-gate-waiver.json",
+    }
+)
+# Owner decision for PR 58 (GitHub-hosted runners): this one non-v4 receipt is admitted by name.
+# Each entry needs its own owner decision; this set is not a general exception.
+OWNER_ADMITTED_RECEIPTS = frozenset(
+    {
+        ".receipts/bot-02-risk/00058-github-hosted-runners.json",
+    }
+)
+
+
+def _receipt_allowlist() -> list[str]:
+    """The `!.receipts/...json` allowlist lines in .gitignore, in file order."""
+    lines = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    return [line for line in lines if line.startswith("!.receipts/") and line.endswith(".json")]
+
+
+def _admits(line: str, path: str) -> bool:
+    """True when one allowlist line admits the path; '*' matches within one segment only."""
+    pattern_parts = line.removeprefix("!").split("/")
+    path_parts = path.split("/")
+    return len(pattern_parts) == len(path_parts) and all(
+        fnmatch.fnmatchcase(segment, pattern)
+        for pattern, segment in zip(pattern_parts, path_parts, strict=True)
+    )
+
 
 # The bypass snippets G-2 rejects in a receipt, checked in the scanner workflow itself: a step
 # that masks its own exit code is the same failure in a different file.
@@ -77,26 +122,25 @@ def gates() -> dict:
     return _load_yaml("gates.yml")
 
 
-# Every job runs on the Omega CI runner pool (swcstudiospace/Omega-Prime docs/ci-runners.md):
-# never on a GitHub-hosted runner, never on any other self-hosted label set.
-OMEGA_CI_POOL = ["self-hosted", "linux", "x64", "omega-ci"]
+# Every job runs on a GitHub-hosted runner, never on a self-hosted label set.
+GITHUB_HOSTED = "ubuntu-latest"
 SAME_REPO_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
 
 
-class TestWorkflowsParseAndRunOnTheOmegaCiPool:
+class TestWorkflowsParseAndRunOnHostedRunners:
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
     def test_parses_as_yaml_with_jobs(self, name):
         assert _load_yaml(name)["jobs"]
 
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
-    def test_every_job_runs_on_the_omega_ci_pool(self, name):
+    def test_no_job_uses_a_self_hosted_runner(self, name):
         for job_name, job in _load_yaml(name)["jobs"].items():
-            assert job["runs-on"] == OMEGA_CI_POOL, job_name
+            assert job["runs-on"] == GITHUB_HOSTED, job_name
 
     @pytest.mark.parametrize("name", WORKFLOW_FILES)
-    def test_fork_pull_requests_never_reach_the_pool(self, name):
-        # A job that can run on pull_request must skip a fork's PR: fork code never runs on
-        # the shared pool. A schedule-only job cannot run on pull_request at all.
+    def test_fork_pull_requests_are_skipped(self, name):
+        # A job that can run on pull_request must skip a fork's PR, so fork code never runs in
+        # this repository's CI. A schedule-only job cannot run on pull_request at all.
         for job_name, job in _load_yaml(name)["jobs"].items():
             condition = job.get("if", "")
             if condition == "github.event_name == 'schedule'":
@@ -178,13 +222,10 @@ class TestSecurityGatesStillBlock:
         assert "-gt 1" in run
 
     def test_trivy_fails_on_high_and_critical_without_ignore_unfixed(self, security_pr):
-        step = _step(security_pr, "Trivy filesystem scan")
-        assert "uses" not in step, "the pool has no Docker: run the trivy binary"
-        run = step["run"]
-        assert "trivy fs" in run
-        assert "--severity HIGH,CRITICAL" in run
-        assert "--exit-code 1" in run
-        assert "ignore-unfixed" not in run
+        with_ = _step(security_pr, "Trivy filesystem scan")["with"]
+        assert with_["severity"] == "HIGH,CRITICAL"
+        assert with_["exit-code"] == "1"
+        assert "ignore-unfixed" not in with_
 
     def test_pip_audit_scans_the_uv_lock_export_strictly(self, security_pr):
         run = _step(security_pr, "pip-audit")["run"]
@@ -243,7 +284,7 @@ class TestCiWorkflow:
         trigger = _trigger(doc)
         assert any("cron" in item for item in trigger["schedule"])
         soak = doc["jobs"]["soak"]
-        assert soak["runs-on"] == OMEGA_CI_POOL
+        assert soak["runs-on"] == GITHUB_HOSTED
         assert soak["if"] == "github.event_name == 'schedule'"
         step = soak["steps"][-1]
         assert str(step["env"]["PUMPGROK_REQUIRE_SOAK"]) == "1"
@@ -335,7 +376,17 @@ class TestReceiptDirectories:
         for seat in seats:
             assert (REPO_ROOT / ".receipts" / seat / ".gitkeep").is_file(), seat
 
-    def test_only_gitignore_allowlisted_receipt_json_is_tracked(self):
+    def test_the_allowlist_is_the_single_v4_glob(self):
+        assert _receipt_allowlist() == [RECEIPT_GLOB]
+
+    def test_glob_admits_v4_receipts_one_directory_deep_only(self):
+        v4_receipt = ".receipts/bot-02-risk/v4-p11-receipts-pins-characterization.json"
+        assert _admits(RECEIPT_GLOB, v4_receipt)
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-02-risk/pr-27-followup.json")
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-02-risk/nested/v4-p1.json")
+        assert not _admits(RECEIPT_GLOB, ".receipts/bot-10-x/v4-p1.json")
+
+    def test_only_glob_admitted_receipt_json_is_tracked(self):
         tracked = subprocess.run(
             ["git", "ls-files", "--", ".receipts"],
             capture_output=True,
@@ -343,10 +394,10 @@ class TestReceiptDirectories:
             check=True,
             cwd=REPO_ROOT,
         ).stdout.split()
-        allowed = {
-            line.removeprefix("!")
-            for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-            if line.startswith("!.receipts/") and line.endswith(".json")
-        }
+        allowed = _receipt_allowlist()
         tracked_json = {path for path in tracked if path.endswith(".json")}
-        assert tracked_json <= allowed, sorted(tracked_json - allowed)
+        unadmitted = {
+            path for path in tracked_json if not any(_admits(line, path) for line in allowed)
+        }
+        admitted = LEGACY_TRACKED_RECEIPTS | OWNER_ADMITTED_RECEIPTS
+        assert unadmitted <= admitted, sorted(unadmitted - admitted)

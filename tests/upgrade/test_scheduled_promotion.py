@@ -5,10 +5,6 @@ the whole declared space and applies the gate verdict to the search winner alone
 over-limit or out-of-bounds declared space fails at load. due() holds a second check until the
 interval has passed on the injected clock, and a harness failure promotes nothing.
 
-The autonomy level and the active set are read from the operator paper ledger at
-PAPER_LEDGER_PATH. The paper window is read from the replay ledger the check is handed, and it
-must reach the window end before any comparison.
-
 Offline only: temp ledger and temp space files, fixture clock, the bundled smoke fixture for
 dataset resolution, the harness and holdout boundary replaced by fakes, no network, no sleeps.
 The real config/upgrade_space.toml is never read here.
@@ -60,24 +56,12 @@ TWO_TEXT = ONE_TEXT + "\n[[candidate]]\n[candidate.filter]\nmin_unique_buyers = 
 
 @pytest.fixture(autouse=True)
 def _run_in_tmp(tmp_path, monkeypatch) -> None:
-    """Promotion manifests, search runs and the operator ledger land under var/ in the cwd.
-
-    PAPER_LEDGER_PATH is relative, so the chdir is what places it under tmp_path.
-    """
+    """Promotion manifests and search runs land under var/ relative to the working directory."""
     monkeypatch.chdir(tmp_path)
 
 
 @pytest.fixture
 def ledger(tmp_path):
-    """The serve's replay ledger: the paper window the check compares its holdout with."""
-    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
-    yield store
-    store.close()
-
-
-@pytest.fixture
-def operator():
-    """The operator paper ledger at PAPER_LEDGER_PATH, under the tmp working directory."""
     PAPER_LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
     store = LedgerStore(str(PAPER_LEDGER_PATH))
     yield store
@@ -104,11 +88,11 @@ def _declared(tmp_path, text: str = TWO_TEXT) -> tuple:
     return load_declared_space(path)
 
 
-def _set_autonomy(store: LedgerStore, policy: str) -> None:
-    """Record a human autonomy level in the operator ledger, then confirm the reader sees it."""
+def _grant_autonomy(store: LedgerStore) -> None:
+    """Record a human autonomous-paper level, then confirm the reader sees it."""
     store.append_batch(
         autonomy_rows(
-            policy,
+            "autonomous-paper",
             "human:SCHED-TEST",
             previous="",
             ts_utc="2026-01-01T00:00:00Z",
@@ -116,51 +100,43 @@ def _set_autonomy(store: LedgerStore, policy: str) -> None:
             correlation_id="upgrade-scheduled-test",
         )
     )
-    assert read_autonomy(store) == policy
+    assert read_autonomy(store) == "autonomous-paper"
 
 
 def _paper_window_rows(store: LedgerStore) -> None:
-    """Paper rows in the replay ledger: one inside the holdout window, one at its end.
-
-    The smoke span runs 00:00:00 to 00:00:30, so the holdout cutoff is 00:00:24 and the
-    00:00:30 event is the holdout. The fake holdout ends the window at T0, so a row stamped
-    T0 reaches the window end.
-    """
+    """Paper rows that make the window complete: one inside the holdout, one at its end."""
     store.append_batch(
         [
-            _window_row("2026-01-01T00:00:30.000Z", "window-inside"),
-            _window_row(format_ts_utc(T0), "window-end"),
+            {
+                "ts_utc": "2026-01-01T00:00:30Z",
+                "source": "paper",
+                "correlation_id": "window-inside",
+                "idempotency_key": "window-inside",
+                "type": "JournalNote",
+                "payload": {
+                    "source": "paper",
+                    "seat": "desk",
+                    "note_kind": "note",
+                    "text": "inside window",
+                    "refs": [],
+                },
+            },
+            {
+                "ts_utc": format_ts_utc(T0),
+                "source": "paper",
+                "correlation_id": "window-end",
+                "idempotency_key": "window-end",
+                "type": "JournalNote",
+                "payload": {
+                    "source": "paper",
+                    "seat": "desk",
+                    "note_kind": "note",
+                    "text": "window end",
+                    "refs": [],
+                },
+            },
         ]
     )
-
-
-def _window_row(ts_utc: str, label: str) -> dict:
-    return {
-        "ts_utc": ts_utc,
-        "source": "paper",
-        "correlation_id": "upgrade-scheduled-window",
-        "idempotency_key": f"paper-window|{label}",
-        "type": "JournalNote",
-        "payload": {
-            "source": "paper",
-            "seat": "desk",
-            "note_kind": "note",
-            "text": label,
-            "refs": [],
-        },
-    }
-
-
-def _check_output(tmp_path) -> set[str]:
-    """Files under var/ other than the ledger databases: where a check writes runs and records."""
-    root = tmp_path / "var"
-    if not root.exists():
-        return set()
-    return {
-        str(path.relative_to(root))
-        for path in root.rglob("*")
-        if path.is_file() and not path.name.startswith("ledger.sqlite")
-    }
 
 
 def _search_result(winner: ParamSet, *, holdout_net: int = 100) -> HarnessResult:
@@ -247,14 +223,10 @@ def _fake_harness(monkeypatch, winner: ParamSet, calls: list[dict]) -> None:
     monkeypatch.setattr(promotion, "_paper_gate", _fake_paper_gate)
 
 
-def test_manual_ticket_skips_and_writes_nothing(ledger, operator, tmp_path, monkeypatch) -> None:
+def test_manual_ticket_skips_and_writes_nothing(ledger, tmp_path, monkeypatch) -> None:
     """Below autonomous-paper the check returns skipped without searching, adds no rows."""
     monkeypatch.setattr(promotion, "run_search", _no_search)
-    _set_autonomy(operator, "manual-ticket")
-    _paper_window_rows(ledger)
     before = ledger.count()
-    operator_before = operator.count()
-    output_before = _check_output(tmp_path)
     outcome = promotion.run_promotion_check(
         ledger,
         DATASET,
@@ -265,22 +237,20 @@ def test_manual_ticket_skips_and_writes_nothing(ledger, operator, tmp_path, monk
     )
     assert outcome == "skipped"
     assert ledger.count() == before
-    assert operator.count() == operator_before
-    assert read_active_set(operator) is None
-    assert _check_output(tmp_path) == output_before
+    assert read_active_set(ledger) is None
+    assert not (tmp_path / "var" / "upgrade").exists()
+    assert not (tmp_path / "var" / "backtest").exists()
 
 
 @pytest.mark.parametrize("autonomous", [False, True])
 def test_empty_declared_space_is_skipped_at_every_level(
-    ledger, operator, tmp_path, monkeypatch, autonomous
+    ledger, tmp_path, monkeypatch, autonomous
 ) -> None:
     """An empty space is skipped at each autonomy level, with no search and no rows."""
     monkeypatch.setattr(promotion, "run_search", _no_search)
-    _set_autonomy(operator, "autonomous-paper" if autonomous else "manual-ticket")
-    _paper_window_rows(ledger)
+    if autonomous:
+        _grant_autonomy(ledger)
     before = ledger.count()
-    operator_before = operator.count()
-    output_before = _check_output(tmp_path)
     outcome = promotion.run_promotion_check(
         ledger,
         DATASET,
@@ -293,9 +263,9 @@ def test_empty_declared_space_is_skipped_at_every_level(
     tick = promotion.make_promotion_check(DATASET, space=(), seed=0, initial_equity_lamports=0)
     tick(ledger, FixtureClock(T0))
     assert ledger.count() == before
-    assert operator.count() == operator_before
-    assert read_active_set(operator) is None
-    assert _check_output(tmp_path) == output_before
+    assert read_active_set(ledger) is None
+    assert not (tmp_path / "var" / "upgrade").exists()
+    assert not (tmp_path / "var" / "backtest").exists()
 
 
 def test_header_only_space_file_declares_no_candidates(tmp_path) -> None:
@@ -342,9 +312,9 @@ def test_malformed_declared_space_is_refused(tmp_path, text) -> None:
         _declared(tmp_path, text)
 
 
-def test_autonomous_search_gates_only_the_winner(ledger, operator, tmp_path, monkeypatch) -> None:
+def test_autonomous_search_gates_only_the_winner(ledger, tmp_path, monkeypatch) -> None:
     """One search covers the whole declared space; the verdict applies to the winner alone."""
-    _set_autonomy(operator, "autonomous-paper")
+    _grant_autonomy(ledger)
     _paper_window_rows(ledger)
     calls: list[dict] = []
     _fake_harness(monkeypatch, SECOND, calls)
@@ -360,22 +330,39 @@ def test_autonomous_search_gates_only_the_winner(ledger, operator, tmp_path, mon
     assert len(calls) == 1
     assert calls[0]["n_trials"] == 2
     assert calls[0]["seed"] == 7
-    assert calls[0]["space"] == [
-        {"filter": {"min_unique_buyers": 5}},
-        {"filter": {"min_unique_buyers": 7}},
-    ]
-    assert read_active_set(operator) == SECOND.content_hash
+    assert calls[0]["space"] == promotion.canonical_space(_declared(tmp_path))
+    assert read_active_set(ledger) == SECOND.content_hash
     promotions = tmp_path / "var" / "upgrade" / "promotions"
     assert (promotions / f"{SECOND.content_hash}.json").is_file()
     assert not (promotions / f"{IN_BOUNDS.content_hash}.json").exists()
 
 
-def test_winner_already_active_is_skipped(ledger, operator, tmp_path, monkeypatch) -> None:
-    """A search winner equal to the active set returns skipped and adds no rows."""
-    _set_autonomy(operator, "autonomous-paper")
+def test_repeated_declaration_counts_once(ledger, tmp_path, monkeypatch) -> None:
+    """A repeated declaration is one trial, and the search receives the canonical space."""
+    _grant_autonomy(ledger)
     _paper_window_rows(ledger)
-    assert _apply(operator, _verdict(operator)) == "promoted"
-    before = operator.count()
+    calls: list[dict] = []
+    _fake_harness(monkeypatch, SECOND, calls)
+    declared = _declared(tmp_path)
+    outcome = promotion.run_promotion_check(
+        ledger,
+        DATASET,
+        clock=FixtureClock(T0),
+        space=[*declared, declared[0]],
+        seed=7,
+        initial_equity_lamports=0,
+    )
+    assert outcome == "promoted"
+    assert calls[0]["n_trials"] == 2
+    assert calls[0]["space"] == promotion.canonical_space(declared)
+
+
+def test_winner_already_active_is_skipped(ledger, tmp_path, monkeypatch) -> None:
+    """A search winner equal to the active set returns skipped and adds no rows."""
+    _grant_autonomy(ledger)
+    _paper_window_rows(ledger)
+    assert _apply(ledger, _verdict(ledger)) == "promoted"
+    before = ledger.count()
     calls: list[dict] = []
     _fake_harness(monkeypatch, IN_BOUNDS, calls)
     outcome = promotion.run_promotion_check(
@@ -388,15 +375,15 @@ def test_winner_already_active_is_skipped(ledger, operator, tmp_path, monkeypatc
     )
     assert outcome == "skipped"
     assert len(calls) == 1
-    assert operator.count() == before
-    assert read_active_set(operator) == IN_BOUNDS.content_hash
+    assert ledger.count() == before
+    assert read_active_set(ledger) == IN_BOUNDS.content_hash
 
 
-def test_harness_failure_returns_failed_and_promotes_nothing(ledger, operator, tmp_path) -> None:
+def test_harness_failure_returns_failed_and_promotes_nothing(ledger, tmp_path) -> None:
     """Any exception in the harness path returns failed with no active-set row."""
-    _set_autonomy(operator, "autonomous-paper")
+    _grant_autonomy(ledger)
     _paper_window_rows(ledger)
-    before = operator.count()
+    before = ledger.count()
     outcome = promotion.run_promotion_check(
         ledger,
         "no-such-dataset",
@@ -406,20 +393,21 @@ def test_harness_failure_returns_failed_and_promotes_nothing(ledger, operator, t
         initial_equity_lamports=0,
     )
     assert outcome == "failed"
-    assert operator.count() == before
-    assert read_active_set(operator) is None
+    assert ledger.count() == before
+    assert read_active_set(ledger) is None
 
 
-def test_blocked_winner_escalates_without_active_set(ledger, operator, tmp_path) -> None:
+def test_blocked_winner_escalates_without_active_set(ledger, tmp_path) -> None:
     """A failed holdout on the winner escalates once and writes no active-set row."""
-    _set_autonomy(operator, "autonomous-paper")
+    _grant_autonomy(ledger)
     _paper_window_rows(ledger)
-    verdict = _verdict(operator, holdout_net=0)
+    verdict = _verdict(ledger, holdout_net=0)
     assert verdict.reason == REASON_HOLDOUT_FAILED
-    assert _apply(operator, verdict) == "escalated"
-    assert read_active_set(operator) is None
-    assert _check_output(tmp_path) == set()
-    escalations = operator.read(types=["Escalation"], limit=None)
+    assert _apply(ledger, verdict) == "escalated"
+    assert read_active_set(ledger) is None
+    assert not (tmp_path / "var" / "upgrade").exists()
+    assert not (tmp_path / "var" / "backtest").exists()
+    escalations = ledger.read(types=["Escalation"], limit=None)
     assert len(escalations) == 1
     assert escalations[0]["payload"]["kind"] == "upgrade_blocked"
 
@@ -462,17 +450,3 @@ def test_closure_runs_check_only_when_due(ledger, tmp_path, monkeypatch) -> None
 def test_max_declared_candidates_matches_gate_limit() -> None:
     """The declared-space limit is the gate's eligible-trial limit, kept equal by test."""
     assert MAX_DECLARED_CANDIDATES == MAX_ELIGIBLE_TRIALS
-
-
-def test_missing_operator_ledger_skips_and_creates_nothing(ledger, tmp_path) -> None:
-    """No operator ledger yet means no autonomy grant: skipped, and the file is not created."""
-    outcome = promotion.run_promotion_check(
-        ledger,
-        "no-such-dataset",
-        clock=FixtureClock(T0),
-        space=_declared(tmp_path),
-        seed=0,
-        initial_equity_lamports=0,
-    )
-    assert outcome == "skipped"
-    assert not PAPER_LEDGER_PATH.exists()

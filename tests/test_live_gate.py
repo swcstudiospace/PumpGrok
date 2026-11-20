@@ -11,7 +11,8 @@ import pytest
 
 from pumpgrok.core.errors import LiveGateError
 from pumpgrok.core.ids import IdFactory
-from pumpgrok.execution.live import PRECONDITION_IDS, LiveAdapterStub, LiveGate, refusal_lines
+from pumpgrok.execution.live import PRECONDITION_IDS, LiveGate, refusal_lines
+from pumpgrok.execution.live.live_adapter import LiveAdapterStub
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng

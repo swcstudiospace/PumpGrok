@@ -9,6 +9,7 @@ symbol. Imports of the gate module live_gate stay allowed because the
 CLI refusal and the weekly report read the gate without reaching an
 adapter. Modules under src/pumpgrok/execution/live/ additionally import
 no network client and open no socket. Offline only, ASCII only.
+Each module also depends on every parent package __init__, because importing a child executes it.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ LIVE_DIR = SRC / "execution" / "live"
 QUARANTINE_MODULE = "pumpgrok.execution.live.live_adapter"
 QUARANTINE_SYMBOL = "LiveAdapterStub"
 GATE_MODULE = "pumpgrok.execution.live.live_gate"
+GATE_PACKAGE = "pumpgrok.execution.live"
+CLI_ROOT = "pumpgrok.cli"
 
 GUARDED_PREFIXES = (
     "pumpgrok.backtest",
@@ -75,6 +78,8 @@ def _module_name(path: Path) -> str:
     parts = list(rel.parts)
     if parts[-1] == "__init__":
         parts = parts[:-1]
+    if not parts:
+        return "pumpgrok"
     return "pumpgrok." + ".".join(parts)
 
 
@@ -139,6 +144,12 @@ def _resolve(dep: str, modules: dict[str, Path]) -> str | None:
     return None
 
 
+def _ancestors(module: str) -> list[str]:
+    """Parent packages, outermost first; importing a module executes each of them."""
+    parts = module.split(".")
+    return [".".join(parts[:size]) for size in range(1, len(parts))]
+
+
 def _edges(modules: dict[str, Path]) -> dict[str, set[str]]:
     """Internal import edges between known modules."""
     graph: dict[str, set[str]] = {}
@@ -148,6 +159,9 @@ def _edges(modules: dict[str, Path]) -> dict[str, set[str]]:
             resolved = _resolve(dep, modules)
             if resolved is not None and resolved != module:
                 targets.add(resolved)
+        for ancestor in _ancestors(module):
+            if ancestor in modules and ancestor != module:
+                targets.add(ancestor)
         graph[module] = targets
     return graph
 
@@ -313,3 +327,14 @@ def test_network_probe_is_classified(tmp_path: Path, source: str, flagged: bool)
     package = tmp_path / "live_probe.py"
     package.write_text(source, encoding="utf-8")
     assert bool(_network_references(package)) is flagged
+
+
+def test_guard_follows_parent_package_init() -> None:
+    """LIV-01 fidelity: importing a.b.c executes a/__init__.py and a/b/__init__.py."""
+    modules = _module_map()
+    graph = _edges(modules)
+    assert GATE_PACKAGE in graph[GATE_MODULE], (
+        "live_gate has no edge to its parent package execution/live/__init__.py"
+    )
+    seen = _closure({CLI_ROOT}, graph)
+    assert GATE_PACKAGE in seen, "pumpgrok.cli closure omits the parent package __init__"

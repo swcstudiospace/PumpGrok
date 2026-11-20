@@ -1,0 +1,8 @@
+{
+  "events_hash": "bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54",
+  "events_read": 5,
+  "fixture": "smoke",
+  "row_count": 11,
+  "rows_file": "trading_smoke_rows.json",
+  "seq": 11
+}

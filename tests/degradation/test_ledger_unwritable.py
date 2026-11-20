@@ -16,7 +16,7 @@ from harness.faults import FaultInjector, FaultMode, FaultyLedgerStore
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.supervisor.scheduler import LEDGER_BUFFER_CAP, DegradedState, LedgerUnavailable
-from pumpgrok.supervisor.seat_task import append_escalation
+from pumpgrok.supervisor.seat_relay import append_escalation
 
 BASE = 1767225600.0
 

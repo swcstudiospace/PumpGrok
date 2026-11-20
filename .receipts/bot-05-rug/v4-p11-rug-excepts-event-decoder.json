@@ -1,0 +1,71 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-02. Owner answer: re-approve PR 36 as amended (overflow fix a523273 adds ArithmeticError to _MALFORMED; receipt schema commit 1b510f1); merge after PR 35. Review points accepted: the behaviour change in authority and holder checks, and the unverified decoder field layouts (MKT-03 owns the on-chain check). Recorded for G-2 only; the bot did not approve this work.",
+  "task_id": "v4-p11-rug-excepts-event-decoder",
+  "bot": "bot-05-rug",
+  "branch": "bot-05-rug/v4-p11-rug-excepts-event-decoder",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "11-07: narrow rug-owned plain-swallow excepts in authorities.py and holders.py (QLT-06); pull forward the B01 pump event decoder with its round-trip test (MKT-02, D-15). PR-03, wave 2, depends on 11-01.",
+  "purpose": "Seat receipt for PR-03 plan 11-07. Records the code commits on the branch above the base 6df40f4 (plan 11-01 tip), and the verification commands run at the branch head before this receipt commit. Agent review by bot-02-risk. The executor does not write approved_by.",
+  "status": "awaiting agent review (bot-02-risk) and chief orchestration. approved_by is intentionally absent; the executor never writes it.",
+  "commits": [
+    {"sha": "3ee541c", "task": "Narrow onchain plain-swallow excepts (QLT-06)", "files": ["src/pumpgrok/tools/onchain/authorities.py", "src/pumpgrok/tools/onchain/holders.py", "tests/tools/onchain/test_onchain_errors.py"]},
+    {"sha": "0e4bade", "task": "Pull forward the pump event decoder (MKT-02, B01)", "files": ["src/pumpgrok/tools/onchain/pump_events.py", "tests/tools/onchain/test_pump_events.py"]},
+    {"sha": "a523273", "task": "Treat arithmetic overflow in malformed payloads as a typed failure (QLT-06)", "files": ["src/pumpgrok/tools/onchain/authorities.py", "src/pumpgrok/tools/onchain/holders.py", "tests/tools/onchain/test_onchain_errors.py"]}
+  ],
+  "commands": [
+    {"cmd": "git merge-base --is-ancestor 6df40f4 HEAD", "exit_code": 0, "output_tail": "(no output; exit 0 means base 6df40f4 is an ancestor of HEAD)"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_onchain_errors.py::test_holder_huge_integer_amount_is_typed_false", "exit_code": 1, "output_tail": "recorded before the ArithmeticError change at a523273: OverflowError: int too large to convert to float escaped holder_snapshot; 1 failed, 8 passed"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_onchain_errors.py", "exit_code": 0, "output_tail": "9 passed (after a523273)"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_onchain_errors.py", "exit_code": 1, "output_tail": "recorded before the first narrowing (3ee541c): 3 failed (bad-body reason, unexpected-error propagation, holder bad-body reason)"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_pump_events.py", "exit_code": 2, "output_tail": "recorded before the decoder existed: ModuleNotFoundError: No module named 'pumpgrok.tools.onchain.pump_events'"},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_pump_events.py", "exit_code": 0, "output_tail": "35 passed (after 0e4bade)"},
+    {"cmd": "uv run pytest -q tests/tools/onchain tests/characterization/test_authority_check.py tests/characterization/test_holder_check.py", "exit_code": 0, "output_tail": "74 passed"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check . -> All checks passed!; ruff format --check . -> already formatted"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy src/ -> Success: no issues found in 210 source files"},
+    {"cmd": "uv run pytest -q tests/replay/test_trading_smoke_pin.py", "exit_code": 0, "output_tail": "trading smoke pin passes"},
+    {"cmd": "uv run pumpgrok verify --fixture smoke-10m | grep -q b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d", "exit_code": 0, "output_tail": "events.hash=b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d / verify=CONSISTENT seq=2 events=41"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "confirmation_record var/live_confirmation.json missing; adapter_registered and no_active_stop unmet; No transaction was attempted. Exit 3 satisfies the plan's test $? -eq 3 check."},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK - 10 bots, 192 rules; 972 tracked path(s), each with one declared owner"},
+    {"cmd": "uv run python -c \"import sys; sys.path.insert(0, 'ci/gates'); from pathlib import Path; import check_ownership as co; m = co.load_manifest(Path('ownership.yaml')); ps = ['src/pumpgrok/tools/onchain/authorities.py', 'src/pumpgrok/tools/onchain/holders.py', 'tests/tools/onchain/test_onchain_errors.py', 'src/pumpgrok/tools/onchain/pump_events.py', 'tests/tools/onchain/test_pump_events.py', '.receipts/bot-05-rug/v4-p11-rug-excepts-event-decoder.json']; owners = [co.resolve_owner(p, m)[0] for p in ps]; print(owners); assert all(o == 'bot-05-rug' for o in owners)\"", "exit_code": 0, "output_tail": "['bot-05-rug', 'bot-05-rug', 'bot-05-rug', 'bot-05-rug', 'bot-05-rug', 'bot-05-rug']"},
+    {"cmd": "grep -nP '[^\\x00-\\x7F]' src/pumpgrok/tools/onchain/pump_events.py src/pumpgrok/tools/onchain/authorities.py src/pumpgrok/tools/onchain/holders.py tests/tools/onchain/test_pump_events.py tests/tools/onchain/test_onchain_errors.py", "exit_code": 1, "output_tail": "(no output; exit 1 is the no-match result, so no non-ASCII bytes)"},
+    {"cmd": "grep -n -i TODO src/pumpgrok/tools/onchain/pump_events.py src/pumpgrok/tools/onchain/authorities.py src/pumpgrok/tools/onchain/holders.py tests/tools/onchain/test_pump_events.py tests/tools/onchain/test_onchain_errors.py", "exit_code": 1, "output_tail": "(no output; exit 1 is the no-match result, so no TODO text)"}
+  ],
+  "claims": [
+    {"claim": "Base 6df40f4 is an ancestor of the branch head, so no rebase or merge was needed.", "evidence_command_index": 0},
+    {"claim": "Before the ArithmeticError change, a holder payload with a 400-digit uiAmount raised OverflowError out of holder_snapshot (reproduction of the escape).", "evidence_command_index": 1, "expects_failure": true},
+    {"claim": "After the change, the malformed-payload paths for authority and holder checks return typed ok:False, including arithmetic overflow, and the error tests pass (9 passed).", "evidence_command_index": 2},
+    {"claim": "The first narrowing was red before the change: the bad-body and unexpected-error tests failed.", "evidence_command_index": 3, "expects_failure": true},
+    {"claim": "The pump decoder tests were red before the decoder existed (module missing).", "evidence_command_index": 4, "expects_failure": true},
+    {"claim": "The pump decoder round-trips all five event types, ignores trailing bytes, and raises EventDecodeError on every truncation and on truncated base64 program data.", "evidence_command_index": 5},
+    {"claim": "The four pinned discriminators equal sha256('event:<Name>')[:8]; PostCompleteBuyEvent's discriminator is derived by the same rule and is not pinned in the research.", "evidence_command_index": 5},
+    {"claim": "Money fields in the decoder are integer base units; no float money is produced.", "evidence_command_index": 5},
+    {"claim": "The existing authority and holder characterization tests pass alongside the onchain suite (74 passed).", "evidence_command_index": 6},
+    {"claim": "make lint passes on the branch head.", "evidence_command_index": 7},
+    {"claim": "make typecheck passes on the branch head.", "evidence_command_index": 8},
+    {"claim": "The trading smoke pin test passes; the trading smoke hash is unchanged.", "evidence_command_index": 9},
+    {"claim": "The smoke-10m events.hash is unchanged at b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d.", "evidence_command_index": 10},
+    {"claim": "Live stays refused: the live run exits 3 with no transaction attempted, and no signer, key, send path or enabling overlay was added.", "evidence_command_index": 11, "expects_failure": true},
+    {"claim": "The ownership manifest validates.", "evidence_command_index": 12},
+    {"claim": "Every touched path resolves to bot-05-rug.", "evidence_command_index": 13},
+    {"claim": "The touched files contain no non-ASCII bytes (grep exit 1 is the no-match result).", "evidence_command_index": 14, "expects_failure": true},
+    {"claim": "The touched files contain no TODO text (grep exit 1 is the no-match result).", "evidence_command_index": 15, "expects_failure": true}
+  ],
+  "deviations": [
+    "Process incident: two early edits (authorities.py and holders.py) were issued with relative paths and landed in the owner checkout /root/src/repos/pumpgrok, uncommitted. The orchestrator restored those files to HEAD and the owner checkout was not touched again. The narrowing was redone in this worktree with absolute paths; commit 3ee541c is the record.",
+    "Plan 11-07 cites an 11-05 no-plain-swallow guard. That guard is not on base 6df40f4, so none was added or run.",
+    "priority_fee.py also carries a broad except Exception. It is outside files_modified and was left untouched.",
+    "Behaviour change for callers: RpcError and DataStale now report their own redacted message (for example 'rpc bad body method=... endpoints=N') instead of the generic 'authority check failed' / 'holder check failed'. Non-RPC, non-malformed exceptions now propagate to the caller instead of returning ok:false. ArithmeticError was added to the malformed tuple in a523273 after a 400-digit integer escaped float() in holders.py. authorities.py has no float conversion, so it has no matching overflow test; the tuple change there is for consistency.",
+    "Pump decoder layouts are not in the repo. TradeEvent (through mayhem_mode, including ix_name before mayhem_mode), CreateEvent (stops before token_program and is_mayhem_mode, which are trailing bytes and ignored), CompleteEvent, CompletePumpAmmMigrationEvent and PostCompleteBuyEvent follow the research spec and the public pump IDL as recalled; they are unverified against chain.",
+    "Commit ca6af57 (author SomeRandmGuyy) edited the rollback_plan in this receipt before this rewrite. Its text is kept; it is extended here only to name commit a523273."
+  ],
+  "unverified": [
+    "On-chain field order and widths for TradeEvent, CreateEvent, CompletePumpAmmMigrationEvent and PostCompleteBuyEvent are not confirmed against chain. Confirmation belongs to the MKT-03 probe, not this PR.",
+    "PostCompleteBuyEvent layout is a guess at the field set; only its discriminator is derived (sha256 rule), not sourced.",
+    "No live RPC, websocket or logs source was exercised. The decoder is pure bytes-in, typed-events-out.",
+    "The 11-05 no-plain-swallow guard was not run because it is not on this base.",
+    "make test, the full pytest -q run, the soak suite and run_all.py were not run, per the seat rules. The orchestrator runs gates.",
+    "The red command entries (exit 1 and exit 2) were observed before their fixes. They are recorded as intended failures and will not fail on re-run at this head."
+  ],
+  "rollback_plan": "Before the merge, revert commits a523273, 0e4bade and 3ee541c on this branch (git revert, no force) or close the draft pull request. After the merge, revert the merge commit on main through a new pull request (git revert -m 1 <merge-sha>). authorities.py and holders.py return to their broad except Exception handlers; pump_events.py and its test are removed. No schema, ledger, config or live state is touched, so no data rollback is needed. Expected recovery time: about 10 minutes (one revert pull request and one CI run)."
+}

@@ -1,0 +1,31 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
+  "task_id": "v4-p11-receipt-status-correction",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-p11-receipt-status-correction",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Correction to the plan 11-09 receipt after PR 39 merged: status, and disclosure of rewritten commands. Follow-up to .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json. Draft pull request against main.",
+  "purpose": "Corrects the status of the 11-09 receipt, which still said approved_by was absent and the receipt was awaiting review. Adds a deviations entry disclosing that eight cmd strings were rewritten from prose or placeholders after their exit codes were recorded, each with a note holding the original cmd and output_tail. Changes no approved_by, claim, command text, exit code or command index.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
+  "commands": [
+    {"cmd": "python3 -c 'import json,subprocess as s; o=json.loads(s.run([\"git\",\"show\",\"3ed2fcf:.receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json\"],capture_output=True,text=True,check=True).stdout); n=json.load(open(\".receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json\",encoding=\"utf-8\")); assert n[\"approved_by\"]==o[\"approved_by\"]==\"human:SomeRandmGuyy\"; assert n[\"claims\"]==o[\"claims\"]; assert [c[\"cmd\"] for c in n[\"commands\"]]==[c[\"cmd\"] for c in o[\"commands\"]]; assert [c[\"exit_code\"] for c in n[\"commands\"]]==[c[\"exit_code\"] for c in o[\"commands\"]]; assert [i for i,c in enumerate(n[\"commands\"]) if \"note\" in c]==[0,1,2,3,4,5,6,9]; print(\"unchanged: approved_by, claims, cmd, exit_code; notes on 0-6 and 9\")'", "exit_code": 0, "output_tail": "unchanged: approved_by, claims, cmd, exit_code; notes on 0-6 and 9"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json --bot bot-00-chief --strict", "exit_code": 0, "output_tail": "G-2 PASS: 40 command(s), 9 substantiated claim(s), 7 unverified item(s)"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-receipt-status-correction.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: the reason line is 'approved_by' is missing; this receipt carries no approved_by by design (see status)"},
+    {"cmd": "timeout 900 python3 -P ci/gates/run_all.py --bot bot-00-chief --base origin/main --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json", "exit_code": 0, "output_tail": "G-1, G-2, G-3, G-4, G-5/G-6 and G-7 PASS on the corrected 11-09 receipt; All gates passed"},
+    {"cmd": "python3 -P ci/gates/check_rollback.py --receipt .receipts/bot-00-chief/v4-p11-adopt-milestone-seat-task.json", "exit_code": 0, "output_tail": "G-5/G-6 PASS: 1 deployment(s) with a rollback plan, 0 destructive op(s) approved"}
+  ],
+  "claims": [
+    {"claim": "approved_by, claims, command text and exit codes of the 11-09 receipt are unchanged from 3ed2fcf, and the eight rewritten commands carry note fields", "evidence": ["python3 -c assertion comparing the corrected receipt with git show 3ed2fcf"], "evidence_command_index": 0},
+    {"claim": "the corrected 11-09 receipt passes check_receipt --strict", "evidence": ["check_receipt --strict on the 11-09 receipt: G-2 PASS, 40 commands"], "evidence_command_index": 1},
+    {"claim": "the corrected 11-09 receipt passes run_all for bot-00-chief", "evidence": ["run_all: G-1 to G-7 PASS on the 11-09 receipt"], "evidence_command_index": 3},
+    {"claim": "the corrected 11-09 receipt passes the rollback gate G-5/G-6", "evidence": ["check_rollback on the 11-09 receipt: G-5/G-6 PASS"], "evidence_command_index": 4},
+    {"claim": "this follow-up receipt fails check_receipt --strict on the missing approved_by reason", "evidence": ["check_receipt --strict on this receipt exits 1 with the approved_by reason line"], "evidence_command_index": 2, "expects_failure": true}
+  ],
+  "unverified": [
+    "This receipt records no approved_by. check_receipt --strict fails on that until the owner adds it, which the executor never writes.",
+    "The draft pull request has not been reviewed or merged; the bot does not approve or merge it.",
+    "The rewritten-command and reworded-grep disclosures are carried from the 11-09 receipt; the owner's review of them is pending."
+  ],
+  "rollback_plan": "Revert the commit that adds this receipt and corrects the 11-09 receipt, through a new pull request (git revert on this branch before merge, or git revert -m 1 <merge-sha> after merge). The change touches receipt JSON only. No code, ledger, var, fixture, replay pin or ownership file changed. Data implications: none."
+}

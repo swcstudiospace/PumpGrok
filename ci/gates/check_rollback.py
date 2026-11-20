@@ -41,7 +41,7 @@ DESTRUCTIVE_PATTERNS: list[tuple[str, str, str]] = [
     (r"\bpumpgrok\s+live[-_ ]trade\b", "trade", "executes a live trade"),
     (r"\bpumpgrok\s+live\s+confirm\b", "trade", "writes a live human confirmation"),
     (r"\bwallet[-_ ]transfer\b", "trade", "moves funds out of a wallet"),
-    (r"\bsend[-_ ]transaction\b", "trade", "sends an on-chain transaction"),
+    (r"\bsend[-_ ]?transaction\b", "trade", "sends an on-chain transaction"),
     (r"\bpumpgrok\s+risk\s+raise-limit\b", "trade", "raises a risk limit"),
     (r"\bpumpgrok\s+killswitch\s+clear\b", "trade", "clears the kill switch"),
     (r"\bpumpgrok\s+state\s+halt\b.*--clear\b", "trade", "clears a halt (R22: human only)"),
@@ -87,16 +87,47 @@ def load(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+# Read-only search tools never execute their pattern or file operands, so that text is data and is
+# not matched. Only a simple command whose first word is one of these is masked. A command with an
+# expansion, a newline, a comment or an unterminated quote is matched in full: masking it could
+# hide a command that runs.
+READ_ONLY_SEARCH_HEADS = frozenset({"grep", "egrep", "fgrep", "zgrep", "zegrep", "zfgrep"})
+
+
+def _is_read_only_search(cmd: str, words: list[_Word]) -> bool:
+    return bool(words) and cmd[words[0].start : words[0].end] in READ_ONLY_SEARCH_HEADS
+
+
+def _matchable_text(cmd: str) -> str:
+    """The command with the operands of read-only search commands blanked out."""
+    scan = _scan_shell(cmd)
+    if scan.expansions or scan.newlines or scan.comments or scan.unterminated:
+        return cmd
+    simple_commands: list[list[_Word]] = [[]]
+    for word in scan.words:
+        if word.is_op:
+            simple_commands.append([])
+        else:
+            simple_commands[-1].append(word)
+    chars = list(cmd)
+    for words in simple_commands:
+        if _is_read_only_search(cmd, words):
+            for k in range(words[0].start, words[-1].end):
+                chars[k] = " "
+    return "".join(chars)
+
+
 def find_matches(commands: list, patterns) -> list[tuple[int, str, str, str]]:
     hits = []
     for i, cmd in enumerate(commands):
         cmd_str = cmd.get("cmd", "") if isinstance(cmd, dict) else str(cmd)
+        matchable = _matchable_text(cmd_str)
         for entry in patterns:
             if isinstance(entry, tuple):
                 pattern, category, desc = entry
             else:
                 pattern, category, desc = entry, "deploy", "deployment"
-            if re.search(pattern, cmd_str, re.IGNORECASE):
+            if re.search(pattern, matchable, re.IGNORECASE):
                 hits.append((i, cmd_str, category, desc))
     return hits
 

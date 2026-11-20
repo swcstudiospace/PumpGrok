@@ -1,0 +1,69 @@
+{
+  "task_id": "pr-27-followup",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/pr-27-followup",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approved the PR 27 review follow-up on 2026-11-01. This receipt covers only the ARCHITECTURE.md wording (network clients and replay ledger) and the two allowlist lines for the PR 27 follow-up receipts.",
+  "commands": [
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --bot bot-02-risk --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-02-risk: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "uv run python -P ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 10 bots, 192 rules; 954 tracked path(s), each with one declared owner"
+    },
+    {
+      "cmd": "git diff -U0 origin/main -- ARCHITECTURE.md .gitignore | rg '^[+-][^+-]'",
+      "exit_code": 0,
+      "output_tail": "+!.receipts/bot-00-chief/v3-closeout-followup.json | +!.receipts/bot-02-risk/pr-27-followup.json | -| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py` (`ws_url`, x.ai `base_url`). Client | +| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py` (`ws_url`, x.ai `base_url`). Client | -No server database, message bus, or secrets manager is referenced. Tools take no API keys. The paper ledger is one SQLite file, `var/ledger | +No server database, message bus, or secrets manager is referenced. Tools take no API keys. The operator paper ledger is one SQLite file, `v (each changed line cut at 140 characters; six changed lines in total)"
+    },
+    {
+      "cmd": "uv run python -m pytest ci/tests/test_security_workflows.py -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "51 passed in 1.22s"
+    },
+    {
+      "cmd": "uv run python -m pytest tests/docs -o addopts= -q",
+      "exit_code": 0,
+      "output_tail": "44 passed in 5.20s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The change touches only bot-02-risk owned paths: G-1 for bot-02-risk passes in diff mode on this branch.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "ownership.yaml still validates: 10 bots, 954 tracked paths, one declared owner each.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ARCHITECTURE.md rows 31 and 33 now state that the offline replay CLI calls neither LaunchMonitor.stream nor GrokAgent._call, and that replay runs write var/replay/<dataset>/ledger.sqlite.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The receipt allowlist test passes with the two follow-up receipt lines in .gitignore.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The tests/docs suite passes after the ARCHITECTURE change.",
+      "evidence_command_index": 4
+    }
+  ],
+  "unverified": [
+    "The live CI run on this PR head and the G-2 result of this receipt are verified only in CI.",
+    "Greptile review of this PR is not reviewed by this session when this receipt is written.",
+    "The code facts in the new wording were checked by reading the src paths cited in the diff; no runtime probe was run for the replay ledger path.",
+    "The bot-00 follow-up receipt (.receipts/bot-00-chief/v3-closeout-followup.json) is verified in its own PR."
+  ],
+  "files_changed": [
+    "ARCHITECTURE.md",
+    ".gitignore",
+    ".receipts/bot-02-risk/pr-27-followup.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this pull request's merge commit with git revert. ARCHITECTURE.md returns to the previous wording and the two allowlist lines are removed; no ledger or live state changes. Expected recovery time: about 5 minutes (one git revert and one CI run). Data implications: none."
+}

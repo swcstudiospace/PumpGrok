@@ -50,6 +50,12 @@ class _ConfirmMixin:
             correlation_id: str,
         ) -> OrderRejectedError: ...
 
+from pumpgrok.core.adapter import OrderRequest
+from pumpgrok.execution.paper_adapter.confirm_stages import _ConfirmStagesMixin
+from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+
+
+class _ConfirmMixin(_ConfirmStagesMixin):
     async def _await_confirmation(
         self,
         request: OrderRequest,
@@ -181,4 +187,31 @@ class _ConfirmMixin:
                 source=ledger_source,
                 correlation_id=correlation_id,
             )
+        latency_s, dropped = await self._confirm_latency(
+            request,
+            order_id=order_id,
+            owner=owner,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
+        await self._confirm_cancel_check(
+            request, order_id=order_id, ledger_source=ledger_source, correlation_id=correlation_id
+        )
+        curve1 = await self._confirm_curve(
+            request,
+            order_id=order_id,
+            forbid_complete=forbid_complete,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
+        recheck = await self._confirm_recheck(
+            request,
+            order_id=order_id,
+            dropped=dropped,
+            seat=seat,
+            exit_reason=exit_reason,
+            creator=creator,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
         return (curve1, latency_s, recheck.size_lamports)

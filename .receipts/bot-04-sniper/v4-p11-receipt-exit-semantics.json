@@ -1,0 +1,26 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved in the draft batch of six (approve_batch: this PR included).",
+  "task_id": "v4-p11-receipt-exit-semantics",
+  "bot": "bot-04-sniper",
+  "branch": "bot-04-sniper/v4-p11-receipt-exit-semantics",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Follow-up to PR 38 (plan 11-06): correct the recorded exit of the live-refusal command in .receipts/bot-04-sniper/v4-p11-paper-adapter-split.json.",
+  "purpose": "The PR 38 receipt recorded the command `uv run pumpgrok run --mode live --once; test $? -eq 3` with exit_code 3. That chain exits 0 because test succeeds, so the recorded exit contradicted the command. This receipt records the bare command and its observed exit. Only the cmd and exit_code of that one entry changed in the PR 38 receipt; indexes, claims and approved_by are unchanged.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
+  "commits": [],
+  "commands": [
+    {"cmd": "git rev-parse --show-toplevel", "exit_code": 0, "output_tail": "/root/src/repos/pumpgrok-wt/v4-11-06"},
+    {"cmd": "uv run pumpgrok run --mode live --once", "exit_code": 3, "output_tail": "[ ] 7 confirmation_record var/live_confirmation.json missing / [ ] 8 adapter_registered no live adapter implementation ships in this release / Fix every unmet line or run in mode=paper. No transaction was attempted."},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-04-sniper/v4-p11-paper-adapter-split.json --bot bot-04-sniper --strict", "exit_code": 0, "output_tail": "G-2 PASS — v4-p11-paper-adapter-split: 36 command(s), 14 substantiated claim(s), 5 unverified item(s)"}
+  ],
+  "claims": [
+    {"claim": "Observed: the bare command uv run pumpgrok run --mode live --once exits 3 on this head, with the confirmation_record and adapter_registered lines unmet and no transaction attempted.", "evidence_command_index": 1, "expects_failure": true},
+    {"claim": "The corrected PR 38 receipt passes the strict G-2 check with no errors.", "evidence_command_index": 2}
+  ],
+  "unverified": [
+    "The PR 38 receipt's approved_by and approval_note entries were not changed by this follow-up and were not verified against the owner record.",
+    "make test, the full pytest -q run, the soak suite and the G-1..G-7 gates beyond run_all for bot-04-sniper were not run by this seat."
+  ],
+  "rollback_plan": "Rollback procedure: run git revert on this receipt commit, which reverts both the receipt file added here and the one-entry correction to the PR 38 receipt, then open a new pull request. The live command is a read-only refusal that exits 3 and changes no state, so no runtime rollback is needed. Expected recovery time: about 5 minutes. Data implications: none; no ledger, var or live state changes."
+}

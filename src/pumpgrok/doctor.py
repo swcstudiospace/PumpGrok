@@ -9,6 +9,7 @@ Probe warnings never fail the report: exit 0 means the process started with vali
 
 from __future__ import annotations
 
+import http.client
 import importlib.util
 import urllib.error
 import urllib.request
@@ -60,7 +61,7 @@ def probe_served_endpoints(port: int, *, timeout_s: float = 2.0) -> list[Endpoin
         except urllib.error.HTTPError as exc:
             probes.append(EndpointProbe(name=path, ok=False, detail=f"HTTP {exc.code}"))
             continue
-        except Exception as exc:
+        except (OSError, ValueError, http.client.HTTPException) as exc:
             probes.append(EndpointProbe(name=path, ok=False, detail=type(exc).__name__))
             continue
         probes.append(EndpointProbe(name=path, ok=code == 200, detail=f"HTTP {code}"))

@@ -1,6 +1,9 @@
-"""Live gate (R21) and the refusing live adapter stub (INV-C-03)."""
+"""Live gate (R21): the nine preconditions, LiveGate and refusal_lines.
 
-from pumpgrok.execution.live.live_adapter import LiveAdapterStub
+The refusing adapter lives in pumpgrok.execution.live.live_adapter and is imported
+from that submodule only. This package does not re-export it (LIV-01).
+"""
+
 from pumpgrok.execution.live.live_gate import (
     PRECONDITION_IDS,
     LiveGate,
@@ -10,7 +13,6 @@ from pumpgrok.execution.live.live_gate import (
 
 __all__ = [
     "PRECONDITION_IDS",
-    "LiveAdapterStub",
     "LiveGate",
     "Precondition",
     "refusal_lines",

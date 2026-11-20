@@ -1,0 +1,40 @@
+{
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Owner approval for merge, 2026-11-03. Owner answer: approved PR #53 (approve_53).",
+  "task_id": "v4-p11-seat-task-cutover-final",
+  "bot": "bot-00-chief",
+  "branch": "bot-00-chief/v4-p11-seat-task-cutover-final",
+  "phase": "11-engineering-foundation-and-quality",
+  "plan": "Step 2 of the seat_task cutover (QLT-04): point every importer of the seat_task re-exports at the defining module (seat_relay or seat_restart), then remove the 13 re-exports and their __all__ entries from seat_task.py. Draft pull request against main; not merged.",
+  "purpose": "After PR 50 migrated the 12 test importers, three chief-owned src importers still used re-exported names through seat_task. They now import from seat_relay, seat_restart or seat_task. seat_task.py drops the six pure re-exports (BACKOFF_CAP_S, CLOCK_SKEW_S, ClockSkew, RESTART_CAPACITY, RESTART_WINDOW_S, relay_tail) and the seven used-internally names' __all__ entries; those seven stay imported because seat_task still uses them. Definitions stay in seat_relay.py and seat_restart.py. Only import lines and __all__ changed; no logic changed.",
+  "status": "Approved by the owner for merge on 2026-11-03 (approved_by recorded). Merge waits for green CI on this head.",
+  "commits": [
+    {"sha": "949d703", "task": "Import seat names from their defining modules; drop seat_task re-exports", "files": ["src/pumpgrok/supervisor/__init__.py", "src/pumpgrok/supervisor/scheduler/degraded.py", "src/pumpgrok/supervisor/scheduler/supervisor.py", "src/pumpgrok/supervisor/seat_task.py"]}
+  ],
+  "commands": [
+    {"cmd": "uv run python -c \"import pumpgrok.supervisor, pumpgrok.supervisor.scheduler.supervisor, pumpgrok.supervisor.scheduler.degraded, pumpgrok.supervisor.seat_task, pumpgrok.supervisor.seat_relay, pumpgrok.supervisor.seat_restart\"", "exit_code": 0, "output_tail": "all six supervisor modules import"},
+    {"cmd": "uv run ruff check src/pumpgrok/supervisor/", "exit_code": 0, "output_tail": "All checks passed!"},
+    {"cmd": "uv run ruff format --check src/pumpgrok/supervisor/", "exit_code": 0, "output_tail": "15 files already formatted"},
+    {"cmd": "make lint", "exit_code": 0, "output_tail": "ruff check and ruff format --check pass; service lint skipped (services/desk-signer/src absent)"},
+    {"cmd": "make typecheck", "exit_code": 0, "output_tail": "mypy src/ clean; service typecheck skipped (services/desk-signer/src absent)"},
+    {"cmd": "uv run pytest -o addopts= -q -rs tests/supervisor", "exit_code": 0, "output_tail": "103 passed in 65.59s; zero SKIPPED lines"},
+    {"cmd": "python3 -c 'import ast,subprocess; RE={\"BACKOFF_CAP_S\",\"CLOCK_SKEW_S\",\"ClockSkew\",\"KIND_HEARTBEAT_STALE\",\"KIND_LEDGER_READ_FAILED\",\"KIND_RESTART_EXHAUSTED\",\"ObserveOnly\",\"RESTART_CAPACITY\",\"RESTART_WINDOW_S\",\"RestartPolicy\",\"append_escalation\",\"escalation_severity\",\"relay_tail\"}; bad=[]; [bad.extend((p,a.name) for a in n.names if a.name in RE) for p in subprocess.run([\"git\",\"ls-files\",\"*.py\"],capture_output=True,text=True).stdout.split() for n in ast.walk(ast.parse(open(p,encoding=\"utf-8\").read())) if isinstance(n,ast.ImportFrom) and n.module==\"pumpgrok.supervisor.seat_task\"]; print(\"re-export importers:\", bad or \"none\"); raise SystemExit(1 if bad else 0)'", "exit_code": 0, "output_tail": "re-export importers: none"},
+    {"cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK — 10 bots, 192 rules; 1016 tracked path(s), each with one declared owner; all four changed paths resolve to bot-00-chief"},
+    {"cmd": "python3 -P ci/gates/check_receipt.py --receipt .receipts/bot-00-chief/v4-p11-seat-task-cutover-final.json --bot bot-00-chief --strict", "exit_code": 1, "output_tail": "G-2 FAIL: the reason line is 'approved_by' is missing; this receipt carries no approved_by by design (see status)"}
+  ],
+  "claims": [
+    {"claim": "seat_task.py no longer re-exports any of the 13 names: no importer in the repository uses them through seat_task, and its __all__ lists only locally defined names", "evidence": ["inline AST re-export check: none"], "evidence_command_index": 6},
+    {"claim": "every importer of the names resolves at its defining module and the package imports cleanly", "evidence": ["import check of six supervisor modules: exit 0"], "evidence_command_index": 0},
+    {"claim": "lint and typecheck are clean across the repository", "evidence": ["make lint exit 0", "make typecheck exit 0"], "evidence_command_index": 3},
+    {"claim": "the supervisor tests pass with zero skipped tests and behaviour is unchanged (only import lines and __all__ changed)", "evidence": ["uv run pytest -o addopts= -q -rs tests/supervisor: 103 passed"], "evidence_command_index": 5},
+    {"claim": "all four changed files are owned by bot-00-chief", "evidence": ["check_ownership --validate-manifest exit 0; resolve_owner returned bot-00-chief for each"], "evidence_command_index": 7},
+    {"claim": "this receipt fails check_receipt --strict only on the missing approved_by reason", "evidence": ["check_receipt --strict on this receipt exits 1 with the approved_by reason line"], "evidence_command_index": 8, "expects_failure": true}
+  ],
+  "unverified": [
+    "This receipt records no approved_by. check_receipt --strict fails on that until the owner adds it, which the executor never writes.",
+    "The draft pull request has not been reviewed or merged; the bot does not approve or merge it.",
+    "tests outside tests/supervisor were not run for this change; the import-only edits reach tests/degradation and tests/integrity only through the names those tests import from their defining modules, which PR 50 already changed. The CI check job is the run of record for the full suite.",
+    "services/desk-signer is absent on this branch; the service lint and typecheck steps were skipped by the Makefile."
+  ],
+  "rollback_plan": "Revert commit 949d703 and this receipt through a new pull request (git revert on this branch before merge, or git revert -m 1 <merge-sha> after merge). The change is import lines and the __all__ list in four supervisor modules. No ledger, var, fixture, replay pin or ownership file changed. Data implications: none."
+}

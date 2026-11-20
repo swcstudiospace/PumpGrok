@@ -8,6 +8,12 @@ FillRecorded cash_delta_lamports (every venue fee and network cost already
 sits inside that delta) minus OrderRejected fees_lamports. Partial fills
 count at their recorded filled amount. A window with no fills scores 0,
 which is an honest zero, never an error marker.
+window: the closing equity of the eval ledger less its opening equity, with open
+positions valued at mark or else cost basis (backtest/equity.py, the same rule
+the backtest report uses). Every venue fee and network cost sits inside the cash
+movement it was paid with, and each refused attempt's fee counts once. Partial
+fills count at their recorded filled amount. A window with no trades scores 0,
+or the fees its refused attempts paid, which is a measured cost, never an error.
 
 Score inputs are replay outputs only: candidate overrides, the recorded
 events in the window, and the seed. No digest, random draw, or wall-clock
@@ -36,6 +42,11 @@ from pumpgrok.backtest.candidate import (
 from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, param_set_hash
 from pumpgrok.backtest.split import holdout_split, walk_forward_folds
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.backtest.equity import net_lamports
+from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, file_digest
+from pumpgrok.backtest.split import holdout_split, walk_forward_folds
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.ledger.reducer import initial_state
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, event_epoch, load_dataset
 from pumpgrok.risk.limits import EngineLimits
@@ -156,6 +167,41 @@ def _net_lamports(ledger_path: Path) -> int:
         payload = _payload_mapping(row, "OrderRejected")
         cash_total -= _int_field(payload, "fees_lamports")
     return cash_total
+def _check_money_rows(rows: Sequence[Mapping[str, Any]]) -> None:
+    """Fail closed on a fill or refusal row whose money the reducer would have to guess at."""
+    for row in rows:
+        if row.get("type") == "FillRecorded":
+            payload = _payload_mapping(row, "FillRecorded")
+            side = payload.get("side")
+            if side not in ("buy", "sell"):
+                raise ValueError(f"FillRecorded row carries unknown side {side!r}")
+            _int_field(payload, "cash_delta_lamports")
+        elif row.get("type") == "OrderRejected":
+            _int_field(_payload_mapping(row, "OrderRejected"), "fees_lamports")
+
+
+def _net_lamports(ledger_path: Path) -> int:
+    """Net realized lamports of one eval ledger, fail closed.
+
+    Folds every recorded row from the ledger's opening equity and values the
+    window with equity.net_lamports, the rule the backtest report uses: cash plus
+    open positions at their mark, else at cost basis. Each fee counts once, since
+    the reducer carries fills by their cash delta and refusals by their fees. A
+    row with no payload mapping, a non-integer money field or an unknown side
+    raises, as does a ledger without its opening equity. A window with no fills
+    nets only the fees its refusals paid, and an empty window nets 0.
+    """
+    store = LedgerStore(ledger_path)
+    try:
+        rows = store.read(limit=None)
+        meta = store.get_meta("initial_equity_lamports")
+    finally:
+        store.close()
+    _check_money_rows(rows)
+    if meta is None:
+        raise ValueError(f"eval ledger {ledger_path} holds no initial_equity_lamports meta")
+    genesis = initial_state(source="replay", initial_equity_lamports=int(meta), day_utc="")
+    return net_lamports(genesis, rows)
 
 
 def _effective_budget(budget: RiskBudget | None) -> RiskBudget:
@@ -215,6 +261,9 @@ def evaluate_window(
     _net_lamports); partial fills count at their recorded filled amount;
     zero trades score 0. Raises when the
     window holds no events. Deterministic for identical inputs.
+    Returns the net realized lamports of the eval ledger (see _net_lamports);
+    partial fills count at their recorded filled amount; zero trades score 0.
+    Raises when the window holds no events. Deterministic for identical inputs.
     """
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError(f"seed must be an int, found {seed!r}")
@@ -240,6 +289,7 @@ def evaluate_window(
         + b"\n"
     )
     file_hex = param_set_hash(raw)
+    file_hex = file_digest(raw)
     stage = Path(tempfile.mkdtemp(prefix="pumpgrok-eval-"))
     try:
         (stage / EVENTS_NAME).write_bytes(raw)

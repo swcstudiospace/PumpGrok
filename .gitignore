@@ -12,8 +12,11 @@ build/
 !.receipts/**/.gitkeep
 !.receipts/bot-00-chief/complete-phase-5.json
 !.receipts/bot-00-chief/phase-6.json
+!.receipts/bot-0*/v4-p*.json
 var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
-!.receipts/bot-02-risk/00057-omega-ci-runners.json
+
+.coverage
+coverage.xml

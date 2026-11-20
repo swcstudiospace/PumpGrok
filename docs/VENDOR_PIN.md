@@ -22,4 +22,5 @@ vendored as regular files (not a git submodule or gitlink). The tree was retired
    exact human approval by ticket ID.
 
 Runtime artefacts of the vendored engine (`config.yaml`, `.venv/`, `logs/`, `state/`, `.env`)
-are gitignored there. Copy `config.example.yaml` to `config.yaml` locally when running it.
+are gitignored there. `config.example.yaml` belonged to the vendored tree and is not in this
+checkout, so there is nothing to copy here.

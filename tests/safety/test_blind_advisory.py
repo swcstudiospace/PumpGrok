@@ -1,10 +1,11 @@
 """BLIND advisory for the SAFE-4/SAFE-8 holder pair (Phase 9 plan 09-05, UPG-05).
 
-While no paid RPC provider is recorded (env PUMPGROK_PAID_RPC_PROVIDER empty
-or unset), blind top10_concentration and blind deployer_history stay status
-blind with their reasons, are listed as advisory in the verdict payload, and
-do not KILL on their own. Every other required blind still KILLs, and with a
-provider recorded the pair reverts to KILL on blind.
+While no paid RPC provider is recorded (the line `paid_rpc_provider: none` in
+.planning/STATE.md), blind top10_concentration and blind deployer_history stay
+status blind with their reasons, are listed as advisory in the verdict payload,
+and do not KILL on their own. Every other required blind still KILLs, and with a
+provider recorded the pair reverts to KILL on blind. A missing or unreadable
+record counts as recorded.
 """
 
 from __future__ import annotations
@@ -29,10 +30,7 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools import build_registry
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.rpc import RpcClient
-from pumpgrok.tools.safety.provider import (
-    PAID_RPC_PROVIDER_ENV_VAR,
-    paid_rpc_provider_recorded,
-)
+from pumpgrok.tools.safety.provider import paid_rpc_provider_recorded
 from pumpgrok.tools.safety.score_report import ScoreReportIn, build_score_report_tool
 
 START = 1469918176.385
@@ -161,19 +159,66 @@ def _clear_in() -> ScoreReportIn:
     return ScoreReportIn(mint=MINT, curve_account=CURVE, creator=CREATOR)
 
 
-def test_provider_signal_empty_means_none_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(PAID_RPC_PROVIDER_ENV_VAR, raising=False)
-    assert paid_rpc_provider_recorded() is False
-    monkeypatch.setenv(PAID_RPC_PROVIDER_ENV_VAR, "   ")
-    assert paid_rpc_provider_recorded() is False
-    monkeypatch.setenv(PAID_RPC_PROVIDER_ENV_VAR, "provider-name")
+def _write_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+    """Write the provider record under ``tmp_path`` and run the test from there."""
+    record = tmp_path / ".planning" / "STATE.md"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(text, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("text", "recorded"),
+    [
+        ("paid_rpc_provider: none\n", False),
+        ("paid_rpc_provider:   none  \n", False),
+        ("paid_rpc_provider: provider-name\n", True),
+        ("paid_rpc_provider:\n", True),
+        ("paid_rpc_provider:    \n", True),
+        ("status: in_progress\n", True),
+        ("paid_rpc_provider: none\npaid_rpc_provider: none\n", True),
+    ],
+)
+def test_record_value_decides_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str, recorded: bool
+) -> None:
+    _write_record(tmp_path, monkeypatch, text)
+    assert paid_rpc_provider_recorded() is recorded
+
+
+def test_missing_record_counts_as_recorded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     assert paid_rpc_provider_recorded() is True
 
 
-async def test_holder_blind_is_advisory_without_provider(
-    monkeypatch: pytest.MonkeyPatch,
+def test_record_path_that_is_a_directory_counts_as_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv(PAID_RPC_PROVIDER_ENV_VAR, raising=False)
+    (tmp_path / ".planning" / "STATE.md").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    assert paid_rpc_provider_recorded() is True
+
+
+def test_undecodable_record_counts_as_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = tmp_path / ".planning" / "STATE.md"
+    record.parent.mkdir(parents=True)
+    record.write_bytes(b"paid_rpc_provider: none\n\xff\xfe")
+    monkeypatch.chdir(tmp_path)
+    assert paid_rpc_provider_recorded() is True
+
+
+def test_environment_variable_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: none\n")
+    monkeypatch.setenv("PUMPGROK_PAID_RPC_PROVIDER", "provider-name")
+    assert paid_rpc_provider_recorded() is False
+
+
+async def test_holder_blind_is_advisory_without_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: none\n")
     reg, bot = _run_with(_handler(holders_ok=False), _clear_in())
     out = await _call(reg, bot, _clear_in())
     statuses = {c.id: c.status for c in out.checks}
@@ -186,9 +231,9 @@ async def test_holder_blind_is_advisory_without_provider(
 
 
 async def test_deployer_blind_is_advisory_without_provider(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv(PAID_RPC_PROVIDER_ENV_VAR, raising=False)
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: none\n")
     payload = ScoreReportIn(mint=MINT, curve_account=CURVE)
     reg, bot = _run_with(_handler(), payload)
     out = await _call(reg, bot, payload)
@@ -202,9 +247,9 @@ async def test_deployer_blind_is_advisory_without_provider(
 
 
 async def test_required_blind_still_kills_without_provider(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv(PAID_RPC_PROVIDER_ENV_VAR, raising=False)
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: none\n")
     reg, bot = _run_with(_handler(jsonparsed_ok=False), _clear_in())
     out = await _call(reg, bot, _clear_in())
     statuses = {c.id: c.status for c in out.checks}
@@ -214,9 +259,9 @@ async def test_required_blind_still_kills_without_provider(
 
 
 async def test_holder_blind_reverts_to_kill_with_provider(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(PAID_RPC_PROVIDER_ENV_VAR, "provider-name")
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: provider-name\n")
     reg, bot = _run_with(_handler(holders_ok=False), _clear_in())
     out = await _call(reg, bot, _clear_in())
     statuses = {c.id: c.status for c in out.checks}
@@ -226,9 +271,9 @@ async def test_holder_blind_reverts_to_kill_with_provider(
 
 
 async def test_deployer_blind_reverts_to_kill_with_provider(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(PAID_RPC_PROVIDER_ENV_VAR, "provider-name")
+    _write_record(tmp_path, monkeypatch, "paid_rpc_provider: provider-name\n")
     payload = ScoreReportIn(mint=MINT, curve_account=CURVE)
     reg, bot = _run_with(_handler(), payload)
     out = await _call(reg, bot, payload)

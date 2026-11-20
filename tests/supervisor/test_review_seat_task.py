@@ -16,13 +16,9 @@ import pytest
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
-from pumpgrok.supervisor.seat_task import (
-    KIND_RESTART_EXHAUSTED,
-    ObserveOnly,
-    RestartPolicy,
-    SeatContext,
-    SeatTask,
-)
+from pumpgrok.supervisor.seat_relay import KIND_RESTART_EXHAUSTED
+from pumpgrok.supervisor.seat_restart import ObserveOnly, RestartPolicy
+from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
 
 SEAT = "bot-01-scout"
 

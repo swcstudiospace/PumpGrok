@@ -2,6 +2,66 @@
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 12: event runtime core
+
+### Added
+
+- A typed event library under `src/pumpgrok/events/`: one `EventKind` catalog, lane bus, sidecar sqlite at `var/desk/events.sqlite`, deterministic drain, and `SourceSupervisor`. It is not wired into the supervisor. Event ids include required `occurred_at`.
+- Ten v4 settings sections, config-gated off. `events.wake_mode` is `cadence` only. `events dlq replay` moves a row from the DLQ to pending in one transaction.
+
+### Fixed
+
+- Phase 12 late terminal handoff: bounded shutdown preserves live workers' outcome ownership. Repeated shutdown retries the retained terminal DLQ handoff after storage recovery without resnapshotting consumed queued work, replaying stale prices or duplicating terminal settlement.
+
+### Verified
+
+- Phase 12: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 12: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 12: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- `pumpgrok run --mode live --once` exits 3. The smoke-10m hash above was measured from a temp cwd on `bot-02-risk/phase-12-event-runtime` at `66246aa`.
+
+## [Unreleased] - v4 Phase 11: engineering foundation and quality
+
+### Changed
+
+- The two replay hash pins are in tests: smoke-10m in `tests/replay/test_replay_hash_pin.py` and the trading `smoke` hash with its full row dump in `tests/replay/test_trading_smoke_pin.py`, both backed by `tests/fixtures/replay/pins/trading_smoke.json` and `trading_smoke_rows.json`.
+- The seat receipt glob tracks every v4 receipt at `.receipts/bot-0*/v4-p*.json`, and no PR-number waiver remains in the gates.
+- The dev tooling is locked, the soak test is marked slow and kept out of the default path, and a branch coverage floor is enforced through `pyproject.toml` `fail_under`. The CI check job runs the coverage floor. A CycloneDX SBOM is built as a CI artifact, and the compose services run with read-only roots, a tmpfs `/tmp`, all capabilities dropped and no-new-privileges.
+- The C901, PLR0912 and PLR0915 complexity ratchet is selected against a recorded baseline. Property tests cover integer money, reducer ordering and replay determinism. An opt-in mutation-smoke make target covers risk and execution math. A guard fails on oversized successor functions and on new plain swallows.
+- Hotspots are split behind characterization tests that pass on the old and the split code: `RiskEngine._evaluate` into rule stages, the `cli/backtest` verb and `Settings` into modules, `supervisor/seat_task.py` into `seat_restart` and `seat_relay`, and the paper adapter sell, batch, confirm, buy and marks functions. Every replay hash is unchanged.
+- The jupiter quote `except` and the rug `except` clauses narrow to typed errors, so an unexpected exception now propagates. The desk-gateway seat id is narrowed before `_authenticate`, so mypy passes with no behaviour change.
+- The v4 milestone planning files are adopted.
+
+### Verified
+
+- Phase 11: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 11: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 11: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 11: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- The trading smoke hash moves only in plan 15-01, so Phase 11 holds it at the v4-base value.
+
+## [Unreleased] - v3 Phase 21: DOC-03 documentation accuracy
+
+### Fixed
+
+- DOC-03 (phase 21): both marketplace manifests (`.claude-plugin/marketplace.json`, `.grok-plugin/marketplace.json`) carry version `0.1.0` (was `1.0.0`) and describe a "Ten-seat" desk (was "Eight-role"). `tests/docs/test_doc_consistency.py` checks all six plugin manifests against the package version and rejects "Eight-role" in any plugin description.
+- DOC-03 (phase 21): `ARCHITECTURE.md` no longer names the absent `ticket_helper.py` and `paper_sim.py`; ticket IDs come from `pumpgrok ticket next` and paper fills from `pumpgrok run --mode paper`. `vendor/grokbot-pumpfun/` is described as absent from this checkout and formerly vendored (see `docs/VENDOR_PIN.md`). "eight persistent Bots" becomes "ten seats". The seat table lists SIGNAL and JOURNAL. `scout pipeline --candidates` is recorded as not implemented (exit 5). The `/workspace/trading-desk` path becomes `$HOME/trading-desk`, the default in `scripts/hermes-bootstrap.sh`.
+- DOC-03 (phase 21): `SETUP.md` counts 10 role files, lists all ten Bots in the desk record and receipt, checks `src/pumpgrok/tools` (the root `tools/` path it listed does not exist), and uses `~/trading-desk` in place of `/workspace/trading-desk`.
+- DOC-03 (phase 21): `README.md` no longer describes the vendored engine as present, and no longer says `pumpgrok paper` logs fills; `pumpgrok run --mode paper` drives the paper adapter and `pumpgrok paper buy|sell` refuse until the curve reader is verified.
+- DOC-03 (phase 21): `SETUP.md` and `README.md` list `pumpgrok ticket next --help` in their tool checks. The bare `pumpgrok ticket next` allocates a ticket id and writes a row to the paper ledger, so it is not a read-only check and is no longer listed as one.
+- DOC-03 (phase 21): `docs/VENDOR_PIN.md` no longer tells the reader to copy `config.example.yaml`. That file belonged to the vendored tree and is absent from this checkout.
+- DOC-03 (phase 21, round 2): `README.md` no longer calls the CLI or setup "read-only". It states what is written: `ticket next` and `create` append a row to the paper ledger `var/ledger.sqlite`, and setup writes local folders and files. "No keys, no real trades" is kept.
+- DOC-03 (phase 21, round 2): `ARCHITECTURE.md` no longer calls the CLIs "read-only" and names the local files they write under `var/`. The data-flow diagram drops the retired vendor engine, the `trades.jsonl` node and the unimplemented scout pipeline node, with their edges, because the vendor tree is absent and `pumpgrok scout pipeline` exits 5.
+- DOC-03 (phase 21, round 2): `SETUP.md` replaces "Setup is read-only" with the local folders and files setup writes (the repository clone in section 1 and `~/trading-desk` in sections 3 and 10).
+- DOC-01 (phase 21, round 2): `CLAUDE.md` replaces stale line ranges (`_run` at lines 57-67 and 68-83, and `replay_runtime.py:222`) with symbol names verified in the code, and cites the live-mode preconditions in `src/pumpgrok/execution/live/live_gate.py`.
+
+## [Unreleased] - v3 Phase 20: LIV-01 live adapter import path
+
+### Fixed
+
+- LIV-01 (phase 20): `pumpgrok.execution.live` no longer re-exports `LiveAdapterStub`, so importing the CLI, backtest or promotion modules no longer loads `pumpgrok.execution.live.live_adapter`. The import-graph guard follows parent package `__init__` edges, and a fresh-interpreter test proves the path is closed (tests/safety/test_cli_import_no_live_adapter.py). The replay hash b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d is unchanged.
+
 ## [Unreleased] - Desk built-ins: platform, wallet allowlist, notional cap, scheduled promotion
 
 ### Added
@@ -27,6 +87,58 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Phase built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - `make lint`, `make typecheck`, `make test`, `./scripts/check.sh`, both generator checks and the schema check exit 0. `run --mode live --once` exits 3.
+- Desk built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Desk built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- The rebased branch is re-verified by the full gate set before its PR is opened.
+
+## [Unreleased] - v3 follow-up: restore fails closed
+
+### Changed
+
+- `restore_active_set` refuses a caller that is not a `human:` or `gate:` writer.
+- `restore_active_set` refuses a prior hash with no valid stored content; both refusals happen before any ledger row is written.
+
+### Verified
+
+- v3 follow-up restore: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up restore: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+
+## [Unreleased] - v3 follow-up: live positions valued at cost until marked
+
+### Changed
+
+- An open position is valued at its fill cost until its first mark, so buys no longer read as a loss in the live equity, drawdown and daily-loss halt; the backtest and live ledger now use the same rule.
+- Known limit: a buy that adds to a position which already has a mark still reads its cost as a loss until the next mark. Fixing it changes the buy-fill path and the close pricing gate (`execution/paper_adapter/marks.py`), so it is not in this change.
+
+### Verified
+
+- v3 follow-up live: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up live: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- The four regression tests in tests/ledger/test_fill_valued_at_cost.py fail on origin/main (a phantom loss of 2 percent of equity per default-size unmarked buy) and pass with this change.
+
+## [Unreleased] - v3 follow-up: provider record in STATE.md, fails closed
+
+### Changed
+
+- The paid-RPC provider is recorded in .planning/STATE.md as `paid_rpc_provider: none` (no provider) or as a provider name.
+- The environment variable PUMPGROK_PAID_RPC_PROVIDER is no longer read.
+- A missing, unreadable, absent, duplicated or empty record counts as recorded, so BLIND stays KILL.
+- The image carries .planning/STATE.md.
+
+### Verified
+
+- v3 follow-up provider record: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- v3 follow-up provider record: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Image built from this tree: /app/.planning holds only STATE.md, readable by the runtime user; the decision is recorded=False from /app and recorded=True from another directory; starting with PUMPGROK_PAID_RPC_PROVIDER set aborts with unknown setting.
+
+## [Unreleased] - v3 follow-up: one identity, one valuation, constitution bytes
+
+### Changed
+
+- Parameter-set identity: `param_set_hash` is the normalized CandidateParams content hash, the value the search winner, promotion gate, evidence and active-set ledger carry. Whitespace and key order no longer change it. Every run id changes once, because the identity input changed. `--params` files with keys outside CandidateParams, or float leaves, are refused with a usage error.
+- Selection valuation: the search objective uses the report's rule (cash plus open positions at mark, else at cost basis) from `backtest/equity.py`, which the report also calls. A buy-and-hold candidate is no longer scored as a loss in selection, so search scores and winners can change.
+- Search input: the promotion search runs over `promotion.canonical_space`, one entry per content hash in hash order. A repeated declaration counts as one trial, and a score tie goes to the lowest content hash instead of the earlier declared entry. The declared-space identity value is unchanged, and run ids hash that identity with code_version, so this change alters no run id; candidates.json bytes change for declarations not already in hash order.
+- Constitution wording: clause 10 quotes now match the amendment bytes (ASCII double quotes, en dash U+2013 kept) in the prompt core, the generated agent files, RISK_POLICY, ROSTER and the browser-ops skill. The frozen oracle test takes its clause 10 authority from `.planning/AMENDMENT-2026-10-25.md`.
 
 ## [Unreleased] - v3 Phase 10: live readiness, kept disabled
 
@@ -52,6 +164,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - UPG-02 gates every promotion in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason.
 - UPG-03 records each active-set change as a ConfigChanged row with evidence under var/upgrade/promotions/, and restores the exact prior set in one operation.
 - UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. It never writes an active-set row.
+- UPG-02 adds `evaluate_candidate`, a gate that checks in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason. `record_promotion` does not require `promotion_eligible` or check `blocks_promotion`, so gate enforcement is by convention.
+- UPG-03 adds `record_promotion`, which writes an evidence manifest under var/upgrade/promotions/ and refuses different evidence at the same hash without recording anything. `record_active_set` accepts any `by` value, needs no gate verdict and writes a ConfigChanged row with no evidence file. `restore_active_set` writes the prior hash back as a new ConfigChanged row; it does not check the caller and does not verify stored content for that hash.
+- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. `escalate_candidate` is a library function with tests; no production code calls it, so it runs only when a caller invokes it. It never writes an active-set row.
 - UPG-05 treats BLIND on SAFE-4 and SAFE-8 as advisory while no paid RPC provider is recorded (PUMPGROK_PAID_RPC_PROVIDER). Setting the provider restores the KILL contract.
 - UPG-06 applies the owner-approved constitution amendment of 2026-10-25 to the rules, the desk skill, the agent prompts and the risk policy, with a frozen oracle test. The risk seat alone carries the amended clause 3.
 
@@ -59,6 +174,7 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 - Phase 9: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Phase 9: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Correction after merge (2026-10-27): the UPG-02 and UPG-03 wording above implied operator-path gating, evidence for active-set changes and a verified restore; promotion, rollback, escalation and active-set record/restore are library-only in this milestone, with no production caller and no operator verb.
 
 ## [Unreleased] - v3 Phase 8: backtest and paper evaluation
 
