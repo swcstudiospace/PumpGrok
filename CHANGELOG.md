@@ -21,6 +21,23 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - `pumpgrok run --mode live --once` exits 3. The smoke-10m hash above was measured from a temp cwd on `bot-02-risk/phase-12-event-runtime` at `66246aa`.
 
+## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
+
+### Added
+
+- Token-first curve layout (49/166 byte accounts) behind an allowlist price gate; statuses stay ASSUMED.
+- Datafeed package (ticks, watch set, mint book, bus bridge), fail-closed LivePriceSource, graduation and marks loop, PumpPortal/logs feed with a 30/10s limiter and readonly allowlist, sealed recorder datasets with gaps and torn-line recovery.
+
+### Verified
+
+- Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: probe outcome ASSUMED with the exact probe error; no VERIFIED flip without a human reviewed_by.
+- Phase 13: paper fee default v1; fee model v2 selectable (builder fee, first-buy ATA, priority cap).
+- `pumpgrok run --mode live --once` still exits 3; no contracts/ file changed.
+
 ## [Unreleased] - v4 Phase 11: engineering foundation and quality
 
 ### Changed
