@@ -103,7 +103,7 @@ class FeeModelV2(FeeModel):
         """Priority cost capped at the signer priority-fee cap."""
         return min(super().priority_fee(), self.priority_fee_cap_lamports)
 
-    def buy_debit(self, filled_lamports: int, *, use_builder: bool = False) -> int:  # type: ignore[override]
+    def buy_debit(self, filled_lamports: int, *, use_builder: bool = False) -> int:
         """Cash debited for a v2 buy: filled plus builder fee and network."""
         return (
             filled_lamports

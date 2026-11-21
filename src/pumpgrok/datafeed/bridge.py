@@ -18,13 +18,13 @@ from pumpgrok.datafeed.events import (
     TokenCreated,
     TradeSeen,
 )
-from pumpgrok.events.models import Event, EventKind
+from pumpgrok.events.models import Event, EventKind, FrozenPayload
 
 Publisher = Callable[[Event], None]
 
 
-def _payload(record: DatafeedEvent) -> dict[str, Any]:
-    return dict(record.model_dump())
+def _payload(record: DatafeedEvent) -> FrozenPayload:
+    return FrozenPayload(dict(record.model_dump()))
 
 
 def to_bus_event(record: DatafeedEvent) -> Event:

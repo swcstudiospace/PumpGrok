@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict
 
 from pumpgrok.core.units import lamports_to_sol, sol_to_lamports
 from pumpgrok.tools._common import UNITS_PER_TOKEN
+from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS
 
 #: Token-first 49-byte layout: disc, virt_token, virt_sol, real_token,
 #: real_sol, total_supply, completion flag. Token fields precede SOL fields.
@@ -209,6 +210,4 @@ def rpc_curve_price_allowed(*, curve_source: str) -> bool:
         return False
     if LAYOUT_STATUS != "VERIFIED":
         return False
-    from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS
-
     return EVENT_DECODE_STATUS == "VERIFIED"

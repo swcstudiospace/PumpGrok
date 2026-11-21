@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS, decode_status
@@ -28,8 +29,6 @@ def test_success_is_pending_review_not_verified() -> None:
 
 
 def test_record_doc_never_writes_verified(tmp_path: Path) -> None:
-    import importlib.util
-
     spec = importlib.util.spec_from_file_location(
         "probe", Path(__file__).resolve().parents[3] / "scripts" / "probe_pump_accounts.py"
     )

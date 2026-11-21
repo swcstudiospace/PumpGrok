@@ -261,8 +261,10 @@ def format_record_markdown(record: Mapping[str, Any]) -> str:
         [
             "Endpoint: https://api.mainnet-beta.solana.com",
             "Method: getAccountInfo (read-only, no keys)",
-            "Layout: ASSUMED until a live probe decodes under it; RPC-derived entries fail closed with data_unavailable.",
-            "Record: decoded_pending_review means decoded but not human-reviewed; VERIFIED needs reviewed_by human:<name> <date>.",
+            "Layout: ASSUMED until a live probe decodes under it;",
+            "RPC-derived entries fail closed with data_unavailable.",
+            "Record: decoded_pending_review means decoded but not",
+            "human-reviewed; VERIFIED needs reviewed_by human:<name> <date>.",
         ]
     )
     return "\n".join(lines) + "\n"

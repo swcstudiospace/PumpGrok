@@ -94,30 +94,20 @@ class PortalFeed:
             if signature in self._seen_signatures:
                 return False
             self._seen_signatures.add(signature)
-        if method == "subscribeNewToken":
-            if not self._limiter.try_acquire():
-                return False
-            guarded_call("subscribeNewToken", lambda: None)
-            mint = str(frame.get("mint", ""))
-            if not mint:
-                self.unknown_frames += 1
-                return False
-            self._note_frame()
-            self._emit(TokenCreated(mint=mint, ts_utc=format_ts_utc(self._clock.now())))
-            return True
-        if method == "subscribeMigration":
-            if not self._limiter.try_acquire():
-                return False
-            guarded_call("subscribeMigration", lambda: None)
-            mint = str(frame.get("mint", ""))
-            if not mint:
-                self.unknown_frames += 1
-                return False
-            self._note_frame()
-            self._emit(Migrated(mint=mint, ts_utc=format_ts_utc(self._clock.now())))
-            return True
-        self.unknown_frames += 1
-        return False
+        builder = {"subscribeNewToken": TokenCreated, "subscribeMigration": Migrated}.get(method)
+        if builder is None:
+            self.unknown_frames += 1
+            return False
+        if not self._limiter.try_acquire():
+            return False
+        guarded_call(method, lambda: None)
+        mint = str(frame.get("mint", ""))
+        if not mint:
+            self.unknown_frames += 1
+            return False
+        self._note_frame()
+        self._emit(builder(mint=mint, ts_utc=format_ts_utc(self._clock.now())))
+        return True
 
     def handle_timeout(self) -> GapEvent:
         """TIMEOUT reconnect: supervisor backoff; the silent interval is a gap."""
