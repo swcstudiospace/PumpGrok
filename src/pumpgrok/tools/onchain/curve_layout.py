@@ -32,10 +32,11 @@ CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
 #: completion flag, creator, amm_pool, reserved trailer.
 _CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
 CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
-#: Accepted discriminator bytes. Fixtures use the ASSUMED marker; any other
-#: 8-byte tag is a bad discriminator and fails closed.
+#: Accepted discriminator bytes: the ASSUMED fixture marker and the real
+#: bonding-curve discriminator the probe checks (docs/CURVE_LAYOUT_PROBE.md).
 _DISCRIMINATOR = b"ASSUMED\x00"
-_ACCEPTED_DISCRIMINATORS = frozenset({_DISCRIMINATOR})
+_REAL_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
+_ACCEPTED_DISCRIMINATORS = frozenset({_DISCRIMINATOR, _REAL_DISCRIMINATOR})
 
 #: Bonding-curve layout verification state (R65). ASSUMED until a live probe
 #: against mainnet bonding-curve accounts decodes under this layout and a
@@ -64,8 +65,8 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
-    #: 32-byte token mint from the 166-byte account; empty for 49-byte.
-    token_mint: bytes = b""
+    #: 32-byte token mint (hex) from the 166-byte account; empty for 49-byte.
+    token_mint: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
@@ -109,7 +110,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_token_reserves_units=rtok,
         total_supply_units=supply,
         complete=bool(complete),
-        token_mint=mint,
+        token_mint=mint.hex() if mint else "",
     )
 
 
