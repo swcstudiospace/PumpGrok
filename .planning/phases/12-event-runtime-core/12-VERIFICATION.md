@@ -1,6 +1,6 @@
 ---
 phase: 12-event-runtime-core
-verified: 2026-11-08T11:52:28Z
+verified: 2026-11-21T21:24:42Z
 status: passed
 score: 12/12 must-haves verified
 covered_files:
@@ -118,7 +118,7 @@ covered_files:
   - tests/tools/market/test_jupiter_errors.py
   - tests/tools/onchain/test_onchain_errors.py
   - tests/tools/onchain/test_pump_events.py
-covered_digest: "v3:sha256:dea9bd4615490bf3e816a4238aa32e4144080e86c9a14738d562c3ed365a9fc4"
+covered_digest: "v3:sha256:145ba93329fdaaa2c305ed9862bddc03ec1291dd6afee370d5196456b813ca77"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification: true
@@ -138,9 +138,9 @@ advisory:
 # Phase 12: Event runtime core Verification Report
 
 **Phase Goal:** A typed, bounded, deterministic event runtime exists as a library: every v4 settings section exists once in a config-gated skeleton, frozen event models with derived ids live in one catalog, an EventBus has per-entity FIFO lanes, a never-dropping P0 lane, dedup, coalescing, seeded retry, a persisted DLQ and graceful shutdown, a deterministic drain serves replay, and a SourceSupervisor owns reconnect backoff, staleness, resync and cursors. Nothing is wired into the supervisor yet and the replay path is untouched.
-**Verified:** 2026-11-08T11:52:28Z
+**Verified:** 2026-11-21T21:24:42Z
 **Status:** passed
-**Re-verification:** Yes. Previous report was gaps_found at 11/12 because `.receipts/bot-00-chief/phase-12-event-runtime.json` was tracked outside the receipt allowlist. HEAD is 9d32a35d8f3aebb2bc0aa7dace92e43d554746a0. Versus 3dda008, product code is unchanged. The only covered-file delta in `12-05-PLAN.md` is the allowlist comment on the smoke-10m pin line.
+**Re-verification:** Yes (2026-11-21 rerun at HEAD `0190154ab07742b0bfe9d1e4f9fd7526df7b7e2a`, fresh worktree `/tmp/p12-fresh-0190154` with no `var/ledger.sqlite`). Prior report was gaps_found at 11/12 on 2026-11-08 (receipt allowlist), closed then and still closed. All 12 roadmap criteria re-executed at current HEAD and pass; logs under `/tmp/p12-rerun/`. Phase 12 code was merged to main by PRs #61 (`d664f4c`), #62 (`e788e9c`) and #63 (`c5ab1b5`); no plan work was re-executed because every plan is already satisfied by merged main (see Per-Plan Status below). No constitution amendment text was applied (Phase 18 gate respected). Nothing was merged by this rerun.
 
 ## Goal Achievement
 
@@ -253,7 +253,19 @@ None. All twelve roadmap criteria were executed and logged.
 
 None. The prior gap is closed. The three tracked receipts use `v4-p12-event-runtime` and sit inside the existing allowlist. Product code is unchanged from 3dda008. covered_digest was copied from `gsd_run query verification.fingerprint` output, not computed by hand.
 
+### Per-Plan Status (2026-11-21 execute-phase rerun)
+
+`gsd_run query init.execute-phase 12` reports 5 plans, 5 summaries, 0 incomplete, 0 runnable. No plan was re-executed: every plan is already satisfied by merged main. No work was duplicated, nothing was merged, and no constitution amendment text (Phase 18 gate) was applied.
+
+| Plan | Deliverable on main | Merged via | Status |
+|------|---------------------|------------|--------|
+| 12-01 | `src/pumpgrok/config/sections/v4.py` settings skeleton; `tests/config/test_v4_settings_skeleton.py` | PR #61 `d664f4c` (bot-02-risk) | ALREADY SATISFIED — criterion 2 EXIT:0 |
+| 12-02 | `src/pumpgrok/events/models.py` catalog, `bus.py` lanes/backpressure | PR #61 `d664f4c` (bot-02-risk) | ALREADY SATISFIED — criterion 3 EXIT:0 |
+| 12-03 | `src/pumpgrok/events/store.py`, `dlq.py`, `src/pumpgrok/cli/events.py` | PR #61 `d664f4c` (bot-02-risk) | ALREADY SATISFIED — criterion 4 EXIT:0 |
+| 12-04 | `src/pumpgrok/events/sources.py` SourceSupervisor; `tests/events/test_sources.py` | PR #61 `d664f4c` (bot-02-risk) | ALREADY SATISFIED — criterion 6 EXIT:0 |
+| 12-05 | `src/pumpgrok/events/drain.py`; `tests/replay/test_event_drain_parity.py`; CHANGELOG Phase 12 hash pins | PR #62 `e788e9c` (bot-09-journal) + PR #63 `c5ab1b5` (bot-00-chief) | ALREADY SATISFIED — criteria 8 and 11 EXIT:0 |
+
 ---
 
-_Verified: 2026-11-08T11:52:28Z_
+_Verified: 2026-11-21T21:24:42Z (rerun at HEAD 0190154)_
 _Verifier: Phase12Final_
