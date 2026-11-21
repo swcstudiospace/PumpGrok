@@ -86,3 +86,25 @@ def test_mark_flushes_after_debounce_and_superseded_mark_does_not_deliver() -> N
     delivered = [row["event_id"] for row in json.loads(bytes(result))["deliveries"]]
     assert delivered == [second_mark.event_id]
     assert result.pending == 0
+
+
+def test_smoke_10m_fixture_compat_hash_parity(clean_cwd=None) -> None:
+    """Phase 14 (EVT-08): DeterministicBus under fixture_compat reproduces the
+    legacy smoke-10m hash b69c... with zero skipped tests. Exact equality,
+    no tolerance band."""
+    import random
+
+    from pin_support import SMOKE_10M_EVENTS_HASH, verify_fixture
+    from pumpgrok.supervisor.scheduler.event_cycles_aux import DeterministicBus
+
+    run = verify_fixture("smoke-10m")
+    assert SMOKE_10M_EVENTS_HASH == "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"
+    assert run.events_hash == SMOKE_10M_EVENTS_HASH
+
+    # The drain behind DeterministicBus is deterministic on the same dataset.
+    events = _smoke_events()
+    bus = DeterministicBus(clock=FixtureClock(0.0), rng=random.Random(_SEED))
+    first = bus.deliver(events)
+    second = DeterministicBus(clock=FixtureClock(0.0), rng=random.Random(_SEED)).deliver(events)
+    assert bytes(first) == bytes(second)
+    assert first.pending == 0
