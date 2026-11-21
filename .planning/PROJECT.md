@@ -12,6 +12,17 @@ The desk reacts to events instead of polling, runs several bounded strategies in
 
 v2 shipped 2026-10-23 (paper-only desk, ten seats, risk engine, paper adapter on the bonding-curve model, deterministic replay, supervised serve loop, desk gateway, Telegram kill channel; 71 requirements). v3 shipped (closed 2026-10-26): integer money and fail-closed state, `CLAUDE.md` and a trimmed `AGENTS.md`, the holdout-aware `pumpgrok backtest` verb and divergence check, bounded and reversible paper parameter promotion with the constitution amendment of 2026-10-25, and live kept refused (34 requirements, 35 plans). Archived under `.planning/milestones/`: `v2-ROADMAP.md`, `v2-REQUIREMENTS.md`, `v2-MILESTONE-AUDIT.md`, `v3-ROADMAP.md`, `v3-REQUIREMENTS.md`.
 
+v2 is shipped on main; the product line is main `f3887bb`. Milestone v3 is defined (2026-10-25) and its roadmap is pending approval.
+
+## Current Milestone: v3 Evaluation, Bounded Upgrade and Live Readiness
+
+**Goal:** make paper trading autonomous and evaluable (backtest with holdout, paper divergence check, bounded and reversible paper parameter promotion), close audited invariant gaps, and document the codebase for agents. Live trading stays disabled.
+
+**Status:** requirements defined 2026-10-25 in `.planning/REQUIREMENTS.md` (34 requirements, seven families); roadmap pending approval (`.planning/STATE.md`).
+
+**Deferred beyond v3** (carried from the v2 next goals; see `.planning/STATE.md` Deferred Items):
+- Manual-ticket exit approvals: a standing human `exit_rule` approval that the exit seat consults before a rule sell (PAPER-007 narrowed; see Out of Scope).
+- A live curve source for serve and paper trading. Serve trades only on fixture curves today.
 v4 is in progress. The roadmap (Phases 11 to 19), requirements (157) and plans (74, in 45 pull requests) were written on 2026-10-28 and none has started. The product line is main at the commit tagged `v4-base`, taken after the owner-approved merge of draft PRs 16 to 20 (order 18, 19, 20, 17 for 17 to 20). Live is still refused (exit 3).
 
 ## Current Milestone: v4 Event-Driven Multi-Strategy Desk with a Dormant Live Path
@@ -54,6 +65,36 @@ Full v2 record: `.planning/milestones/v2-REQUIREMENTS.md` (71 of 71 complete) an
 - [x] SEC (5 requirements, SEC-001..005): no committed secrets and Solana-aware secret scanning, env-only secrets, AST test for signing symbols outside the live stub, live-mode fail-fast with exit 3, green security workflow - phases 1, 2, 4, 5
 - [x] GOLIVE (3 requirements, GOLIVE-001..003): `pumpgrok live confirm` HMAC record, `LiveGate.validate` over `source=paper` events only, go-live runbook and per-precondition tests, shipped with `live.enabled = false` everywhere - phases 4, 5
 
+### Active (v3)
+
+<!-- Current scope. One line per requirement family; the individual ids live in .planning/REQUIREMENTS.md. -->
+
+- [x] INT (10 requirements, INT-01..010): integer money across module boundaries, fail-closed corrupt or missing state, integer daily-loss halt, one SOL-to-lamports conversion, id and RNG composition roots, injected-clock live gate, two feature-lineage review fixes, stage-function splits, persisted trailing-stop peaks, bonding-curve layout probe
+- [x] DOC (4 requirements, DOC-01..004): `CLAUDE.md` codebase map, `AGENTS.md` cleanup and command verification, docs contradictions from the 2026-10-25 audit corrected, historical design banners. Verified: .planning/phases/07-documentation-upgrade/07-VERIFICATION.md (passed, 9/9)
+- [x] BT (7 requirements, BT-01..007): run manifests with whole-dataset digest, per-fill replay detail, holdout and walk-forward split, trial recording with 20 and 50 trial limits, bounded metrics, `pumpgrok backtest` verb with byte-identical reports, holdout-aware harness replaces the grid search. Verified: .planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md (passed, 13/13)
+- [x] PAP (3 requirements, PAP-01..03): one result schema for backtest and paper trades, divergence check on the D7 defaults, autonomous paper verified end to end on recorded datasets. Verified: .planning/phases/08-backtest-and-paper-evaluation/08-VERIFICATION.md (passed, 13/13)
+- [x] UPG (6 requirements, UPG-01..06): content-hashed parameter sets within version-controlled bounds, promotion gate (bounds, holdout, divergence, at most 20 trials, autonomous-paper level), evidence record with exact one-operation rollback, escalation for ineligible candidates, SAFE-4 and SAFE-8 advisory BLIND, constitution amendment applied. Verified 2026-10-26 in .planning/phases/09-bounded-paper-self-upgrade/09-VERIFICATION.md (passed, 10/10). Re-verified on HEAD 01f80e3 on 2026-11-12: `pytest tests/upgrade tests/safety/test_blind_advisory.py tests/safety/test_constitution_amendment.py` exit 0; `scripts/generate-templates.py --check` exit 0. UPG-05 read path changed in b1ebaf7 (operator ledger), covered by the same tests.
+- [x] LIV (2 requirements, LIV-01..02): live stays refused (exit 3, no live adapter, import-graph test), live-readiness record deferred with no signing or custody code. Verified: .planning/phases/10-live-readiness-kept-disabled/10-VERIFICATION.md (passed, 8/8)
+- [x] PRC (2 requirements, PRC-01..02): phase gates and receipts for every completion claim, phase branches and draft-only PRs with no merge to main without approval. Closed 2026-10-26 with owner-approved deviations (V3-5).
+
+### Out of Scope
+
+<!-- Explicit boundaries from docs/upgrade-plan-desk-v2.md section 5.11 and the v3 requirements. -->
+
+- Live trading enablement, live order placement, signing, custody, wallet funding, any real transaction, any live adapter implementation - constitution clause 1, D4 and R21 precondition 8; GOLIVE-* ships disabled, no adapter is registered, and LIV-01/LIV-02 keep live refused and recorded as deferred
+- Web dashboard or UI beyond text/markdown reports - spec non-goal; `reporting/dashboard.py` is a text renderer only
+- New chains, venues, launchpads, data vendors; post-graduation CPMM modelling - D8 keeps the integrations exactly as today; R8/R38 document graduation as a force-close limitation
+- External historical data or new data vendors - data policy: self-recorded only (D8, AF-10)
+- Paid RPC procurement or spend - no provider approved; user decision
+- PumpPortal trade-stream key - default no (R45); user decision
+- Multi-tenant, billing, SaaS packaging - spec non-goal; single-operator internal tool
+- New alpha and new signal families. Paper parameter evaluation and bounded promotion are in scope under clause 8 as amended on 2026-10-25.
+- Engagement level `micro-live` - retired by R16; levels are `research | paper` only, `live` exists solely behind the disabled gate
+- Changing `~/src/repos/programming-desk/` itself - spec non-goal; it is mirrored in shape and names only, never imported or edited
+- Social posting, coordinated buying, volume tooling, wallet UI automation - forbidden by D7/R39; detection only, enforced by a static test
+- Telegram live verification, G-4 consumer acknowledgements, bot-06 exit roster change - human actions outside the code
+- Manual-ticket exit approval path (PAPER-007) - deferred by owner decision 2026-10-23
+- Coverage threshold, ed25519 confirmation signatures, Greptile as a gate, gateway OAuth - deferred (`docs/FOUNDATION_STACK.md` U-5, `docs/design/paper-engine.md` section 7.3)
 ### Validated (v3, closed 2026-10-26)
 
 Full v3 record: `.planning/milestones/v3-REQUIREMENTS.md` (34 of 34 complete) and `.planning/milestones/v3-ROADMAP.md`.
@@ -114,6 +155,7 @@ Full v3 record: `.planning/milestones/v3-REQUIREMENTS.md` (34 of 34 complete) an
 ## Context
 
 **Baseline**
+- v2 is shipped on main; the product line is main `f3887bb`. Milestone v3 branches from it (Key Decisions V3-3).
 - v2 and v3 are closed. Milestone v4 branches from main at the commit tagged `v4-base`, after draft PRs 16 to 20 merge (owner decision V4-5); `feat/grokbot-desk-merge` stays untouched (V3-3).
 
 **Technical environment**
@@ -247,6 +289,8 @@ and implemented by workflows/transition.md and workflows/complete-milestone.md.
 
 **v3 note (2026-10-25):** v3 phase numbering continues from v2's five phases, so phase 9 is the phase that applies the constitution amendment (V3-1). Each v3 phase closes with the PRC-01 gate set and a receipt per completion claim. As each v3 family completes, move its items from Active to Validated with the phase reference, and move any requirement the amendment or audits invalidate to Out of Scope with its reason.
 
+---
+*Last updated: 2026-10-26 after the Phase 6 closure decision (V3-5)*
 **v4 note (2026-10-28):** v4 phase numbering continues from v3, so phase 11 is the first v4 phase. Each v4 phase closes with the PRC-01 gate set, a receipt per completion claim, one journal CHANGELOG pull request with both replay hash pairs and one chief `.planning` close. As each v4 family completes, move its items from Active to Validated with the phase reference. The amendment pull request (plan 18-07) is the only change that edits the Out of Scope live and custody rows and the BLIND constraint text, and only a human applies it.
 
 ---

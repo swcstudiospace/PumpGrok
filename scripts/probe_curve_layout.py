@@ -38,6 +38,8 @@ import os
 import re
 import struct
 import sys
+import time
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -157,6 +159,155 @@ def _rpc_get_account(endpoint: str, account: str, commitment: str, timeout: floa
         err = payload["error"]
         raise RuntimeError(f"rpc error {err.get('code')}: {err.get('message')}")
     return payload
+
+
+_LAYOUT_ORDERS = {
+    "idl_order": ("vtok", "vsol", "rtok", "rsol", "supply"),
+    "repo_order": ("vsol", "vtok", "rsol", "rtok", "supply"),
+}
+# Plausible live-curve bands in base units. Token reserves are ~1e15 units and SOL reserves
+# ~1e10 lamports, so a count read under the wrong order falls outside its band.
+_TOKEN_RESERVE_BAND = (10**14, 10**17)
+_SOL_RESERVE_BAND = (10**8, 10**12)
+
+
+def _layout_problems(values: dict[str, int], complete: int) -> list[str]:
+    """Sanity checks one candidate reading must pass. Empty list means it passes."""
+    problems = []
+    if complete not in (0, 1):
+        problems.append(f"completion byte {complete} is not boolean")
+    lo, hi = _TOKEN_RESERVE_BAND
+    if not lo <= values["vtok"] <= hi:
+        problems.append("virtual_token outside token scale")
+    lo, hi = _SOL_RESERVE_BAND
+    if not lo <= values["vsol"] <= hi:
+        problems.append("virtual_sol outside SOL scale")
+    if values["rtok"] > values["vtok"]:
+        problems.append("real_token exceeds virtual_token")
+    if values["rsol"] > values["vsol"]:
+        problems.append("real_sol exceeds virtual_sol")
+    if values["supply"] == 0:
+        problems.append("supply is zero")
+    return problems
+
+
+def evaluate_layouts(raw: bytes) -> dict:
+    """Read the same bytes under each candidate order; flip only when exactly one passes."""
+    if len(raw) < _EXPECTED_SIZE:
+        return {
+            "passing": [],
+            "flip_allowed": False,
+            "decoded": None,
+            "problems": {"size": [f"{len(raw)} < {_EXPECTED_SIZE}"]},
+        }
+    # Live curve accounts are longer than 49 bytes (166 observed); the curve fields are the
+    # 49-byte prefix, so decode that and ignore trailing fields.
+    _disc, *words, complete = _CURVE_STRUCT.unpack(raw[:_EXPECTED_SIZE])
+    passing: list[str] = []
+    problems: dict[str, list[str]] = {}
+    readings: dict[str, dict[str, int]] = {}
+    for name, order in _LAYOUT_ORDERS.items():
+        values = dict(zip(order, words, strict=True))
+        found = _layout_problems(values, complete)
+        readings[name] = values
+        if found:
+            problems[name] = found
+        else:
+            passing.append(name)
+    flip = len(passing) == 1
+    return {
+        "passing": passing,
+        "flip_allowed": flip,
+        "decoded": readings[passing[0]] if flip else None,
+        "problems": problems,
+    }
+
+
+def filter_curve_candidates(accounts: list[dict]) -> list[dict]:
+    """Keep pump-owned accounts of 49+ bytes with the curve discriminator."""
+    return [
+        account
+        for account in accounts
+        if account["owner"] == EXPECTED_PROGRAM_ID
+        and len(account["raw"]) >= _EXPECTED_SIZE
+        and account["raw"][:8].hex() == EXPECTED_DISCRIMINATOR_HEX
+    ]
+
+
+def call_with_backoff(call, method, params, *, sleep=time.sleep, max_retries=5, base_delay=1.0):
+    """Retry only HTTP 429 with exponential backoff; every other error propagates at once."""
+    attempt = 0
+    while True:
+        try:
+            return call(method, params)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt >= max_retries:
+                raise
+            sleep(base_delay * (2**attempt))
+            attempt += 1
+
+
+def _rpc_post(endpoint: str, method: str, params: list, timeout: float):
+    """One JSON-RPC POST returning its result; raises on RPC error or non-https endpoint."""
+    if not endpoint.startswith("https://"):
+        raise ValueError("RPC endpoint must use https")
+    body = json.dumps({"jsonrpc": "2.0", "id": "curve-probe", "method": method, "params": params})
+    request = urllib.request.Request(  # noqa: S310 - scheme checked above
+        endpoint, data=body.encode("utf-8"), headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        payload = json.loads(response.read().decode("utf-8"))
+    if isinstance(payload.get("error"), dict):
+        err = payload["error"]
+        raise RuntimeError(f"rpc error {err.get('code')}: {err.get('message')}")
+    return payload.get("result")
+
+
+def discover_curve_account(endpoint: str, timeout: float, limit: int, *, sleep=time.sleep):
+    """Scan recent program signatures for a curve account; read-only, 429-aware."""
+
+    def call(method: str, params: list):
+        return _rpc_post(endpoint, method, params, timeout)
+
+    signatures = call_with_backoff(
+        call, "getSignaturesForAddress", [EXPECTED_PROGRAM_ID, {"limit": limit}], sleep=sleep
+    )
+    seen: set[str] = set()
+    for entry in signatures or []:
+        tx = call_with_backoff(
+            call,
+            "getTransaction",
+            [entry["signature"], {"encoding": "json", "maxSupportedTransactionVersion": 1}],
+            sleep=sleep,
+        )
+        if not tx:
+            continue
+        loaded = (tx.get("meta") or {}).get("loadedAddresses") or {}
+        keys = [
+            *tx["transaction"]["message"]["accountKeys"],
+            *loaded.get("writable", []),
+            *loaded.get("readonly", []),
+        ]
+        for key in keys:
+            if key in seen:
+                continue
+            seen.add(key)
+            info = call_with_backoff(
+                call, "getAccountInfo", [key, {"encoding": "base64"}], sleep=sleep
+            )
+            value = (info or {}).get("value")
+            if not value:
+                continue
+            raw = base64.b64decode(value["data"][0], validate=True)
+            if filter_curve_candidates([{"owner": value["owner"], "raw": raw}]):
+                return {
+                    "account": key,
+                    "signature": entry["signature"],
+                    "slot": info["context"]["slot"],
+                    "owner": value["owner"],
+                    "raw": raw,
+                }
+    return None
 
 
 def _decode_account(raw: bytes) -> dict:
