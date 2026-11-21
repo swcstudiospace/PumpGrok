@@ -18,5 +18,3 @@ prompts-assembled/*.xml.tmp
 
 .coverage
 coverage.xml
-!.receipts/bot-02-risk/00057-omega-ci-runners.json
-!.receipts/bot-02-risk/T1482-be.json
