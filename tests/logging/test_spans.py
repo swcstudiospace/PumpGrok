@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import secrets
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -112,7 +113,9 @@ def test_span_fields_pass_through_redaction_filter(
 ) -> None:
     buffer = io.StringIO()
     setup_logging(mode="paper", profile="paper", environ={}, stream=buffer)
-    with bind_clock(clock), span("probe", api_key="test-value-not-a-secret"):
+    # Sampled at runtime: no secret-shaped literal lives in this file, while
+    # the `api_key` key name still proves key-based redaction of span fields.
+    with bind_clock(clock), span("probe", api_key=secrets.token_hex(8)):
         pass
     lines = [line for line in buffer.getvalue().splitlines() if line]
     assert len(lines) == 1

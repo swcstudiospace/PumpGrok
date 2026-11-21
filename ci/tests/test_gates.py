@@ -16,6 +16,7 @@ import ast
 import importlib.util
 import json
 import re
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -365,7 +366,8 @@ class TestG3Secrets:
         assert [f["rule"] for f in findings] == ["forbidden_file"]
 
     def test_pragma_allowlist_marker_suppresses_a_line(self, secrets_gate):
-        line = 'API_KEY = "Zq8Lr2Tv9Wm4Xk7Nb1Hc6Yd3Pe5Fg0Js"  # pragma: allowlist secret'
+        # Sampled at runtime: no synthetic credential literal lives in this file.
+        line = 'API_KEY = "' + secrets.token_hex(16) + '"  # pragma: allowlist secret'
         assert secrets_gate.scan_line("fixture.py", 1, line) == []
 
     def test_placeholder_values_are_not_high_entropy_findings(self, secrets_gate):
