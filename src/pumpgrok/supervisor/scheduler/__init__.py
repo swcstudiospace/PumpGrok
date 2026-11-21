@@ -53,6 +53,14 @@ from pumpgrok.supervisor.scheduler.supervisor import (
     cycle_timeout_s,
     rollover_key,
 )
+from pumpgrok.supervisor.scheduler.wake import (
+    ALLOWED_TIMERS,
+    SEAT_WAKES,
+    UnknownTimerError,
+    assert_allowed_timers,
+    dispatch,
+    wakes_for,
+)
 
 __all__ = [
     "DEFAULT_ROSTER_DIR",
@@ -73,6 +81,12 @@ __all__ = [
     "LedgerUnavailable",
     "ReplayRuntime",
     "Supervisor",
+    "ALLOWED_TIMERS",
+    "SEAT_WAKES",
+    "UnknownTimerError",
+    "assert_allowed_timers",
+    "dispatch",
+    "wakes_for",
     "assert_no_skew",
     "build_serve_replay",
     "cycle_timeout_s",

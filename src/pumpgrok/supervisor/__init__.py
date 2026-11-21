@@ -21,6 +21,11 @@ from pumpgrok.supervisor.lifecycle import (
     shutdown,
 )
 from pumpgrok.supervisor.metrics import NINE_FAMILIES, Metrics, build_registry
+from pumpgrok.supervisor.metrics_events import (
+    EVENT_FAMILIES,
+    EventMetrics,
+    build_event_registry,
+)
 from pumpgrok.supervisor.scheduler import (
     SEAT_CADENCES,
     TICK_S,
@@ -52,6 +57,10 @@ __all__ = [
     "CLOCK_SKEW_S",
     "NINE_FAMILIES",
     "SEAT_CADENCES",
+    "EVENT_FAMILIES",
+    "EventMetrics",
+    "build_event_registry",
+    "SEAT_WAKES",
     "TICK_S",
     "ClockSkew",
     "DegradedState",

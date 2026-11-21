@@ -65,6 +65,12 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run.add_argument(
         "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
     )
+    run.add_argument(
+        "--wake-mode",
+        choices=["cadence", "event"],
+        default="cadence",
+        help="how seats wake: cadence polls (default) or event dispatch",
+    )
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
