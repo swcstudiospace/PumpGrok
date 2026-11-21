@@ -339,8 +339,6 @@ def load_desk_cycle(path: Path = DESK_CYCLE_PATH) -> Element:
     return root
 
 
-
-
 def _escape_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
