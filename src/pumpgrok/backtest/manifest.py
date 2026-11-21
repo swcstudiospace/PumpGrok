@@ -93,6 +93,7 @@ def dataset_digest(dataset_dir: Path | str) -> str:
     names = sorted(entry.name for entry in root.iterdir() if entry.is_file())
     if not names:
         raise ValueError(f"dataset directory holds no files: {root}")
+    per_file = [hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names]
     per_file = [file_digest((root / name).read_bytes()) for name in names]
     return hashlib.sha256("".join(per_file).encode("utf-8")).hexdigest()
 

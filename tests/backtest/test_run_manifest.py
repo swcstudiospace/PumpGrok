@@ -35,6 +35,7 @@ from pumpgrok.core.idempotency import canonical_json
 SMOKE10M = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke-10m"
 SEED = 20260101
 CODE_VERSION = "TESTCODEVERSION"
+PARAMS_RAW = json.dumps({"top_k": 10}, sort_keys=True).encode("utf-8")
 PARAMS_RAW = json.dumps({"filter": {"min_unique_buyers": 5}}, sort_keys=True).encode("utf-8")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 
@@ -81,6 +82,7 @@ def test_manifest_holds_all_inputs(tmp_path: Path) -> None:
     assert manifest.dataset_digest == _expected_digest(root)
     assert manifest.seed == SEED
     assert manifest.filter_settings_hash == filter_settings_hash(FilterSettings())
+    assert manifest.param_set_hash == param_set_hash(PARAMS_RAW)
     assert manifest.param_set_hash == CandidateParams(**json.loads(PARAMS_RAW)).content_hash
     assert manifest.code_version == CODE_VERSION
     assert manifest.run_id_version == RUN_ID_VERSION
