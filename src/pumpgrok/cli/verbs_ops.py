@@ -45,7 +45,14 @@ log = logging.getLogger("pumpgrok.cli")
 def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
     if getattr(args, "json", False):
         return _doctor_json_verb(settings)
-    _say(sys.stdout, *doctor_report(settings))
+    if getattr(args, "wake_mode", "cadence") == "event":
+        from pumpgrok.cli.wake_mode import event_mode_refusal as _refusal
+
+        refusals = _refusal("event", Path("hermes/cron/jobs.yaml"))
+        if refusals:
+            _say(sys.stdout, "wake_mode=event refused: " + "; ".join(refusals))
+            return 1
+    _say(sys.stdout, *doctor_report(settings, wake_mode=getattr(args, "wake_mode", "cadence")))
     return EXIT_OK
 
 def _doctor_json_verb(settings: Settings) -> int:

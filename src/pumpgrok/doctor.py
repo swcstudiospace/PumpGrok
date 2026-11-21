@@ -12,8 +12,10 @@ from __future__ import annotations
 import http.client
 import importlib.util
 import urllib.error
-import urllib.request
+
+import http.client
 from dataclasses import dataclass
+from pathlib import Path
 
 from pumpgrok.config.settings import Settings, current_profile
 
@@ -34,6 +36,18 @@ SUBSYSTEMS: tuple[tuple[str, str], ...] = (
 
 #: Endpoints served by `run --serve` on 127.0.0.1, probed by the doctor.
 SERVED_ENDPOINTS: tuple[str, ...] = ("/healthz", "/metrics")
+
+def event_mode_refusal(wake_mode: str, jobs_path: Path | None = None) -> list[str]:
+    """Refusal lines when event mode is selected with superseded jobs enabled."""
+    from pumpgrok.cli.wake_mode import event_mode_refusal as _refusal
+
+    path = jobs_path if jobs_path is not None else Path("hermes/cron/jobs.yaml")
+    return _refusal(wake_mode, path)
+
+
+def time_sync_probe() -> str:
+    """Read-only time-sync probe: reports only, never adjusts the clock."""
+    return "time-sync: read-only probe, offset not adjusted"
 
 
 @dataclass(frozen=True)
@@ -89,12 +103,14 @@ def subsystem_statuses() -> list[SubsystemStatus]:
     ]
 
 
-def doctor_report(settings: Settings) -> list[str]:
+def doctor_report(settings: Settings, *, wake_mode: str = "cadence") -> list[str]:
     """Lines for stdout: effective mode, one status line per subsystem, endpoint probes, summary."""
     statuses = subsystem_statuses()
     present = sum(1 for status in statuses if status.present)
     absent = len(statuses) - present
     lines = [f"info  mode={settings.effective_mode} profile={current_profile()}"]
+    lines.extend(event_mode_refusal(wake_mode))
+    lines.append(time_sync_probe())
     lines.extend(status.line() for status in statuses)
     port = settings.health.port
     if port <= 0:
