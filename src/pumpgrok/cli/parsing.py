@@ -74,7 +74,8 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
-    verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor_parser = verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor_parser.add_argument("--json", action="store_true", help="print readiness records as JSON")
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
     verify.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to verify")

@@ -98,6 +98,16 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
+    if settings.effective_mode == "paper" and args.replay is None:
+        from pumpgrok.onboarding.start_gate import check_start
+
+        missing = check_start(os.environ, "paper")
+        if missing:
+            _say(
+                sys.stderr,
+                "paper start refused: missing required inputs: " + ", ".join(missing),
+            )
+            return EXIT_NOT_IMPLEMENTED
     if args.record is not None or args.duration is not None:
         return _not_implemented("run --record")
     if args.serve:

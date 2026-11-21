@@ -42,9 +42,37 @@ from pumpgrok.tools import ensure_paper_genesis
 log = logging.getLogger("pumpgrok.cli")
 
 
-def _doctor_verb(_args: argparse.Namespace, settings: Settings) -> int:
+def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
+    if getattr(args, "json", False):
+        return _doctor_json_verb(settings)
     _say(sys.stdout, *doctor_report(settings))
     return EXIT_OK
+
+def _doctor_json_verb(settings: Settings) -> int:
+    """Print one readiness record per operator input; exit 1 on failure cases."""
+    import json as _json
+    from collections.abc import Mapping as _Mapping
+
+    from pumpgrok.onboarding.doctor_report import failing_records, doctor_records
+
+    mode = settings.effective_mode
+    env: _Mapping[str, str] = os.environ
+    records = doctor_records(env, mode)
+    _say(
+        sys.stdout,
+        _json.dumps(
+            [
+                {
+                    "name": record.name,
+                    "required_for_mode": record.required_for_mode,
+                    "status": record.status,
+                    "source": record.source,
+                }
+                for record in records
+            ]
+        ),
+    )
+    return 1 if failing_records(records) else 0
 
 
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
