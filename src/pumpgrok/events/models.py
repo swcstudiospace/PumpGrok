@@ -36,6 +36,7 @@ class EventKind(StrEnum):
     strategy_intent = "strategy_intent"
     curve_tick = "curve_tick"
     mark = "mark"
+    gap = "gap"
 
 
 PRIORITY_BY_KIND: dict[EventKind, Priority] = {
@@ -51,6 +52,7 @@ PRIORITY_BY_KIND: dict[EventKind, Priority] = {
     EventKind.strategy_intent: 1,
     EventKind.curve_tick: 2,
     EventKind.mark: 2,
+    EventKind.gap: 1,
 }
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventsSettings(BaseModel):
@@ -34,6 +34,9 @@ class DatafeedSettings(BaseModel):
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
+    watch_cap: int = Field(default=32, ge=1, le=1000)
+    rate_limit_per_10s: int = Field(default=30, ge=1, le=1000)
+    feed_state_dir: str = "var/desk/datafeed"
 
 
 class RecorderSettings(BaseModel):
@@ -41,6 +44,7 @@ class RecorderSettings(BaseModel):
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
+    dataset_root: str = "var/desk/datasets"
 
 
 class StrategiesSettings(BaseModel):
