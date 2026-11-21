@@ -84,6 +84,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ### Verified
 
+- Phase built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- `make lint`, `make typecheck`, `make test`, `./scripts/check.sh`, both generator checks and the schema check exit 0. `run --mode live --once` exits 3.
 - Desk built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Desk built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - The rebased branch is re-verified by the full gate set before its PR is opened.
@@ -158,6 +161,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Added
 
 - UPG-01 adds content-hashed parameter sets within version-controlled bounds (src/pumpgrok/config/upgrade_bounds.toml). An out-of-bounds value fails with a typed error and is never clamped.
+- UPG-02 gates every promotion in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason.
+- UPG-03 records each active-set change as a ConfigChanged row with evidence under var/upgrade/promotions/, and restores the exact prior set in one operation.
+- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. It never writes an active-set row.
 - UPG-02 adds `evaluate_candidate`, a gate that checks in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason. `record_promotion` does not require `promotion_eligible` or check `blocks_promotion`, so gate enforcement is by convention.
 - UPG-03 adds `record_promotion`, which writes an evidence manifest under var/upgrade/promotions/ and refuses different evidence at the same hash without recording anything. `record_active_set` accepts any `by` value, needs no gate verdict and writes a ConfigChanged row with no evidence file. `restore_active_set` writes the prior hash back as a new ConfigChanged row; it does not check the caller and does not verify stored content for that hash.
 - UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. `escalate_candidate` is a library function with tests; no production code calls it, so it runs only when a caller invokes it. It never writes an active-set row.
