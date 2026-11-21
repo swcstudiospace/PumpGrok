@@ -113,7 +113,7 @@ class FeeModelV2(FeeModel):
 
 
 def fee_model_for(model_name: str) -> FeeModel:
-    """Build the configured fee model; the config default stays v1."""
+    """Build the configured fee model; the paper default is v2, v1 stays selectable."""
     if model_name == "v2":
         return FeeModelV2()
     if model_name != "v1":

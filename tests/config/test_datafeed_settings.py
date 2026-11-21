@@ -33,4 +33,4 @@ def test_absent_toml_keeps_off(clean_env: None) -> None:
     assert settings.datafeed.enabled is False
     assert settings.recorder.enabled is False
     assert settings.datafeed.watch_cap == 32
-    assert settings.paper_fees.model == "v1"
+    assert settings.paper_fees.model == "v2"
