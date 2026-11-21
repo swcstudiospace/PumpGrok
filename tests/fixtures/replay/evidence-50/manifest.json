@@ -1,0 +1,14 @@
+{
+  "dataset": "evidence-50",
+  "notes": "Phase 14 GRK-11 evidence dataset: 320 tick events over 60 distinct mints; 60 admitted candidates under the prefilter.",
+  "recorded_from_utc": "2026-01-01T00:00:00.000000Z",
+  "recorded_to_utc": "2026-01-01T00:05:19.000000Z",
+  "seed_hint": 20260101,
+  "sha256": {
+    "events.jsonl": "edc91b0ce0811ce3459812f9aa6deb0adec6f3e5448f7b4c3de7ffdc5d05e3c6"
+  },
+  "sources": {
+    "pumpportal": "synthesised",
+    "rest": "synthesised"
+  }
+}
