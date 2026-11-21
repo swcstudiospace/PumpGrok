@@ -175,7 +175,6 @@ class _MarksMixin:
         held = {m: p for m, p in state.positions.items() if p.token_units > 0 and not p.mtm_frozen}
         if not held:
             return None
-        now = self._clock.now()
         marks, values = await self._price_held(held, self._clock.now())
         if not marks:
             return None
@@ -212,8 +211,6 @@ class _MarksMixin:
             }
             self._last_reserves[mint] = (curve.s_lamports, curve.t_units)
             self._last_price_ts[mint] = recorded
-        if not marks:
-            return None
         return marks, values
 
     def _append_mark_row(
@@ -418,72 +415,6 @@ class _MarksMixin:
             hold_s = int(self._clock.now() - parse_ts_utc(pos.opened_ts_utc))
         except ValueError:
             hold_s = 0
-        venue_tx_ref = f"dry_run:{self._ids.ulid()}"
-        order_id = self._ids.ulid()
-        price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
-        rows: list[dict[str, Any]] = [
-            {
-                "ts_utc": self._now_ts(),
-                "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"fill|{order_id}",
-                "type": "FillRecorded",
-                "payload": {
-                    "source": ledger_source,
-                    "order_id": order_id,
-                    "decision_id": "",
-                    "side": "sell",
-                    "mint": mint,
-                    "filled_lamports": proceeds,
-                    "filled_units": pos.token_units,
-                    "filled_fraction": "1",
-                    "price_avg": price_exit,
-                    "venue_fee_lamports": venue_fee,
-                    "network_cost_lamports": network_cost,
-                    "cash_delta_lamports": proceeds,
-                    "venue_tx_ref": venue_tx_ref,
-                    "route": "curve",
-                },
-            },
-            {
-                "ts_utc": self._now_ts(),
-                "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"close|{reason}|{mint}|{self._now_ts()}",
-                "type": "PositionClosed",
-                "payload": {
-                    "source": ledger_source,
-                    "mint": mint,
-                    "price_exit": str(Decimal(proceeds) / Decimal(pos.token_units))
-                    if pos.token_units
-                    else "0",
-                    "proceeds_lamports": proceeds,
-                    "realized_pnl_lamports": realized,
-                    "reason": reason,
-                    "pnl_pct": str(pnl_pct),
-                    "hold_seconds": max(hold_s, 0),
-                    "venue_tx_ref": venue_tx_ref,
-                },
-            },
-            {
-                "ts_utc": self._now_ts(),
-                "source": ledger_source,
-                "correlation_id": correlation_id,
-                "idempotency_key": f"escalation|{reason}|{mint}|{self._now_ts()}",
-                "type": "Escalation",
-                "payload": {
-                    "source": ledger_source,
-                    "kind": reason,
-                    "seat": "bot-06-exit",
-                    "detail": f"{reason} mint={mint} mtm_lamports={proceeds} frozen=true"
-                    + (f" ticket={ticket_id}" if ticket_id else ""),
-                },
-            },
-        ]
-        stored = self._store.append_batch(rows)
-        self._frozen_marks[mint] = proceeds
-        self._last_price_ts.pop(mint, None)
-        return stored[1]
         return pnl_pct, max(hold_s, 0)
 
     def _force_close_fill_row(

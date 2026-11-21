@@ -173,10 +173,6 @@ def filter_settings_hash(settings: FilterSettings) -> str:
 
 
 def param_set_hash(data: bytes) -> str:
-    """sha256 over parameter-set file bytes (the file bytes are the hash input)."""
-    if not data:
-        raise ValueError("parameter-set bytes must not be empty")
-    return hashlib.sha256(data).hexdigest()
     """Canonical identity of one parameter-set file: the CandidateParams content hash.
 
     The bytes parse into the same CandidateParams model the backtest CLI validates,

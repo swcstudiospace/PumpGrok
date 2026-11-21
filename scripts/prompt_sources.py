@@ -350,6 +350,8 @@ def _emit_cycle(el: Element, indent: str) -> list[str]:
     lines = [f"{indent}<{el.tag}{attrs}>"]
     if text:
         lines.append(f"{indent}  {escape(text)}")
+
+
 def _escape_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 

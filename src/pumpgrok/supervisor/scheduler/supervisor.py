@@ -26,7 +26,6 @@ from pumpgrok.supervisor.health import (
     write_health_json,
 )
 from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
-from pumpgrok.supervisor.seat_task import ObserveOnly, SeatContext, SeatTask, relay_tail
 from pumpgrok.supervisor.seat_relay import relay_tail
 from pumpgrok.supervisor.seat_restart import ObserveOnly
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask

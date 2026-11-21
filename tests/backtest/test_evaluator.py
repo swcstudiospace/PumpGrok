@@ -1,9 +1,5 @@
 """Window evaluator on the recorded fixtures (BT-03, BT-07).
 
-Desk-default overrides score the smoke full window as the ledger-derived
-net recorded cash change: the sum of FillRecorded cash_delta_lamports (every
-venue fee and network cost already inside it) minus the sum of OrderRejected
-fees_lamports, identical across runs, with no sign assumption.
 Desk-default overrides score the smoke full window as the eval ledger's closing
 equity less its opening equity: cash moves once per FillRecorded cash delta and
 once per OrderRejected fee, and open positions sit at their mark or cost basis,
@@ -53,27 +49,6 @@ def _full_window(dataset_dir: Path, window_id: str) -> EvalWindow:
 
 
 def _ledger_math(ledger_path: Path) -> tuple[int, int]:
-    """Independent net lamports and fill count from one ledger's fills."""
-    store = LedgerStore(ledger_path)
-    try:
-        fills = store.read(types=["FillRecorded"], limit=None)
-        rejections = store.read(types=["OrderRejected"], limit=None)
-    finally:
-        store.close()
-    cash_total = 0
-    for row in fills:
-        payload = row["payload"]
-        assert isinstance(payload, dict)
-        cash_total += int(payload["cash_delta_lamports"])
-    for row in rejections:
-        payload = row["payload"]
-        assert isinstance(payload, dict)
-        cash_total -= int(payload["fees_lamports"])
-    return cash_total, len(fills)
-
-
-def test_desk_defaults_score_matches_ledger_math(tmp_path: Path) -> None:
-    """Smoke full-window score equals the ledger-derived net lamports."""
     """Closing less opening equity from one ledger's rows, and its fill count.
 
     Cash must move once per fill cash delta and once per refusal fee; open

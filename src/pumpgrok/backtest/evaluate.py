@@ -3,11 +3,6 @@
 Each candidate parameter set is applied as validated settings overrides and
 replayed through the real engine and PaperAdapter over a stamp-range slice of
 a recorded dataset. The tuning objective is net realized lamports over the
-window: the net recorded cash change of the eval ledger, the sum of
-FillRecorded cash_delta_lamports (every venue fee and network cost already
-sits inside that delta) minus OrderRejected fees_lamports. Partial fills
-count at their recorded filled amount. A window with no fills scores 0,
-which is an honest zero, never an error marker.
 window: the closing equity of the eval ledger less its opening equity, with open
 positions valued at mark or else cost basis (backtest/equity.py, the same rule
 the backtest report uses). Every venue fee and network cost sits inside the cash
@@ -39,9 +34,6 @@ from pumpgrok.backtest.candidate import (
     ScoringKnobError,
     _reject_scoring_knobs,
 )
-from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, param_set_hash
-from pumpgrok.backtest.split import holdout_split, walk_forward_folds
-from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.backtest.equity import net_lamports
 from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, file_digest
 from pumpgrok.backtest.split import holdout_split, walk_forward_folds
@@ -139,34 +131,6 @@ def _payload_mapping(row: Mapping[str, Any], kind: str) -> dict[str, Any]:
     return payload
 
 
-def _net_lamports(ledger_path: Path) -> int:
-    """Net recorded cash change in lamports from one eval ledger, fail closed.
-
-    Sums FillRecorded cash_delta_lamports, which already carries every fee: a
-    BUY debits filled plus network cost (its venue fee sits inside filled), and
-    a SELL credits proceeds already net of venue fee and network cost. Each
-    OrderRejected fees_lamports is then deducted, as the ledger cash equation
-    does, so no fee is counted twice. Rows without a payload mapping, a
-    non-integer cash field, or an unknown side raise instead of scoring a
-    guess. A ledger with no fills nets 0.
-    """
-    store = LedgerStore(ledger_path)
-    try:
-        fills = store.read(types=["FillRecorded"], limit=None)
-        rejections = store.read(types=["OrderRejected"], limit=None)
-    finally:
-        store.close()
-    cash_total = 0
-    for row in fills:
-        payload = _payload_mapping(row, "FillRecorded")
-        side = payload.get("side")
-        if side not in ("buy", "sell"):
-            raise ValueError(f"FillRecorded row carries unknown side {side!r}")
-        cash_total += _int_field(payload, "cash_delta_lamports")
-    for row in rejections:
-        payload = _payload_mapping(row, "OrderRejected")
-        cash_total -= _int_field(payload, "fees_lamports")
-    return cash_total
 def _check_money_rows(rows: Sequence[Mapping[str, Any]]) -> None:
     """Fail closed on a fill or refusal row whose money the reducer would have to guess at."""
     for row in rows:
@@ -257,10 +221,6 @@ def evaluate_window(
     replayed with run_once_replay under the candidate overrides and the
     explicit caller-supplied ledger path, never the default replay path.
     risk_budget and limits go to run_once_replay unchanged; omitted means the replay default.
-    Returns the net recorded cash change of the eval ledger in lamports (see
-    _net_lamports); partial fills count at their recorded filled amount;
-    zero trades score 0. Raises when the
-    window holds no events. Deterministic for identical inputs.
     Returns the net realized lamports of the eval ledger (see _net_lamports);
     partial fills count at their recorded filled amount; zero trades score 0.
     Raises when the window holds no events. Deterministic for identical inputs.
@@ -288,7 +248,6 @@ def evaluate_window(
         )
         + b"\n"
     )
-    file_hex = param_set_hash(raw)
     file_hex = file_digest(raw)
     stage = Path(tempfile.mkdtemp(prefix="pumpgrok-eval-"))
     try:

@@ -1,7 +1,6 @@
 """Machine-checked doc consistency (DOC-03, Phase 7 plan 07-05).
 
 Asserts:
-1. The four plugin manifests carry the same ``version`` as ``pyproject.toml``.
 1. The six plugin manifests carry the same ``version`` as ``pyproject.toml``.
    Marketplace files carry it on each plugin entry. No manifest description says ``Eight-role``.
 2. ``docs/VENDOR_PIN.md`` carries the historical provenance pin and a
@@ -35,8 +34,6 @@ PLUGIN_MANIFESTS = (
     REPO_ROOT / ".cursor-plugin" / "plugin.json",
     REPO_ROOT / ".grok-plugin" / "plugin.json",
     REPO_ROOT / ".claude-plugin" / "marketplace.json",
-    REPO_ROOT / ".cursor-plugin" / "plugin.json",
-    REPO_ROOT / ".grok-plugin" / "plugin.json",
     REPO_ROOT / ".grok-plugin" / "marketplace.json",
 )
 
@@ -71,14 +68,6 @@ def _pyproject_version() -> str:
     return str(data["project"]["version"])
 
 
-def test_plugin_manifest_versions_match_pyproject() -> None:
-    expected = _pyproject_version()
-    for manifest in PLUGIN_MANIFESTS:
-        payload = json.loads(manifest.read_text(encoding="utf-8"))
-        name = manifest.relative_to(REPO_ROOT).as_posix()
-        assert payload.get("version") == expected, (
-            f"{name} version {payload.get('version')!r} != pyproject version {expected!r}"
-        )
 def _manifest_entries(manifest: Path) -> list[dict[str, object]]:
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     if "plugins" in payload:
