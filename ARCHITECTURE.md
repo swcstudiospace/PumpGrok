@@ -24,6 +24,7 @@ External systems named in skills or tools:
 | System | How PumpGrok uses it |
 |--------|----------------------|
 | Jupiter Swap API `https://api.jup.ag/swap/v2/order` (`QUOTE_URL`; never `/execute`) | Informational exec-side quote only; never swap/send |
+| Solana bonding curve (on-chain reserves) | `market.price` spot read via `getAccountInfo` on the curve account (ASSUMED layout); the only price the fill model uses |
 | Solana bonding curve (on-chain reserves) | `market.price` spot read via `getAccountInfo` on the curve account (ASSUMED layout). Paper fills and marks read the curve through the paper adapter's `_read_curve` port and price with `execution/curve_math.py` |
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
 | `PUMPGROK_RPC__ENDPOINTS` | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
@@ -197,6 +198,12 @@ This repository itself stores instruction files, plugin JSON, Python helpers, th
 
 | Mechanism | Where |
 |-----------|--------|
+| `PUMPGROK_RPC__ENDPOINTS` | `authority_check.py`, `priority_fee.py`, `holder_check.py` |
+| `--desk` | `paper_sim.py` (default `/workspace/trading-desk`) |
+| Quote params | `jupiter_quote.py` flags |
+| Desk record | `/workspace/trading-desk/desk.md` (engagement, public address, RPC note) |
+| Risk numbers | `/workspace/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
+| `GROKBOT_*` environment variables | Vendored engine only (`vendor/grokbot-pumpfun`, e.g. `GROKBOT_GROK_API_KEY`); never stored in PumpGrok or trading-desk files |
 | `PUMPGROK_RPC__ENDPOINTS` | `tools/onchain/authorities.py`, `tools/onchain/priority_fee.py`, `tools/onchain/top_holders.py` (`RpcSettings` in `config/settings.py`) |
 | `PUMPGROK_DESK` | `scripts/hermes-bootstrap.sh`, `scripts/hermes-install-cron.sh`, `scripts/hermes-verify-isolation.sh` (default `${HOME}/trading-desk`; their `--desk` flag overrides it) |
 | Quote params | `src/pumpgrok/tools/market/jupiter.py` (`QUOTE_URL`) |
@@ -235,6 +242,9 @@ Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep S
 
 ## Unknowns
 
+- Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
+- `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
+- Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
 - Plugin manifests `plugin.json` and `pyproject.toml` carry `"license": "AGPL-3.0"` (plugin.json) and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace). The two marketplace manifests and `SETUP.md` still carry a placeholder organisation name, which `scripts/check.sh` allowlists until the real organisation is supplied.
 - `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates ten seats and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.

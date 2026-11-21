@@ -31,9 +31,9 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 PLUGIN_MANIFESTS = (
     REPO_ROOT / "plugin.json",
     REPO_ROOT / ".claude-plugin" / "plugin.json",
-    REPO_ROOT / ".claude-plugin" / "marketplace.json",
     REPO_ROOT / ".cursor-plugin" / "plugin.json",
     REPO_ROOT / ".grok-plugin" / "plugin.json",
+    REPO_ROOT / ".claude-plugin" / "marketplace.json",
     REPO_ROOT / ".grok-plugin" / "marketplace.json",
 )
 
