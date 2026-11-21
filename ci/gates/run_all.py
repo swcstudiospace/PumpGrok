@@ -79,6 +79,9 @@ def main() -> int:
         )
     )
 
+    # idle-grok: the idle desk must make zero Grok calls over 24 virtual hours.
+    results.append(run("idle-grok", [str(GATES_DIR / "check_idle_grok.py")]))
+
     print(f"\n{'=' * 70}\nSUMMARY\n{'=' * 70}")
     failed = 0
     for name, code in results:

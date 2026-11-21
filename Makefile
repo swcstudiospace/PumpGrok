@@ -67,6 +67,9 @@ doctor: sync     ## effective config, data sources, ledger, killswitch
 gates:           ## G-1..G-7 for BOT/TASK (stdlib + pyyaml only, like CI)
 	python3 -P ci/gates/run_all.py --bot $(BOT) --base origin/main --receipt .receipts/$(BOT)/$(TASK).json
 
+
+idle-grok:       ## idle-grok gate: 24 virtual hours, zero Grok calls
+	$(UV) run python ci/gates/check_idle_grok.py
 prompts:         ## assemble prompts and regenerate agent templates
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh
 	$(UV) run python scripts/generate-templates.py
