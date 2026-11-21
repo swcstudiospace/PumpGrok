@@ -14,7 +14,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.grok.budget import BudgetExhausted, LayeredBudget
 from pumpgrok.grok.cache import Cache, build_cache_key_payload, canonical_request_hash
 from pumpgrok.grok.coalesce import Coalescer
@@ -46,7 +45,7 @@ __all__ = [
 class Transport(Protocol):
     """The only network seam. Fakes are supplied by tests."""
 
-    async def __call__(self, request: "GatewayRequest") -> str: ...
+    async def __call__(self, request: GatewayRequest) -> str: ...
 
 
 class ReplayMiss(RuntimeError):
@@ -109,7 +108,7 @@ class GrokGateway:
         prefilter: Prefilter | None = None,
         cache: Cache | None = None,
         ledger: GatewayLedger | None = None,
-        coalescer: Coalescer | None = None,
+        coalescer: Coalescer[Any] | None = None,
     ) -> None:
         self._clock = clock
         self._budget = budget
@@ -141,19 +140,27 @@ class GrokGateway:
             return None
         if not self._budget.try_debit(request.agent, request.cost):
             raise BudgetExhausted(f"budget exhausted for {request.agent}")
-        sanitized = sanitize_prompt(request.prompt)
-        cached = self._cache.get(request.cache_key, request.agent)
+        sanitized_prompt = sanitize_prompt(request.prompt)
+        effective = GatewayRequest(
+            agent=request.agent,
+            prompt=sanitized_prompt,
+            consequence_id=request.consequence_id,
+            score=request.score,
+            model=request.model,
+            cost=request.cost,
+        )
+        cached = self._cache.get(effective.cache_key, effective.agent)
         if cached is not None:
             self._ledger.record(
-                request_hash=request.cache_key,
-                agent=request.agent,
+                request_hash=effective.cache_key,
+                agent=effective.agent,
                 outcome="cached",
                 lamports=0,
             )
             return GatewayResponse(parsed=parse_strict_json(cached), text=cached, cached=True)
 
         async def _once() -> GatewayResponse:
-            text = await self._transport(request)
+            text = await self._transport(effective)
             received = text
             # Fallback responses may be flagged by the transport convention
             # "[fallback]{...}"; the rest of the gateway treats them as
@@ -162,14 +169,15 @@ class GrokGateway:
                 received = received[len("[fallback]") :]
             parsed = parse_strict_json(sanitize_prompt(received))
             self._ledger.record(
-                request_hash=request.cache_key,
-                agent=request.agent,
+                request_hash=effective.cache_key,
+                agent=effective.agent,
                 outcome="transport",
-                lamports=request.cost,
+                lamports=effective.cost,
             )
             return GatewayResponse(parsed=parsed, text=text, fallback=text.startswith("[fallback]"))
 
-        response = await self._coalescer.run(request.cache_key, _once)
+        response: GatewayResponse = await self._coalescer.run(effective.cache_key, _once)
         if not response.fallback:
-            self._cache.set(request.cache_key, response.text, request.agent)
+            self._cache.set(effective.cache_key, response.text, effective.agent)
+        assert response is not None
         return response

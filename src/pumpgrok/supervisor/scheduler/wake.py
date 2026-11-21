@@ -66,4 +66,3 @@ def dispatch(events: list[Event], *, clock: Clock) -> list[Wake]:
         for seat in wakes_for(event.kind):
             wakes.append(Wake(seat=seat, event=event))
     return wakes
-

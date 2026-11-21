@@ -25,6 +25,7 @@ from pumpgrok.cli.validators import (
     _utc_now,
 )
 from pumpgrok.cli.verbs_state import operator_active_set
+from pumpgrok.cli.wake_mode import event_mode_refusal as _event_mode_refusal
 from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
@@ -33,6 +34,7 @@ from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.doctor import doctor_report
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
@@ -46,28 +48,22 @@ def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
     if getattr(args, "json", False):
         return _doctor_json_verb(settings)
     if getattr(args, "wake_mode", "cadence") == "event":
-        from pumpgrok.cli.wake_mode import event_mode_refusal as _refusal
-
-        refusals = _refusal("event", Path("hermes/cron/jobs.yaml"))
+        refusals = _event_mode_refusal("event", Path("hermes/cron/jobs.yaml"))
         if refusals:
             _say(sys.stdout, "wake_mode=event refused: " + "; ".join(refusals))
             return 1
     _say(sys.stdout, *doctor_report(settings, wake_mode=getattr(args, "wake_mode", "cadence")))
     return EXIT_OK
 
+
 def _doctor_json_verb(settings: Settings) -> int:
     """Print one readiness record per operator input; exit 1 on failure cases."""
-    import json as _json
-    from collections.abc import Mapping as _Mapping
-
-    from pumpgrok.onboarding.doctor_report import failing_records, doctor_records
-
     mode = settings.effective_mode
-    env: _Mapping[str, str] = os.environ
+    env = os.environ
     records = doctor_records(env, mode)
     _say(
         sys.stdout,
-        _json.dumps(
+        json.dumps(
             [
                 {
                     "name": record.name,

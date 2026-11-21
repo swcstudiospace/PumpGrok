@@ -25,7 +25,7 @@ from typing import Final
 
 #: Event-decode verification state (MKT-10). ASSUMED until a human reviews
 #: the probe record. The flip to VERIFIED requires a human-set reviewed_by;
-#: no agent sets it. Reviewed-by is recorded in docs/CURVE_LAYOUT_PROBE.md.
+#: no agent sets it. Reviewed-by is recorded in the curve layout probe record.
 EVENT_DECODE_STATUS: Final[str] = "ASSUMED"
 #: Human reviewer name + date when VERIFIED; None while ASSUMED. Never set
 #: by an agent; only the 13-05 human checkpoint may set this.

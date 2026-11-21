@@ -9,8 +9,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from pumpgrok.onboarding.doctor_report import failing_records, doctor_records
 from pumpgrok.onboarding.access import enabled_seats_without_access
+from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
 
 DEFAULT_ACCESS_PATH = Path("var/desk/access-decisions.jsonl")
 DEFAULT_SEATS: tuple[str, ...] = ("bot-01-scout", "bot-02-risk", "bot-06-exit")

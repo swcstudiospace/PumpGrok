@@ -63,8 +63,8 @@ def failing_records(records: list[InputRecord]) -> list[InputRecord]:
     """Records that fail the readiness check for their mode."""
     failures: list[InputRecord] = []
     for record in records:
-        if record.status == "forbidden-present":
-            failures.append(record)
-        elif record.required_for_mode and record.status == "missing":
+        if record.status == "forbidden-present" or (
+            record.required_for_mode and record.status == "missing"
+        ):
             failures.append(record)
     return failures

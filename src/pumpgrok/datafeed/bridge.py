@@ -7,7 +7,6 @@ The publisher is injected, so tests pass a recording fake.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from pumpgrok.datafeed.events import (
     CurveTick,

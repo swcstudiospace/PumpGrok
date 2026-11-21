@@ -6,6 +6,7 @@ import subprocess
 def test_gate_exits_zero_on_silence() -> None:
     proc = subprocess.run(
         ["uv", "run", "python", "ci/gates/check_idle_grok.py"],
+        check=False,
         capture_output=True,
         text=True,
         timeout=120,

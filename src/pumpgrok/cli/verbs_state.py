@@ -47,6 +47,7 @@ from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
+from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
@@ -99,8 +100,6 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
     if settings.effective_mode == "paper" and args.replay is None:
-        from pumpgrok.onboarding.start_gate import check_start
-
         missing = check_start(os.environ, "paper")
         if missing:
             _say(
@@ -108,16 +107,20 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 "paper start refused: missing required inputs: " + ", ".join(missing),
             )
             return EXIT_NOT_IMPLEMENTED
+    outcome: int | None = None
     if args.record is not None or args.duration is not None:
-        return _not_implemented("run --record")
-    if args.serve:
+        outcome = _not_implemented("run --record")
+    elif args.serve:
         if args.once or not args.replay:
             _say(
                 sys.stderr,
                 "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
             )
-            return EXIT_NOT_IMPLEMENTED
-        return _serve_replay_loop(Path(args.replay), settings)
+            outcome = EXIT_NOT_IMPLEMENTED
+        else:
+            outcome = _serve_replay_loop(Path(args.replay), settings)
+    if outcome is not None:
+        return outcome
     if not (args.once and args.replay):
         _say(
             sys.stderr,

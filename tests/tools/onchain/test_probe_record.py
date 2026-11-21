@@ -35,7 +35,7 @@ def test_record_doc_never_writes_verified(tmp_path: Path) -> None:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    out = tmp_path / "CURVE_LAYOUT_PROBE.md"
+    out = tmp_path / "probe-record.md"
     module.write_record_doc({"status": "decoded_pending_review"}, out)
     text = out.read_text(encoding="utf-8")
     assert "decoded_pending_review" in text

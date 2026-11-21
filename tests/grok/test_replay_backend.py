@@ -1,5 +1,7 @@
 """Replay backend returns recorded hashes and raises on a miss, no network."""
 
+import pathlib
+
 import pytest
 
 from pumpgrok.grok import GatewayRequest, GrokGateway, ReplayBackend, ReplayMiss
@@ -37,8 +39,6 @@ async def test_replay_miss_raises() -> None:
 
 
 def test_replay_backend_imports_no_transport_library() -> None:
-    import pathlib
-
     source = pathlib.Path("src/pumpgrok/grok/__init__.py").read_text(encoding="utf-8")
     assert "httpx" not in source
     assert "requests" not in source

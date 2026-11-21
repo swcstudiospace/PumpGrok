@@ -85,4 +85,4 @@ class FallbackLadder:
     def deterministic_result(self, consequence_id: str) -> str:
         """Deterministic fallback payload (integer money only, no network)."""
         total = sum(ord(c) for c in consequence_id) % 100
-        return '{"score": %d, "source": "deterministic"}' % total
+        return f'{{"score": {total}, "source": "deterministic"}}'

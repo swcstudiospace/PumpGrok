@@ -8,6 +8,7 @@ host only.
 
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from pumpgrok.core.idempotency import canonical_json
@@ -67,8 +68,6 @@ def host_only(endpoint: str) -> str:
 
 def record_choice_via_text(path_text: str, name: str, value: str) -> dict[str, str]:
     """One recorded operator choice (RPC host only)."""
-    from pathlib import Path
-
     path = Path(path_text)
     path.parent.mkdir(parents=True, exist_ok=True)
     row = {"name": name, "value": host_only(value), "source": "operator-choice"}

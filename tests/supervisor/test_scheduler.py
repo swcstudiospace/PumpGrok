@@ -1,24 +1,24 @@
 """Scheduler: cadence entry is untouched by event mode (parity test)."""
 
 import pathlib
+import subprocess
 
 
 def test_cadence_scheduler_has_no_wake_dependency() -> None:
-    source = pathlib.Path(
-        "src/pumpgrok/supervisor/scheduler/supervisor.py"
-    ).read_text(encoding="utf-8")
+    source = pathlib.Path("src/pumpgrok/supervisor/scheduler/supervisor.py").read_text(
+        encoding="utf-8"
+    )
     assert "scheduler.wake" not in source
     assert "SEAT_WAKES" not in source
 
 
 def test_wake_flag_defaults_to_cadence() -> None:
     source = pathlib.Path("src/pumpgrok/cli/parsing.py").read_text(encoding="utf-8")
-    assert '--wake-mode' in source
+    assert "--wake-mode" in source
     assert 'default="cadence"' in source
 
 
 def test_cadence_output_byte_identical() -> None:
-    import subprocess
 
     proc = subprocess.run(
         [
@@ -32,6 +32,7 @@ def test_cadence_output_byte_identical() -> None:
             "--replay",
             "tests/fixtures/replay/smoke",
         ],
+        check=False,
         capture_output=True,
         text=True,
         timeout=120,

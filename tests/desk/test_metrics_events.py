@@ -19,7 +19,8 @@ def test_event_registry_has_five_new_families() -> None:
     assert registry is not None
     names = _family_names(registry)
     for family_name in EVENT_FAMILIES:
-        assert family_name in names or family_name.rstrip("_total") in names
+        stem = family_name[: -len("_total")] if family_name.endswith("_total") else family_name
+        assert family_name in names or stem in names
 
 
 def test_cadence_has_no_event_families() -> None:

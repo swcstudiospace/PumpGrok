@@ -1,6 +1,6 @@
 """Failure-injection suite: faults route to DLQ/retry/fallback paths."""
 
-import asyncio
+import json
 
 import pytest
 
@@ -29,8 +29,6 @@ def test_poison_event_does_not_block_others() -> None:
 def test_duplicate_events_collapse_to_one_delivery() -> None:
     event = _event(EventKind.curve_tick)
     result = drain([event, event, event], FixtureClock(0.0), make_rng(20260101))
-    import json
-
     delivered = json.loads(bytes(result))["deliveries"]
     assert len(delivered) == 1
 

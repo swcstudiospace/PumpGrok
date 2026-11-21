@@ -7,7 +7,7 @@ only, never payload values. Integer counters only.
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge
+from prometheus_client import CollectorRegistry, Counter
 
 from pumpgrok.supervisor.metrics import NINE_FAMILIES, build_registry
 
@@ -31,8 +31,12 @@ class EventMetrics:
 
     def __init__(self, registry: CollectorRegistry | None = None) -> None:
         self._registry = registry if registry is not None else build_registry()
-        self.events_total = Counter(EVENTS_TOTAL, "Bus events by kind.", ["kind"], registry=self._registry)
-        self.wakes_total = Counter(WAKES_TOTAL, "Seat wakes by seat.", ["seat"], registry=self._registry)
+        self.events_total = Counter(
+            EVENTS_TOTAL, "Bus events by kind.", ["kind"], registry=self._registry
+        )
+        self.wakes_total = Counter(
+            WAKES_TOTAL, "Seat wakes by seat.", ["seat"], registry=self._registry
+        )
         self.prefilter_skips = Counter(
             GROK_PREFILTER_SKIPS_TOTAL, "Grok prefilter skips.", registry=self._registry
         )

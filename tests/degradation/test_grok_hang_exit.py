@@ -33,9 +33,7 @@ async def test_hung_transport_does_not_delay_exit_sell() -> None:
     wakes = dispatch([exit_event], clock=clock)
     assert [wake.seat for wake in wakes] == ["bot-06-exit"]
 
-    request = GatewayRequest(
-        agent="signal", prompt="x", consequence_id="c-hung", score=90
-    )
+    request = GatewayRequest(agent="signal", prompt="x", consequence_id="c-hung", score=90)
     task = asyncio.ensure_future(gateway.call(request))
     # The exit lane proceeds immediately; the hung Grok call never delays it.
     await asyncio.sleep(0)

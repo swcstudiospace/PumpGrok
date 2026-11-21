@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from pumpgrok.supervisor.scheduler.wake import ALLOWED_TIMERS, assert_allowed_timers
 
 WAKE_MODES: tuple[str, ...] = ("cadence", "event")
@@ -33,7 +35,7 @@ def parse_wake_mode(value: str) -> str:
     if value not in WAKE_MODES:
         raise ValueError(f"unknown wake mode: {value}")
     assert_allowed_timers(frozenset({"wake"}))
-    assert ALLOWED_TIMERS == frozenset({"wake"})
+    assert frozenset({"wake"}) == ALLOWED_TIMERS
     return value
 
 
@@ -47,16 +49,13 @@ def superseded_jobs_enabled(jobs_path: Path) -> list[str] | None:
     None means the jobs file could not be read or parsed; callers refuse.
     """
     try:
-        import yaml  # type: ignore[import-untyped]
-    except ImportError:
-        try:
-            return _parse_jobs_text(jobs_path.read_text(encoding="utf-8"))
-        except OSError:
-            return None
-    try:
-        data = yaml.safe_load(jobs_path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+        text = jobs_path.read_text(encoding="utf-8")
+    except OSError:
         return None
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return _parse_jobs_text(text) if False else None
     if not isinstance(data, dict) or not isinstance(data.get("jobs"), list):
         return None
     enabled: list[str] = []

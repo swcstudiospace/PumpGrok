@@ -12,8 +12,7 @@ from __future__ import annotations
 import http.client
 import importlib.util
 import urllib.error
-
-import http.client
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,17 +36,18 @@ SUBSYSTEMS: tuple[tuple[str, str], ...] = (
 #: Endpoints served by `run --serve` on 127.0.0.1, probed by the doctor.
 SERVED_ENDPOINTS: tuple[str, ...] = ("/healthz", "/metrics")
 
+
 def event_mode_refusal(wake_mode: str, jobs_path: Path | None = None) -> list[str]:
     """Refusal lines when event mode is selected with superseded jobs enabled."""
-    from pumpgrok.cli.wake_mode import event_mode_refusal as _refusal
+    from pumpgrok.cli.wake_mode import event_mode_refusal  # noqa: PLC0415
 
     path = jobs_path if jobs_path is not None else Path("hermes/cron/jobs.yaml")
-    return _refusal(wake_mode, path)
+    return event_mode_refusal(wake_mode, path)
 
 
 def time_sync_probe() -> str:
     """Read-only time-sync probe: reports only, never adjusts the clock."""
-    return "time-sync: read-only probe, offset not adjusted"
+    return "info  time-sync: read-only probe, offset not adjusted"
 
 
 @dataclass(frozen=True)

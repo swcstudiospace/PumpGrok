@@ -1002,6 +1002,7 @@ class TestEveryGateIsWired:
             "G-4",
             "G-5/G-6",
             "G-7",
+            "idle-grok",
         ]
 
     def test_g7_takes_no_bot_argument(self, monkeypatch):
@@ -1014,7 +1015,7 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         run_all.main()
-        g7_argv = calls[-1][1]
+        g7_argv = calls[5][1]
         assert "--bot" not in g7_argv
         assert "--repo" in g7_argv
 

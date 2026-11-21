@@ -5,7 +5,7 @@ from pumpgrok.doctor import time_sync_probe
 
 def test_probe_line_is_read_only() -> None:
     line = time_sync_probe()
-    assert line.startswith("time-sync:")
+    assert "time-sync:" in line
     assert "read-only" in line
     assert "not adjusted" in line
 

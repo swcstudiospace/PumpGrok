@@ -25,7 +25,6 @@ def test_event_families_absent_in_cadence() -> None:
 def test_event_families_present_in_event_mode() -> None:
     registry = build_event_registry("event")
     assert registry is not None
-    from pumpgrok.supervisor.metrics_events import EventMetrics
 
     assert EventMetrics is not None
     assert isinstance(registry, type(build_registry()))

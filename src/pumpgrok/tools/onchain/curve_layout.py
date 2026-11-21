@@ -34,7 +34,7 @@ CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
 _CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
 CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
 #: Accepted discriminator bytes: the ASSUMED fixture marker and the real
-#: bonding-curve discriminator the probe checks (docs/CURVE_LAYOUT_PROBE.md).
+#: bonding-curve discriminator the probe checks (the curve layout probe record).
 _DISCRIMINATOR = b"ASSUMED\x00"
 _REAL_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 _ACCEPTED_DISCRIMINATORS = frozenset({_DISCRIMINATOR, _REAL_DISCRIMINATOR})

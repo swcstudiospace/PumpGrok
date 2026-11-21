@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
-
-T = TypeVar("T")
 
 
-class Coalescer:
+class Coalescer[T]:
     def __init__(self) -> None:
         self._in_flight: dict[str, asyncio.Future[T]] = {}
 

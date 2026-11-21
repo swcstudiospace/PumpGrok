@@ -3,9 +3,12 @@
 The seat calls the gateway with an event consequence id. It never reaches
 for the vendor agent directly; direct transport calls live only in `grok/`.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from pumpgrok.grok import GatewayRequest
 
 if TYPE_CHECKING:
     from pumpgrok.grok import GatewayResponse, GrokGateway
@@ -26,7 +29,6 @@ class SignalSeat:
         prompt_body: str,
         score: int,
     ) -> GatewayResponse | None:
-        from pumpgrok.grok import GatewayRequest
 
         return await gateway.call(
             GatewayRequest(

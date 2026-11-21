@@ -1,5 +1,7 @@
 """Event mode wakes per SEAT_WAKES; cadence unchanged; unknown timer refuses."""
 
+import pathlib
+
 import pytest
 
 from pumpgrok.events.models import Event, EventKind
@@ -52,7 +54,6 @@ def test_allowed_timers_pass_and_unknown_refuses() -> None:
 
 
 def test_cadence_path_does_not_import_wake() -> None:
-    import pathlib
 
     for name in ["supervisor.py", "serve.py", "replay_cycles.py"]:
         source = pathlib.Path(f"src/pumpgrok/supervisor/scheduler/{name}").read_text(

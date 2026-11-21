@@ -19,8 +19,12 @@ def test_float_in_payload_raises() -> None:
 
 
 def test_hash_is_stable_and_distinct() -> None:
-    a = build_cache_key_payload(agent="scout", model="fast", prompt_hash="abc", consequence_id="c-1")
-    b = build_cache_key_payload(agent="scout", model="fast", prompt_hash="xyz", consequence_id="c-1")
+    a = build_cache_key_payload(
+        agent="scout", model="fast", prompt_hash="abc", consequence_id="c-1"
+    )
+    b = build_cache_key_payload(
+        agent="scout", model="fast", prompt_hash="xyz", consequence_id="c-1"
+    )
     assert canonical_request_hash(a) == canonical_request_hash(dict(a))
     assert canonical_request_hash(a) != canonical_request_hash(b)
     assert len(canonical_request_hash(a)) == 64

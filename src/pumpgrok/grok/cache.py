@@ -41,7 +41,9 @@ def build_cache_key_payload(
 def _assert_int_str(payload: dict[str, Any]) -> None:
     for key, value in payload.items():
         if not isinstance(value, (str, int)) or isinstance(value, bool):
-            raise TypeError(f"cache key field {key!r} must be int or str, got {type(value).__name__}")
+            raise TypeError(
+                f"cache key field {key!r} must be int or str, got {type(value).__name__}"
+            )
 
 
 def canonical_request_hash(payload: dict[str, Any]) -> str:

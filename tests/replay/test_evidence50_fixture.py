@@ -1,5 +1,6 @@
 """evidence-50 fixture: >= 50 admitted candidates and loads via load_dataset."""
 
+import subprocess
 from pathlib import Path
 
 from pumpgrok.replay.clock import parse_ts_utc
@@ -23,7 +24,6 @@ def test_admitted_candidates_at_least_50() -> None:
 
 
 def test_negative_control_budget_too_small() -> None:
-    import subprocess
 
     proc = subprocess.run(
         [
@@ -36,6 +36,7 @@ def test_negative_control_budget_too_small() -> None:
             "--budget",
             "5",
         ],
+        check=False,
         capture_output=True,
         text=True,
         timeout=120,

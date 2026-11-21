@@ -27,8 +27,8 @@ def read_choices(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
     rows: list[dict[str, str]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line:
-            rows.append(json.loads(line))
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if stripped:
+            rows.append(json.loads(stripped))
     return rows

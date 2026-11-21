@@ -47,9 +47,12 @@ async def test_missing_consequence_id_rejected() -> None:
 def test_no_agent_file_calls_grok_agent_run(name: str) -> None:
     tree = ast.parse((REPO / name).read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if node.value.id in ("GrokAgent", "grok_agent"):
-                assert node.attr != "run", name
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in ("GrokAgent", "grok_agent")
+        ):
+            assert node.attr != "run", name
         if isinstance(node, ast.ImportFrom) and node.module:
             assert "agents.base" not in node.module
     source = (REPO / name).read_text(encoding="utf-8")

@@ -19,9 +19,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from pumpgrok.grok import GatewayRequest, GrokGateway  # noqa: E402
-from pumpgrok.grok.budget import BudgetExhausted, LayeredBudget  # noqa: E402
-from pumpgrok.replay.clock import FixtureClock  # noqa: E402
+from pumpgrok.grok import GatewayRequest, GrokGateway
+from pumpgrok.grok.budget import BudgetExhausted, LayeredBudget
+from pumpgrok.replay.clock import FixtureClock
 
 
 def _load_events(dataset: Path) -> list[dict[str, Any]]:
@@ -48,9 +48,7 @@ async def _measure(events: list[dict[str, Any]], budget: int) -> tuple[int, int]
 
     gateway = GrokGateway(
         clock=clock,
-        budget=LayeredBudget(
-            window_cap=budget, agent_cap=budget, global_cap=budget
-        ),
+        budget=LayeredBudget(window_cap=budget, agent_cap=budget, global_cap=budget),
         transport=transport,
     )
     admitted = 0

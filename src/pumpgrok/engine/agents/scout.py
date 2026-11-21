@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pumpgrok.grok import GatewayRequest
+
 if TYPE_CHECKING:
     from pumpgrok.grok import GatewayResponse, GrokGateway
 
@@ -24,7 +26,6 @@ class ScoutSeat:
         prompt_body: str,
         score: int,
     ) -> GatewayResponse | None:
-        from pumpgrok.grok import GatewayRequest
 
         return await gateway.call(
             GatewayRequest(

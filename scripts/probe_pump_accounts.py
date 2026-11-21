@@ -44,7 +44,7 @@ DEFAULT_OUT = REPO_ROOT / "var" / "probe" / "pump_accounts.json"
 DEFAULT_TIMEOUT_S = 15.0
 
 # Owner and discriminator a bonding-curve account must carry before its bytes are
-# trusted. Both match docs/CURVE_LAYOUT_PROBE.md and scripts/probe_curve_layout.py.
+# trusted.
 EXPECTED_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
 
@@ -240,7 +240,7 @@ def probe_account(account: str, endpoint: str, fetch: AccountFetch, clock: Clock
 
 
 def format_record_markdown(record: Mapping[str, Any]) -> str:
-    """Render one probe record as the docs/CURVE_LAYOUT_PROBE.md body.
+    """Render one probe record as the the curve layout probe record body.
 
     Never writes VERIFIED: a decode reads decoded_pending_review until a
     human sets reviewed_by; every other outcome reads ASSUMED with the
