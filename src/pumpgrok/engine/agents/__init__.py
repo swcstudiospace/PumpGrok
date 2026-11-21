@@ -11,7 +11,11 @@ from pumpgrok.engine.agents.auditor import AuditorAgent
 from pumpgrok.engine.agents.base import GrokAgent, GrokAgentError
 from pumpgrok.engine.agents.checker import CheckerAgent
 from pumpgrok.engine.agents.narrative import NarrativeAgent
+from pumpgrok.engine.agents.rug import RugSeat
+from pumpgrok.engine.agents.scout import ScoutSeat
+from pumpgrok.engine.agents.signal import SignalSeat
 from pumpgrok.engine.agents.timing import TimingAgent
+from pumpgrok.engine.agents.whale import WhaleSeat
 
 __all__ = [
     "AuditorAgent",
@@ -19,5 +23,9 @@ __all__ = [
     "GrokAgent",
     "GrokAgentError",
     "NarrativeAgent",
+    "RugSeat",
+    "ScoutSeat",
+    "SignalSeat",
     "TimingAgent",
+    "WhaleSeat",
 ]
