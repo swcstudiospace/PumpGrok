@@ -23,7 +23,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-
 #: Event-decode verification state (MKT-10). ASSUMED until a human reviews
 #: the probe record. The flip to VERIFIED requires a human-set reviewed_by;
 #: no agent sets it. Reviewed-by is recorded in docs/CURVE_LAYOUT_PROBE.md.

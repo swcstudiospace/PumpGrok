@@ -64,7 +64,13 @@ def test_gap_holds_position() -> None:
     assert src.is_stale("m1") is False
     src.on_gap(
         GapEvent.model_validate(
-            {"mint": "m1", "ts_utc": TS30, "reason": "timeout", "from_ts_utc": TS, "to_ts_utc": TS30}
+            {
+                "mint": "m1",
+                "ts_utc": TS30,
+                "reason": "timeout",
+                "from_ts_utc": TS,
+                "to_ts_utc": TS30,
+            }
         )
     )
     assert src.is_stale("m1") is True

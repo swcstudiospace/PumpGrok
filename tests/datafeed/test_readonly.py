@@ -13,8 +13,17 @@ from pumpgrok.datafeed.readonly import (
 
 
 def test_five_method_set() -> None:
-    assert ALLOWED_METHODS == frozenset(
-        {"getAccountInfo", "logsSubscribe", "getTransaction", "subscribeNewToken", "subscribeMigration"}
+    assert (
+        frozenset(
+            {
+                "getAccountInfo",
+                "logsSubscribe",
+                "getTransaction",
+                "subscribeNewToken",
+                "subscribeMigration",
+            }
+        )
+        == ALLOWED_METHODS
     )
 
 

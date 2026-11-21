@@ -21,7 +21,7 @@ from typing import Any
 
 from pumpgrok.datafeed.events import CurveTick, GapEvent
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
-from pumpgrok.replay.fixtures import EVENTS_NAME, FixtureManifest, MANIFEST_NAME
+from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest
 
 GAPS_NAME = "gaps.jsonl"
 _NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
