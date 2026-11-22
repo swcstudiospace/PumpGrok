@@ -1,0 +1,8 @@
+# Version-controlled mint allowlist and blocklist (Phase 17, RSK-05).
+#
+# The entry-gate hook reads this file only. A missing or unparsable file
+# fails closed: every mint is refused until the file parses again.
+
+allowlist = []
+
+blocklist = []
