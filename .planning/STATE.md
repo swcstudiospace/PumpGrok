@@ -1,35 +1,23 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3
-milestone_name: PumpGrok Desk v3
-status: in_progress
-stopped_at: Phase 6 closed 2026-10-26 with owner-approved deviations; ship in progress (PR not yet merged).
-last_updated: "2026-10-26T12:00:22Z"
-last_activity: 2026-10-26
-last_activity_desc: Phase 6 closure records written (PROJECT V3-5); ship PR pending.
-current_phase: 6
-progress:
-  total_phases: 5
-  completed_phases: 5
-  blocked_phases: 0
-  total_plans: 35
-  completed_plans: 35
-  percent: 100
 milestone: v4
-milestone_name: PumpGrok Desk v4
-status: "Phase 12 verified 12/12; ship checkpoint open (draft PRs, owner receipt approval pending)"
-last_updated: "2026-11-08"
-last_activity: 2026-11-08
-last_activity_desc: Phase 12 verified at 9d32a35; seat branches opened as draft PRs; G-2 awaits owner approval
-state_head: 8e8c4c3f09f2ce4f1e366d10ea56cb6db832c931
+status: Awaiting next milestone
+last_updated: "2026-11-22T04:42:00.507Z"
+last_activity: 2026-11-22
+last_activity_desc: Milestone v4 completed and archived
+state_head: d3d7d5f9c2c653c20f083431843ee4642f849ca8
 progress:
-  total_phases: 9
-  completed_phases: 1
-  percent: 11
+  total_phases: 14
+  completed_phases: 6
+  total_plans: 95
+  completed_plans: 74
+  percent: 43
   blocked_phases: 0
+milestone_name: PumpGrok Desk v4
 current_phase: 12
-stopped_at: "Phase 12 verified 12/12 at 9d32a35 (report commit 57da233). Draft PRs open for bot-02-risk, bot-09-journal and bot-00-chief on phase-12-event-runtime; not merged. Resume after the owner adds approved_by to the three v4-p12 receipts and the PRs merge. Phase 13 starts only after Phase 12 merges (ROADMAP Execution Order)."
+stopped_at: Phase 12 verified 12/12 at 9d32a35 (report commit 57da233). Draft PRs open for bot-02-risk, bot-09-journal and bot-00-chief on phase-12-event-runtime; not merged. Resume after the owner adds approved_by to the three v4-p12 receipts and the PRs merge. Phase 13 starts only after Phase 12 merges (ROADMAP Execution Order).
 ---
+
 paid_rpc_provider: none
 
 # Project State
@@ -40,16 +28,10 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-- Milestone: v3 (PumpGrok Desk v3). The only open milestone. v2 is shipped and archived (.planning/MILESTONES.md).
-- Phase: 6 of 10 (Integrity closure) closed 2026-10-26 with owner-approved deviations. Phases 7, 8, 9 and 10 are complete; each has an independent verifier report (07-VERIFICATION.md, 08-VERIFICATION.md, 09-VERIFICATION.md, 10-VERIFICATION.md).
-- Phase 6: closed on the integration branch (PROJECT V3-5). The phase PR and the merge through ultrathink-ship are the remaining steps.
-- Phases 7 to 10: complete. Live stays refused (exit 3). Remaining: the Phase 6 PR through ultrathink-ship, then the milestone close, which has not started.
-- Integration branch: bot-00-chief/phase-6-integrity. The name predates v3 and is kept. Per-unit worktree branches bot-00-chief/p7-NN are merged into it.
-- Percent 100 (5 of 5 phases complete). Known plans with SUMMARY files: 35 of 35 (phase 6 plans 01-09; phase 7 plans 01-06; phase 8 plans 01-10; phase 9 plans 01-07; phase 10 plans 01-03). Fix-up 06-01b is recorded but not counted.
-Milestone: v4 (PumpGrok Desk v4). Phase: 11 of 19 closed (merged as PR #55, 2026-11-03). Phase 12 of 19 verified 12/12; ship checkpoint open.
-Plan: 12-01 to 12-05 on bot-02-risk, bot-09-journal and bot-00-chief (phase-12-event-runtime). Draft pull requests, not merged.
-Status: Phase 12 closes when the owner approves its three receipts (G-2) and the PRs merge. Owner answer: the hosting target is deferred to Phase 19.
-Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v4-p12-event-runtime.json on each seat branch. Verification report .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
+Phase: Milestone v4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-22 — Milestone v4 completed and archived
 
 ## Discovery (2026-10-25)
 

@@ -1,5 +1,37 @@
 # Milestones
 
+## v4 v4 (Shipped: 2026-11-22)
+
+**Phases completed:** 14 phases, 95 plans, 17 tasks
+
+**Key accomplishments:**
+- paper_adapter `_place_buy`/`_place_order` and scheduler `_replay_cycles` split into verbatim-moved stage functions (52/54/50 AST lines), signatures and ledger behavior unchanged, plus an AST length-guard test.
+- Ten frozen v4 settings sections load off, and a notional cap above 1 SOL still refuses.
+- Sidecar sqlite stores dedup, pending, and DLQ; the bus retries transient errors from an injected RNG and the events CLI republishes or drops named rows without opening the paper ledger.
+- SourceSupervisor owns backoff, 121-second staleness, resync, and cursor repair inside the events package, and the desk loop does not import the bus.
+- Synchronous FixtureClock drain returns byte-identical delivery logs, and DLQ replay parks the row on pending instead of dropping it on a noop bus.
+- Status: complete.
+- Status: complete
+- 16 | **Date:** 2026-11-22 | **Branch:** bot-00-chief/phase-12-verification
+- 17-risk-hardening | **Plan:** 17-01 | **Wave:** 1
+- 17-risk-hardening | **Plan:** 17-02 | **Wave:** 1
+- 17-risk-hardening | **Plan:** 17-03 | **Wave:** 2
+- 17-risk-hardening | **Plan:** 17-04 | **Wave:** 2
+- 17-risk-hardening | **Plan:** 17-05 | **Wave:** 3
+- 17-risk-hardening | **Plan:** 17-06 | **Wave:** 4
+- 17-risk-hardening | **Plan:** 17-07 | **Wave:** 5
+- 19-observability · **Plan:** 01
+- 19-observability · **Plan:** 02
+- 19-observability · **Plan:** 03
+- 19-observability · **Plan:** 04
+- 19-observability · **Plan:** 05
+- 19-observability · **Plan:** 06
+- 19-observability · **Plan:** 07
+- 19-observability · **Plan:** 09
+- 2026-11-22 · **Verdict:** PASS with recorded gaps (PRC-08; Phase 18 changelog lines owed by journal)
+
+---
+
 ## v3 PumpGrok Desk v3 (Shipped: 2026-11-01)
 
 **Phases completed:** 7 phases, 36 plans, 10 tasks
