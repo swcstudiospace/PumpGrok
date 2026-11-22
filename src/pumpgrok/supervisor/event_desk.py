@@ -27,10 +27,9 @@ from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.grok import GatewayLedger, GatewayRequest, GrokGateway, LayeredBudget
 from pumpgrok.promotion.evaluator import EvidenceView, PromotionEvaluator
 from pumpgrok.promotion.stages import StageRow, Transition, append_stage_row, append_transition, read_stage_row
-from pumpgrok.promotion.thresholds import PromotionThresholds, load_thresholds
-from pumpgrok.replay.clock import Clock, format_ts_utc
-from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.entry_checks import EntryChecks
+from pumpgrok.supervisor.intent_router import IntentRouter, Place
+from pumpgrok.supervisor.live_paper import strategy_factory
+from pumpgrok.supervisor.recovery import recover
 from pumpgrok.risk.feed_health import FeedHealth
 from pumpgrok.strategies.allocation import Allocation
 from pumpgrok.strategies.runtime import StrategyRuntime
@@ -58,6 +57,7 @@ class EventDesk:
     """The composed paper desk; state lives in the ledger and bus sidecar."""
 
     mode: str
+ 
     store: LedgerStore
     clock: Clock
     bus: EventBus
@@ -70,6 +70,7 @@ class EventDesk:
     feed_health: FeedHealth
     entry_checks: EntryChecks | None = None
     budget: LayeredBudget | None = None
+    restored: Any = None
 
     def handle_evidence(self, evidence: EvidenceView) -> StageRow:
         """Event-triggered promotion evaluation (no timers, no polling)."""
@@ -177,6 +178,7 @@ def build_event_desk(
             await desk._route_event(event)
 
     bus = EventBus(clock=clock, handler=_handler, dlq=lambda _ev: None)
+    restored = recover(store, clock)
     desk = EventDesk(
         mode=str(mode),
         store=store,
@@ -191,6 +193,7 @@ def build_event_desk(
         feed_health=feed_health,
         entry_checks=entry_checks,
         budget=real_budget,
+        restored=restored,
     )
     holder["desk"] = desk
     return desk
