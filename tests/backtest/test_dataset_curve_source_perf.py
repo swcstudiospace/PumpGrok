@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pumpgrok.backtest.event_source import DatasetEventSource
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
 from pumpgrok.replay.fixtures import FixtureDataset, FixtureManifest
 
 
@@ -19,7 +19,10 @@ def _synthetic(n_mints: int = 20, per_mint: int = 250) -> FixtureDataset:
             events.append(
                 {
                     "mint": mint,
-                    "ts_utc": f"2025-01-{day % 28 + 1:02d}T{second // 3600:02d}:{(second // 60) % 60:02d}:{second % 60:02d}.000Z",
+                    "ts_utc": (
+                        f"2025-01-{day % 28 + 1:02d}T{second // 3600:02d}:"
+                        f"{(second // 60) % 60:02d}:{second % 60:02d}.000Z"
+                    ),
                     "S": 1_000_000 + tick,
                     "T": 1_000_000,
                 }
@@ -34,7 +37,7 @@ def _synthetic(n_mints: int = 20, per_mint: int = 250) -> FixtureDataset:
     )
     return FixtureDataset(manifest=manifest, events=tuple(events))  # type: ignore[arg-type]
 def test_bisect_index_meets_budget() -> None:
-    from pumpgrok.replay.clock import parse_ts_utc
+
 
     dataset = _synthetic()
     clock = FixtureClock(start=0.0)

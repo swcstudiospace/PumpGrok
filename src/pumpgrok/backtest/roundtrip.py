@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 __all__ = [
     "RoundTrip",
@@ -85,7 +86,7 @@ def group_round_trips(fills: Sequence[RoundTripFill]) -> RoundTripsResult:
     Partial exits fold into the open trip; a sell with no preceding buy
     opens and immediately closes its own trip (unusual, never dropped).
     """
-    open_trips: dict[str, dict[str, object]] = {}
+    open_trips: dict[str, dict[str, Any]] = {}
     order: list[str] = []
     closed: list[RoundTrip] = []
     for index, fill in enumerate(fills):

@@ -16,10 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from pumpgrok.backtest.grading import grade
+from pumpgrok.backtest.grading import DataKind, DatasetMeta, grade
 from pumpgrok.backtest.store import RunStore, idempotence_key
-
-__all__ = ["ScheduledRun", "Scheduler"]
 
 REQUIRED_AUTONOMY = "autonomous-paper"
 REFUSAL_KIND = "refused:autonomy"
@@ -74,7 +72,7 @@ class Scheduler:
         if cached is not None and cached.get("kind") == RUN_KIND:
             return ScheduledRun(ran=False, refused=False, record=cached)
         result = runner()
-        record = {
+        run_record: dict[str, Any] = {
             "idempotence_key": key,
             "kind": RUN_KIND,
             "edge": edge_kind,
@@ -83,8 +81,8 @@ class Scheduler:
             "param_hash": param_hash,
             "result": result,
         }
-        self._store.save(record)
-        return ScheduledRun(ran=True, refused=False, record=record)
+        self._store.save(run_record)
+        return ScheduledRun(ran=True, refused=False, record=run_record)
 
     def store_bytes(self) -> bytes:
         """Current store bytes (byte-stable across identical runs)."""
@@ -95,7 +93,7 @@ class Scheduler:
 
 def grade_result(meta_dict: dict[str, Any]) -> dict[str, Any]:
     """Grade a persisted meta mapping through grading.py (Phase 17 consumes this)."""
-    from pumpgrok.backtest.grading import DataKind, DatasetMeta
+
 
     meta = DatasetMeta(
         kind=DataKind(str(meta_dict["kind"])),

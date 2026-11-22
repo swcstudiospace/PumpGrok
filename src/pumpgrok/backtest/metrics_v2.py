@@ -140,14 +140,13 @@ def summarize_v2(fills: Sequence[Fill], ctx: MetricsContext) -> MetricsV2Report:
     )
 
     peak = initial
-    max_drawdown = Decimal(0)
+    max_drawdown_value = Decimal(0)
     for equity in curve:
         peak = max(peak, equity)
         if peak > 0:
             decline = _finite(Decimal(peak - equity) / Decimal(peak))
-            max_drawdown = max(max_drawdown, decline)
-    if peak <= 0:
-        max_drawdown = None
+            max_drawdown_value = max(max_drawdown_value, decline)
+    max_drawdown: Decimal | None = max_drawdown_value if peak > 0 else None
 
     previous_points = (initial, *curve[:-1])
     deltas = [equity - previous for equity, previous in zip(curve, previous_points, strict=True)]

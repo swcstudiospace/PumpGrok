@@ -18,9 +18,9 @@ __all__ = [
     "GAP_POLICY",
     "GAP_THRESHOLD_S",
     "GapSegment",
-    "segment_dataset",
-    "flatten_at_gaps",
     "entries_allowed",
+    "flatten_at_gaps",
+    "segment_dataset",
 ]
 
 #: Silence (seconds) after which a dataset is considered gapped.
@@ -69,9 +69,8 @@ def flatten_at_gaps(exit_lamports: int) -> int:
     return exit_lamports - haircut
 
 
-def entries_allowed(ts: float, gaps: Sequence[tuple[float, float]], cooldown_s: float = COOLDOWN_S) -> bool:
+def entries_allowed(
+    ts: float, gaps: Sequence[tuple[float, float]], cooldown_s: float = COOLDOWN_S
+) -> bool:
     """False during a gap or its cooldown; True otherwise."""
-    for start, end in gaps:
-        if start <= ts < end + cooldown_s:
-            return False
-    return True
+    return all(not start <= ts < end + cooldown_s for start, end in gaps)

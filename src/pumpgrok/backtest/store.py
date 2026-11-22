@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-__all__ = ["RunStore", "idempotence_key", "dumps_record"]
+__all__ = ["RunStore", "dumps_record", "idempotence_key"]
 
 
 def idempotence_key(dataset_digest: str, strategy_id: str, param_hash: str) -> str:

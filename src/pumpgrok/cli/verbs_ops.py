@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Any
 
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
+from pumpgrok.cli.serve_feed import FeedServer, health_probe
 from pumpgrok.cli.validators import (
     _human_by,
     _jsonable,
@@ -88,7 +90,6 @@ def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
     """`live serve`: expose the read-only feed endpoint for a dataset."""
-    from pumpgrok.cli.serve_feed import FeedServer, health_probe
 
     server = FeedServer(Path(str(args.dataset)), int(args.port))
     server.start()
@@ -99,8 +100,6 @@ def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
             f"serving {probe['dataset']} on port {server.port}: {probe['ticks']} ticks",
         )
         if not args.once:
-            import threading
-
             threading.Event().wait()
     finally:
         server.stop()

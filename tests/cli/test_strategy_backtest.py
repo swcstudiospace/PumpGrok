@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from pumpgrok.backtest.manifest import _resolve_dataset_dir
 from pumpgrok.backtest.strategy_run import run_strategy
 from pumpgrok.cli import main as cli_main
 
@@ -12,7 +13,7 @@ def test_backtest_strategy_matches_runtime(capsys: pytest.CaptureFixture[str]) -
     code = cli_main(["backtest", "--fixture", "smoke", "--strategy", "legacy_screening"])
     assert code == 0
     out = capsys.readouterr().out
-    from pumpgrok.backtest.manifest import _resolve_dataset_dir
+
 
     expected = run_strategy(_resolve_dataset_dir("smoke"), "legacy_screening", seed=0)
     assert "legacy_screening" in out

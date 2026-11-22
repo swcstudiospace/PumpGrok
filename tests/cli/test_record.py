@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from pumpgrok.cli import main as cli_main
+from pumpgrok.cli.serve_feed import FeedServer, health_probe
 from pumpgrok.replay.fixtures import load_dataset
 
 SMOKE = Path("tests/fixtures/replay/smoke")
@@ -23,7 +24,6 @@ def test_record_seals_dataset(tmp_path: Path) -> None:
 
 
 def test_serve_health_probe(tmp_path: Path) -> None:
-    from pumpgrok.cli.serve_feed import FeedServer, health_probe
 
     server = FeedServer(SMOKE, 0)
     server.start()
@@ -40,16 +40,17 @@ def test_replay_verbs_rerun_identical(tmp_path: Path) -> None:
     first = tmp_path / "trim-a"
     second = tmp_path / "trim-b"
     args = ["replay", "trim", "--from", str(SMOKE), "--name", "trimmed"]
-    assert cli_main(args + ["--to", str(first), "--from-ts", FROM_TS, "--to-ts", TO_TS]) == 0
-    assert cli_main(args + ["--to", str(second), "--from-ts", FROM_TS, "--to-ts", TO_TS]) == 0
+    tail = ["--from-ts", FROM_TS, "--to-ts", TO_TS]
+    assert cli_main([*args, "--to", str(first), *tail]) == 0
+    assert cli_main([*args, "--to", str(second), *tail]) == 0
     for name in ("manifest.json", "events.jsonl"):
         assert (first / name).read_bytes() == (second / name).read_bytes()
     # rebuild-ticks: two runs produce a byte-equal tick file
     ticks_a = tmp_path / "ticks-a.json"
     ticks_b = tmp_path / "ticks-b.json"
     base = ["replay", "rebuild-ticks", "--from", str(SMOKE)]
-    assert cli_main(base + ["--to", str(ticks_a)]) == 0
-    assert cli_main(base + ["--to", str(ticks_b)]) == 0
+    assert cli_main([*base, "--to", str(ticks_a)]) == 0
+    assert cli_main([*base, "--to", str(ticks_b)]) == 0
     assert ticks_a.read_bytes() == ticks_b.read_bytes()
     # import: byte-equal for the same external tick file
     ticks_file = tmp_path / "ticks.json"
@@ -63,8 +64,8 @@ def test_replay_verbs_rerun_identical(tmp_path: Path) -> None:
     i1 = tmp_path / "imp-a"
     i2 = tmp_path / "imp-b"
     imp = ["replay", "import", "--source", str(ticks_file), "--name", "imported"]
-    assert cli_main(imp + ["--to", str(i1)]) == 0
-    assert cli_main(imp + ["--to", str(i2)]) == 0
+    assert cli_main([*imp, "--to", str(i1)]) == 0
+    assert cli_main([*imp, "--to", str(i2)]) == 0
     for name in ("manifest.json", "events.jsonl"):
         assert (i1 / name).read_bytes() == (i2 / name).read_bytes()
     load_dataset(i1)  # sealed, loadable

@@ -25,7 +25,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     dataset_dir: Path = Path(".")
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path != "/healthz":
             self.send_response(404)
             self.end_headers()
@@ -72,7 +72,9 @@ class FeedServer:
 def health_probe(port: int) -> dict[str, Any]:
     """GET /healthz on localhost and decode the JSON body."""
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5) as response:
-        return json.loads(response.read().decode("utf-8"))
+        body = json.loads(response.read().decode("utf-8"))
+    assert isinstance(body, dict)
+    return body
 
 
 def serve_feed_once(dataset_dir: Path, port: int) -> int:

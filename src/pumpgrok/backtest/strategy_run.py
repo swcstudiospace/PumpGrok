@@ -22,8 +22,13 @@ from typing import Any
 
 from pumpgrok.backtest.evaluate import CandidateParams, EvalWindow, evaluate_window
 from pumpgrok.backtest.event_source import DatasetEventSource
+from pumpgrok.backtest.manifest import _resolve_dataset_dir
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
+from pumpgrok.strategies.allocation import Allocation
+from pumpgrok.strategies.registry import registered_ids, resolve_factory
+from pumpgrok.strategies.runtime import StrategyRuntime
+from pumpgrok.strategies.tape import Tape, Tick
 
 __all__ = ["StrategyRunResult", "run_strategy"]
 
@@ -56,8 +61,6 @@ def run_strategy(
     """
     directory = Path(dataset) if Path(dataset).is_dir() else None
     if directory is None:
-        from pumpgrok.backtest.manifest import _resolve_dataset_dir
-
         directory = _resolve_dataset_dir(str(dataset))
     source = load_dataset(directory)
     clock = FixtureClock(start=event_epoch(source.events[0]) if source.events else 0.0)
@@ -82,10 +85,6 @@ def run_strategy(
         return StrategyRunResult(
             strategy_id=strategy_id, dataset=source.manifest.dataset, net_lamports=net
         )
-    from pumpgrok.strategies.allocation import Allocation
-    from pumpgrok.strategies.registry import resolve_factory, registered_ids
-    from pumpgrok.strategies.runtime import StrategyRuntime
-    from pumpgrok.strategies.tape import Tape, Tick
 
     if strategy_id not in registered_ids():
         raise ValueError(f"unknown strategy id: {strategy_id!r}")
@@ -111,7 +110,7 @@ def run_strategy(
     budget = 1_000_000_000
     allocation = Allocation(
         desk_budget_lamports=budget * 4,
-        slices_lamports={sid: budget for sid in (strategy_id,)},
+        slices_lamports=dict.fromkeys((strategy_id,), budget),
     )
     defaults: dict[str, dict[str, int]] = {
         "mean_reversion": {"deviation_bps": 100},

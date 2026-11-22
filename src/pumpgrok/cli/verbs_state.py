@@ -32,6 +32,7 @@ from pumpgrok.cli.promotion import make_promotion_check
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
+    _repo_root,
     _run_wired,
     _seat_manifest_id,
     _unflattened_lines,
@@ -49,6 +50,9 @@ from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.replay.clock import WallClock, format_ts_utc
+from pumpgrok.replay.fixtures import load_dataset
+from pumpgrok.replay.live_recorder import LiveRecorder
+from pumpgrok.replay.normalize import to_curve_tick
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
@@ -85,6 +89,25 @@ def _declared_space() -> tuple[dict[str, Any], ...]:
         raise ConfigError([exc.message]) from exc
 
 
+def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
+    """Record/serve/duration branches of `run`; None when the replay cycle runs."""
+    if args.record is not None and args.duration is not None:
+        return _not_implemented("run --duration")
+    if args.record is not None:
+        return _record_dataset(args, settings)
+    if args.duration is not None:
+        return _not_implemented("run --duration")
+    if args.serve:
+        if args.once or not args.replay:
+            _say(
+                sys.stderr,
+                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
+            )
+            return EXIT_NOT_IMPLEMENTED
+        return _serve_replay_loop(Path(args.replay), settings)
+    return None
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
     gate = LiveGate(
         mode=settings.effective_mode,
@@ -107,23 +130,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
                 "paper start refused: missing required inputs: " + ", ".join(missing),
             )
             return EXIT_NOT_IMPLEMENTED
-    outcome: int | None = None
-    if args.record is not None:
-        if args.duration is not None:
-            outcome = _not_implemented("run --duration")
-        else:
-            outcome = _record_dataset(args, settings)
-    elif args.duration is not None:
-        outcome = _not_implemented("run --duration")
-    elif args.serve:
-        if args.once or not args.replay:
-            _say(
-                sys.stderr,
-                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
-            )
-            outcome = EXIT_NOT_IMPLEMENTED
-        else:
-            outcome = _serve_replay_loop(Path(args.replay), settings)
+    outcome = _run_outcome(args, settings)
     if outcome is not None:
         return outcome
     if not (args.once and args.replay):
@@ -140,11 +147,6 @@ def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
     The source is `--replay <dir>` when given, else the bundled smoke
     fixture; the sealed output passes load_dataset unchanged (REC-03).
     """
-    from pumpgrok.cli.wiring import _repo_root
-    from pumpgrok.replay.fixtures import load_dataset
-    from pumpgrok.replay.live_recorder import LiveRecorder
-    from pumpgrok.replay.normalize import to_curve_tick
-
     source = (
         Path(args.replay)
         if args.replay

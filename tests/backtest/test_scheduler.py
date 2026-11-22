@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 from pathlib import Path
 
+from pumpgrok.backtest import scheduler
 from pumpgrok.backtest.scheduler import Scheduler, grade_result
 from pumpgrok.backtest.store import RunStore
 
 
-def _runner(calls: list[str], value: str = "ok"):  # noqa: ANN202
+def _runner(calls: list[str], value: str = "ok"):
     def run() -> dict[str, object]:
         calls.append(value)
         return {"value": value}
@@ -56,10 +58,6 @@ def test_two_runs_are_byte_equal(tmp_path: Path) -> None:
 
 
 def test_no_llm_client_constructible() -> None:
-    import ast
-
-    from pumpgrok.backtest import scheduler
-
     tree = ast.parse(inspect.getsource(scheduler))
     imported = {
         alias.name

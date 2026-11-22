@@ -5,7 +5,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from pumpgrok.backtest.evaluate import CandidateParams, EvalWindow, evaluate_window
+from pumpgrok.backtest.manifest import _resolve_dataset_dir
 from pumpgrok.backtest.strategy_run import run_strategy
 from pumpgrok.replay.fixtures import event_epoch, load_dataset
 
@@ -26,7 +29,6 @@ def _v1_net(dataset_dir: Path, tmp_path: Path) -> int:
 
 
 def test_legacy_parity_on_smoke(tmp_path: Path) -> None:
-    from pumpgrok.backtest.manifest import _resolve_dataset_dir
 
     directory = _resolve_dataset_dir("smoke")
     result = run_strategy(directory, "legacy_screening", seed=0, ledger_path=tmp_path / "r.sqlite")
@@ -36,7 +38,6 @@ def test_legacy_parity_on_smoke(tmp_path: Path) -> None:
 
 
 def test_other_strategy_runs_through_runtime(tmp_path: Path) -> None:
-    from pumpgrok.backtest.manifest import _resolve_dataset_dir
 
     directory = _resolve_dataset_dir("smoke")
     result = run_strategy(directory, "mean_reversion", seed=0)
@@ -46,7 +47,7 @@ def test_other_strategy_runs_through_runtime(tmp_path: Path) -> None:
 
 
 def test_unknown_strategy_refused() -> None:
-    import pytest
+
 
     with tempfile.TemporaryDirectory():
         pass
