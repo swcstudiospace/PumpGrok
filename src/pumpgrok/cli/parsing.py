@@ -235,6 +235,16 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay_import.add_argument("--name", required=True, help="sealed dataset name")
 
 
+def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    ledger = verbs.add_parser("ledger", parents=[mode_option], help="ledger backup and restore")
+    ledger_cmd = ledger.add_subparsers(dest="cmd", required=True, metavar="LEDGER")
+    backup = ledger_cmd.add_parser("backup", help="write a ledger copy under the state directory")
+    backup.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore = ledger_cmd.add_parser("restore", help="verify then atomically replace the active ledger")
+    restore.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore.add_argument("--from", dest="from_", required=True, help="candidate ledger to verify")
+
+
 def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
     promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
     promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
@@ -267,6 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_journal_ticket(verbs, mode_option)
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
+    _add_ledger(verbs, mode_option)
     _add_promotion(verbs, mode_option)
     _add_tail(verbs, mode_option)
     return parser
