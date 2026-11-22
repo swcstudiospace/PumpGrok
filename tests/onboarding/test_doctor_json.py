@@ -29,4 +29,5 @@ def test_doctor_records_module() -> None:
 
     records = doctor_records({}, "paper")
     assert len(records) == 5
-    assert {record.name for record in records}.issuperset({"xai_api_key", "wallet_public_address"})  # pragma: allowlist secret — asserting names only, no values
+    names = {record.name for record in records}
+    assert names.issuperset({"xai_api_key", "wallet_public_address"})  # pragma: allowlist secret

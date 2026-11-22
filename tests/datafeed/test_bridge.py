@@ -17,7 +17,7 @@ def _tick() -> CurveTick:
             "mint": "m1",
             "ts_utc": TS,
             "virtual_sol_reserves_lamports": 42_000_000_000,
-            "virtual_token_reserves_units": 766_428_571,  # pragma: allowlist secret — fixture reserves, not a credential
+            "virtual_token_reserves_units": 766_428_571,  # pragma: allowlist secret
             "real_sol_reserves_lamports": 12_000_000_000,
             "real_token_reserves_units": 500_000_000_000,
             "total_supply_units": 1_000_000_000_000,
