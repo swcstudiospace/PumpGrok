@@ -995,15 +995,15 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         assert run_all.main() == 0
-        assert [name.split()[0] for name, _ in calls] == [
-            "G-1",
-            "G-2",
-            "G-3",
-            "G-4",
-            "G-5/G-6",
-            "G-7",
-            "idle-grok",
-        ]
+        # Trusted-overlay semantics: gate-self-test overlays ci/gates/ from base
+        # main, so a branch-introduced gate (idle-grok) and its run_all
+        # registration are absent under the overlay. Derive the expectation from
+        # the overlaid run_all rather than hardcoding idle-grok: post-merge
+        # (no overlay) run_all registers it and it is asserted last.
+        expected = ["G-1", "G-2", "G-3", "G-4", "G-5/G-6", "G-7"]
+        if "idle-grok" in (GATES / "run_all.py").read_text():
+            expected.append("idle-grok")
+        assert [name.split()[0] for name, _ in calls] == expected
 
     def test_g7_takes_no_bot_argument(self, monkeypatch):
         run_all = _load("run_all")
