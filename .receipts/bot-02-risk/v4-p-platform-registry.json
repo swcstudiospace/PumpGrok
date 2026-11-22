@@ -1,0 +1,63 @@
+{
+  "task_id": "v4-p-platform-registry",
+  "receipt_task_id": "platform-registry-001",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/platform-registry",
+  "phase": "platform-registry",
+  "plan": "onboarding platform registry over evidenced surfaces (SPE-36673..36679)",
+  "purpose": "Registry-driven platform selection for backtest/paper onboarding without new vendor SDKs; live stays refused.",
+  "status": "Draft PR for review. Not approved.",
+  "commands": [
+    {
+      "id": "onboarding-config-execution",
+      "cmd": "uv run pytest -q tests/onboarding/ tests/config/ tests/safety/test_wallet_allowlist_settings.py tests/execution/",
+      "exit_code": 0,
+      "log": "256 passed in 13.18s"
+    },
+    {
+      "id": "ruff-new-files",
+      "cmd": "uv run ruff check src/pumpgrok/onboarding/platforms.py tests/onboarding/test_platform_registry.py",
+      "exit_code": 0,
+      "log": "No issues found"
+    },
+    {
+      "id": "mypy-new-module",
+      "cmd": "uv run mypy src/pumpgrok/onboarding/platforms.py",
+      "exit_code": 0,
+      "log": "No issues found"
+    },
+    {
+      "id": "live-refusal",
+      "cmd": "uv run pumpgrok run --mode live --once; echo exit=$?",
+      "exit_code": 3,
+      "log": "LIVE GATE refusing to start, 8 of 9 preconditions unmet"
+    },
+    {
+      "id": "smoke-paper",
+      "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+      "exit_code": 0,
+      "log": "trades filled=2 not_filled=1"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Registry lists exactly the 6 evidenced platforms; live stub unselectable in every mode.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "No live execution path introduced; refusal exit code unchanged at 3.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "No pinned surface changed; onboarding/config/execution suites green (256 passed).",
+      "evidence_command_index": 0
+    }
+  ],
+  "unverified": [
+    "Full make test timed out at 300s in prior run; bounded 256-test set used instead. Full suite not re-run to green here.",
+    "Not reviewed by Greptile; no 5/5 claim.",
+    "approved_by deliberately absent pending review."
+  ],
+  "rollback_plan": "Revert 7f37a4d; registry is additive-only, no other code imports platforms.py.",
+  "approved_by": ""
+}
