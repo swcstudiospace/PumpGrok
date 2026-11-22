@@ -5,7 +5,8 @@ and run against the paper adapter (scripted curves, ``p_drop=0.0`` for
 deterministic fills). CLI level: paper buy/sell (simulate then place),
 state halt --clear/autonomy/resume, killswitch clear, ticket next/create/list,
 and verify run end to end with exit 0 and JSON. The remaining exit-5 list is
-pinned to the 04-09 handoff exactly.
+pinned to the 04-09 handoff exactly, minus the replay verbs Phase 16
+implemented (REC-03).
 """
 
 from __future__ import annotations
@@ -49,8 +50,6 @@ EXIT_5_HANDOFF = [
     ["rug", "watch"],
     ["journal", "rollup", "--daily"],
     ["audit"],
-    ["replay", "trim"],
-    ["replay", "rebuild-ticks"],
 ]
 
 EXEC_BACKENDS = {
@@ -463,7 +462,7 @@ class TestServedVerbCoverage:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.chdir(tmp_path)
-        assert len(EXIT_5_HANDOFF) == 9
+        assert len(EXIT_5_HANDOFF) == 7
         for argv in EXIT_5_HANDOFF:
             code, out, err = _run(argv)
             assert code == 5, argv
