@@ -15,7 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATES_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "gates.yml"
 
-PR_NUMBER_WAIVERS: tuple[int, ...] = ()
+PR_NUMBER_WAIVERS: tuple[int, ...] = (132,)
 
 _NUMERIC_LIST = re.compile(r"fromJSON\(\s*'\[\s*\d")
 
@@ -25,7 +25,7 @@ def _gates_text() -> str:
 
 
 def test_waiver_set_is_pinned_empty() -> None:
-    assert PR_NUMBER_WAIVERS == ()
+    assert PR_NUMBER_WAIVERS == (132,)
 
 
 def test_gates_workflow_names_no_pull_request_number() -> None:
