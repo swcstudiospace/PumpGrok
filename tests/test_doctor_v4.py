@@ -31,7 +31,9 @@ def test_source_section_reports_states() -> None:
 
 
 def test_grok_budget_section_reports_windows() -> None:
-    lines = doctor_grok_budget_lines(Settings(mode="paper"), windows={"daily": "ok", "monthly": "ok"})
+    lines = doctor_grok_budget_lines(
+        Settings(mode="paper"), windows={"daily": "ok", "monthly": "ok"}
+    )
     assert any("grok-budget daily" in line for line in lines)
     assert any("grok-budget monthly" in line for line in lines)
 
@@ -71,13 +73,21 @@ def test_doctor_has_no_signer_or_venue_import() -> None:
     assert "from pumpgrok.execution" not in src
     assert "import pumpgrok.execution" not in src
     assert "venue" not in src.lower()
-    assert "signer" not in src.split("def doctor_report")[0] or True  # function names may mention signer
+    assert "signer" not in src.split("def doctor_report")[0] or True  # names may mention signer
 
 
 def test_doctor_probes_are_read_only() -> None:
     src = Path("src/pumpgrok/doctor.py").read_text(encoding="utf-8")
     # New v4 section functions must not write files or open sockets for sending.
-    for fn in ("doctor_bus_lines", "doctor_source_lines", "doctor_grok_budget_lines", "doctor_stage_lines", "doctor_kills_lines", "doctor_signer_lines"):
+    fns = (
+        "doctor_bus_lines",
+        "doctor_source_lines",
+        "doctor_grok_budget_lines",
+        "doctor_stage_lines",
+        "doctor_kills_lines",
+        "doctor_signer_lines",
+    )
+    for fn in fns:
         assert f"def {fn}(" in src
     assert "write_text" not in src.split("def doctor_bus_lines")[1].split("def doctor_report")[0]
     assert "os.replace" not in src.split("def doctor_bus_lines")[1].split("def doctor_report")[0]

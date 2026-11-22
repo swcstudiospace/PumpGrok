@@ -8,12 +8,18 @@ byte-identical and is reported as failure.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
+from contextlib import suppress
 from pathlib import Path
 
+log = logging.getLogger("pumpgrok.ledger.backup")
 
-def backup_ledger(active: str | Path, state_dir: str | Path, name: str = "ledger-backup.sqlite") -> Path:
+
+def backup_ledger(
+    active: str | Path, state_dir: str | Path, name: str = "ledger-backup.sqlite"
+) -> Path:
     """Copy the active ledger under the state directory; returns the copy path."""
     src = Path(active)
     dest_dir = Path(state_dir)
@@ -29,17 +35,17 @@ def verify_candidate(candidate: str | Path) -> bool:
 
     try:
         store = LedgerStore(candidate)
-    except Exception:
+    except Exception as exc:
+        log.warning("backup candidate unreadable: %s (%s)", candidate, exc)
         return False
     try:
         return bool(store.verify())
-    except Exception:
+    except Exception as exc:
+        log.warning("backup candidate verification failed: %s (%s)", candidate, exc)
         return False
     finally:
-        try:
+        with suppress(Exception):
             store._db.close()
-        except Exception:
-            pass
 
 
 def restore_ledger(candidate: str | Path, active: str | Path) -> bool:

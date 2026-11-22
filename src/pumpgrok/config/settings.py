@@ -437,7 +437,8 @@ def collect_startup_problems(environ: Mapping[str, str]) -> list[str]:
         raw_state = (environ.get("PUMPGROK_STATE_DIR") or "").strip()
         if not raw_state or not Path(raw_state).is_absolute():
             problems.append(
-                "refused environment variable: PUMPGROK_STATE_DIR (must be a non-empty absolute path)"
+                "refused environment variable: PUMPGROK_STATE_DIR "
+                "(must be a non-empty absolute path)"
             )
     if "PUMPGROK_LOG_LEVEL" in present:
         raw_level = (environ.get("PUMPGROK_LOG_LEVEL") or "").strip()
@@ -448,6 +449,8 @@ def collect_startup_problems(environ: Mapping[str, str]) -> list[str]:
             )
 
     allowed = allowed_env_names()
+    problems.extend(find_key_bearing_env(environ))
+    problems.extend(find_unknown_env(environ, allowed))
 
     profile = environ.get("PUMPGROK_PROFILE", "").strip() or DEFAULT_PROFILE
     if profile not in OVERLAY_PROFILES:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -99,14 +100,24 @@ def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
         return _not_implemented("run --duration")
     if getattr(args, "live_paper", False):
         return _live_paper_outcome(args, settings)
+    return _serve_outcome(args, settings)
+
+
+def _serve_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
+    """Serve branches of `run`; None when the replay cycle runs."""
+    if args.serve and (args.once or not args.replay):
+        _say(
+            sys.stderr,
+            "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
+        )
+        return EXIT_NOT_IMPLEMENTED
     if args.serve:
-        if args.once or not args.replay:
-            _say(
-                sys.stderr,
-                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
-            )
-            return EXIT_NOT_IMPLEMENTED
         return _serve_replay_loop(Path(args.replay), settings)
+    return None
+
+
+async def _no_place(_intent: object) -> None:
+    """Async place stub for the live-paper root: builds the desk, places nothing."""
     return None
 
 
@@ -129,17 +140,15 @@ def _live_paper_outcome(args: argparse.Namespace, settings: Settings) -> int:
             mode=ExecutionMode.PAPER,
             store=store,
             clock=WallClock(),
-            place=lambda intent: None,
+            place=_no_place,
         )
         _say(sys.stdout, f"live-paper desk up (paper only): {desk.mode}")
     except Exception as exc:
         _say(sys.stderr, f"live-paper root refused: {type(exc).__name__}")
         return EXIT_NOT_IMPLEMENTED
     finally:
-        try:
+        with contextlib.suppress(Exception):
             store._db.close()
-        except Exception:
-            pass
     return EXIT_OK
 
 

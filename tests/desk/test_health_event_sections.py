@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
+
+import pumpgrok.supervisor.health as mod
 from pumpgrok.supervisor.health import build_status
 
 
@@ -57,9 +60,6 @@ def test_existing_fields_unchanged() -> None:
 
 def test_no_skipped() -> None:
     # Zero-skip rule: this module must not contain a skip marker.
-    import inspect
-    import pumpgrok.supervisor.health as mod
-
     src = inspect.getsource(mod)
     assert "pytest.skip" not in src
     assert "pytest.mark.skip" not in src

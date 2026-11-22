@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
+
 from prometheus_client import generate_latest
 
+import pumpgrok.supervisor.metrics_events as mod
 from pumpgrok.supervisor.metrics import NINE_FAMILIES, build_registry
 from pumpgrok.supervisor.metrics_events import (
     STRATEGY_FAMILIES,
@@ -52,9 +55,6 @@ def test_strategy_families_absent_in_cadence() -> None:
 
 
 def test_no_skipped() -> None:
-    import inspect
-    import pumpgrok.supervisor.metrics_events as mod
-
     src = inspect.getsource(mod)
     assert "pytest.skip" not in src
     assert "pytest.mark.skip" not in src

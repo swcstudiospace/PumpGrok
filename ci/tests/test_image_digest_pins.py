@@ -18,7 +18,7 @@ def test_dockerfile_bases_digest_pinned() -> None:
     for ref in refs:
         if ref == "builder":
             continue  # multi-stage alias, not a registry image
-        name, sep, rest = ref.partition("@")
+        _name, sep, rest = ref.partition("@")
         assert sep == "@" and rest.startswith("sha256:"), ref
 
 

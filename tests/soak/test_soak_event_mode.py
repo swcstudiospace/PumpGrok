@@ -23,8 +23,6 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.supervisor.event_desk import build_event_desk
 
-pytestmark = [pytest.mark.slow]
-
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "smoke" / "events.jsonl"
 
 # Golden hash of the smoke drain (recorded after first soak run).
@@ -60,6 +58,7 @@ def _events() -> list[Event]:
     return events
 
 
+@pytest.mark.slow
 def test_event_mode_soak_zero_idle_grok(tmp_path: Path) -> None:
     _require_soak()
     assert FIXTURE.is_file(), "smoke fixture missing under PUMPGROK_REQUIRE_SOAK=1"

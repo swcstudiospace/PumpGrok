@@ -9,6 +9,7 @@ import urllib.request
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.supervisor.health_server import HostedHealthServer
 
+
 def _fetch(port: int, path: str) -> tuple[int, str]:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as resp:

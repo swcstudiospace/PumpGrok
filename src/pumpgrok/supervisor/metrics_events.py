@@ -58,13 +58,22 @@ class EventMetrics:
             GROK_TRANSPORT_CALLS_TOTAL, "Grok transport calls.", registry=self._registry
         )
         self.strategy_p_total = Counter(
-            STRATEGY_P_TOTAL, "Per-strategy performance events.", ["strategy"], registry=self._registry
+            STRATEGY_P_TOTAL,
+            "Per-strategy performance events.",
+            ["strategy"],
+            registry=self._registry,
         )
         self.strategy_l_total = Counter(
-            STRATEGY_LIVE_L_TOTAL, "Per-strategy live events.", ["strategy"], registry=self._registry
+            STRATEGY_LIVE_L_TOTAL,
+            "Per-strategy live events.",
+            ["strategy"],
+            registry=self._registry,
         )
         self.strategy_stage = Counter(
-            STRATEGY_STAGE, "Strategy stage transitions.", ["strategy", "stage"], registry=self._registry
+            STRATEGY_STAGE,
+            "Strategy stage transitions.",
+            ["strategy", "stage"],
+            registry=self._registry,
         )
 
     @property

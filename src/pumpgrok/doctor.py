@@ -103,7 +103,9 @@ def subsystem_statuses() -> list[SubsystemStatus]:
     ]
 
 
-def doctor_bus_lines(settings: Settings, *, depth: int | None = None, lanes: tuple[str, ...] = ()) -> list[str]:
+def doctor_bus_lines(
+    settings: Settings, *, depth: int | None = None, lanes: tuple[str, ...] = ()
+) -> list[str]:
     """Bus depth and lane state, read-only (OBS-01 D-02). Never writes, sends, or holds a key."""
     sidecar = settings.events.sidecar_path
     enabled = settings.events.enabled
@@ -128,7 +130,9 @@ def doctor_source_lines(settings: Settings, *, states: dict[str, str] | None = N
     return lines
 
 
-def doctor_grok_budget_lines(settings: Settings, *, windows: dict[str, str] | None = None) -> list[str]:
+def doctor_grok_budget_lines(
+    settings: Settings, *, windows: dict[str, str] | None = None
+) -> list[str]:
     """Grok layered-budget window states, read-only (OBS-01 D-02). Key by name only, never value."""
     if windows is None:
         windows = {"daily": "unset"}
@@ -150,8 +154,8 @@ def doctor_stage_lines(settings: Settings, *, stages: dict[str, str] | None = No
 def doctor_kills_lines(settings: Settings, *, kills: tuple[str, ...] | None = None) -> list[str]:
     """Active kills from the ledger kill surface, read-only (OBS-01 D-02)."""
     if kills is None:
-        from pathlib import Path as _P  # noqa: PLC0415
         import os as _os  # noqa: PLC0415
+        from pathlib import Path as _P  # noqa: PLC0415
 
         found: list[str] = []
         if _os.environ.get("PUMPGROK_KILLSWITCH"):

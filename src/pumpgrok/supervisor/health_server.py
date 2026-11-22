@@ -79,9 +79,19 @@ class HostedHealthServer:
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            request = await asyncio.wait_for(reader.read(65536), timeout=self._read_timeout_s)
-            path = self._path_of(request)
+            read_task = asyncio.ensure_future(reader.read(65536))
+            sleep_task = asyncio.ensure_future(self._clock.sleep(self._read_timeout_s))
+            done, _ = await asyncio.wait(
+                {read_task, sleep_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            sleep_task.cancel()
+            read_task.cancel()
+            if read_task not in done:
+                log.warning("hosted health read timeout")
+                return
+            request = read_task.result()
             status = dict(self._get_status())
+            path = self._path_of(request)
             if path == "/livez":
                 body = {
                     "live": True,
@@ -105,7 +115,16 @@ class HostedHealthServer:
                 if not is_loopback_bind(self._bind_host) and not self._metrics_token:
                     self._respond(writer, 401, {"metrics": False, "auth": "required"})
                 else:
-                    self._respond(writer, 503, {"metrics": False, "note": "no exporter", "replay_demo": True, "ledger_source": "replay"})
+                    self._respond(
+                        writer,
+                        503,
+                        {
+                            "metrics": False,
+                            "note": "no exporter",
+                            "replay_demo": True,
+                            "ledger_source": "replay",
+                        },
+                    )
             else:
                 self._respond_empty(writer, 404)
         except TimeoutError:
@@ -122,7 +141,8 @@ class HostedHealthServer:
             line = request.split(b"\r\n", 1)[0].decode("latin-1")
             parts = line.split(" ")
             return parts[1] if len(parts) > 1 else "/"
-        except Exception:
+        except Exception as exc:
+            log.warning("hosted health malformed request line: %s", exc)
             return "/"
 
     @staticmethod

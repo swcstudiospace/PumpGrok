@@ -6,7 +6,7 @@ import asyncio
 import socket
 import time
 
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.replay.clock import WallClock
 from pumpgrok.supervisor.health_server import DEFAULT_READ_TIMEOUT_S, HostedHealthServer
 
 
@@ -15,7 +15,7 @@ def test_default_read_timeout_is_five_seconds() -> None:
 
 
 async def _main() -> float:
-    clock = FixtureClock(start=1_700_000_000.0)
+    clock = WallClock()
     server = HostedHealthServer(
         clock,
         lambda: {"halted": False, "ledger_status": "CONSISTENT"},

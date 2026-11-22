@@ -65,7 +65,8 @@ def validate_gateway_bind(host: str, environ: Mapping[str, str] | None = None) -
     if _flag_set(env, "DESK_GATEWAY_TLS") or _flag_set(env, "DESK_GATEWAY_REVERSE_PROXY"):
         return
     raise ValueError(
-        f"refused gateway bind on non-loopback host {host!r} without DESK_GATEWAY_TLS or DESK_GATEWAY_REVERSE_PROXY"
+        f"refused gateway bind on non-loopback host {host!r} "
+        "without DESK_GATEWAY_TLS or DESK_GATEWAY_REVERSE_PROXY"
     )
 
 
