@@ -103,6 +103,79 @@ def subsystem_statuses() -> list[SubsystemStatus]:
     ]
 
 
+def doctor_bus_lines(settings: Settings, *, depth: int | None = None, lanes: tuple[str, ...] = ()) -> list[str]:
+    """Bus depth and lane state, read-only (OBS-01 D-02). Never writes, sends, or holds a key."""
+    sidecar = settings.events.sidecar_path
+    enabled = settings.events.enabled
+    if depth is None:
+        depth = 0
+    lane_text = ", ".join(lanes) if lanes else "none"
+    return [
+        f"info  bus depth={depth} lanes={lane_text} sidecar={sidecar} enabled={enabled}",
+    ]
+
+
+def doctor_source_lines(settings: Settings, *, states: dict[str, str] | None = None) -> list[str]:
+    """Per-source status from the SourceSupervisor surface, read-only (OBS-01 D-02)."""
+    if states is None:
+        states = {"feed": "unknown"}
+    lines = []
+    for name, state in sorted(states.items()):
+        if state in ("live", "stale", "resyncing", "disconnected", "unknown"):
+            lines.append(f"info  source {name} status={state}")
+        else:
+            lines.append(f"warn  source {name} status=unknown")
+    return lines
+
+
+def doctor_grok_budget_lines(settings: Settings, *, windows: dict[str, str] | None = None) -> list[str]:
+    """Grok layered-budget window states, read-only (OBS-01 D-02). Key by name only, never value."""
+    if windows is None:
+        windows = {"daily": "unset"}
+    lines = []
+    for window, state in sorted(windows.items()):
+        lines.append(f"info  grok-budget {window} state={state}")
+    return lines
+
+
+def doctor_stage_lines(settings: Settings, *, stages: dict[str, str] | None = None) -> list[str]:
+    """Strategy stages from the promotion surface, read-only (OBS-01 D-02)."""
+    if stages is None:
+        stages = {}
+    if not stages:
+        return ["info  stages none"]
+    return [f"info  stage {sid} stage={stage}" for sid, stage in sorted(stages.items())]
+
+
+def doctor_kills_lines(settings: Settings, *, kills: tuple[str, ...] | None = None) -> list[str]:
+    """Active kills from the ledger kill surface, read-only (OBS-01 D-02)."""
+    if kills is None:
+        from pathlib import Path as _P  # noqa: PLC0415
+        import os as _os  # noqa: PLC0415
+
+        found: list[str] = []
+        if _os.environ.get("PUMPGROK_KILLSWITCH"):
+            found.append("env:PUMPGROK_KILLSWITCH")
+        latch = _P("var/desk/KILLSWITCH")
+        try:
+            if latch.is_file():
+                found.append("file:var/desk/KILLSWITCH")
+        except OSError:
+            return ["warn  kills unreadable"]
+        kills = tuple(found)
+    if not kills:
+        return ["info  kills none"]
+    return [f"info  kill {k}" for k in kills]
+
+
+def doctor_signer_lines(settings: Settings, *, attestation: str | None = None) -> list[str]:
+    """Signer attestation state by name and source only, never the value (OBS-01 D-02, T-19-01)."""
+    if attestation is None:
+        enabled = settings.signer.enabled
+        attestation = "present" if enabled else "absent"
+    return [f"info  signer attestation={attestation} source=settings"]
+
+
 def doctor_report(settings: Settings, *, wake_mode: str = "cadence") -> list[str]:
     """Lines for stdout: effective mode, one status line per subsystem, endpoint probes, summary."""
     statuses = subsystem_statuses()
@@ -112,6 +185,12 @@ def doctor_report(settings: Settings, *, wake_mode: str = "cadence") -> list[str
     lines.extend(event_mode_refusal(wake_mode))
     lines.append(time_sync_probe())
     lines.extend(status.line() for status in statuses)
+    lines.extend(doctor_bus_lines(settings))
+    lines.extend(doctor_source_lines(settings))
+    lines.extend(doctor_grok_budget_lines(settings))
+    lines.extend(doctor_stage_lines(settings))
+    lines.extend(doctor_kills_lines(settings))
+    lines.extend(doctor_signer_lines(settings))
     port = settings.health.port
     if port <= 0:
         lines.append("warn  /healthz (not served: health.port=0, only `run --serve` binds a port)")
