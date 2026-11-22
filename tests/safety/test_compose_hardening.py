@@ -14,7 +14,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = REPO_ROOT / "docker-compose.yml"
-EXPECTED_SERVICES = ("desk-gateway", "pumpgrok")
+EXPECTED_SERVICES = ("desk-gateway", "pumpgrok", "pumpgrok-replay")
 
 
 def _services() -> dict:

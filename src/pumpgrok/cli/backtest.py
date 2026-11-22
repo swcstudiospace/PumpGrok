@@ -21,6 +21,7 @@ from pumpgrok.backtest.manifest import RunManifest, build_manifest, param_set_ha
 from pumpgrok.backtest.report import build_report
 from pumpgrok.backtest.report import render as render_backtest
 from pumpgrok.backtest.split import HoldoutSplit, holdout_split
+from pumpgrok.backtest.strategy_run import run_strategy
 from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.cli.backtest_holdout import (
     _Dataset,
@@ -40,6 +41,9 @@ from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel
 from pumpgrok.replay.fixtures import FixtureDataset, event_epoch, load_dataset
+from pumpgrok.replay.import_data import import_ticks
+from pumpgrok.replay.rebuild_ticks import rebuild_ticks
+from pumpgrok.replay.trim import trim_dataset
 from pumpgrok.risk.limits import EngineLimits
 
 # Names that promotion.py and the backtest test suites import from this module. Their
@@ -334,6 +338,15 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     it promotion stays ineligible with reason divergence not compared. This
     verb places no paper orders itself.
     """
+    strategy = getattr(args, "strategy", None)
+    if strategy is not None:
+        dataset = _backtest_dataset(str(args.fixture))
+        result = run_strategy(dataset.directory, str(strategy), seed=settings.replay.seed)
+        line = (
+            f"strategy {result.strategy_id} on {result.dataset}: net {result.net_lamports} lamports"
+        )
+        _say(sys.stdout, line)
+        return 0
     plan = _backtest_plan(args, settings)
     with _run_lock(plan.run_dir):
         harness_result = _run_trials(plan)
@@ -343,4 +356,27 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
+    """Replay maintenance verbs (REC-03): trim, rebuild-ticks, import.
+
+    Each verb is deterministic: running it twice on the same input
+    produces byte-identical output (dataset bytes or tick file).
+    """
+    if args.cmd == "trim":
+        trim_dataset(
+            Path(args.from_dir),
+            Path(args.to_dir),
+            str(args.name),
+            from_ts_utc=str(args.from_ts),
+            to_ts_utc=str(args.to_ts),
+        )
+        _say(sys.stdout, f"trimmed dataset into {args.to_dir}")
+        return 0
+    if args.cmd == "rebuild-ticks":
+        rebuild_ticks(Path(args.from_dir), Path(args.to_file))
+        _say(sys.stdout, f"rebuilt ticks into {args.to_file}")
+        return 0
+    if args.cmd == "import":
+        import_ticks(Path(args.source), Path(args.to_dir), str(args.name))
+        _say(sys.stdout, f"imported dataset into {args.to_dir}")
+        return 0
     return _not_implemented(f"replay {args.cmd}")

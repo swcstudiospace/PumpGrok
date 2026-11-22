@@ -248,3 +248,7 @@ Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep S
 - Plugin manifests `plugin.json` and `pyproject.toml` carry `"license": "AGPL-3.0"` (plugin.json) and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace). The two marketplace manifests and `SETUP.md` still carry a placeholder organisation name, which `scripts/check.sh` allowlists until the real organisation is supplied.
 - `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates ten seats and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
+
+## v4 event mode and hosted runtime
+
+Event mode replaces cadence polling with bus dispatch (`wake_mode=event`). Doctor v4 (`src/pumpgrok/doctor.py`) reports bus, sources, Grok windows, stages, kills, and attestation read-only. Health (`supervisor/health.py`) and metrics (`supervisor/metrics_events.py`) carry event, strategy, and promotion sections; alert rules (`docs/observability/alerts.yaml`) reference only registry metrics. The hosted surface (`supervisor/health_server.py`) serves `/livez`, `/readyz`, and `/metrics` with loopback defaults, 401-gated metrics beyond loopback, and a replay-demo label; ledger backup/restore verifies the hash chain before replacing (`ledger/backup.py`, `pumpgrok ledger backup|restore`).

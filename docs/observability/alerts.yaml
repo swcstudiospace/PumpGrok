@@ -1,0 +1,29 @@
+# Alert rules (OBS-03 D-04).
+# Every expression names a metric the registry exposes after plan 19-02.
+# Metric names below resolve against NINE_FAMILIES + EVENT_FAMILIES + STRATEGY_FAMILIES.
+rules:
+  - name: dead-letters
+    expr: "pumpgrok_events_total > 0"
+    threshold: 0
+    severity: critical
+    description: Dead events recorded on the event bus.
+  - name: stale-sources
+    expr: "pumpgrok_data_age_seconds > 300"
+    threshold: 300
+    severity: major
+    description: A data source has not framed within the stale budget.
+  - name: grok-budget-exhaustion
+    expr: "pumpgrok_grok_transport_calls_total > 0"
+    threshold: 0
+    severity: major
+    description: Grok transport calls observed while budget must hold the line.
+  - name: strategy-kills
+    expr: "pumpgrok_kill_switch == 1"
+    threshold: 1
+    severity: critical
+    description: The kill switch is engaged.
+  - name: signer-unknown
+    expr: "pumpgrok_strategy_stage > 0"
+    threshold: 0
+    severity: minor
+    description: A strategy stage is UNKNOWN and needs operator review.

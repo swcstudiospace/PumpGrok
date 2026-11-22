@@ -43,6 +43,9 @@ jobs:
       - name: Lint, typecheck, test and audit
         run: make lint typecheck test audit
 
+      - name: idle-grok
+        run: uv run python ci/gates/check_idle_grok.py
+
   soak:
     name: Nightly slow soak
     runs-on: ubuntu-latest

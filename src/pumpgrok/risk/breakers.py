@@ -36,6 +36,18 @@ EXEC_ERROR_REASONS: frozenset[str] = frozenset(
     {"tx_dropped", "slippage_exceeded", "quote_unavailable", "rpc_error"}
 )
 
+#: Live failure classes mapped into the exec-error breaker (RSK-04). Transient
+#: classes count toward the existing threshold; UNKNOWN halts immediately
+#: and is never retried (G-04).
+LIVE_FAILURE_CLASSES: frozenset[str] = frozenset(
+    {"send_failure", "rpc_error", "unknown", "confirmation_timeout"}
+)
+
+#: Live classes counted as transient exec errors (UNKNOWN is excluded on purpose).
+LIVE_TRANSIENT_CLASSES: frozenset[str] = frozenset(
+    {"send_failure", "rpc_error", "confirmation_timeout"}
+)
+
 BREAKER_NAMES: tuple[str, ...] = ("data_stale", "loss_velocity", "exec_errors")
 
 THRESHOLDS: dict[str, str] = {
@@ -313,6 +325,30 @@ class ExecErrorsBreaker(Breaker):
         if len(self._rejects) >= self.max_rejects and not self.is_open:
             self.trip(ts)
 
+    def note_live_failure(
+        self, ts: float, failure_class: str, *, halt: Callable[[], None] | None = None
+    ) -> bool:
+        """Consume one live failure class; UNKNOWN trips at once and halts.
+
+        Transient classes behave exactly like a qualifying reject; UNKNOWN
+        is never counted as a transient, never retried, and sets a halt
+        through ``halt`` (the engine writes the ledger halt row).
+        Returns True when a halt was set.
+        """
+        if failure_class == "unknown":
+            if halt is not None:
+                halt()
+            if not self.is_open:
+                self.trip(ts)
+            return True
+        if failure_class in LIVE_TRANSIENT_CLASSES:
+            self._rejects.append(ts)
+            while self._rejects and self._rejects[0] < ts - self.window_s:
+                self._rejects.popleft()
+            if len(self._rejects) >= self.max_rejects and not self.is_open:
+                self.trip(ts)
+        return False
+
 
 class _SuppressIntegrity:
     """A duplicate trip/reset key means another path recorded it already."""
@@ -390,6 +426,42 @@ class BreakerSet:
         before = self.data_stale.state
         self.data_stale.note_miss(ts)
         self._transition("data_stale", before, ts_utc, source, correlation_id)
+
+    def note_live_failure(
+        self,
+        failure_class: str,
+        ts: float,
+        *,
+        ts_utc: str,
+        source: str,
+        correlation_id: str,
+        on_unknown_halt: Callable[..., None] | None = None,
+    ) -> bool:
+        """Route one live failure class into the exec-error breaker (RSK-04).
+
+        UNKNOWN trips the breaker at once, persists the trip row, and sets
+        a halt through ``on_unknown_halt``; it is never retried. Transient
+        classes count toward the existing threshold. Unknown classes are
+        ignored (no second breaker is created).
+        """
+        if failure_class not in LIVE_FAILURE_CLASSES:
+            return False
+        before = self.exec_errors.state
+        halted = self.exec_errors.note_live_failure(
+            ts,
+            failure_class,
+            halt=(
+                (
+                    lambda: on_unknown_halt(
+                        ts_utc=ts_utc, source=source, correlation_id=correlation_id
+                    )
+                )
+                if on_unknown_halt is not None
+                else None
+            ),
+        )
+        self._transition("exec_errors", before, ts_utc, source, correlation_id)
+        return halted
 
     def refresh(self, *, ts_utc: str, source: str, correlation_id: str, equity_now: int) -> None:
         """Feed ledger observations and persist fresh transition rows (idempotent).

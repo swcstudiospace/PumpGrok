@@ -36,6 +36,8 @@ GUARDED_PREFIXES = (
 )
 GUARDED_MODULES = (
     "pumpgrok.execution.paper_adapter",
+    "pumpgrok.execution.paper_factory",
+    "pumpgrok.execution.entry_hook",
     "pumpgrok.cli",
 )
 

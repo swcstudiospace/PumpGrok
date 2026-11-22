@@ -53,8 +53,17 @@ from pumpgrok.supervisor.scheduler.supervisor import (
     cycle_timeout_s,
     rollover_key,
 )
+from pumpgrok.supervisor.scheduler.wake import (
+    ALLOWED_TIMERS,
+    SEAT_WAKES,
+    UnknownTimerError,
+    assert_allowed_timers,
+    dispatch,
+    wakes_for,
+)
 
 __all__ = [
+    "ALLOWED_TIMERS",
     "DEFAULT_ROSTER_DIR",
     "EXIT_SEAT",
     "FIXTURE_SEAT_CADENCES",
@@ -65,6 +74,7 @@ __all__ = [
     "RISK_ROW_TYPES",
     "ROSTER",
     "SEAT_CADENCES",
+    "SEAT_WAKES",
     "SERVE_PACE_S",
     "TICK_S",
     "TRADE_ROW_TYPES",
@@ -73,15 +83,19 @@ __all__ = [
     "LedgerUnavailable",
     "ReplayRuntime",
     "Supervisor",
+    "UnknownTimerError",
+    "assert_allowed_timers",
     "assert_no_skew",
     "build_serve_replay",
     "cycle_timeout_s",
     "dataset_events_start",
     "dataset_stamps",
+    "dispatch",
     "kill_switch_engaged",
     "open_replay_runtime",
     "rollover_key",
     "run_once_replay",
     "serve_fixture_timeline",
     "serve_replay",
+    "wakes_for",
 ]

@@ -97,6 +97,7 @@ class _StepCtx:
     equity: int
     approvals: dict[str, ApprovalRecord]
     half_blocked: bool = False
+    strategy_id: str | None = None
     evaluated: dict[str, str] = field(default_factory=dict)
     approval: ApprovalRecord | None = None
     approval_id: str | None = None

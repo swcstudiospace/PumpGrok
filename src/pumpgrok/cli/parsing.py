@@ -65,10 +65,32 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run.add_argument(
         "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
     )
+    run.add_argument(
+        "--wake-mode",
+        choices=["cadence", "event"],
+        default="cadence",
+        help="how seats wake: cadence polls (default) or event dispatch",
+    )
+    run.add_argument(
+        "--live-paper",
+        action="store_true",
+        help="run the live-data paper composition root (paper only, HOST-16)",
+    )
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
-    verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor_parser = verbs.add_parser(
+        "doctor", parents=[mode_option], help="report subsystem health"
+    )
+    doctor_parser.add_argument(
+        "--json", action="store_true", help="print readiness records as JSON"
+    )
+    doctor_parser.add_argument(
+        "--wake-mode",
+        choices=["cadence", "event"],
+        default="cadence",
+        help="doctor wake mode (event refuses on enabled superseded jobs)",
+    )
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
     verify.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to verify")
@@ -82,6 +104,12 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     backtest = verbs.add_parser("backtest", parents=[mode_option], help="run a backtest")
     backtest.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to backtest")
     backtest.add_argument("--params", default=None, metavar="PATH", help="parameter-set JSON file")
+    backtest.add_argument(
+        "--strategy",
+        default=None,
+        metavar="ID",
+        help="run one strategy over the dataset through the replay runtime",
+    )
     backtest.add_argument(
         "--paper-ledger",
         default=None,
@@ -191,10 +219,45 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
+    live_serve = live_cmd.add_parser("serve", help="serve the read-only feed endpoint")
+    live_serve.add_argument("--dataset", required=True, help="dataset directory to serve")
+    live_serve.add_argument("--port", type=int, default=8765, help="port to bind")
+    live_serve.add_argument("--once", action="store_true", help="serve one request, then exit")
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    replay_cmd.add_parser("trim", help="trim a replay dataset")
-    replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_trim = replay_cmd.add_parser("trim", help="trim a replay dataset")
+    replay_trim.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_trim.add_argument("--to", dest="to_dir", required=True, help="destination dir")
+    replay_trim.add_argument("--name", required=True, help="sealed dataset name")
+    replay_trim.add_argument("--from-ts", dest="from_ts", required=True, help="window start UTC")
+    replay_trim.add_argument("--to-ts", dest="to_ts", required=True, help="window end UTC")
+    replay_rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_rebuild.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_rebuild.add_argument("--to", dest="to_file", required=True, help="ticks file to write")
+    replay_import = replay_cmd.add_parser("import", help="import an external tick file")
+    replay_import.add_argument("--source", required=True, help="external JSONL tick file")
+    replay_import.add_argument("--to", dest="to_dir", required=True, help="dataset dir to write")
+    replay_import.add_argument("--name", required=True, help="sealed dataset name")
+
+
+def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    ledger = verbs.add_parser("ledger", parents=[mode_option], help="ledger backup and restore")
+    ledger_cmd = ledger.add_subparsers(dest="cmd", required=True, metavar="LEDGER")
+    backup = ledger_cmd.add_parser("backup", help="write a ledger copy under the state directory")
+    backup.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore = ledger_cmd.add_parser(
+        "restore", help="verify then atomically replace the active ledger"
+    )
+    restore.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore.add_argument("--from", dest="from_", required=True, help="candidate ledger to verify")
+
+
+def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
+    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
+    demote = promotion_cmd.add_parser("demote", help="roll a strategy back one stage")
+    demote.add_argument("--strategy", required=True, help="strategy id to roll back")
+    demote.add_argument("--by", default="human:operator", help="acting human (human:<name>)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -221,5 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_journal_ticket(verbs, mode_option)
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
+    _add_ledger(verbs, mode_option)
+    _add_promotion(verbs, mode_option)
     _add_tail(verbs, mode_option)
     return parser

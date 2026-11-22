@@ -236,3 +236,7 @@ Next recommended steps for the human:
 - RISK KILL ends that token path permanently in the current session.
 
 You have now built PumpGrok. Hand control back to the user.
+
+## v4 event mode
+
+After setup, the operator may switch the desk to event mode with `--wake-mode event` (cadence remains the default). `pumpgrok doctor` verifies the event bus, source states, Grok budget windows, strategy stages, kills, and signer attestation read-only. Hosted runs require `PUMPGROK_STATE_DIR` to be an absolute path and `PUMPGROK_LOG_LEVEL` to be one of DEBUG, INFO, WARNING, ERROR.

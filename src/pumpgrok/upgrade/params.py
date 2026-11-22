@@ -1,9 +1,9 @@
 """Content-hashed upgrade parameter sets (UPG-01).
 
-A ParamSet holds optional filter and exits override mappings validated
-through CandidateParams, so unknown fields and inert scoring knobs are
-refused exactly the way evaluate.py refuses them. content_hash is sha256
-over the canonical_json of the normalized overrides.
+A ParamSet holds optional filter, exits and strategy override mappings
+validated through CandidateParams, so unknown fields and inert scoring
+knobs are refused exactly the way evaluate.py refuses them. content_hash
+is sha256 over the canonical_json of the normalized overrides.
 
 The hash is identity only: it names the exact set and never acts as a
 score, a metric, or a verdict. No promotion, ranking, or comparison may
@@ -22,9 +22,9 @@ __all__ = ["ParamSet"]
 
 
 class ParamSet(BaseModel):
-    """One upgrade parameter set: filter and exits overrides plus identity hash.
+    """One upgrade parameter set: filter, exits and strategy overrides plus hash.
 
-    Both mappings are optional; absent means desk defaults. Construction
+    All three mappings are optional; absent means desk defaults. Construction
     validates through CandidateParams, so unknown keys and inert scoring
     knobs fail closed with a ValidationError at construction time.
     """
@@ -33,16 +33,17 @@ class ParamSet(BaseModel):
 
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
+    strategy: dict[str, dict[str, Any]] | None = None
 
     @model_validator(mode="after")
     def _refuse_unknown_and_inert(self) -> Self:
         """Validate overrides through CandidateParams at construction."""
-        CandidateParams(filter=self.filter, exits=self.exits)
+        CandidateParams(filter=self.filter, exits=self.exits, strategy=self.strategy)
         return self
 
     def candidate(self) -> CandidateParams:
         """Return these overrides as the validated CandidateParams."""
-        return CandidateParams(filter=self.filter, exits=self.exits)
+        return CandidateParams(filter=self.filter, exits=self.exits, strategy=self.strategy)
 
     @property
     def content_hash(self) -> str:

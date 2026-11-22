@@ -1,0 +1,1 @@
+{"dataset": "strat-launch", "notes": "Hand-authored tape fixture: LaunchMint is created at ts 100; ticks at 150/500/800 have ages 50/400/700, so a max_age_seconds of 600 fires exactly one early-window buy at the first tick. Ticks only; non-decreasing ts.", "seed_hint": 20260101, "sources": {"hand-authored": "STR-04 baseline fixture"}}

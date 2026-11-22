@@ -45,3 +45,7 @@ Sources: [list]
 ## References
 - Tools: `market.price`, `market.liquidity`, `market.trades`; port: `src/pumpgrok/tools/market/jupiter.py`
 - Handoff: LEAD block (`discovery-tools`); gate: `risk-audit`
+
+## v4 notes
+
+Event mode delivers market traffic over the event bus (`wake_mode=event`). Per-source status and data age appear in the doctor report and as `pumpgrok_data_age_seconds{source}`. See `docs/runbooks/datafeed.md` for the operator path.

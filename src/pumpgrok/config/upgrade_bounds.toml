@@ -62,3 +62,21 @@ max = 604800.0
 [exits.stop_loss_poll_seconds]
 min = 1.0
 max = 3600.0
+
+# Strategy parameter bounds (STR-01, D-02). One [strategy.<ID>.<PARAM>]
+# table per bounded baseline parameter; the declared BOUNDS in each
+# strategy module must equal these sections exactly (asserted by test).
+# legacy_screening takes filter/exits overrides only and has no section
+# here, so any strategy override naming it fails with no bound.
+
+[strategy.momentum_breakout.breakout_bps]
+min = 0
+max = 10000
+
+[strategy.new_launch_sniper.max_age_seconds]
+min = 0
+max = 86400
+
+[strategy.mean_reversion.deviation_bps]
+min = 0
+max = 10000

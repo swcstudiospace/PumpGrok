@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Any
 
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
+from pumpgrok.cli.serve_feed import FeedServer, health_probe
 from pumpgrok.cli.validators import (
     _human_by,
     _jsonable,
@@ -25,6 +27,7 @@ from pumpgrok.cli.validators import (
     _utc_now,
 )
 from pumpgrok.cli.verbs_state import operator_active_set
+from pumpgrok.cli.wake_mode import event_mode_refusal as _event_mode_refusal
 from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
@@ -33,6 +36,7 @@ from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.doctor import doctor_report
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
@@ -42,15 +46,64 @@ from pumpgrok.tools import ensure_paper_genesis
 log = logging.getLogger("pumpgrok.cli")
 
 
-def _doctor_verb(_args: argparse.Namespace, settings: Settings) -> int:
-    _say(sys.stdout, *doctor_report(settings))
+def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
+    if getattr(args, "json", False):
+        return _doctor_json_verb(settings)
+    if getattr(args, "wake_mode", "cadence") == "event":
+        refusals = _event_mode_refusal("event", Path("hermes/cron/jobs.yaml"))
+        if refusals:
+            _say(sys.stdout, "wake_mode=event refused: " + "; ".join(refusals))
+            return 1
+    _say(sys.stdout, *doctor_report(settings, wake_mode=getattr(args, "wake_mode", "cadence")))
     return EXIT_OK
+
+
+def _doctor_json_verb(settings: Settings) -> int:
+    """Print one readiness record per operator input; exit 1 on failure cases."""
+    mode = settings.effective_mode
+    env = os.environ
+    records = doctor_records(env, mode)
+    _say(
+        sys.stdout,
+        json.dumps(
+            [
+                {
+                    "name": record.name,
+                    "required_for_mode": record.required_for_mode,
+                    "status": record.status,
+                    "source": record.source,
+                }
+                for record in records
+            ]
+        ),
+    )
+    return 1 if failing_records(records) else 0
 
 
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "confirm":
         return _live_confirm(args, settings)
+    if args.cmd == "serve":
+        return _live_serve(args, settings)
     return _not_implemented(f"live {args.cmd}")
+
+
+def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
+    """`live serve`: expose the read-only feed endpoint for a dataset."""
+
+    server = FeedServer(Path(str(args.dataset)), int(args.port))
+    server.start()
+    try:
+        probe = health_probe(server.port)
+        _say(
+            sys.stdout,
+            f"serving {probe['dataset']} on port {server.port}: {probe['ticks']} ticks",
+        )
+        if not args.once:
+            threading.Event().wait()
+    finally:
+        server.stop()
+    return 0
 
 
 def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:

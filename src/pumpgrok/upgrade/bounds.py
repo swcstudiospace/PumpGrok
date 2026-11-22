@@ -9,7 +9,7 @@ value, and the allowed range; values are never clamped silently.
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -46,10 +46,16 @@ class KeyBound:
 
 @dataclass(frozen=True)
 class Bounds:
-    """Parsed upgrade bounds: per-key inclusive bounds for filter and exits."""
+    """Parsed upgrade bounds: per-key inclusive bounds for filter and exits.
+
+    strategy holds per-strategy per-param inclusive bounds parsed from the
+    [strategy.<ID>.<PARAM>] sections; empty means no strategy overrides are
+    admitted (any strategy override then fails with no bound).
+    """
 
     filter: dict[str, KeyBound]
     exits: dict[str, KeyBound]
+    strategy: dict[str, dict[str, KeyBound]] = field(default_factory=dict)
 
 
 def default_bounds_path() -> Path:
@@ -83,6 +89,25 @@ def _parse_section(raw: Any, section: str) -> dict[str, KeyBound]:
     return {key: _parse_key_bound(section, key, entry) for key, entry in raw.items()}
 
 
+def _parse_strategy(raw: Any) -> dict[str, dict[str, KeyBound]]:
+    """Parse the [strategy.<ID>.<PARAM>] tables; absent means none."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("bounds: 'strategy' must be a table of [strategy.<ID>.<PARAM>]")
+    parsed: dict[str, dict[str, KeyBound]] = {}
+    for strategy_id, entry in raw.items():
+        if not isinstance(strategy_id, str) or not strategy_id:
+            raise ValueError("bounds: strategy ids must be non-empty str")
+        if not isinstance(entry, dict):
+            raise ValueError(f"bounds strategy.{strategy_id}: entry must be a table")
+        parsed[strategy_id] = {
+            key: _parse_key_bound(f"strategy.{strategy_id}", key, param)
+            for key, param in entry.items()
+        }
+    return parsed
+
+
 def load_bounds(path: Path | str | None = None) -> Bounds:
     """Read and validate the bounds TOML file, fail closed on any defect."""
     resolved = Path(path) if path is not None else default_bounds_path()
@@ -93,7 +118,28 @@ def load_bounds(path: Path | str | None = None) -> Bounds:
     return Bounds(
         filter=_parse_section(raw.get("filter"), "filter"),
         exits=_parse_section(raw.get("exits"), "exits"),
+        strategy=_parse_strategy(raw.get("strategy")),
     )
+
+
+def _check_value(label: str, key: str, value: Any, bound: KeyBound) -> None:
+    """Reject one value that its bound does not admit (bool or number)."""
+    if isinstance(bound.minimum, bool):
+        if not isinstance(value, bool):
+            raise OutOfBoundsError(
+                f"out of bounds: {label}.{key}={value!r} must be a bool, "
+                "allowed range [False, True]"
+            )
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise OutOfBoundsError(
+            f"out of bounds: {label}.{key}={value!r} must be a number, "
+            f"allowed range [{bound.minimum}, {bound.maximum}]"
+        )
+    if value < bound.minimum or value > bound.maximum:
+        raise OutOfBoundsError(
+            f"out of bounds: {label}.{key}={value!r} outside [{bound.minimum}, {bound.maximum}]"
+        )
 
 
 def _check_section(
@@ -109,26 +155,23 @@ def _check_section(
                 f"no bound for {section}.{key}: {value!r} cannot be accepted "
                 "without a version-controlled bound"
             )
-        if isinstance(bound.minimum, bool):
-            if not isinstance(value, bool):
-                raise OutOfBoundsError(
-                    f"out of bounds: {section}.{key}={value!r} must be a bool, "
-                    "allowed range [False, True]"
-                )
-            continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise OutOfBoundsError(
-                f"out of bounds: {section}.{key}={value!r} must be a number, "
-                f"allowed range [{bound.minimum}, {bound.maximum}]"
-            )
-        if value < bound.minimum or value > bound.maximum:
-            raise OutOfBoundsError(
-                f"out of bounds: {section}.{key}={value!r} outside "
-                f"[{bound.minimum}, {bound.maximum}]"
-            )
+        _check_value(section, key, value, bound)
 
 
 def validate_against_bounds(params: ParamSet, bounds: Bounds) -> None:
-    """Reject any override outside its bound with OutOfBoundsError, never clamp."""
+    """Reject any override outside its bound with OutOfBoundsError, never clamp.
+
+    Strategy overrides check each [strategy.<ID>.<PARAM>] bound, so an
+    unknown strategy id or param fails with no bound instead of slipping
+    through. Absent strategy overrides (None or {}) check nothing.
+    """
     _check_section("filter", params.filter, bounds.filter)
     _check_section("exits", params.exits, bounds.exits)
+    for strategy_id, mapping in (params.strategy or {}).items():
+        section_bounds = bounds.strategy.get(strategy_id)
+        if section_bounds is None:
+            raise OutOfBoundsError(
+                f"no bound for strategy.{strategy_id}: {dict(mapping)!r} cannot be "
+                "accepted without a version-controlled bound"
+            )
+        _check_section(f"strategy.{strategy_id}", mapping, section_bounds)

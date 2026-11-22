@@ -1,7 +1,9 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-[ASSUMED] Anchor-style layout: an 8-byte discriminator, five little-endian
-u64 reserve counters, then a one-byte completion flag (0/1). The layout is
+Token-first layout: an 8-byte discriminator, token reserves before SOL
+reserves, five little-endian u64 counters, then a one-byte completion flag
+(0/1). Both the 49-byte account (counters only) and the 166-byte account
+(same counters plus token-mint and related pubkeys) decode. The layout is
 NOT verified against a mainnet account: every test fixture built with
 :func:`encode_curve_fixture` is marked ASSUMED, and user confirmation of
 the layout is pending. Shared by ``market.price`` and ``onchain.lp_status``.
@@ -21,9 +23,21 @@ from pydantic import BaseModel, ConfigDict
 
 from pumpgrok.core.units import lamports_to_sol, sol_to_lamports
 from pumpgrok.tools._common import UNITS_PER_TOKEN
+from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS
 
+#: Token-first 49-byte layout: disc, virt_token, virt_sol, real_token,
+#: real_sol, total_supply, completion flag. Token fields precede SOL fields.
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
+#: Token-first 166-byte layout: disc, token_mint, counters (token-first),
+#: completion flag, creator, amm_pool, reserved trailer.
+_CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
+CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
+#: Accepted discriminator bytes: the ASSUMED fixture marker and the real
+#: bonding-curve discriminator the probe checks (the curve layout probe record).
+_DISCRIMINATOR = b"ASSUMED\x00"
+_REAL_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
+_ACCEPTED_DISCRIMINATORS = frozenset({_DISCRIMINATOR, _REAL_DISCRIMINATOR})
 
 #: Bonding-curve layout verification state (R65). ASSUMED until a live probe
 #: against mainnet bonding-curve accounts decodes under this layout and a
@@ -52,20 +66,33 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
+    #: 32-byte token mint (hex) from the 166-byte account; empty for 49-byte.
+    token_mint: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
-    """Decode raw account bytes with the ASSUMED layout.
+    """Decode raw account bytes with the token-first ASSUMED layout.
 
-    Raises :class:`CurveDecodeError` on any shape mismatch (wrong length,
-    completion flag outside ``{0, 1}``); callers map it to ``DataStale``.
+    Both the 49-byte and 166-byte accounts decode; the 166-byte variant
+    additionally yields its token mint. Raises :class:`CurveDecodeError`
+    on wrong length, a bad discriminator, or a non-boolean completion flag.
     """
-    if len(data) != CURVE_ACCOUNT_SIZE:
-        raise CurveDecodeError(f"curve account size {len(data)} != ASSUMED {CURVE_ACCOUNT_SIZE}")
-    try:
-        (_, vsol, vtok, rsol, rtok, supply, complete) = _CURVE_STRUCT.unpack(data)
-    except struct.error as exc:
-        raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
+    if len(data) == CURVE_ACCOUNT_SIZE:
+        try:
+            (disc, vtok, vsol, rtok, rsol, supply, complete) = _CURVE_STRUCT.unpack(data)
+        except struct.error as exc:
+            raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
+        mint = b""
+    elif len(data) == CURVE_ACCOUNT_SIZE_166:
+        try:
+            vals = _CURVE_STRUCT_166.unpack(data)
+            disc, mint, vtok, vsol, rtok, rsol, supply, complete = vals[:8]
+        except struct.error as exc:
+            raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
+    else:
+        raise CurveDecodeError(f"curve account size {len(data)} not in token-first sizes")
+    if disc not in _ACCEPTED_DISCRIMINATORS:
+        raise CurveDecodeError("curve discriminator mismatch")
     if complete not in (0, 1):
         raise CurveDecodeError(f"curve completion flag not boolean: {complete!r}")
     for name, value in (
@@ -84,6 +111,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_token_reserves_units=rtok,
         total_supply_units=supply,
         complete=bool(complete),
+        token_mint=mint.hex() if mint else "",
     )
 
 
@@ -110,16 +138,33 @@ def encode_curve_fixture(
     real_token_reserves_units: int,
     total_supply_units: int,
     complete: bool,
+    size: int = CURVE_ACCOUNT_SIZE,
+    token_mint: bytes = b"",
 ) -> bytes:
-    """Build [ASSUMED]-layout account bytes for tests. Never used in production."""
+    """Build token-first [ASSUMED]-layout bytes for tests. Never in production."""
+    flag = 1 if complete else 0
+    if size == CURVE_ACCOUNT_SIZE_166:
+        return _CURVE_STRUCT_166.pack(
+            _DISCRIMINATOR,
+            bytes(token_mint).ljust(32, b"\x00")[:32],
+            virtual_token_reserves_units,
+            virtual_sol_reserves_lamports,
+            real_token_reserves_units,
+            real_sol_reserves_lamports,
+            total_supply_units,
+            flag,
+            b"\x00" * 32,
+            b"\x00" * 32,
+            b"\x00" * 21,
+        )
     return _CURVE_STRUCT.pack(
-        b"ASSUMED\x00",
-        virtual_sol_reserves_lamports,
+        _DISCRIMINATOR,
         virtual_token_reserves_units,
-        real_sol_reserves_lamports,
+        virtual_sol_reserves_lamports,
         real_token_reserves_units,
+        real_sol_reserves_lamports,
         total_supply_units,
-        1 if complete else 0,
+        flag,
     )
 
 
@@ -154,8 +199,15 @@ def rpc_curve_price_allowed(*, curve_source: str) -> bool:
     """True when a price from ``curve_source`` may price a paper entry.
 
     RPC-derived reserves are untrusted bytes until the layout is VERIFIED
-    (T-04-08): while ``LAYOUT_STATUS`` is ASSUMED they fail closed with
+    (T-04-08): while either status is ASSUMED they fail closed with
     ``data_unavailable`` at the entry gate. Fixture, rest and pumpportal
     integer ticks never pass through this layout, so replay is unaffected.
+    Replay and fixture sources are allowed; unknown sources are refused.
     """
-    return not (curve_source == "rpc" and LAYOUT_STATUS != "VERIFIED")
+    if curve_source in ("replay", "fixture", "rest", "pumpportal"):
+        return True
+    if curve_source != "rpc":
+        return False
+    if LAYOUT_STATUS != "VERIFIED":
+        return False
+    return EVENT_DECODE_STATUS == "VERIFIED"

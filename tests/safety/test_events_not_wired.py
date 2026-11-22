@@ -65,6 +65,10 @@ def test_guarded_roots_do_not_import_bus() -> None:
             assert node.module != _BUS
             assert not node.module.startswith(f"{_BUS}.")
 
+    # event_desk.py is the sanctioned composition root (RT-03): it is the
+    # one module allowed to import the bus, because it wires it. Every
+    # other desk-loop root must still avoid the import.
+    _EXEMPT = {"pumpgrok/supervisor/event_desk.py"}
     for relative in (
         "pumpgrok/supervisor",
         "pumpgrok/execution",
@@ -77,5 +81,9 @@ def test_guarded_roots_do_not_import_bus() -> None:
     ):
         root = _SRC / relative
         files = [root] if root.is_file() else list(root.rglob("*.py"))
-        offenders = [path for path in files if _imports_bus(path)]
+        offenders = [
+            path
+            for path in files
+            if path.relative_to(_SRC).as_posix() not in _EXEMPT and _imports_bus(path)
+        ]
         assert offenders == []

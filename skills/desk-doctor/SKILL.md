@@ -52,3 +52,7 @@ doctor exit != 0 -> STOP: read the failing check, fix the cause, re-run; never t
 - Rosters: `contracts/tool-rosters/bot-00-chief.yaml` (seat grants plus core merge)
 - Gate G-7: setup and doctor gate for desk changes
 - Companion skills: `verification-receipts` (receipt chain), `pumpgrok-setup` (bootstrap)
+
+## v4 notes
+
+Doctor v4 adds read-only sections: event bus depth, source states, Grok budget windows, strategy stages, active kills, and signer attestation (present or absent, by name only). Doctor output is status text; it never writes state, sends, or holds a key.

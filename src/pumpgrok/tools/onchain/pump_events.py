@@ -21,6 +21,24 @@ import base64
 import struct
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Final
+
+#: Event-decode verification state (MKT-10). ASSUMED until a human reviews
+#: the probe record. The flip to VERIFIED requires a human-set reviewed_by;
+#: no agent sets it. Reviewed-by is recorded in the curve layout probe record.
+EVENT_DECODE_STATUS: Final[str] = "ASSUMED"
+#: Human reviewer name + date when VERIFIED; None while ASSUMED. Never set
+#: by an agent; only the 13-05 human checkpoint may set this.
+EVENT_DECODE_REVIEWED_BY: Final[str | None] = None
+
+
+def decode_status(*, reviewed_by: str | None = None) -> str:
+    """Decode status for a reviewer: VERIFIED only with a human name set.
+
+    Pure helper for tests and the probe record. The shipped literal stays
+    ASSUMED; callers pass a human name only after human review.
+    """
+    return "VERIFIED" if reviewed_by else "ASSUMED"
 
 
 class EventDecodeError(ValueError):

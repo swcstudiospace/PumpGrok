@@ -1,8 +1,8 @@
 # No secrets in the image. Every PUMPGROK_* value arrives at run time (compose env_file or -e);
 # nothing from .env is copied in (see .dockerignore). Pinned bases: python:3.12-slim, uv 0.13.4.
 
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /bin/
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -28,7 +28,7 @@ RUN chmod -R a+rX /opt/venv/lib/python3.12/docs
 RUN chmod -R a+rX /opt/venv/lib/python3.12/skills
 RUN chmod a+r /opt/venv/lib/python3.12/ownership.yaml
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \

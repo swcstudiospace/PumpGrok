@@ -57,5 +57,5 @@ def test_absent_toml_leaves_v4_sections_off(clean_env: None) -> None:
         section = getattr(settings, field_name)
         assert section.enabled is False
         assert section.allowlist == ()
-    assert settings.paper_fees.model == "v1"
+    assert settings.paper_fees.model == "v2"
     assert "interval" not in v4.PromotionSettings.model_fields

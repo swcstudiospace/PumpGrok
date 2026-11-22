@@ -13,6 +13,7 @@ import json
 import random
 import re
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.engine import STEP_IDS, RiskDecision, RiskEngine, order_hash_for
+from pumpgrok.risk.strategy_slice import SliceConfig
 from pumpgrok.tools.risk.check_limits import R34_RULE_IDS
 
 PINNED_STEP_IDS: tuple[str, ...] = (
@@ -167,3 +169,40 @@ def test_nineteen_rows_are_not_persisted_in_risk_json(
     # The 19 evaluated rows live on RiskDecision.evaluated; risk_json carries the summary only.
     for text in _placed_risk_json(_smoke_ledger(monkeypatch, tmp_path)):
         assert "evaluated" not in json.loads(text)
+
+
+def test_slice_and_kill_verdicts_add_no_risk_json_key(tmp_path: Path) -> None:
+    """Phase 17 verdicts reuse existing rows: no new step and no new risk_json key."""
+    clock = FixtureClock(start=_START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", "10000000000")
+    store.set_meta("source", "paper")
+    engine = RiskEngine(
+        store=store,
+        budget=RiskBudget(),
+        ids=IdFactory(clock, random.Random(11)),
+        clock=clock,
+        autonomy="autonomous-paper",
+        get_reserves=lambda _mint: (42_000_000_000, 764_000_000_000_000),
+        slice_config=SliceConfig(
+            weights={"momentum_breakout": Decimal("0.02")},
+            reserve=Decimal("0.80"),
+            enabled=True,
+        ),
+    )
+    ids = IdFactory(clock, random.Random(5))
+    order = OrderRequest(
+        ticket_id="SOL-20260201-001",
+        mint="So11111111111111111111111111111111111111112",
+        side="buy",
+        decision_id=ids.ulid(),
+        size_lamports=300_000_000,
+        max_slippage_bps=50,
+        approval_id=f"apr-{ids.ulid()}",
+        correlation_id="test",
+    )
+    decision = engine.check(order, seat="bot-04-sniper", strategy_id="momentum_breakout")
+    assert len(decision.evaluated) == 19
+    assert [row["id"] for row in decision.evaluated] == list(PINNED_STEP_IDS)
+    assert set(decision.model_dump()) == PINNED_DECISION_FIELDS
+    assert decision.caps.get("strategy_slice") == 200_000_000

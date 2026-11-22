@@ -112,3 +112,7 @@ Assumptions and path differences the reader must not mistake for verified fact.
 - Curve decoding uses the `[ASSUMED]` layout in `src/pumpgrok/tools/onchain/curve_layout.py` until a live probe confirms it (see `scripts/probe_curve_layout.py`).
 - `run --once --replay` exercises the `PaperAdapter` path via `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py`, while `run_replay` in `src/pumpgrok/replay/runner.py` writes the checkpoint verdict row first and does not run the paper adapter.
 - `run --record` is not implemented and exits `EXIT_NOT_IMPLEMENTED` (`src/pumpgrok/cli/codes.py`) from `_run` in `src/pumpgrok/cli/verbs_state.py`.
+
+## v4 event mode
+
+The desk runs in cadence mode by default and supports event mode via `--wake-mode event`. `pumpgrok doctor` reports bus depth, source states, Grok budget windows, strategy stages, kills, and signer attestation read-only. `run --mode live` is refused with exit 3 in every mode (paper-only invariant).

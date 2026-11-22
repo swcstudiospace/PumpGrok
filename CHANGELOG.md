@@ -1,7 +1,43 @@
+Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 19: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 19: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 16: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 16: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 15: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 15: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 15: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 15: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 # Changelog
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+
+## [Unreleased] - v4 Phase 14: event-driven desk and Grok gateway
+
+### Added
+
+- Single Grok gateway (`src/pumpgrok/grok/`): deterministic prefilter that skips before budget spend, sanitizer plus strict JSON parse, canonical cache key of ints/strings with per-agent TTLs, in-flight coalescing, layered persisted budget with reserve share, hash-only gateway ledger, and a replay backend that raises on a miss. Four agents run behind it; the signal seat never calls the vendor agent directly. Fallback ladder keyed by `signal_scoring_mode` with a breaker and half-open probe.
+- Supervisor event-mode wake: closed `SEAT_WAKES` dispatch, allowed-timer set (only `wake`), `--wake-mode {cadence,event}` defaulting to cadence, and event/Grok metric families registered only in event mode. Ten seat cycle bodies run on wakes with pinned golden hashes; the DeterministicBus under fixture_compat reproduces the legacy smoke-10m hash exactly.
+- Operator onboarding: snapshot-pinned input inventory, `doctor --json` readiness records (presence and source only), paper start gate, seat access grants only as operator-choice ledger rows, wallet base58 plus Ed25519 curve-point validation, RPC host-only choice records, empty x.ai key counts as missing, HMAC confirmation key forbidden in live.
+- Hermes cron cutover: five superseded jobs disabled (not deleted) in `hermes/cron/jobs.yaml`, `docs/runbooks/events.md`, doctor refusal in event mode, read-only time-sync probe. Idle-zero-Grok CI gate (`ci/gates/check_idle_grok.py` wired into `run_all.py`, `Makefile`, `ci.yml`). Grok measurement (`scripts/measure_grok_calls.py`) and the `evidence-50` fixture (60 admitted candidates, ratio 0.1875).
+
+### Verified
+
+- Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: events-smoke-10m golden hash: 888e1849dca763a0ecbc088e873969f5c8da7fee63031bca7310f58203f2204c
+- Phase 14: events-soak-3d golden hash: c08ad0ddddfd44de00590c9fc2f5f80b6852aa428e3d05ec1f4d26d8a7194e70
+- Phase 14: `scripts/probe_curve_layout.py` deleted with all references removed.
+- `pumpgrok run --mode live --once` exits 3. No contracts/ file changed.
 ## [Unreleased] - v4 Phase 12: event runtime core
 
 ### Added
@@ -20,6 +56,23 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 12: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - `pumpgrok run --mode live --once` exits 3. The smoke-10m hash above was measured from a temp cwd on `bot-02-risk/phase-12-event-runtime` at `66246aa`.
+
+## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
+
+### Added
+
+- Token-first curve layout (49/166 byte accounts) behind an allowlist price gate; statuses stay ASSUMED.
+- Datafeed package (ticks, watch set, mint book, bus bridge), fail-closed LivePriceSource, graduation and marks loop, PumpPortal/logs feed with a 30/10s limiter and readonly allowlist, sealed recorder datasets with gaps and torn-line recovery.
+
+### Verified
+
+- Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: probe outcome ASSUMED with the exact probe error; no VERIFIED flip without a human reviewed_by.
+- Phase 13: paper fee default v1; fee model v2 selectable (builder fee, first-buy ATA, priority cap).
+- `pumpgrok run --mode live --once` still exits 3; no contracts/ file changed.
 
 ## [Unreleased] - v4 Phase 11: engineering foundation and quality
 

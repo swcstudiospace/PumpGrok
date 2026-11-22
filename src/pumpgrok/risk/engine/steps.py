@@ -30,6 +30,7 @@ from pumpgrok.risk.engine.constants import (
     SYSTEM_EXIT_REASONS,
 )
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
+from pumpgrok.risk.strategy_slice import SliceConfig, spent_from_ledger
 
 
 class _EngineSteps:
@@ -45,6 +46,7 @@ class _EngineSteps:
         _reputation: ReputationBook | None
         _live_check: Callable[[], list[str]] | None
         _observe_only: frozenset[str]
+        _slice_config: SliceConfig | None
         _get_reserves: Callable[[str], tuple[int, int] | None] | None
 
         def _fold(self) -> LedgerState: ...
@@ -353,6 +355,36 @@ class _EngineSteps:
             ctx.final_size = cap
             ctx.capped = True
             ctx.caps["max_token_fraction"] = cap
+        self._apply_strategy_slice(ctx)
+
+    def _apply_strategy_slice(self, ctx: _StepCtx) -> None:
+        """Cap an over-slice buy on this same row, or reject when the cap cannot hold.
+
+        The slice check is config-gated off by default (RSK-01, G-01): with
+        no enabled SliceConfig, or no strategy id, the row behaves exactly
+        as before. Spent comes from ledger rows, never process memory.
+        """
+        config = getattr(self, "_slice_config", None)
+        if config is None or not config.enabled or ctx.strategy_id is None:
+            return
+        assert ctx.final_size is not None
+        spent = spent_from_ledger(self._store, ctx.strategy_id)
+        room = config.cap_lamports(
+            ctx.strategy_id, equity_lamports=ctx.equity, spent_lamports=spent
+        )
+        # Always record the slice room on this existing row so the verdict
+        # is traceable even when an earlier cap already bound the size.
+        ctx.caps["strategy_slice"] = room
+        if ctx.final_size <= room:
+            return
+        if room < int(self._limits.min_trade_lamports):
+            raise _Fail(
+                "max_token_fraction",
+                f"strategy={ctx.strategy_id} slice cap={room} below minimum",
+            )
+        ctx.final_size = room
+        ctx.capped = True
+        ctx.caps["strategy_slice"] = room
 
     def _step_daily_loss_halt(self, ctx: _StepCtx) -> None:
         ctx.mark("daily_loss_halt")

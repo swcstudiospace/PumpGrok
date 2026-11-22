@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -32,6 +33,7 @@ from pumpgrok.cli.promotion import make_promotion_check
 from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
 from pumpgrok.cli.wiring import (
     _call_use,
+    _repo_root,
     _run_wired,
     _seat_manifest_id,
     _unflattened_lines,
@@ -47,7 +49,11 @@ from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
+from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.replay.clock import WallClock, format_ts_utc
+from pumpgrok.replay.fixtures import load_dataset
+from pumpgrok.replay.live_recorder import LiveRecorder
+from pumpgrok.replay.normalize import to_curve_tick
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
@@ -84,6 +90,68 @@ def _declared_space() -> tuple[dict[str, Any], ...]:
         raise ConfigError([exc.message]) from exc
 
 
+def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
+    """Record/serve/duration branches of `run`; None when the replay cycle runs."""
+    if args.record is not None and args.duration is not None:
+        return _not_implemented("run --duration")
+    if args.record is not None:
+        return _record_dataset(args, settings)
+    if args.duration is not None:
+        return _not_implemented("run --duration")
+    if getattr(args, "live_paper", False):
+        return _live_paper_outcome(args, settings)
+    return _serve_outcome(args, settings)
+
+
+def _serve_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
+    """Serve branches of `run`; None when the replay cycle runs."""
+    if args.serve and (args.once or not args.replay):
+        _say(
+            sys.stderr,
+            "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
+        )
+        return EXIT_NOT_IMPLEMENTED
+    if args.serve:
+        return _serve_replay_loop(Path(args.replay), settings)
+    return None
+
+
+async def _no_place(_intent: object) -> None:
+    """Async place stub for the live-paper root: builds the desk, places nothing."""
+    return None
+
+
+def _live_paper_outcome(args: argparse.Namespace, settings: Settings) -> int:
+    """Run the live-data paper root (HOST-16): paper only, OD-04 probe review gated."""
+    if settings.effective_mode != "paper":
+        _say(sys.stderr, "live-paper root is paper only")
+        return EXIT_LIVE
+    if os.environ.get("PUMPGROK_OD04_PROBE_REVIEW", "").strip() != "approved":
+        _say(sys.stderr, "live-paper root refused: PUMPGROK_OD04_PROBE_REVIEW must be approved")
+        return EXIT_NOT_IMPLEMENTED
+    from pumpgrok.core.adapter import ExecutionMode  # noqa: PLC0415
+    from pumpgrok.ledger.store import LedgerStore  # noqa: PLC0415
+    from pumpgrok.replay.clock import WallClock  # noqa: PLC0415
+    from pumpgrok.supervisor.live_paper import build_live_paper  # noqa: PLC0415
+
+    store = LedgerStore("var/ledger.sqlite")
+    try:
+        desk = build_live_paper(
+            mode=ExecutionMode.PAPER,
+            store=store,
+            clock=WallClock(),
+            place=_no_place,
+        )
+        _say(sys.stdout, f"live-paper desk up (paper only): {desk.mode}")
+    except Exception as exc:
+        _say(sys.stderr, f"live-paper root refused: {type(exc).__name__}")
+        return EXIT_NOT_IMPLEMENTED
+    finally:
+        with contextlib.suppress(Exception):
+            store._db.close()
+    return EXIT_OK
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
     gate = LiveGate(
         mode=settings.effective_mode,
@@ -98,16 +166,17 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
             return EXIT_LIVE
-    if args.record is not None or args.duration is not None:
-        return _not_implemented("run --record")
-    if args.serve:
-        if args.once or not args.replay:
+    if settings.effective_mode == "paper" and args.replay is None:
+        missing = check_start(os.environ, "paper")
+        if missing:
             _say(
                 sys.stderr,
-                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
+                "paper start refused: missing required inputs: " + ", ".join(missing),
             )
             return EXIT_NOT_IMPLEMENTED
-        return _serve_replay_loop(Path(args.replay), settings)
+    outcome = _run_outcome(args, settings)
+    if outcome is not None:
+        return outcome
     if not (args.once and args.replay):
         _say(
             sys.stderr,
@@ -115,6 +184,27 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         )
         return EXIT_NOT_IMPLEMENTED
     return _skip_cycle(Path(args.replay), settings)
+
+
+def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
+    """`run --record DATASET`: seal a recorded dataset from the replay source.
+
+    The source is `--replay <dir>` when given, else the bundled smoke
+    fixture; the sealed output passes load_dataset unchanged (REC-03).
+    """
+    source = (
+        Path(args.replay)
+        if args.replay
+        else _repo_root() / "tests" / "fixtures" / "replay" / "smoke"
+    )
+    dataset = load_dataset(source)
+    target = Path(str(args.record))
+    recorder = LiveRecorder(target)
+    for record in dataset.events:
+        recorder.record_tick(to_curve_tick(dict(record)))
+    recorder.seal(target.name or dataset.manifest.dataset, seed_hint=settings.replay.seed)
+    _say(sys.stdout, f"recorded dataset sealed into {target}")
+    return EXIT_OK
 
 
 def _serve_replay_loop(source: Path, settings: Settings) -> int:
