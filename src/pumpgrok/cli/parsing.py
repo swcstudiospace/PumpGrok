@@ -71,6 +71,11 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
         default="cadence",
         help="how seats wake: cadence polls (default) or event dispatch",
     )
+    run.add_argument(
+        "--live-paper",
+        action="store_true",
+        help="run the live-data paper composition root (paper only, HOST-16)",
+    )
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:

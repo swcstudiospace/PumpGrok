@@ -26,6 +26,18 @@ def shutdown_exit_code(failed: bool) -> int:
     return 1 if failed else 0
 
 
+#: Default read timeout for slow/inscomplete requests (HOST-12).
+DEFAULT_READ_TIMEOUT_S = 5.0
+
+#: Hosts considered loopback (HOST-11).
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def is_loopback_bind(host: str) -> bool:
+    """True iff the bind host is loopback."""
+    return host.strip().lower() in LOOPBACK_HOSTS
+
+
 class HostedHealthServer:
     """Strict-route asyncio server for the hosted surface."""
 
@@ -35,11 +47,18 @@ class HostedHealthServer:
         get_status: Callable[[], Mapping[str, Any]],
         is_ready: Callable[[], bool],
         live: Callable[[], bool] | None = None,
+        *,
+        bind_host: str = "127.0.0.1",
+        metrics_token: str = "",
+        read_timeout_s: float = DEFAULT_READ_TIMEOUT_S,
     ) -> None:
         self._clock = clock
         self._get_status = get_status
         self._is_ready = is_ready
         self._live = live or (lambda: True)
+        self._bind_host = bind_host
+        self._metrics_token = metrics_token
+        self._read_timeout_s = read_timeout_s
         self._server: asyncio.AbstractServer | None = None
 
     async def start(self, host: str = "127.0.0.1", port: int = 0) -> int:
@@ -60,11 +79,16 @@ class HostedHealthServer:
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            request = await reader.read(65536)
+            request = await asyncio.wait_for(reader.read(65536), timeout=self._read_timeout_s)
             path = self._path_of(request)
             status = dict(self._get_status())
             if path == "/livez":
-                body = {"live": True, "halted": bool(status.get("halted", False))}
+                body = {
+                    "live": True,
+                    "halted": bool(status.get("halted", False)),
+                    "replay_demo": True,
+                    "ledger_source": "replay",
+                }
                 code = 200 if self._live() else 503
                 self._respond(writer, code, body)
             elif path == "/readyz":
@@ -73,12 +97,19 @@ class HostedHealthServer:
                     "ready": ready,
                     "halted": bool(status.get("halted", False)),
                     "ledger_status": str(status.get("ledger_status", "UNKNOWN")),
+                    "replay_demo": True,
+                    "ledger_source": "replay",
                 }
                 self._respond(writer, 200 if ready else 503, body)
             elif path == "/metrics":
-                self._respond(writer, 503, {"metrics": False, "note": "no exporter"})
+                if not is_loopback_bind(self._bind_host) and not self._metrics_token:
+                    self._respond(writer, 401, {"metrics": False, "auth": "required"})
+                else:
+                    self._respond(writer, 503, {"metrics": False, "note": "no exporter", "replay_demo": True, "ledger_source": "replay"})
             else:
                 self._respond_empty(writer, 404)
+        except TimeoutError:
+            log.warning("hosted health read timeout")
         except Exception as exc:
             log.warning("hosted health request failed: %s", exc)
         finally:

@@ -97,6 +97,8 @@ def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
         return _record_dataset(args, settings)
     if args.duration is not None:
         return _not_implemented("run --duration")
+    if getattr(args, "live_paper", False):
+        return _live_paper_outcome(args, settings)
     if args.serve:
         if args.once or not args.replay:
             _say(
@@ -106,6 +108,39 @@ def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
             return EXIT_NOT_IMPLEMENTED
         return _serve_replay_loop(Path(args.replay), settings)
     return None
+
+
+def _live_paper_outcome(args: argparse.Namespace, settings: Settings) -> int:
+    """Run the live-data paper root (HOST-16): paper only, OD-04 probe review gated."""
+    if settings.effective_mode != "paper":
+        _say(sys.stderr, "live-paper root is paper only")
+        return EXIT_LIVE
+    if os.environ.get("PUMPGROK_OD04_PROBE_REVIEW", "").strip() != "approved":
+        _say(sys.stderr, "live-paper root refused: PUMPGROK_OD04_PROBE_REVIEW must be approved")
+        return EXIT_NOT_IMPLEMENTED
+    from pumpgrok.core.adapter import ExecutionMode  # noqa: PLC0415
+    from pumpgrok.ledger.store import LedgerStore  # noqa: PLC0415
+    from pumpgrok.replay.clock import WallClock  # noqa: PLC0415
+    from pumpgrok.supervisor.live_paper import build_live_paper  # noqa: PLC0415
+
+    store = LedgerStore("var/ledger.sqlite")
+    try:
+        desk = build_live_paper(
+            mode=ExecutionMode.PAPER,
+            store=store,
+            clock=WallClock(),
+            place=lambda intent: None,
+        )
+        _say(sys.stdout, f"live-paper desk up (paper only): {desk.mode}")
+    except Exception as exc:
+        _say(sys.stderr, f"live-paper root refused: {type(exc).__name__}")
+        return EXIT_NOT_IMPLEMENTED
+    finally:
+        try:
+            store._db.close()
+        except Exception:
+            pass
+    return EXIT_OK
 
 
 def _run(args: argparse.Namespace, settings: Settings) -> int:

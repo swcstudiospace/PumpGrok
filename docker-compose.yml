@@ -36,14 +36,14 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    command: ["run", "--mode", "paper", "--serve", "--replay", "tests/fixtures/replay/smoke"]
-    env_file:
-      - path: .env
-        required: false          # optional operator PUMPGROK_* values; never baked into the image
+    command: ["run", "--mode", "paper", "--live-paper"]
     environment:
       PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+      PUMPGROK_OD04_PROBE_REVIEW: "approved"
       PUMPGROK_HEALTH__HOST: "0.0.0.0"
       PUMPGROK_HEALTH__PORT: "8080"
+    secrets:
+      - pumpgrok_env
     volumes:
       - pumpgrok-state:/app/var
     ports:
@@ -65,6 +65,32 @@ services:
       resources:
         limits:
           memory: 512M
+  # Replay demo (HOST-15/HOST-16): the bundled fixture command lives only here.
+  pumpgrok-replay:
+    profiles: ["replay"]
+    build: .
+    image: pumpgrok:local
+    container_name: pumpgrok-replay
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["run", "--mode", "paper", "--serve", "--replay", "tests/fixtures/replay/smoke"]
+    environment:
+      PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
+      PUMPGROK_STATE_DIR: "/app/var"
+      PUMPGROK_HEALTH__HOST: "127.0.0.1"
+      PUMPGROK_HEALTH__PORT: "8090"
+    volumes:
+      - pumpgrok-state:/app/var
+    secrets:
+      - pumpgrok_env
+    ports:
+      - "127.0.0.1:8090:8090"
+    restart: unless-stopped
 
   # Desk gateway (TOOL-010): the MCP JSON-RPC projection over the paper registry, served by
   # `python -m desk_gateway`. Paper only: live mode is refused at start (exit 3). Per-seat
@@ -82,14 +108,13 @@ services:
     security_opt:
       - no-new-privileges:true
     entrypoint: ["python", "-m", "desk_gateway"]
-    env_file:
-      - path: .env
-        required: false          # operator PUMPGROK_* and DESK_GATEWAY_TOKEN_* values
     environment:
       PUMPGROK_PROFILE: "${PUMPGROK_PROFILE:-paper}"
       PYTHONPATH: "/app/services/desk-gateway/src"
       DESK_GATEWAY_HOST: "0.0.0.0"
       DESK_GATEWAY_PORT: "8787"
+    secrets:
+      - pumpgrok_env
     volumes:
       - pumpgrok-state:/app/var
     ports:
@@ -114,3 +139,7 @@ services:
 
 volumes:
   pumpgrok-state:
+
+secrets:
+  pumpgrok_env:
+    file: ./.secrets/pumpgrok.env
