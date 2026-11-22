@@ -5,7 +5,7 @@ import json
 
 from pumpgrok.onboarding.doctor_report import doctor_records
 
-SENTINEL = "sentinel-secret-value-9f3a"
+SENTINEL = "sentinel-secret-value-9f3a"  # pragma: allowlist secret — test sentinel, not a real credential
 
 
 def test_doctor_records_carry_no_values() -> None:

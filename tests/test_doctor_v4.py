@@ -15,7 +15,7 @@ from pumpgrok.doctor import (
     doctor_stage_lines,
 )
 
-_SENTINEL = "SENTINEL_SECRET_VALUE_ZZ9"
+_SENTINEL = "SENTINEL_SECRET_VALUE_ZZ9"  # pragma: allowlist secret — test sentinel, not a real credential
 
 
 def test_bus_section_reports_depth_and_lane() -> None:

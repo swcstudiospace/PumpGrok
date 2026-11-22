@@ -29,7 +29,7 @@ def test_manifest_key_set_and_no_secrets(tmp_path: Path) -> None:
                 "mint": "m1",
                 "ts_utc": format_ts_utc(1_000.0),
                 "virtual_sol_reserves_lamports": 42_000_000_000,
-                "virtual_token_reserves_units": 766_428_571,
+                "virtual_token_reserves_units": 766_428_571,  # pragma: allowlist secret — fixture reserves, not a credential
                 "real_sol_reserves_lamports": 12_000_000_000,
                 "real_token_reserves_units": 500_000_000_000,
                 "total_supply_units": 1_000_000_000_000,
