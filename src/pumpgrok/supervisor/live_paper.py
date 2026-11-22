@@ -13,11 +13,12 @@ five allowlisted read methods is reachable from this root.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pumpgrok.core.adapter import ExecutionMode
+from pumpgrok.execution.entry_hook import EntryHook
+from pumpgrok.risk.entry_checks import EntryChecks
 from pumpgrok.datafeed.marks import MarksLoop
 from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.datafeed.price import LivePriceSource
@@ -69,6 +70,8 @@ class LivePaperDesk:
     router: IntentRouter
     allocation: Allocation
     allowed_methods: frozenset[str] = ALLOWED_METHODS
+    entry_checks: EntryChecks | None = None
+    entry_hook: EntryHook = field(default_factory=EntryHook)
 
     def feed_call(self, method: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Call the transport only when ``method`` is on the read-only allowlist."""
@@ -86,6 +89,7 @@ def build_live_paper(
     desk_budget_lamports: int = 1_000_000_000,
     slices_lamports: dict[str, int] | None = None,
     tape: Tape | None = None,
+    entry_checks: EntryChecks | None = None,
 ) -> LivePaperDesk:
     """Compose the paper desk; refuse unless the execution mode is paper."""
     if mode != ExecutionMode.PAPER:
@@ -131,4 +135,6 @@ def build_live_paper(
         runtime=runtime,
         router=router,
         allocation=allocation,
+        entry_checks=entry_checks,
+        entry_hook=EntryHook(),
     )
