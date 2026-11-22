@@ -1,0 +1,13 @@
+# Version-controlled promotion thresholds (Phase 17, PRM-02).
+#
+# Every threshold must be at least as strict as the LiveGate floors
+# (14 days, 50 closed trades, profit factor 1.2, drawdown 0.15); the
+# loader refuses the whole file with a ConfigError naming the key when
+# any threshold is looser, missing, or unparsable. Ratios are strings so
+# they load as Decimal; counts are integers.
+
+[promotion.thresholds]
+min_paper_days = 14
+min_closed_trades = 50
+min_profit_factor = "1.20"
+max_drawdown_fraction = "0.15"

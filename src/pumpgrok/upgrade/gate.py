@@ -93,6 +93,7 @@ def evaluate_candidate(
     store: LedgerStore,
     backtest: MetricsReport,
     paper: MetricsReport,
+    paper_mode: bool = False,
 ) -> GateVerdict:
     """Run the five gate checks in order; first failure wins as the reason.
 
@@ -138,8 +139,11 @@ def evaluate_candidate(
                 f"(ledger refuses past {MAX_ALLOWED_TRIALS})"
             ),
         )
+    # The promotion evaluator reuses this gate with paper_mode=True: bounds,
+    # trial count, holdout and divergence run identically, while the
+    # autonomous-paper level is only required on the upgrade path.
     level = read_autonomy(store)
-    if level != REQUIRED_AUTONOMY_LEVEL:
+    if level != REQUIRED_AUTONOMY_LEVEL and not paper_mode:
         return GateVerdict(
             promotion_eligible=False,
             reason=REASON_BELOW_AUTONOMY_LEVEL,

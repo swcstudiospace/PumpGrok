@@ -235,6 +235,14 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay_import.add_argument("--name", required=True, help="sealed dataset name")
 
 
+def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
+    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
+    demote = promotion_cmd.add_parser("demote", help="roll a strategy back one stage")
+    demote.add_argument("--strategy", required=True, help="strategy id to roll back")
+    demote.add_argument("--by", default="human:operator", help="acting human (human:<name>)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     mode_option = _Parser(add_help=False)
     mode_option.add_argument(
@@ -259,5 +267,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_journal_ticket(verbs, mode_option)
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
+    _add_promotion(verbs, mode_option)
     _add_tail(verbs, mode_option)
     return parser
