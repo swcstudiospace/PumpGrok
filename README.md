@@ -84,3 +84,7 @@ Subdirectory READMEs: [agents/README.md](agents/README.md), [skills/README.md](s
 Copyright (c) 2026 Spectrum Web Co LLC. Associated identity: swcstudiospace.
 
 PumpGrok is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+
+## v4 event mode (observability and hosted)
+
+The desk has two wake modes. Cadence polls on a fixed interval (default). Event mode (`wake_mode=event`, `pumpgrok run --wake-mode event`) dispatches seats from the event bus instead of polling. `pumpgrok doctor` reports the v4 runtime read-only: event bus depth, source states, Grok budget windows, strategy stages, active kills, and signer attestation (name and source only, never a secret value). `var/health.json` and the metrics registry carry the event, strategy, and promotion sections alongside the existing health body. Alert rules live in `docs/observability/alerts.yaml` and name only metrics the registry exposes. Hosted runs use a single absolute `PUMPGROK_STATE_DIR` with a named volume in compose; the replay demo profile runs the bundled fixture while the default service runs the live-data paper root. Live trading stays refused: `run --mode live` exits 3.
