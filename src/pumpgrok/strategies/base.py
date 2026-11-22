@@ -82,7 +82,7 @@ def code_digest(strategy_id: str) -> str:
     try:
         module = importlib.import_module(name)
         source = inspect.getsource(module)
-    except Exception:
+    except (ImportError, OSError, TypeError):
         return ""
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 

@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from pumpgrok.config.settings import ExitsSettings, FilterSettings
 from pumpgrok.core.idempotency import canonical_json
@@ -130,6 +130,8 @@ class CandidateParams(BaseModel):
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
     strategy: dict[str, dict[str, Any]] | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("filter")
     @classmethod
