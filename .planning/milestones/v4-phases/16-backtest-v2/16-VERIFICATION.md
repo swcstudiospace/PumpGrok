@@ -1,3 +1,9 @@
+---
+phase: 16-backtest-v2
+verified: 2026-11-22
+status: passed
+score: 5/5 plans (16-01..16-05; consolidated in 16-SUMMARY.md)
+---
 # Phase 16 Verification — Backtest v2 and autonomous evaluation
 
 **Phase:** 16 | **Wave 1:** 16-01..16-04 | **Wave 2:** 16-05
