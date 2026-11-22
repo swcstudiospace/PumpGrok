@@ -81,7 +81,30 @@ def _doctor_json_verb(settings: Settings) -> int:
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "confirm":
         return _live_confirm(args, settings)
+    if args.cmd == "serve":
+        return _live_serve(args, settings)
     return _not_implemented(f"live {args.cmd}")
+
+
+def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
+    """`live serve`: expose the read-only feed endpoint for a dataset."""
+    from pumpgrok.cli.serve_feed import FeedServer, health_probe
+
+    server = FeedServer(Path(str(args.dataset)), int(args.port))
+    server.start()
+    try:
+        probe = health_probe(server.port)
+        _say(
+            sys.stdout,
+            f"serving {probe['dataset']} on port {server.port}: {probe['ticks']} ticks",
+        )
+        if not args.once:
+            import threading
+
+            threading.Event().wait()
+    finally:
+        server.stop()
+    return 0
 
 
 def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:

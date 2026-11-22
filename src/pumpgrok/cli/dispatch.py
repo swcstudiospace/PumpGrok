@@ -7,7 +7,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from pumpgrok.cli.backtest import _backtest_verb
+from pumpgrok.cli.backtest import _backtest_verb, _replay_verb
 from pumpgrok.cli.codes import _FIND_ONLY_ROUTES, EXIT_CONFIG, EXIT_FIXTURE, EXIT_LEDGER
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
@@ -50,6 +50,7 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "verify": _verify_verb,
     "report": _report_verb,
     "backtest": _backtest_verb,
+    "replay": _replay_verb,
     "events": _events_handler,
 }
 

@@ -100,6 +100,12 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     backtest.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to backtest")
     backtest.add_argument("--params", default=None, metavar="PATH", help="parameter-set JSON file")
     backtest.add_argument(
+        "--strategy",
+        default=None,
+        metavar="ID",
+        help="run one strategy over the dataset through the replay runtime",
+    )
+    backtest.add_argument(
         "--paper-ledger",
         default=None,
         metavar="PATH",
@@ -208,10 +214,25 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
+    live_serve = live_cmd.add_parser("serve", help="serve the read-only feed endpoint")
+    live_serve.add_argument("--dataset", required=True, help="dataset directory to serve")
+    live_serve.add_argument("--port", type=int, default=8765, help="port to bind")
+    live_serve.add_argument("--once", action="store_true", help="serve one request, then exit")
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    replay_cmd.add_parser("trim", help="trim a replay dataset")
-    replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_trim = replay_cmd.add_parser("trim", help="trim a replay dataset")
+    replay_trim.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_trim.add_argument("--to", dest="to_dir", required=True, help="destination dir")
+    replay_trim.add_argument("--name", required=True, help="sealed dataset name")
+    replay_trim.add_argument("--from-ts", dest="from_ts", required=True, help="window start UTC")
+    replay_trim.add_argument("--to-ts", dest="to_ts", required=True, help="window end UTC")
+    replay_rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_rebuild.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_rebuild.add_argument("--to", dest="to_file", required=True, help="ticks file to write")
+    replay_import = replay_cmd.add_parser("import", help="import an external tick file")
+    replay_import.add_argument("--source", required=True, help="external JSONL tick file")
+    replay_import.add_argument("--to", dest="to_dir", required=True, help="dataset dir to write")
+    replay_import.add_argument("--name", required=True, help="sealed dataset name")
 
 
 def build_parser() -> argparse.ArgumentParser:

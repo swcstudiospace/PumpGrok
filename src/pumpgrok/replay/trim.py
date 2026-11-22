@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pumpgrok.datafeed.events import CurveTick
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
 from pumpgrok.replay.live_recorder import LiveRecorder, validate_dataset_name
+from pumpgrok.replay.normalize import to_curve_tick
 
 
 def trim_dataset(
@@ -31,5 +31,5 @@ def trim_dataset(
     for record in dataset.events:
         stamp = parse_ts_utc(str(record["ts_utc"]))
         if start <= stamp <= end:
-            recorder.record_tick(CurveTick.model_validate(record))
+            recorder.record_tick(to_curve_tick(dict(record)))
     return recorder.seal(dataset_name, seed_hint=seed_hint)

@@ -8,8 +8,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pumpgrok.datafeed.events import CurveTick
 from pumpgrok.replay.live_recorder import LiveRecorder, validate_dataset_name
+from pumpgrok.replay.normalize import to_curve_tick
 
 
 def import_ticks(
@@ -22,5 +22,5 @@ def import_ticks(
         if not line.strip():
             raise ValueError("external tick file has a blank line")
         record = json.loads(line)
-        recorder.record_tick(CurveTick.model_validate(record))
+        recorder.record_tick(to_curve_tick(record))
     return recorder.seal(dataset_name, seed_hint=seed_hint)

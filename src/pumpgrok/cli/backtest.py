@@ -334,6 +334,17 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     it promotion stays ineligible with reason divergence not compared. This
     verb places no paper orders itself.
     """
+    strategy = getattr(args, "strategy", None)
+    if strategy is not None:
+        from pumpgrok.backtest.strategy_run import run_strategy
+
+        dataset = _backtest_dataset(str(args.fixture))
+        result = run_strategy(dataset.directory, str(strategy), seed=settings.replay.seed)
+        _say(
+            sys.stdout,
+            f"strategy {result.strategy_id} on {result.dataset}: net {result.net_lamports} lamports",
+        )
+        return 0
     plan = _backtest_plan(args, settings)
     with _run_lock(plan.run_dir):
         harness_result = _run_trials(plan)
@@ -343,4 +354,33 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _replay_verb(args: argparse.Namespace, _settings: Settings) -> int:
+    """Replay maintenance verbs (REC-03): trim, rebuild-ticks, import.
+
+    Each verb is deterministic: running it twice on the same input
+    produces byte-identical output (dataset bytes or tick file).
+    """
+    if args.cmd == "trim":
+        from pumpgrok.replay.trim import trim_dataset
+
+        trim_dataset(
+            Path(args.from_dir),
+            Path(args.to_dir),
+            str(args.name),
+            from_ts_utc=str(args.from_ts),
+            to_ts_utc=str(args.to_ts),
+        )
+        _say(sys.stdout, f"trimmed dataset into {args.to_dir}")
+        return 0
+    if args.cmd == "rebuild-ticks":
+        from pumpgrok.replay.rebuild_ticks import rebuild_ticks
+
+        rebuild_ticks(Path(args.from_dir), Path(args.to_file))
+        _say(sys.stdout, f"rebuilt ticks into {args.to_file}")
+        return 0
+    if args.cmd == "import":
+        from pumpgrok.replay.import_data import import_ticks
+
+        import_ticks(Path(args.source), Path(args.to_dir), str(args.name))
+        _say(sys.stdout, f"imported dataset into {args.to_dir}")
+        return 0
     return _not_implemented(f"replay {args.cmd}")

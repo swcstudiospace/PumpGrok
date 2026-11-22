@@ -108,8 +108,13 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             )
             return EXIT_NOT_IMPLEMENTED
     outcome: int | None = None
-    if args.record is not None or args.duration is not None:
-        outcome = _not_implemented("run --record")
+    if args.record is not None:
+        if args.duration is not None:
+            outcome = _not_implemented("run --duration")
+        else:
+            outcome = _record_dataset(args, settings)
+    elif args.duration is not None:
+        outcome = _not_implemented("run --duration")
     elif args.serve:
         if args.once or not args.replay:
             _say(
@@ -128,6 +133,31 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         )
         return EXIT_NOT_IMPLEMENTED
     return _skip_cycle(Path(args.replay), settings)
+
+def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
+    """`run --record DATASET`: seal a recorded dataset from the replay source.
+
+    The source is `--replay <dir>` when given, else the bundled smoke
+    fixture; the sealed output passes load_dataset unchanged (REC-03).
+    """
+    from pumpgrok.cli.wiring import _repo_root
+    from pumpgrok.replay.fixtures import load_dataset
+    from pumpgrok.replay.live_recorder import LiveRecorder
+    from pumpgrok.replay.normalize import to_curve_tick
+
+    source = (
+        Path(args.replay)
+        if args.replay
+        else _repo_root() / "tests" / "fixtures" / "replay" / "smoke"
+    )
+    dataset = load_dataset(source)
+    target = Path(str(args.record))
+    recorder = LiveRecorder(target)
+    for record in dataset.events:
+        recorder.record_tick(to_curve_tick(dict(record)))
+    recorder.seal(target.name or dataset.manifest.dataset, seed_hint=settings.replay.seed)
+    _say(sys.stdout, f"recorded dataset sealed into {target}")
+    return EXIT_OK
 
 
 def _serve_replay_loop(source: Path, settings: Settings) -> int:
