@@ -10,9 +10,11 @@ integer lamports.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
-__all__ = ["Tape", "Tick"]
+__all__ = ["Tape", "Tick", "load_tape"]
 
 
 @dataclass(frozen=True)
@@ -64,3 +66,32 @@ class Tape:
     def ticks_for(self, mint: str) -> tuple[Tick, ...]:
         """Ticks for one mint in order (read-only snapshot)."""
         return tuple(tick for tick in self.ticks if tick.mint == mint)
+
+
+def load_tape(dataset_dir: str | Path) -> Tape:
+    """Load a recorded tape fixture (ticks.json, ticks only) unchanged.
+
+    The fixture directory holds ``ticks.json`` (a list of tick objects in
+    non-decreasing ts order) and ``manifest.json``. The runtime consumes
+    the ticks exactly as recorded; no fill or order lives in the fixture.
+    """
+    base = Path(dataset_dir)
+    raw = json.loads((base / "ticks.json").read_text(encoding="utf-8"))
+    ticks: list[Tick] = []
+    for item in raw["ticks"]:
+        ticks.append(
+            Tick(
+                ts=float(item["ts"]),
+                mint=str(item["mint"]),
+                price_lamports=int(item["price_lamports"]),
+                buyers=int(item.get("buyers", 0)),
+                created_ts=(
+                    None if item.get("created_ts") is None else float(item["created_ts"])
+                ),
+                curve_progress=float(item.get("curve_progress", 0.0)),
+            )
+        )
+    manifest = json.loads((base / "manifest.json").read_text(encoding="utf-8"))
+    if "dataset" in manifest and not isinstance(manifest["dataset"], str):
+        raise ValueError("tape manifest dataset must be a str")
+    return Tape.from_ticks(ticks)

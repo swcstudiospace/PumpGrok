@@ -1,0 +1,1 @@
+{"dataset": "strat-reversion", "notes": "Hand-authored tape fixture: RevMint prints 10000/10100/10200 then dips to 9000, which is 1089bps below the strictly-prior mean 10100 and fires one mean_reversion buy at the dip against a 1000bps threshold. Ticks only; non-decreasing ts.", "seed_hint": 20260101, "sources": {"hand-authored": "STR-04 baseline fixture"}}
