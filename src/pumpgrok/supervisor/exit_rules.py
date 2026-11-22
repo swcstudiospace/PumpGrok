@@ -73,10 +73,25 @@ class LedgerExitBook:
     _identity: dict[str, int] = field(default_factory=dict)
     #: (mint, opening sequence) pairs whose sell the venue left unknown.
     _held_out: set[tuple[str, int]] = field(default_factory=set)
+    #: Ticket ids already sold by this book: the no-double-sell filter (15-06).
+    _sold_tickets: set[str] = field(default_factory=set)
 
     @property
     def positions(self) -> dict[str, ExitPosition]:
         return self._positions
+
+    def claim_ticket(self, ticket_id: str) -> bool:
+        """Claim one ticket for an exit sell; False when already sold.
+
+        The filter keys on ticket attribution (15-02): the ticket names the
+        position's origin, so two strategies racing the same ticket position
+        produce exactly one sell. A re-entry opens a new ticket and is
+        unaffected.
+        """
+        if ticket_id in self._sold_tickets:
+            return False
+        self._sold_tickets.add(ticket_id)
+        return True
 
     @property
     def exit_config(self) -> ExitsSettings:
@@ -173,6 +188,8 @@ class ExitRules:
 
     async def _sell(self, position: ExitPosition, price: int, reason: str) -> None:
         ticket = self._book.ticket(position.mint)
+        if not self._book.claim_ticket(ticket):
+            return
         result = await self._place_sell(position.mint, ticket, int(position.token_amount), reason)
         status = str(result["status"])
         if status == "unknown":
@@ -200,6 +217,8 @@ class ExitRules:
                 continue
             reserves = self._curves.last_open_reserves(mint)
             if reserves is None:
+                continue
+            if not self._book.claim_ticket(self._book.ticket(mint)):
                 continue
             row = await self._graduate(mint, reserves[0], reserves[1])
             if row is not None:
