@@ -20,7 +20,7 @@ from pumpgrok.events.sources import SourceStatus
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock
 
-__all__ = ["FeedHealth", "FeedSpec", "FeedVerdict", "STALE_AFTER_S"]
+__all__ = ["STALE_AFTER_S", "FeedHealth", "FeedSpec", "FeedVerdict"]
 
 #: Staleness window per feed, seconds (mirrors events STALE_AFTER_S).
 STALE_AFTER_S = 120.0
@@ -125,4 +125,6 @@ class FeedHealth:
                 never_ticked=tuple(never_ticked),
                 detail=f"optional feeds stale: {tuple(optional_stale)}",
             )
-        return FeedVerdict(status="healthy", stale_feeds=tuple(stale), never_ticked=tuple(never_ticked))
+        return FeedVerdict(
+            status="healthy", stale_feeds=tuple(stale), never_ticked=tuple(never_ticked)
+        )

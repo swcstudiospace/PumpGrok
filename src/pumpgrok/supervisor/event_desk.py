@@ -11,8 +11,8 @@ sidecar and the ledger.
 
 from __future__ import annotations
 
-import random
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -24,18 +24,28 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event
 from pumpgrok.events.sources import SourceSupervisor
-from pumpgrok.grok import GatewayLedger, GatewayRequest, GrokGateway, LayeredBudget
+from pumpgrok.grok import GatewayLedger, GatewayRequest, GrokGateway
+from pumpgrok.grok.budget import LayeredBudget
 from pumpgrok.promotion.evaluator import EvidenceView, PromotionEvaluator
-from pumpgrok.promotion.stages import StageRow, Transition, append_stage_row, append_transition, read_stage_row
-from pumpgrok.supervisor.intent_router import IntentRouter, Place
-from pumpgrok.supervisor.live_paper import strategy_factory
-from pumpgrok.supervisor.recovery import recover
+from pumpgrok.promotion.stages import (
+    StageRow,
+    Transition,
+    append_stage_row,
+    append_transition,
+    read_stage_row,
+)
+from pumpgrok.promotion.thresholds import PromotionThresholds, load_thresholds
+from pumpgrok.replay.clock import Clock, format_ts_utc
+from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.entry_checks import EntryChecks
 from pumpgrok.risk.feed_health import FeedHealth
 from pumpgrok.strategies.allocation import Allocation
 from pumpgrok.strategies.runtime import StrategyRuntime
 from pumpgrok.strategies.tape import Tape
 from pumpgrok.supervisor.intent_router import IntentRouter, Place
 from pumpgrok.supervisor.live_paper import strategy_factory
+from pumpgrok.supervisor.recovery import recover
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
@@ -57,7 +67,7 @@ class EventDesk:
     """The composed paper desk; state lives in the ledger and bus sidecar."""
 
     mode: str
- 
+
     store: LedgerStore
     clock: Clock
     bus: EventBus
@@ -83,7 +93,7 @@ class EventDesk:
             version_id=evidence.version_id,
             param_hash=evidence.param_hash,
             evidence_run_id=evidence.evidence_run_id,
-            metrics=evidence.metrics,
+            metrics=dict(evidence.metrics) if evidence.metrics is not None else {},
         )
         if previous is None or next_stage != previous:
             ts = format_ts_utc(self.clock.now())
@@ -112,10 +122,8 @@ class EventDesk:
             elif isinstance(evidence, dict):
                 data = dict(evidence)
                 data.setdefault("strategy_id", str(event.entity_id))
-                try:
-                    self.handle_evidence(EvidenceView(**data))  # type: ignore[arg-type]
-                except TypeError:
-                    pass
+                with suppress(TypeError):
+                    self.handle_evidence(EvidenceView(**data))
 
 
 def build_event_desk(
@@ -151,7 +159,11 @@ def build_event_desk(
         allocation=allocation,
         params=params,
     )
-    real_budget = budget if budget is not None else LayeredBudget(window_cap=100, agent_cap=40, global_cap=200)
+    real_budget = (
+        budget
+        if budget is not None
+        else LayeredBudget(window_cap=100, agent_cap=40, global_cap=200)
+    )
     gateway = GrokGateway(
         clock=clock,
         budget=real_budget,
@@ -162,14 +174,16 @@ def build_event_desk(
     risk = RiskEngine(
         store=store,
         budget=RiskBudget(paper_equity_sol=Decimal(desk_budget_lamports) / Decimal(1_000_000_000)),
-        ids=IdFactory(clock, random.Random(11)),
+        ids=IdFactory(clock, make_rng(11)),
         clock=clock,
         autonomy="autonomous-paper",
         feed_health=feed_health,
     )
     router = IntentRouter(store=store, place=place, clock=clock)
     evaluator = PromotionEvaluator(thresholds if thresholds is not None else load_thresholds())
-    sources = SourceSupervisor(clock, random.Random(7), path=sidecar_path or (Path("var") / "events-sidecar.sqlite"))
+    sources = SourceSupervisor(
+        clock, make_rng(7), path=sidecar_path or (Path("var") / "events-sidecar.sqlite")
+    )
     holder: dict[str, Any] = {}
 
     async def _handler(event: Event) -> None:

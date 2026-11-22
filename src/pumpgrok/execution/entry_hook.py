@@ -10,10 +10,12 @@ from pumpgrok.datafeed.graduation import entry_refused
 from pumpgrok.risk.entry_checks import EntryChecks, MintFacts
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
+
 class EntryRefusedError(ValueError):
     """A buy was refused by the entry gate; sells never raise this."""
 
     code = "entry_refused"
+
 
 class EntryHook:
     """Stateless entry gate consulted before a buy fill."""

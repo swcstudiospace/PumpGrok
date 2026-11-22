@@ -17,10 +17,7 @@ __all__ = ["rebuild_ticks"]
 def rebuild_ticks(source_dir: Path, to_file: Path) -> Path:
     """Write the dataset's events as a deterministic ticks file; return its path."""
     dataset = load_dataset(Path(source_dir))
-    lines = [
-        json.dumps(event, sort_keys=True, separators=(",", ":"))
-        for event in dataset.events
-    ]
+    lines = [json.dumps(event, sort_keys=True, separators=(",", ":")) for event in dataset.events]
     to_file = Path(to_file)
     to_file.parent.mkdir(parents=True, exist_ok=True)
     to_file.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))

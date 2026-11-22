@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pumpgrok.backtest.harness import HarnessResult
 from pumpgrok.backtest.metrics import MetricsReport
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.upgrade.bounds import load_bounds
 from pumpgrok.upgrade.gate import (
     REASON_BELOW_AUTONOMY_LEVEL,
@@ -54,21 +55,19 @@ def _search(**overrides: object) -> HarnessResult:
 
 
 def _manual_store(tmp_path: Path):
-    from pumpgrok.ledger.store import LedgerStore
-
     return LedgerStore(str(tmp_path / "ledger.sqlite"))
 
 
 def test_paper_path_passes_on_same_evidence_that_upgrade_blocks_for_level(tmp_path: Path) -> None:
     store = _manual_store(tmp_path)  # manual-ticket: below the level
-    common = dict(
-        bounds=BOUNDS,
-        search=_search(),
-        run_id="RUN-1",
-        store=store,
-        backtest=_report(),
-        paper=_report(),
-    )
+    common = {
+        "bounds": BOUNDS,
+        "search": _search(),
+        "run_id": "RUN-1",
+        "store": store,
+        "backtest": _report(),
+        "paper": _report(),
+    }
     upgrade = evaluate_candidate(IN_BOUNDS, **common)  # type: ignore[arg-type]
     assert upgrade.reason == REASON_BELOW_AUTONOMY_LEVEL
     paper = evaluate_candidate(IN_BOUNDS, paper_mode=True, **common)  # type: ignore[arg-type]
@@ -83,14 +82,14 @@ def test_paper_path_reuses_bounds_holdout_and_divergence_verdicts(tmp_path: Path
         {"search": _search(holdout_net_lamports=0)},
         {"search": _search(trial_count=51)},
     ):
-        kwargs = dict(
-            bounds=BOUNDS,
-            search=_search(),
-            run_id="RUN-1",
-            store=store,
-            backtest=_report(),
-            paper=_report(),
-        )
+        kwargs = {
+            "bounds": BOUNDS,
+            "search": _search(),
+            "run_id": "RUN-1",
+            "store": store,
+            "backtest": _report(),
+            "paper": _report(),
+        }
         kwargs.update(overrides)
         upgrade = evaluate_candidate(IN_BOUNDS, **kwargs)  # type: ignore[arg-type]
         paper = evaluate_candidate(IN_BOUNDS, paper_mode=True, **kwargs)  # type: ignore[arg-type]

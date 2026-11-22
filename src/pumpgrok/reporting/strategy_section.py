@@ -48,9 +48,7 @@ def per_strategy_summary(
     if not trips_by_strategy:
         lines.append("none closed in this window\n")
     else:
-        lines.append(
-            _TOTAL.format(net=_sol(total), win_rate="n/a", trips=total_trips)
-        )
+        lines.append(_TOTAL.format(net=_sol(total), win_rate="n/a", trips=total_trips))
     return "".join(lines), total
 
 

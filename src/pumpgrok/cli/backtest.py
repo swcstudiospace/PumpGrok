@@ -343,8 +343,7 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
         dataset = _backtest_dataset(str(args.fixture))
         result = run_strategy(dataset.directory, str(strategy), seed=settings.replay.seed)
         line = (
-            f"strategy {result.strategy_id} on {result.dataset}: "
-            f"net {result.net_lamports} lamports"
+            f"strategy {result.strategy_id} on {result.dataset}: net {result.net_lamports} lamports"
         )
         _say(sys.stdout, line)
         return 0

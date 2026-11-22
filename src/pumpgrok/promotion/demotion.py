@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DemotionState",
-    "detect_demotion",
     "demote_one_stage",
+    "detect_demotion",
     "reset_on_hash_change",
 ]
 
@@ -43,7 +43,9 @@ _BACK_ONE: dict[Stage, Stage] = {
 class DemotionState:
     """Demotion triggers evaluated at promotion time."""
 
-    def __init__(self, *, evidence_meets_thresholds: bool, kill_row_present: bool, halt_present: bool) -> None:
+    def __init__(
+        self, *, evidence_meets_thresholds: bool, kill_row_present: bool, halt_present: bool
+    ) -> None:
         self.evidence_meets_thresholds = evidence_meets_thresholds
         self.kill_row_present = kill_row_present
         self.halt_present = halt_present
@@ -80,7 +82,9 @@ def demote_one_stage(
         evidence_run_id=row.evidence_run_id,
         metrics=row.metrics,
     )
-    append_stage_row(store, demoted, by=by, ts_utc=ts_utc, source=source, correlation_id=correlation_id)
+    append_stage_row(
+        store, demoted, by=by, ts_utc=ts_utc, source=source, correlation_id=correlation_id
+    )
     append_transition(
         store,
         Transition(
@@ -122,7 +126,9 @@ def reset_on_hash_change(
         evidence_run_id=row.evidence_run_id,
         metrics=row.metrics,
     )
-    append_stage_row(store, reset, by=by, ts_utc=ts_utc, source=source, correlation_id=correlation_id)
+    append_stage_row(
+        store, reset, by=by, ts_utc=ts_utc, source=source, correlation_id=correlation_id
+    )
     append_transition(
         store,
         Transition(

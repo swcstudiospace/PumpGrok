@@ -14,7 +14,6 @@ def test_backtest_strategy_matches_runtime(capsys: pytest.CaptureFixture[str]) -
     assert code == 0
     out = capsys.readouterr().out
 
-
     expected = run_strategy(_resolve_dataset_dir("smoke"), "legacy_screening", seed=0)
     assert "legacy_screening" in out
     assert str(expected.net_lamports) in out

@@ -31,7 +31,13 @@ from pumpgrok.promotion.thresholds import (
     load_thresholds,
 )
 
-DEFAULT = Path(__file__).resolve().parents[2] / "src" / "pumpgrok" / "config" / "promotion_thresholds.toml"
+DEFAULT = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "pumpgrok"
+    / "config"
+    / "promotion_thresholds.toml"
+)
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -52,8 +58,8 @@ GOOD = (
 def test_floors_are_single_sourced_from_the_live_gate() -> None:
     assert FLOOR_PAPER_DAYS == MIN_PAPER_DAYS
     assert FLOOR_CLOSED_TRADES == MIN_CLOSED_TRADES
-    assert FLOOR_PROFIT_FACTOR == Decimal(str(MIN_PROFIT_FACTOR))
-    assert FLOOR_DRAWDOWN_FRACTION == Decimal(str(MAX_DRAWDOWN_FRACTION))
+    assert Decimal(str(MIN_PROFIT_FACTOR)) == FLOOR_PROFIT_FACTOR
+    assert Decimal(str(MAX_DRAWDOWN_FRACTION)) == FLOOR_DRAWDOWN_FRACTION
 
 
 def test_default_file_loads_at_the_floors() -> None:
@@ -79,10 +85,13 @@ def test_default_file_parses_as_toml() -> None:
     ],
 )
 def test_looser_than_floor_refuses_to_load(tmp_path: Path, key: str, looser_value: object) -> None:
-    body = GOOD.replace(
-        f'{key} = {"14" if key == "min_paper_days" else "50" if key == "min_closed_trades" else chr(34) + ("1.20" if key == "min_profit_factor" else "0.15") + chr(34)}',
-        f"{key} = {looser_value!r}".replace("'", '"'),
-    )
+    original = {
+        "min_paper_days": "14",
+        "min_closed_trades": "50",
+        "min_profit_factor": '"1.20"',
+        "max_drawdown_fraction": '"0.15"',
+    }[key]
+    body = GOOD.replace(f"{key} = {original}", f"{key} = {looser_value!r}".replace("'", '"'))
     with pytest.raises(ConfigError) as excinfo:
         load_thresholds(_write(tmp_path, body))
     assert key in str(excinfo.value)
@@ -103,8 +112,14 @@ def test_unparsable_file_refuses_to_load(tmp_path: Path) -> None:
 def test_thresholds_meet_check() -> None:
     thresholds = load_thresholds(DEFAULT)
     assert thresholds.meets(
-        paper_days=14, closed_trades=50, profit_factor=Decimal("1.20"), drawdown_fraction=Decimal("0.15")
+        paper_days=14,
+        closed_trades=50,
+        profit_factor=Decimal("1.20"),
+        drawdown_fraction=Decimal("0.15"),
     )
     assert not thresholds.meets(
-        paper_days=13, closed_trades=50, profit_factor=Decimal("1.20"), drawdown_fraction=Decimal("0.15")
+        paper_days=13,
+        closed_trades=50,
+        profit_factor=Decimal("1.20"),
+        drawdown_fraction=Decimal("0.15"),
     )

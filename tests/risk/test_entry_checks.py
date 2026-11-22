@@ -7,6 +7,7 @@ a passing control mint. Mint facts are fabricated structs; no network.
 from __future__ import annotations
 
 import sys
+import tomllib
 from decimal import Decimal
 from pathlib import Path
 
@@ -120,8 +121,6 @@ def test_unparsable_mint_list_fails_closed(tmp_path: Path) -> None:
 
 
 def test_mint_lists_toml_parses_as_toml() -> None:
-    import tomllib
-
     path = Path(__file__).resolve().parents[2] / "src" / "pumpgrok" / "config" / "mint_lists.toml"
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     assert isinstance(raw["allowlist"], list)

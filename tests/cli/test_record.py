@@ -56,10 +56,7 @@ def test_replay_verbs_rerun_identical(tmp_path: Path) -> None:
     ticks_file = tmp_path / "ticks.json"
     source = load_dataset(SMOKE)
     ticks_file.write_bytes(
-        b"\n".join(
-            json.dumps(event, sort_keys=True).encode() for event in source.events
-        )
-        + b"\n"
+        b"\n".join(json.dumps(event, sort_keys=True).encode() for event in source.events) + b"\n"
     )
     i1 = tmp_path / "imp-a"
     i2 = tmp_path / "imp-b"

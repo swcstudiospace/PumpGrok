@@ -19,11 +19,10 @@ import tomllib
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
 
 __all__ = [
-    "DEFAULT_MINT_LISTS_PATH",
     "DEFAULT_HOLDER_LIMIT",
+    "DEFAULT_MINT_LISTS_PATH",
     "EntryChecks",
     "EntryRefusal",
     "MintFacts",
@@ -119,7 +118,8 @@ class EntryChecks:
             return EntryRefusal("authority", f"mint {facts.mint} has an authority")
         if facts.extensions:
             return EntryRefusal(
-                "extension", f"mint {facts.mint} uses unsupported extensions {list(facts.extensions)}"
+                "extension",
+                f"mint {facts.mint} uses unsupported extensions {list(facts.extensions)}",
             )
         if facts.holder_concentration > self.holder_limit:
             return EntryRefusal(

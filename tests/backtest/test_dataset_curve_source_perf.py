@@ -36,8 +36,9 @@ def _synthetic(n_mints: int = 20, per_mint: int = 250) -> FixtureDataset:
         sha256={"events.jsonl": "a" * 64},
     )
     return FixtureDataset(manifest=manifest, events=tuple(events))  # type: ignore[arg-type]
-def test_bisect_index_meets_budget() -> None:
 
+
+def test_bisect_index_meets_budget() -> None:
 
     dataset = _synthetic()
     clock = FixtureClock(start=0.0)

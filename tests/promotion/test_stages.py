@@ -69,7 +69,9 @@ def _evidence(**overrides: object) -> EvidenceView:
     return EvidenceView(**fields)  # type: ignore[arg-type]
 
 
-def _promote(store: LedgerStore, clock: FixtureClock, evaluator: PromotionEvaluator, evidence: EvidenceView) -> StageRow:
+def _promote(
+    store: LedgerStore, clock: FixtureClock, evaluator: PromotionEvaluator, evidence: EvidenceView
+) -> StageRow:
     row = read_stage_row(store, STRATEGY)
     next_stage = evaluator.next_stage(row.stage if row else None, evidence)
     new_row = StageRow(
@@ -124,7 +126,10 @@ def test_ineligible_evidence_never_moves_a_stage(tmp_path: Path) -> None:
     evaluator = _evaluator()
     row = _promote(store, clock, evaluator, _evidence(eligible=False))
     assert row.stage is Stage.BACKTEST
-    assert read_stage_row(store, STRATEGY) is None or read_stage_row(store, STRATEGY).stage is Stage.BACKTEST
+    assert (
+        read_stage_row(store, STRATEGY) is None
+        or read_stage_row(store, STRATEGY).stage is Stage.BACKTEST
+    )
 
 
 def test_below_threshold_evidence_never_moves_a_stage(tmp_path: Path) -> None:

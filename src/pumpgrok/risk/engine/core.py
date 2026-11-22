@@ -42,7 +42,7 @@ from pumpgrok.risk.engine.rules import (
 from pumpgrok.risk.engine.steps import _EngineSteps
 from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
-from pumpgrok.risk.strategy_slice import SliceConfig, killed_strategies, spent_from_ledger
+from pumpgrok.risk.strategy_slice import SliceConfig, killed_strategies
 
 
 class RiskEngine(_EngineSteps):
@@ -290,7 +290,9 @@ class RiskEngine(_EngineSteps):
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
         order_hash = order_hash_for(order)
-        cache_key = self._cache_key(order, order_hash=order_hash, stage=stage, strategy_id=strategy_id)
+        cache_key = self._cache_key(
+            order, order_hash=order_hash, stage=stage, strategy_id=strategy_id
+        )
         cached = self._decisions.get(cache_key)
         if cached is not None:
             return cached
@@ -473,10 +475,10 @@ class RiskEngine(_EngineSteps):
         so a killed strategy reports the kill first. A feed verdict that
         fails closed refuses on the existing ``data_stale`` row.
         """
-        if ctx.is_buy and ctx.strategy_id is not None:
-            if ctx.strategy_id in killed_strategies(self._store):
-                ctx.mark("kill_switch", "fail")
-                raise _Fail("kill_switch", f"strategy={ctx.strategy_id} killed")
+        is_buy = ctx.is_buy and ctx.strategy_id is not None
+        if is_buy and ctx.strategy_id in killed_strategies(self._store):
+            ctx.mark("kill_switch", "fail")
+            raise _Fail("kill_switch", f"strategy={ctx.strategy_id} killed")
         if self._feed_health is not None and ctx.is_buy:
             held = sum(1 for p in state.positions.values() if p.token_units > 0)
             verdict = self._feed_health.check(self._mode, held_mints=held)

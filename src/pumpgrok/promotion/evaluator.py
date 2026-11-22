@@ -38,7 +38,7 @@ class EvidenceView:
     version_id: str = ""
     evidence_run_id: str = ""
     event_id: str = ""
-    metrics: dict[str, Any] = None  # type: ignore[assignment]
+    metrics: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.metrics is None:

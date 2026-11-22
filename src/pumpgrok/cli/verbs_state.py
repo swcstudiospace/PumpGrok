@@ -141,6 +141,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         return EXIT_NOT_IMPLEMENTED
     return _skip_cycle(Path(args.replay), settings)
 
+
 def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
     """`run --record DATASET`: seal a recorded dataset from the replay source.
 

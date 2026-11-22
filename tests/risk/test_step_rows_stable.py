@@ -13,6 +13,7 @@ import json
 import random
 import re
 import sqlite3
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,6 @@ from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.engine import STEP_IDS, RiskDecision, RiskEngine, order_hash_for
 from pumpgrok.risk.strategy_slice import SliceConfig
-from decimal import Decimal
 from pumpgrok.tools.risk.check_limits import R34_RULE_IDS
 
 PINNED_STEP_IDS: tuple[str, ...] = (

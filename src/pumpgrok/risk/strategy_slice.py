@@ -55,9 +55,7 @@ class SliceError(ValueError):
 class SliceConfig:
     """Version-controlled slice weights plus the reserve; integer math only."""
 
-    weights: dict[str, Decimal] = field(
-        default_factory=lambda: dict(DEFAULT_WEIGHTS)
-    )
+    weights: dict[str, Decimal] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     reserve: Decimal = DEFAULT_RESERVE
     enabled: bool = False
 
@@ -92,27 +90,20 @@ def load_slice_config(path: Path | str | None = None) -> SliceConfig:
         return SliceConfig()
     try:
         raw = tomllib.loads(target.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return SliceConfig()
-    section = raw.get("strategy", {}).get("slice", {})
-    if not isinstance(section, dict):
-        return SliceConfig()
-    enabled = bool(section.get("enabled", False))
-    try:
+        section = raw.get("strategy", {}).get("slice", {})
+        if not isinstance(section, dict):
+            return SliceConfig()
+        enabled = bool(section.get("enabled", False))
         reserve = Decimal(str(section.get("reserve", str(DEFAULT_RESERVE))))
-    except Exception:
-        return SliceConfig()
-    weights_raw = section.get("weights", {})
-    if not isinstance(weights_raw, dict):
-        return SliceConfig()
-    try:
+        weights_raw = section.get("weights", {})
+        if not isinstance(weights_raw, dict):
+            return SliceConfig()
         weights = {str(k): Decimal(str(v)) for k, v in weights_raw.items()}
-    except Exception:
-        return SliceConfig()
-    try:
         return SliceConfig(weights=weights, reserve=reserve, enabled=enabled)
     except SliceError:
         raise
+    except Exception:
+        return SliceConfig()
 
 
 def spent_from_ledger(store: LedgerStore, strategy_id: str) -> int:

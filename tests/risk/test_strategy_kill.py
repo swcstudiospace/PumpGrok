@@ -7,6 +7,7 @@ slice check, so a killed strategy reports the kill first.
 
 from __future__ import annotations
 
+import itertools
 import json
 import random
 import sys
@@ -80,9 +81,7 @@ def _sell(ids: IdFactory, units: int = 3_000_000) -> OrderRequest:
     )
 
 
-def _key_seq() -> "Any":
-    import itertools
-
+def _key_seq() -> Any:
     return itertools.count(1)
 
 
@@ -126,7 +125,9 @@ def _seed_position(store: LedgerStore, clock: FixtureClock) -> None:
             "cash_lamports": EQUITY,
             "equity_lamports": EQUITY,
             "unrealized_lamports": 0,
-            "prices_json": json.dumps({MINT_A: {"mtm_lamports": EQUITY, "spot": "0.00001", "source": "curve"}}),
+            "prices_json": json.dumps(
+                {MINT_A: {"mtm_lamports": EQUITY, "spot": "0.00001", "source": "curve"}}
+            ),
         },
     )
 

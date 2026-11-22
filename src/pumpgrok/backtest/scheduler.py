@@ -94,7 +94,6 @@ class Scheduler:
 def grade_result(meta_dict: dict[str, Any]) -> dict[str, Any]:
     """Grade a persisted meta mapping through grading.py (Phase 17 consumes this)."""
 
-
     meta = DatasetMeta(
         kind=DataKind(str(meta_dict["kind"])),
         complete=bool(meta_dict["complete"]),

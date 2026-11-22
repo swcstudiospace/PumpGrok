@@ -43,7 +43,9 @@ def _promotion_verb(args: argparse.Namespace, settings: Settings) -> int:
             return 1
         _say(
             sys.stdout,
-            json.dumps({"ok": True, "strategy": args.strategy, "stage": demoted.stage.value, "by": args.by}),
+            json.dumps(
+                {"ok": True, "strategy": args.strategy, "stage": demoted.stage.value, "by": args.by}
+            ),
         )
         return EXIT_OK
     return 1

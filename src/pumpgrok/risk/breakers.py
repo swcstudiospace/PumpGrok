@@ -451,7 +451,11 @@ class BreakerSet:
             ts,
             failure_class,
             halt=(
-                (lambda: on_unknown_halt(ts_utc=ts_utc, source=source, correlation_id=correlation_id))
+                (
+                    lambda: on_unknown_halt(
+                        ts_utc=ts_utc, source=source, correlation_id=correlation_id
+                    )
+                )
                 if on_unknown_halt is not None
                 else None
             ),

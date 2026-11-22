@@ -20,7 +20,13 @@ from pumpgrok.promotion.demotion import (
     detect_demotion,
     reset_on_hash_change,
 )
-from pumpgrok.promotion.stages import Stage, StageRow, append_stage_row, decision_log, read_stage_row
+from pumpgrok.promotion.stages import (
+    Stage,
+    StageRow,
+    append_stage_row,
+    decision_log,
+    read_stage_row,
+)
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
@@ -54,7 +60,9 @@ def test_hash_change_resets_to_backtest(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     _seed(store, clock, Stage.LIVE_ELIGIBLE)
-    reset = reset_on_hash_change(store, STRATEGY, "b" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now()))
+    reset = reset_on_hash_change(
+        store, STRATEGY, "b" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now())
+    )
     assert reset is not None
     assert reset.stage is Stage.BACKTEST
     assert reset.param_hash == "b" * 64
@@ -68,16 +76,50 @@ def test_same_hash_does_not_reset(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     _seed(store, clock, Stage.PAPER)
-    row = reset_on_hash_change(store, STRATEGY, "a" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now()))
+    row = reset_on_hash_change(
+        store, STRATEGY, "a" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now())
+    )
     assert row is not None
     assert row.stage is Stage.PAPER
 
 
 def test_detect_demotion_triggers() -> None:
-    assert detect_demotion(Stage.PAPER, DemotionState(evidence_meets_thresholds=False, kill_row_present=False, halt_present=False)) is Stage.BACKTEST
-    assert detect_demotion(Stage.LIVE_ELIGIBLE, DemotionState(evidence_meets_thresholds=True, kill_row_present=True, halt_present=False)) is Stage.PAPER
-    assert detect_demotion(Stage.LIVE_ELIGIBLE, DemotionState(evidence_meets_thresholds=True, kill_row_present=False, halt_present=True)) is Stage.PAPER
-    assert detect_demotion(Stage.PAPER, DemotionState(evidence_meets_thresholds=True, kill_row_present=False, halt_present=False)) is None
+    assert (
+        detect_demotion(
+            Stage.PAPER,
+            DemotionState(
+                evidence_meets_thresholds=False, kill_row_present=False, halt_present=False
+            ),
+        )
+        is Stage.BACKTEST
+    )
+    assert (
+        detect_demotion(
+            Stage.LIVE_ELIGIBLE,
+            DemotionState(
+                evidence_meets_thresholds=True, kill_row_present=True, halt_present=False
+            ),
+        )
+        is Stage.PAPER
+    )
+    assert (
+        detect_demotion(
+            Stage.LIVE_ELIGIBLE,
+            DemotionState(
+                evidence_meets_thresholds=True, kill_row_present=False, halt_present=True
+            ),
+        )
+        is Stage.PAPER
+    )
+    assert (
+        detect_demotion(
+            Stage.PAPER,
+            DemotionState(
+                evidence_meets_thresholds=True, kill_row_present=False, halt_present=False
+            ),
+        )
+        is None
+    )
 
 
 def test_demote_rolls_back_exactly_one_stage(tmp_path: Path) -> None:
@@ -88,7 +130,9 @@ def test_demote_rolls_back_exactly_one_stage(tmp_path: Path) -> None:
     assert demoted is not None
     assert demoted.stage is Stage.PAPER
     assert read_stage_row(store, STRATEGY).stage is Stage.PAPER  # type: ignore[union-attr]
-    again = demote_one_stage(store, STRATEGY, by="human:alice", ts_utc=format_ts_utc(clock.now() + 60))
+    again = demote_one_stage(
+        store, STRATEGY, by="human:alice", ts_utc=format_ts_utc(clock.now() + 60)
+    )
     assert again is not None
     assert again.stage is Stage.BACKTEST
     log = decision_log(store, STRATEGY)
@@ -98,4 +142,6 @@ def test_demote_rolls_back_exactly_one_stage(tmp_path: Path) -> None:
 def test_demote_unknown_strategy_returns_none(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
-    assert demote_one_stage(store, "nope", by="human:alice", ts_utc=format_ts_utc(clock.now())) is None
+    assert (
+        demote_one_stage(store, "nope", by="human:alice", ts_utc=format_ts_utc(clock.now())) is None
+    )

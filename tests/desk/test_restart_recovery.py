@@ -1,14 +1,17 @@
-"""RT-04: restart recovery re-arms exit deadlines and restores tapes, peaks, probation and watch set.
+"""RT-04: restart recovery re-arms exits, tapes, peaks, probation and watch set.
 
 Kill-the-process tests on a temp ledger file: a crash mid-recovery
-followed by a second recovery converges to the identical state, and
-the resume-buy test proves no second sniper BUY and no second
-simulated fill for the same mint and candidate. No test may be skipped.
+followed by a second recovery converges to the identical state, and the
+resume-buy test proves no second sniper BUY and no second simulated fill
+for the same mint and candidate. No test may be skipped.
 """
 
 from __future__ import annotations
 
+import contextlib
+import itertools
 import json
+import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,12 +47,12 @@ def _store(tmp_path: Path) -> LedgerStore:
 
 
 def _seq():
-    import itertools
-
     return itertools.count(1)
 
 
-def _append(store: LedgerStore, clock: FixtureClock, seq: Any, type_: str, payload: dict[str, Any]) -> None:
+def _append(
+    store: LedgerStore, clock: FixtureClock, seq: Any, type_: str, payload: dict[str, Any]
+) -> None:
     store.append(
         ts_utc=format_ts_utc(clock.now()),
         source="paper",
@@ -63,7 +66,10 @@ def _append(store: LedgerStore, clock: FixtureClock, seq: Any, type_: str, paylo
 def _seed(store: LedgerStore, clock: FixtureClock) -> None:
     seq = _seq()
     _append(
-        store, clock, seq, "PositionOpened",
+        store,
+        clock,
+        seq,
+        "PositionOpened",
         {
             "source": "paper",
             "mint": MINT,
@@ -78,18 +84,26 @@ def _seed(store: LedgerStore, clock: FixtureClock) -> None:
         },
     )
     _append(
-        store, clock, seq, "MarkToMarket",
+        store,
+        clock,
+        seq,
+        "MarkToMarket",
         {
             "source": "paper",
             "ts_source": "curve",
             "cash_lamports": EQUITY,
             "equity_lamports": EQUITY,
             "unrealized_lamports": 0,
-            "prices_json": json.dumps({MINT: {"mtm_lamports": EQUITY, "spot": "0.00001", "source": "curve"}}),
+            "prices_json": json.dumps(
+                {MINT: {"mtm_lamports": EQUITY, "spot": "0.00001", "source": "curve"}}
+            ),
         },
     )
     _append(
-        store, clock, seq, "OrderPlaced",
+        store,
+        clock,
+        seq,
+        "OrderPlaced",
         {
             "source": "paper",
             "order_id": "01H00000000000000000000000",
@@ -103,7 +117,10 @@ def _seed(store: LedgerStore, clock: FixtureClock) -> None:
         },
     )
     _append(
-        store, clock, seq, "JournalNote",
+        store,
+        clock,
+        seq,
+        "JournalNote",
         {
             "source": "paper",
             "seat": "bot-02-risk",
@@ -113,7 +130,10 @@ def _seed(store: LedgerStore, clock: FixtureClock) -> None:
         },
     )
     _append(
-        store, clock, seq, "JournalNote",
+        store,
+        clock,
+        seq,
+        "JournalNote",
         {
             "source": "paper",
             "seat": "bot-00-chief",
@@ -154,18 +174,14 @@ def test_corrupt_ledger_fails_closed(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed(store, clock)
     # Corrupt the chain: rewrite one payload without fixing hashes.
-    import sqlite3
-
     conn = sqlite3.connect(str(tmp_path / "ledger.sqlite"))
     conn.execute("DROP TRIGGER events_append_only_u")
     conn.execute("DROP TRIGGER events_append_only_d")
     conn.execute("UPDATE events SET payload_json='{}' WHERE seq=1")
     conn.commit()
     conn.close()
-    try:
+    with contextlib.suppress(Exception):
         store.verify()
-    except Exception:
-        pass
     with pytest.raises(RecoveryError):
         recover(store, clock)
 
@@ -180,7 +196,6 @@ def test_resume_places_no_second_buy_and_no_second_fill(tmp_path: Path) -> None:
 
 
 def test_fresh_candidate_has_no_decision_link(tmp_path: Path) -> None:
-    clock = FixtureClock(start=START)
     store = _store(tmp_path)
     assert decision_recorded(store, MINT, DECISION_ID) is False
     assert_no_second_buy(store, MINT, DECISION_ID)  # must not raise

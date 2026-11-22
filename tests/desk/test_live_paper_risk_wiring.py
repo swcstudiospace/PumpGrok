@@ -54,7 +54,10 @@ def test_event_desk_builds_with_paper_mode(tmp_path: Path) -> None:
         mode=ExecutionMode.PAPER,
         store=store,
         clock=clock,
-        place=lambda intent: None, sidecar_path=tmp_path / "sidecar.sqlite", params={"momentum_breakout": {"breakout_bps": 100}},)
+        place=lambda intent: None,
+        sidecar_path=tmp_path / "sidecar.sqlite",
+        params={"momentum_breakout": {"breakout_bps": 100}},
+    )
     assert desk.mode == str(ExecutionMode.PAPER)
     assert desk.bus is not None
     assert desk.risk is not None
@@ -78,7 +81,10 @@ def test_entry_checks_wired_into_live_paper_root(tmp_path: Path) -> None:
         mode=ExecutionMode.PAPER,
         store=store,
         clock=clock,
-        place=lambda intent: None, entry_checks=EntryChecks(), params={"momentum_breakout": {"breakout_bps": 100}},)
+        place=lambda intent: None,
+        entry_checks=EntryChecks(),
+        params={"momentum_breakout": {"breakout_bps": 100}},
+    )
     assert desk.entry_checks is not None
     assert isinstance(desk.entry_hook, EntryHook)
     with pytest.raises(EntryRefusedError):

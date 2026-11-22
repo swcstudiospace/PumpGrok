@@ -16,9 +16,7 @@ from pumpgrok.replay.fixtures import event_epoch, load_dataset
 def _v1_net(dataset_dir: Path, tmp_path: Path) -> int:
     source = load_dataset(dataset_dir)
     stamps = [event_epoch(event) for event in source.events]
-    window = EvalWindow(
-        window_id="full", start_ts=min(stamps), end_ts=max(stamps) + 1.0
-    )
+    window = EvalWindow(window_id="full", start_ts=min(stamps), end_ts=max(stamps) + 1.0)
     return evaluate_window(
         dataset_dir,
         CandidateParams(),
@@ -47,7 +45,6 @@ def test_other_strategy_runs_through_runtime(tmp_path: Path) -> None:
 
 
 def test_unknown_strategy_refused() -> None:
-
 
     with tempfile.TemporaryDirectory():
         pass

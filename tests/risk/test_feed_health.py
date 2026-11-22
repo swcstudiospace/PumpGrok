@@ -1,4 +1,4 @@
-"""RSK-03: feed staleness is lazy and idle-quiet; never-ticked required feeds fail closed in live mode.
+"""RSK-03: feed staleness is lazy and idle-quiet; never-ticked required feeds fail closed.
 
 Fault-injection first: a silent source goes stale on read, a never-ticked
 source fails closed in live mode, an optional feed going stale degrades

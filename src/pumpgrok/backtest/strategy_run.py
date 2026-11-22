@@ -72,9 +72,11 @@ def run_strategy(
             start_ts=min(stamps) if stamps else 0.0,
             end_ts=(max(stamps) + 1.0) if stamps else 1.0,
         )
-        ledger = Path(ledger_path) if ledger_path is not None else Path(
-            tempfile.mkdtemp(prefix="pumpgrok-stratrun-")
-        ) / "ledger.sqlite"
+        ledger = (
+            Path(ledger_path)
+            if ledger_path is not None
+            else Path(tempfile.mkdtemp(prefix="pumpgrok-stratrun-")) / "ledger.sqlite"
+        )
         net = evaluate_window(
             directory,
             CandidateParams(),

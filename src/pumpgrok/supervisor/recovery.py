@@ -22,9 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerInconsistent
-from pumpgrok.risk.engine.model import utc_day
-from pumpgrok.core.risk_budget import budget_equity_lamports
 from pumpgrok.replay.clock import Clock, parse_ts_utc
+from pumpgrok.risk.engine.model import utc_day
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
@@ -72,7 +71,9 @@ def _read_positions(store: LedgerStore, clock: Clock) -> dict[str, Any]:
     meta_equity = store.get_meta("initial_equity_lamports")
     initial = int(meta_equity) if meta_equity is not None else 10_000_000_000
     meta_source = store.get_meta("source") or "paper"
-    state = initial_state(source=meta_source, initial_equity_lamports=initial, day_utc=utc_day(clock.now()))
+    state = initial_state(
+        source=meta_source, initial_equity_lamports=initial, day_utc=utc_day(clock.now())
+    )
     for event in events:
         state = reduce(state, event)
     return {mint: pos for mint, pos in state.positions.items() if pos.token_units > 0}
@@ -178,7 +179,10 @@ def decision_recorded(store: LedgerStore, mint: str, decision_id: str) -> bool:
             payload = event.get("payload")
             if not isinstance(payload, dict):
                 continue
-            if str(payload.get("mint", "")) == mint and str(payload.get("decision_id", "")) == decision_id:
+            if (
+                str(payload.get("mint", "")) == mint
+                and str(payload.get("decision_id", "")) == decision_id
+            ):
                 return True
     return False
 

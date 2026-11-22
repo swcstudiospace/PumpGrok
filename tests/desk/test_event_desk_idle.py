@@ -29,7 +29,10 @@ def test_idle_desk_is_silent_after_24_virtual_hours(tmp_path: Path) -> None:
         mode=ExecutionMode.PAPER,
         store=store,
         clock=clock,
-        place=lambda intent: None, sidecar_path=tmp_path / "sidecar.sqlite", params={"momentum_breakout": {"breakout_bps": 100}},)
+        place=lambda intent: None,
+        sidecar_path=tmp_path / "sidecar.sqlite",
+        params={"momentum_breakout": {"breakout_bps": 100}},
+    )
     clock.jump(24 * 3600.0)
     assert desk.gateway.transport_calls == 0
     trades = store.read(types=["OrderPlaced", "FillRecorded"], limit=None)

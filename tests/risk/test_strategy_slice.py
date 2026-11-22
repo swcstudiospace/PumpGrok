@@ -13,7 +13,6 @@ import sys
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
@@ -113,7 +112,7 @@ def test_weights_summing_above_one_refuse_to_load(tmp_path: Path) -> None:
     )
     try:
         load_slice_config(bad)
-    except Exception as exc:  # noqa: BLE001 - SliceError is a ValueError
+    except Exception as exc:
         assert isinstance(exc, ValueError)
     else:  # pragma: no cover
         raise AssertionError("weights above 1.0 must refuse to load")
@@ -166,7 +165,9 @@ def test_exhausted_slice_rejects_on_max_token_fraction(tmp_path: Path) -> None:
     decision = engine.check(_buy(ids, 300_000_000), seat="bot-04-sniper", strategy_id=STRATEGY)
     assert decision.passed is False
     assert decision.reason == "max_token_fraction"
-    assert any(row["id"] == "max_token_fraction" and row["status"] == "fail" for row in decision.evaluated)
+    assert any(
+        row["id"] == "max_token_fraction" and row["status"] == "fail" for row in decision.evaluated
+    )
 
 
 def test_disabled_slice_behaves_exactly_as_before(tmp_path: Path) -> None:

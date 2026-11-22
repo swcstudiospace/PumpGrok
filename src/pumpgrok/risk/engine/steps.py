@@ -32,6 +32,7 @@ from pumpgrok.risk.engine.constants import (
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
 from pumpgrok.risk.strategy_slice import SliceConfig, spent_from_ledger
 
+
 class _EngineSteps:
     """The 19 R34 step checks plus halt detection."""
 

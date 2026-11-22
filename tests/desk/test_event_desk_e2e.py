@@ -80,7 +80,20 @@ def test_event_desk_e2e_promotes_and_exhausts_real_budget(tmp_path: Path) -> Non
             Event(
                 kind="strategy_intent",
                 entity_id=STRATEGY,
-                payload={"evidence": {"strategy_id": STRATEGY, "eligible": True, "paper_days": 14, "closed_trades": 50, "profit_factor": "1.25", "drawdown_fraction": "0.10", "param_hash": "a"*64, "version_id": "v1", "evidence_run_id": "RUN-1", "event_id": "evt-9"}},
+                payload={
+                    "evidence": {
+                        "strategy_id": STRATEGY,
+                        "eligible": True,
+                        "paper_days": 14,
+                        "closed_trades": 50,
+                        "profit_factor": "1.25",
+                        "drawdown_fraction": "0.10",
+                        "param_hash": "a" * 64,
+                        "version_id": "v1",
+                        "evidence_run_id": "RUN-1",
+                        "event_id": "evt-9",
+                    }
+                },
                 occurred_at=format_ts_utc(clock.now()),
             )
         )

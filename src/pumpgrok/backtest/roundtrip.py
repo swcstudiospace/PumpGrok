@@ -75,9 +75,7 @@ class RoundTripsResult:
     @property
     def total_net_lamports(self) -> int:
         """Sum of realized nets over closed trips only."""
-        return sum(
-            trip.realized_net_lamports for trip in self.trips if not trip.unclosed
-        )
+        return sum(trip.realized_net_lamports for trip in self.trips if not trip.unclosed)
 
 
 def group_round_trips(fills: Sequence[RoundTripFill]) -> RoundTripsResult:
@@ -147,9 +145,7 @@ def group_round_trips(fills: Sequence[RoundTripFill]) -> RoundTripsResult:
         unclosed_count=len(frozen_trips) - len(closed_trips),
         wins=sum(1 for trip in closed_trips if trip.realized_net_lamports > 0),
         losses=sum(1 for trip in closed_trips if trip.realized_net_lamports < 0),
-        total_realized_net_lamports=sum(
-            trip.realized_net_lamports for trip in closed_trips
-        ),
+        total_realized_net_lamports=sum(trip.realized_net_lamports for trip in closed_trips),
     )
 
 

@@ -135,9 +135,7 @@ def summarize_v2(fills: Sequence[Fill], ctx: MetricsContext) -> MetricsV2Report:
     curve = ctx.equity_curve_lamports
     final = curve[-1]
 
-    total_return = (
-        _finite(Decimal(final - initial) / Decimal(initial)) if initial > 0 else None
-    )
+    total_return = _finite(Decimal(final - initial) / Decimal(initial)) if initial > 0 else None
 
     peak = initial
     max_drawdown_value = Decimal(0)

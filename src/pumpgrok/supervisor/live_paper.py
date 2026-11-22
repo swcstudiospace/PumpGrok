@@ -13,18 +13,19 @@ five allowlisted read methods is reachable from this root.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from pumpgrok.core.adapter import ExecutionMode
-from pumpgrok.execution.entry_hook import EntryHook
-from pumpgrok.risk.entry_checks import EntryChecks
 from pumpgrok.datafeed.marks import MarksLoop
 from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.datafeed.readonly import ALLOWED_METHODS, guarded_call
+from pumpgrok.execution.entry_hook import EntryHook
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, FixtureClock, WallClock
+from pumpgrok.risk.entry_checks import EntryChecks
 from pumpgrok.strategies.allocation import Allocation
 from pumpgrok.strategies.registry import is_known_strategy, resolve_factory
 from pumpgrok.strategies.runtime import StrategyRuntime

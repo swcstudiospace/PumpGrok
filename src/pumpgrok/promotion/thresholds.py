@@ -25,7 +25,7 @@ from pumpgrok.execution.live.live_gate import (
 )
 
 if TYPE_CHECKING:
-    from pumpgrok.ledger.store import LedgerStore
+    pass
 
 __all__ = [
     "DEFAULT_THRESHOLDS_PATH",
@@ -53,7 +53,14 @@ class PromotionThresholds:
     min_profit_factor: Decimal = FLOOR_PROFIT_FACTOR
     max_drawdown_fraction: Decimal = FLOOR_DRAWDOWN_FRACTION
 
-    def meets(self, *, paper_days: int, closed_trades: int, profit_factor: Decimal, drawdown_fraction: Decimal) -> bool:
+    def meets(
+        self,
+        *,
+        paper_days: int,
+        closed_trades: int,
+        profit_factor: Decimal,
+        drawdown_fraction: Decimal,
+    ) -> bool:
         """True when recorded evidence meets every threshold."""
         return (
             paper_days >= self.min_paper_days
@@ -70,14 +77,7 @@ def _decimal(raw: object, key: str) -> Decimal:
         raise ConfigError([f"promotion threshold {key} is not a decimal: {raw!r}"]) from exc
 
 
-def load_thresholds(path: Path | str | None = None) -> PromotionThresholds:
-    """Load thresholds from the version-controlled TOML file, fail-closed.
-
-    Raises ConfigError naming the key when a threshold is looser than its
-    floor, when a key is missing, or when the file does not parse.
-    """
-    target = Path(path) if path is not None else DEFAULT_THRESHOLDS_PATH
-    problems: list[str] = []
+def _read_section(target: Path) -> dict[str, object]:
     try:
         raw = tomllib.loads(target.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
@@ -85,41 +85,52 @@ def load_thresholds(path: Path | str | None = None) -> PromotionThresholds:
     section = raw.get("promotion", {}).get("thresholds", {})
     if not isinstance(section, dict):
         raise ConfigError([f"promotion thresholds section missing in {target}"])
+    return section
 
-    def _int(key: str, floor: int) -> int:
-        value = section.get(key)
-        if not isinstance(value, int) or isinstance(value, bool):
-            problems.append(f"promotion threshold {key} is missing or not an int")
-            return floor
-        if value < floor:
-            problems.append(
-                f"promotion threshold {key}={value} is looser than the LiveGate floor {floor}"
-            )
-        return value
 
-    paper_days = _int("min_paper_days", FLOOR_PAPER_DAYS)
-    closed = _int("min_closed_trades", FLOOR_CLOSED_TRADES)
+def _int_threshold(section: dict[str, object], key: str, floor: int, problems: list[str]) -> int:
+    value = section.get(key)
+    if not isinstance(value, int) or isinstance(value, bool):
+        problems.append(f"promotion threshold {key} is missing or not an int")
+        return floor
+    if value < floor:
+        problems.append(
+            f"promotion threshold {key}={value} is looser than the LiveGate floor {floor}"
+        )
+    return value
 
-    profit_raw = section.get("min_profit_factor")
-    drawdown_raw = section.get("max_drawdown_fraction")
-    if profit_raw is None:
-        problems.append("promotion threshold min_profit_factor is missing")
-        profit = FLOOR_PROFIT_FACTOR
-    else:
-        profit = _decimal(profit_raw, "min_profit_factor")
-        if profit < FLOOR_PROFIT_FACTOR:
-            problems.append(
-                f"promotion threshold min_profit_factor={profit} is looser than the LiveGate floor {FLOOR_PROFIT_FACTOR}"
-            )
-    if drawdown_raw is None:
-        problems.append("promotion threshold max_drawdown_fraction is missing")
-        drawdown = FLOOR_DRAWDOWN_FRACTION
-    else:
-        drawdown = _decimal(drawdown_raw, "max_drawdown_fraction")
-        if drawdown > FLOOR_DRAWDOWN_FRACTION:
-            problems.append(
-                f"promotion threshold max_drawdown_fraction={drawdown} is looser than the LiveGate floor {FLOOR_DRAWDOWN_FRACTION}"
-            )
+
+def _decimal_threshold(
+    section: dict[str, object], key: str, floor: Decimal, problems: list[str]
+) -> Decimal:
+    raw = section.get(key)
+    if raw is None:
+        problems.append(f"promotion threshold {key} is missing")
+        return floor
+    value = _decimal(raw, key)
+    looser = value < floor if key == "min_profit_factor" else value > floor
+    if looser:
+        problems.append(
+            f"promotion threshold {key}={value} is looser than the LiveGate floor {floor}"
+        )
+    return value
+
+
+def load_thresholds(path: Path | str | None = None) -> PromotionThresholds:
+    """Load thresholds from the version-controlled TOML file, fail-closed.
+
+    Raises ConfigError naming the key when a threshold is looser than its
+    floor, when a key is missing, or when the file does not parse.
+    """
+    target = Path(path) if path is not None else DEFAULT_THRESHOLDS_PATH
+    section = _read_section(target)
+    problems: list[str] = []
+    paper_days = _int_threshold(section, "min_paper_days", FLOOR_PAPER_DAYS, problems)
+    closed = _int_threshold(section, "min_closed_trades", FLOOR_CLOSED_TRADES, problems)
+    profit = _decimal_threshold(section, "min_profit_factor", FLOOR_PROFIT_FACTOR, problems)
+    drawdown = _decimal_threshold(
+        section, "max_drawdown_fraction", FLOOR_DRAWDOWN_FRACTION, problems
+    )
     if problems:
         raise ConfigError(problems)
     return PromotionThresholds(

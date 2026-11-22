@@ -18,7 +18,7 @@ from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
-from pumpgrok.risk.breakers import BreakerSet, LIVE_FAILURE_CLASSES
+from pumpgrok.risk.breakers import LIVE_FAILURE_CLASSES, BreakerSet
 from pumpgrok.risk.engine import RiskEngine
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
@@ -33,12 +33,15 @@ def _store(tmp_path: Path) -> LedgerStore:
 
 
 def _halt_rows(store: LedgerStore) -> list[dict[str, object]]:
-    return [e for e in store.read(types=["HaltSet"], limit=None) if isinstance(e.get("payload"), dict)]
+    return [
+        e for e in store.read(types=["HaltSet"], limit=None) if isinstance(e.get("payload"), dict)
+    ]
 
 
 def test_live_failure_taxonomy_is_the_four_classes() -> None:
-    assert LIVE_FAILURE_CLASSES == frozenset(
-        {"send_failure", "rpc_error", "unknown", "confirmation_timeout"}
+    assert (
+        frozenset({"send_failure", "rpc_error", "unknown", "confirmation_timeout"})
+        == LIVE_FAILURE_CLASSES
     )
 
 
@@ -48,7 +51,11 @@ def test_transient_classes_trip_exec_errors_at_threshold(tmp_path: Path) -> None
     breakers = BreakerSet(store, clock)
     for index, cls in enumerate(["send_failure", "rpc_error", "confirmation_timeout"]):
         halted = breakers.note_live_failure(
-            cls, clock.now() + index, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
+            cls,
+            clock.now() + index,
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
+            correlation_id="test",
         )
         assert halted is False
     assert "exec_errors" in breakers.open_breakers()
