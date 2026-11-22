@@ -28,6 +28,7 @@ from pumpgrok.risk.engine.model import (
     RiskDecision,
     _Fail,
     _StepCtx,
+    _suppress_integrity,
     order_hash_for,
     utc_day,
 )
@@ -41,6 +42,7 @@ from pumpgrok.risk.engine.rules import (
 from pumpgrok.risk.engine.steps import _EngineSteps
 from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
+from pumpgrok.risk.strategy_slice import SliceConfig, killed_strategies, spent_from_ledger
 
 
 class RiskEngine(_EngineSteps):
@@ -70,6 +72,8 @@ class RiskEngine(_EngineSteps):
         observe_only: frozenset[str] = frozenset(),
         scan_kill_verdicts: bool = True,
         reputation: ReputationBook | None = None,
+        slice_config: SliceConfig | None = None,
+        feed_health: Any = None,
     ) -> None:
         self._store = store
         self._budget = budget
@@ -92,6 +96,8 @@ class RiskEngine(_EngineSteps):
         self._live_check = live_check
         self._observe_only = observe_only
         self._scan_kill_verdicts = scan_kill_verdicts
+        self._slice_config = slice_config
+        self._feed_health = feed_health
         self._decisions: dict[str, RiskDecision] = {}
         # Breaker name -> order_hash of the order holding its admitted probe.
         self._probe_owners: dict[str, str] = {}
@@ -267,6 +273,7 @@ class RiskEngine(_EngineSteps):
         source: str = "paper",
         correlation_id: str = "desk",
         stage: Literal["ACCEPTED", "CONFIRMING"] = "ACCEPTED",
+        strategy_id: str | None = None,
     ) -> RiskDecision:
         """Run the R34 steps for one order; first failure wins.
 
@@ -283,7 +290,7 @@ class RiskEngine(_EngineSteps):
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
         order_hash = order_hash_for(order)
-        cache_key = self._cache_key(order, order_hash=order_hash, stage=stage)
+        cache_key = self._cache_key(order, order_hash=order_hash, stage=stage, strategy_id=strategy_id)
         cached = self._decisions.get(cache_key)
         if cached is not None:
             return cached
@@ -296,6 +303,7 @@ class RiskEngine(_EngineSteps):
             source=source,
             correlation_id=correlation_id,
             stage=stage,
+            strategy_id=strategy_id,
         )
         self._decisions[cache_key] = decision
         while len(self._decisions) > _DECISION_CACHE_MAX:
@@ -308,6 +316,7 @@ class RiskEngine(_EngineSteps):
         *,
         order_hash: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
+        strategy_id: str | None = None,
     ) -> str:
         """Cache key with a gate generation: ledger head plus live gate state.
 
@@ -318,7 +327,7 @@ class RiskEngine(_EngineSteps):
         """
         kill = self._killswitch.poll()
         return (
-            f"{stage}|{order_hash}|{order.approval_id or ''}"
+            f"{stage}|{order_hash}|{order.approval_id or ''}|{strategy_id or ''}"
             f"|{self._store.count()}"
             f"|{int(kill.active)}|{kill.source}|{kill.reason}"
             f"|{','.join(sorted(self._breakers.open_breakers()))}"
@@ -338,6 +347,7 @@ class RiskEngine(_EngineSteps):
         state: LedgerState,
         equity: int,
         probes: ProbeView,
+        strategy_id: str | None = None,
     ) -> _StepCtx:
         is_buy = order.side.value == "buy"
         ctx = _StepCtx(
@@ -363,6 +373,7 @@ class RiskEngine(_EngineSteps):
             equity=equity,
             approvals=self._approvals(),
             final_size=order.size_lamports if is_buy else None,
+            strategy_id=strategy_id,
         )
         ctx.approval_id = order.approval_id or None
         return ctx
@@ -378,6 +389,7 @@ class RiskEngine(_EngineSteps):
         source: str,
         correlation_id: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
+        strategy_id: str | None = None,
     ) -> RiskDecision:
         state = self._fold()
         self._breakers.sync_from_ledger()
@@ -398,8 +410,10 @@ class RiskEngine(_EngineSteps):
             state=state,
             equity=equity,
             probes=probes,
+            strategy_id=strategy_id,
         )
         try:
+            self._pre_walk_gates(ctx, state)
             walk_steps(self, ctx)
             confirm_holding(ctx)
             claim_probe(self._breakers, self._probe_owners, ctx, order_hash, probes)
@@ -450,6 +464,65 @@ class RiskEngine(_EngineSteps):
             status = "fail" if step == fail_key else ctx.evaluated.get(step, "skip")
             rows.append({"id": step, "status": status})
         return rows
+
+    def _pre_walk_gates(self, ctx: _StepCtx, state: LedgerState) -> None:
+        """Strategy kill and feed-health gates, before the slice check (RSK-02, RSK-03).
+
+        A killed strategy refuses buys on the existing ``kill_switch`` row
+        while exits still pass; the kill check runs before the slice check
+        so a killed strategy reports the kill first. A feed verdict that
+        fails closed refuses on the existing ``data_stale`` row.
+        """
+        if ctx.is_buy and ctx.strategy_id is not None:
+            if ctx.strategy_id in killed_strategies(self._store):
+                ctx.mark("kill_switch", "fail")
+                raise _Fail("kill_switch", f"strategy={ctx.strategy_id} killed")
+        if self._feed_health is not None and ctx.is_buy:
+            held = sum(1 for p in state.positions.values() if p.token_units > 0)
+            verdict = self._feed_health.check(self._mode, held_mints=held)
+            if verdict.blocks_entries():
+                ctx.mark("data_stale", "fail")
+                raise _Fail("data_stale", verdict.detail)
+
+    def note_live_failure(
+        self,
+        failure_class: str,
+        *,
+        ts_utc: str | None = None,
+        source: str = "paper",
+        correlation_id: str = "desk",
+    ) -> bool:
+        """Route one live failure class into the exec-error breaker (RSK-04).
+
+        Transient classes increment the breaker counter toward the existing
+        threshold. Any UNKNOWN immediately sets a halt that needs a human
+        clear and is never retried; returns True when a halt was set.
+        """
+        now = self._clock.now()
+        return self._breakers.note_live_failure(
+            failure_class,
+            now,
+            ts_utc=ts_utc or self._now_ts(),
+            source=source,
+            correlation_id=correlation_id,
+            on_unknown_halt=self._set_exec_unknown_halt,
+        )
+
+    def _set_exec_unknown_halt(self, *, ts_utc: str, source: str, correlation_id: str) -> None:
+        state = self._fold()
+        equity = self._equity_for_halts(state)
+        with _suppress_integrity():
+            self._store.append(
+                **self._halt_row(
+                    reason="exec_unknown",
+                    detail="UNKNOWN send outcome: halt until a human clears",
+                    equity=equity,
+                    day_start=int(state.day_start_equity_lamports),
+                    ts_utc=ts_utc,
+                    source=source,
+                    correlation_id=correlation_id,
+                )
+            )
 
     def note_tick(self, ts: float, *, ts_utc: str, source: str, correlation_id: str) -> None:
         """Record a fresh price for the DataStale breaker (feed hook for 04-08)."""
