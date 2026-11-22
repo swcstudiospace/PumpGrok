@@ -17,7 +17,8 @@ FIXTURE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "replay" 
 def _run(ticks: list[Tick], max_age: int = 600) -> list:
     strategy = NewLaunchSniperStrategy({"max_age_seconds": max_age})
     allocation = Allocation(10_000_000, {"new_launch_sniper": 10_000_000})
-    return StrategyRuntime(Tape.from_ticks(ticks), {"new_launch_sniper": strategy}, allocation).run()
+    runtime = StrategyRuntime(Tape.from_ticks(ticks), {"new_launch_sniper": strategy}, allocation)
+    return runtime.run()
 
 
 def test_at_age_bound_fires_past_bound_does_not() -> None:

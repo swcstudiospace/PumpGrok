@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 
 from pumpgrok.config.settings import ExitsSettings, FilterSettings
 from pumpgrok.core.idempotency import canonical_json
@@ -108,9 +108,7 @@ def _normalized_strategy(
             raise TypeError("strategy override keys must be non-empty str")
         if not isinstance(params, dict):
             raise TypeError(f"strategy {strategy_id!r} params must be a mapping")
-        normalized[strategy_id] = {
-            key: _normalized_leaf(value) for key, value in params.items()
-        }
+        normalized[strategy_id] = {key: _normalized_leaf(value) for key, value in params.items()}
     return normalized
 
 

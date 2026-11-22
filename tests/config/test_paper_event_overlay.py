@@ -23,14 +23,16 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_paper_event_toml_values() -> None:
-    raw = tomllib.load(open(PAPER_EVENT, "rb"))
+    with open(PAPER_EVENT, "rb") as handle:
+        raw = tomllib.load(handle)
     assert raw["execution"]["mode"] == "paper"
     assert raw["risk"]["max_open_positions"] == 6
     assert raw["risk"]["max_trades_per_day"] == 40
 
 
 def test_live_toml_unchanged() -> None:
-    raw = tomllib.load(open(LIVE, "rb"))
+    with open(LIVE, "rb") as handle:
+        raw = tomllib.load(handle)
     assert raw["risk"]["max_open_positions"] == 3
     assert raw["risk"]["max_trades_per_day"] == 20
 

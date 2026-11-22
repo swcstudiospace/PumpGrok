@@ -30,6 +30,4 @@ class MemeFilter:
             return False
         if tick.age_seconds < self.min_age_seconds:
             return False
-        if tick.curve_progress > self.max_curve_progress:
-            return False
-        return True
+        return not tick.curve_progress > self.max_curve_progress

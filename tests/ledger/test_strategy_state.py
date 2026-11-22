@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pumpgrok.ledger.strategy_state import read_open_positions, record_close, record_open
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.strategy_state import read_open_positions, record_close, record_open
 
 
 def _open_store(tmp_path: Path) -> LedgerStore:

@@ -42,6 +42,10 @@ def test_legacy_hashes_are_byte_identical_to_pre_strategy_digests() -> None:
 def test_empty_strategy_matches_absent_strategy_hash() -> None:
     """strategy=None and strategy={} both mean no overrides, one hash."""
     assert ParamSet().content_hash == ParamSet(strategy={}).content_hash
-    assert ParamSet(filter={"min_unique_buyers": 5}).content_hash == ParamSet(
-        filter={"min_unique_buyers": 5}, strategy={},
-    ).content_hash
+    assert (
+        ParamSet(filter={"min_unique_buyers": 5}).content_hash
+        == ParamSet(
+            filter={"min_unique_buyers": 5},
+            strategy={},
+        ).content_hash
+    )

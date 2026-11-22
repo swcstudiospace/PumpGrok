@@ -36,9 +36,7 @@ def test_adapter_parity_with_direct_replay(tmp_path: Path) -> None:
 
 def test_legacy_adapter_writes_no_attribution_refs(tmp_path: Path) -> None:
     filter_cfg = CandidateParams().filter_settings()
-    run_legacy(
-        SMOKE, filter_cfg, seed=20260101, ledger_path=tmp_path / "legacy.sqlite"
-    )
+    run_legacy(SMOKE, filter_cfg, seed=20260101, ledger_path=tmp_path / "legacy.sqlite")
     store = LedgerStore(str(tmp_path / "legacy.sqlite"))
     try:
         notes = store.read(types=["JournalNote"], limit=None)

@@ -85,9 +85,7 @@ def load_tape(dataset_dir: str | Path) -> Tape:
                 mint=str(item["mint"]),
                 price_lamports=int(item["price_lamports"]),
                 buyers=int(item.get("buyers", 0)),
-                created_ts=(
-                    None if item.get("created_ts") is None else float(item["created_ts"])
-                ),
+                created_ts=(None if item.get("created_ts") is None else float(item["created_ts"])),
                 curve_progress=float(item.get("curve_progress", 0.0)),
             )
         )

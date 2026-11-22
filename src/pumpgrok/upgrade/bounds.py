@@ -57,6 +57,7 @@ class Bounds:
     exits: dict[str, KeyBound]
     strategy: dict[str, dict[str, KeyBound]] = field(default_factory=dict)
 
+
 def default_bounds_path() -> Path:
     """In-package upgrade_bounds.toml path."""
     return Path(__file__).resolve().parents[1] / "config" / "upgrade_bounds.toml"
@@ -137,8 +138,7 @@ def _check_value(label: str, key: str, value: Any, bound: KeyBound) -> None:
         )
     if value < bound.minimum or value > bound.maximum:
         raise OutOfBoundsError(
-            f"out of bounds: {label}.{key}={value!r} outside "
-            f"[{bound.minimum}, {bound.maximum}]"
+            f"out of bounds: {label}.{key}={value!r} outside [{bound.minimum}, {bound.maximum}]"
         )
 
 

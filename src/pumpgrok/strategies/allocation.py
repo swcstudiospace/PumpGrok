@@ -60,5 +60,6 @@ class Allocation:
                 f"over-slice spend: {strategy_id!r} requested {amount_lamports} "
                 f"of {remaining} remaining"
             )
-        self._spent_lamports[strategy_id] = self._spent_lamports.get(strategy_id, 0) + amount_lamports
+        spent = self._spent_lamports.get(strategy_id, 0) + amount_lamports
+        self._spent_lamports[strategy_id] = spent
         return self.available(strategy_id)

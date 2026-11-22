@@ -6,6 +6,7 @@ import ast
 import importlib
 from pathlib import Path
 
+from pumpgrok.strategies import runtime as runtime_module
 from pumpgrok.strategies.allocation import Allocation
 from pumpgrok.strategies.base import StrategyContext, bounds_for
 from pumpgrok.strategies.runtime import StrategyRuntime
@@ -26,9 +27,12 @@ def test_no_llm_imports_under_strategies() -> None:
                 for alias in node.names:
                     if alias.name.startswith(LLM_ROOTS):
                         offenders.append(f"{path.name}: {alias.name}")
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                if node.module.startswith(LLM_ROOTS):
-                    offenders.append(f"{path.name}: {node.module}")
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith(LLM_ROOTS)
+            ):
+                offenders.append(f"{path.name}: {node.module}")
     assert offenders == []
 
 
@@ -77,10 +81,7 @@ def test_idle_runtime_makes_zero_calls() -> None:
 def test_grok_gateway_raises_on_miss_is_not_reachable_from_strategies() -> None:
     # The strategies package has no attribute that resolves to the gateway
     # backend: importing strategies must not load pumpgrok.grok.
-    import pumpgrok.strategies.runtime as runtime_module
-
     assert not hasattr(runtime_module, "grok_gateway")
-    import sys
-
-    assert "pumpgrok.grok.client" not in sys.modules or True  # informational only
+    # (Intentionally no sys.modules assertion here: test ordering could load
+    # the gateway client first. The hasattr and find_spec asserts above carry it.)
     assert importlib.util.find_spec("pumpgrok.grok") is not None  # the package exists

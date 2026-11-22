@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from pumpgrok.strategies.allocation import Allocation
-from pumpgrok.strategies.base import StrategyContext
 from pumpgrok.strategies.momentum_breakout import MomentumBreakoutStrategy
 from pumpgrok.strategies.runtime import StrategyRuntime
 from pumpgrok.strategies.tape import Tape, Tick, load_tape
@@ -24,8 +23,14 @@ def _run(ticks: list[Tick]) -> list:
 
 
 def test_one_tick_below_no_fire_at_bound_fire() -> None:
-    below = [Tick(ts=1.0, mint="M", price_lamports=100_000), Tick(ts=2.0, mint="M", price_lamports=109_999)]
-    at = [Tick(ts=1.0, mint="M", price_lamports=100_000), Tick(ts=2.0, mint="M", price_lamports=110_000)]
+    below = [
+        Tick(ts=1.0, mint="M", price_lamports=100_000),
+        Tick(ts=2.0, mint="M", price_lamports=109_999),
+    ]
+    at = [
+        Tick(ts=1.0, mint="M", price_lamports=100_000),
+        Tick(ts=2.0, mint="M", price_lamports=110_000),
+    ]
     assert _run(below) == []
     intents = _run(at)
     assert len(intents) == 1
@@ -42,10 +47,12 @@ def test_fixture_produces_one_asserted_fill() -> None:
     # The prefix without the firing tick produces no fill.
     strategy2 = MomentumBreakoutStrategy({"breakout_bps": 1000})
     allocation2 = Allocation(10_000_000, {"momentum_breakout": 10_000_000})
-    assert (
-        StrategyRuntime(Tape.from_ticks(list(tape.ticks[:2])), {"momentum_breakout": strategy2}, allocation2).run()
-        == []
+    runtime2 = StrategyRuntime(
+        Tape.from_ticks(list(tape.ticks[:2])),
+        {"momentum_breakout": strategy2},
+        allocation2,
     )
+    assert runtime2.run() == []
 
 
 def test_look_ahead_canary() -> None:

@@ -19,7 +19,7 @@ def test_exactly_four_ids() -> None:
         "new_launch_sniper",
         "mean_reversion",
     )
-    assert STRATEGY_IDS == registered_ids()
+    assert registered_ids() == STRATEGY_IDS
     assert len(set(STRATEGY_IDS)) == 4
 
 

@@ -23,14 +23,14 @@ from typing import Any
 
 from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.ledger.store import LedgerStore
- 
+
 __all__ = [
     "CorruptStrategyState",
+    "read_attribution_refs",
+    "read_open_positions",
     "record_attribution_ref",
     "record_close",
     "record_open",
-    "read_attribution_refs",
-    "read_open_positions",
 ]
 
 LEGACY_STRATEGY_ID = "legacy_screening"
@@ -206,5 +206,3 @@ def read_open_positions(store: LedgerStore, strategy_id: str) -> list[dict[str, 
         {"strategy_id": strategy_id, "mint": mint, "entry_price_lamports": price}
         for mint, price in open_positions.items()
     ]
-
-

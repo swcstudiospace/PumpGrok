@@ -8,7 +8,9 @@ adding a fifth strategy is a code change visible in review.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+import importlib
+from collections.abc import Callable
+from typing import Any, cast
 
 from pumpgrok.strategies.base import STRATEGY_IDS, bounds_for
 
@@ -34,15 +36,18 @@ def get_strategy_bounds(strategy_id: str) -> dict[str, tuple[int, int]]:
 
 def resolve_factory(strategy_id: str) -> Callable[..., Any]:
     """Import and return the concrete strategy class for an id (never silent)."""
-    import importlib
 
     if strategy_id not in STRATEGY_IDS:
         raise ValueError(f"unknown strategy id: {strategy_id!r}")
-    module_name = "pumpgrok.strategies.legacy" if strategy_id == "legacy_screening" else {
-        "momentum_breakout": "pumpgrok.strategies.momentum_breakout",
-        "new_launch_sniper": "pumpgrok.strategies.new_launch_sniper",
-        "mean_reversion": "pumpgrok.strategies.mean_reversion",
-    }[strategy_id]
+    module_name = (
+        "pumpgrok.strategies.legacy"
+        if strategy_id == "legacy_screening"
+        else {
+            "momentum_breakout": "pumpgrok.strategies.momentum_breakout",
+            "new_launch_sniper": "pumpgrok.strategies.new_launch_sniper",
+            "mean_reversion": "pumpgrok.strategies.mean_reversion",
+        }[strategy_id]
+    )
     module = importlib.import_module(module_name)
     cls_name = {
         "legacy_screening": "LegacyScreeningStrategy",
@@ -53,4 +58,4 @@ def resolve_factory(strategy_id: str) -> Callable[..., Any]:
     factory = getattr(module, cls_name, None)
     if factory is None:
         factory = module
-    return factory
+    return cast(Callable[..., Any], factory)

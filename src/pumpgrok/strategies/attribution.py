@@ -29,9 +29,7 @@ class AttributionFold:
         return sum(self.per_strategy.values())
 
 
-def fold_attribution(
-    per_strategy: dict[str, int], desk_total_lamports: int
-) -> AttributionFold:
+def fold_attribution(per_strategy: dict[str, int], desk_total_lamports: int) -> AttributionFold:
     """Fold per-strategy P&L and prove the folder equals the desk total.
 
     Raises ValueError when the fold and the desk total disagree, or when

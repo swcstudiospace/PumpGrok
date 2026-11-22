@@ -18,6 +18,7 @@ or the risk engine. Money is integer lamports throughout.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import inspect
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -25,9 +26,9 @@ from typing import Any, Protocol, runtime_checkable
 from pumpgrok.core.idempotency import canonical_json
 
 __all__ = [
-    "Intent",
     "LEGACY_STRATEGY_ID",
     "STRATEGY_IDS",
+    "Intent",
     "StrategyContext",
     "StrategyProtocol",
     "bounds_for",
@@ -70,8 +71,6 @@ def code_digest(strategy_id: str) -> str:
     version id stays deterministic in every environment; the registry and
     runtime import the modules directly and fail closed there.
     """
-    import importlib
-
     module_names = {
         "momentum_breakout": "pumpgrok.strategies.momentum_breakout",
         "new_launch_sniper": "pumpgrok.strategies.new_launch_sniper",
@@ -83,7 +82,7 @@ def code_digest(strategy_id: str) -> str:
     try:
         module = importlib.import_module(name)
         source = inspect.getsource(module)
-    except Exception:  # noqa: BLE001 - best-effort digest only
+    except Exception:
         return ""
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
@@ -135,9 +134,7 @@ class StrategyProtocol(Protocol):
     def decide(self, context: StrategyContext) -> Intent | None: ...
 
 
-def strategy_version_id(
-    strategy_id: str, params: dict[str, Any], code: str | None = None
-) -> str:
+def strategy_version_id(strategy_id: str, params: dict[str, Any], code: str | None = None) -> str:
     """Version id for one (id, params, code) triple (identity only).
 
     sha256 over the canonical id, params and code digest. The code
