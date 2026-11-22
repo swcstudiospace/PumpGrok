@@ -1,3 +1,9 @@
+---
+phase: 17-risk-hardening
+verified: 2026-11-22
+status: passed
+score: 7/7 plans summarized
+---
 # Phase 17 Verification — Risk hardening
 
 **Phase:** 17 | **Wave 1:** 17-01, 17-02 | **Wave 2:** 17-03, 17-04 | **Wave 3:** 17-05 | **Wave 4:** 17-06 | **Wave 5:** 17-07
