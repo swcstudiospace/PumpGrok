@@ -204,7 +204,7 @@ Every v4 requirement id from REQUIREMENTS.md traced to evidence. An id with no e
 
 - PRC-08: 19-08 deferred human-gated (see 19-08-SUMMARY.md); waiver already absent, landing pending human approval.
 
-## Final gate proof (19-09, committed tree 4070d42, 2026-11-22)
+## Final gate proof (19-09, committed tree ca6cff7, 2026-11-22)
 
 - `make lint` exit 0; `make typecheck` exit 0; `make test` exit 0 (coverage 90.05%);
   `make cov` exit 0; `make test-all` exit 0; `make audit` exit 0; `./scripts/check.sh` exit 0;
@@ -214,4 +214,6 @@ Every v4 requirement id from REQUIREMENTS.md traced to evidence. An id with no e
   (measured twice from clean working directories).
 - trading-smoke events.hash before == after == bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
   (matches tests/fixtures/replay/pins/trading_smoke.json).
-- Phase 19 CHANGELOG lines recorded in 19-09-SUMMARY.md for the journal seat (journal owns CHANGELOG.md).
+- Phase 19 CHANGELOG lines are already present in CHANGELOG.md (journal commit 2d63d76).
+- Gap: CHANGELOG.md has no Phase 18 hash-pair lines (journal-owned, owed by the journal
+  seat). All other phases 11-17 and 19 pass the close loop.
