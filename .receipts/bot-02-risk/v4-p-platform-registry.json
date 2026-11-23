@@ -59,6 +59,6 @@
     "Not reviewed by Greptile; no 5/5 claim.",
     "Owner review pending on the PR; approved_by set to the owner-selected approver."
   ],
-  "rollback_plan": "Revert 7f37a4d; registry is additive-only, no other code imports platforms.py.",
+  "rollback_plan": "Revert 7f37a4d with git revert. Recovery time under 5 minutes. Data implications none: registry is additive-only and nothing imports platforms.py, so no ledger or config state changes.",
   "approved_by": "human:SomeRandmGuyy"
 }
