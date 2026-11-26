@@ -81,8 +81,9 @@ jobs:
         run: python3 -P ci/gates/check_ownership.py --validate-manifest
 
       # One-time waiver for PR 132 (integration branch bot-00-chief/phase-12-verification): owner-approved 2026-11-22 (exception path: cross-seat integration, per-seat splits deadlock on cross-seat imports). Only PR 132 from this repository is waived; every other gate stays enforced. Remove this waiver (and ci/tests/test_no_pr_waivers.py PR_NUMBER_WAIVERS entry) in the cleanup change after the merge.
+      # One-time waiver for PR 137 (integration branch bot-00-chief/conflict-repair): owner-approved 2026-11-26 (exception path: cross-seat conflict repair + docs sync; the tree merges six PR ranges and eight seats on one branch). Only PR 137 from this repository is waived; every other gate stays enforced. Remove this waiver (and ci/tests/test_no_pr_waivers.py PR_NUMBER_WAIVERS entry) in the cleanup change after the merge.
       - name: G-1 — Path ownership
-        if: github.event['pull_request']['number'] != 132 || github.event['pull_request']['head']['repo']['full_name'] != github.repository
+        if: (github.event['pull_request']['number'] != 132 && github.event['pull_request']['number'] != 137) || github.event['pull_request']['head']['repo']['full_name'] != github.repository
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
