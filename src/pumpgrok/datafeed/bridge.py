@@ -2,6 +2,8 @@
 
 Imports events models only: never the supervisor, never a network client.
 The publisher is injected, so tests pass a recording fake.
+
+Also bridges read-only curve observations onto the existing event bus.
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pumpgrok.datafeed.events import (
+    CurveObservation,
     CurveTick,
     DatafeedEvent,
     GapEvent,
@@ -17,7 +20,9 @@ from pumpgrok.datafeed.events import (
     TokenCreated,
     TradeSeen,
 )
+from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
+from pumpgrok.replay.live_recorder import LiveRecorder
 
 Publisher = Callable[[Event], None]
 
@@ -56,3 +61,20 @@ def publish(record: DatafeedEvent, publisher: Publisher) -> Event:
     event = to_bus_event(record)
     publisher(event)
     return event
+
+
+class ObservationBridge:
+    def __init__(self, *, bus: EventBus, recorder: LiveRecorder) -> None:
+        self.bus = bus
+        self.recorder = recorder
+
+    async def publish(self, observation: CurveObservation) -> None:
+        observation.validate()
+        event = Event(
+            kind=EventKind.curve_tick,
+            entity_id=observation.mint,
+            payload=FrozenPayload(observation.replay_tick()),
+            occurred_at=observation.ts_utc,
+        )
+        self.recorder.record(observation)
+        await self.bus.publish(event)

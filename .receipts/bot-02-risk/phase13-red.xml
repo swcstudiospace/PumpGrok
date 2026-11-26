@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.079" timestamp="2026-11-10T14:52:24.499584+00:00" hostname="vps"><testcase classname="tests.datafeed.test_bridge" name="test_observation_is_recorded_before_real_bus_publication" time="0.004"><failure message="assert None is not None">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-175/test_observation_is_recorded_b0')
+
+    async def test_observation_is_recorded_before_real_bus_publication(tmp_path: Path) -&gt; None:
+        clock = FixtureClock(1_767_225_600.0)
+        observation = _observation(clock)
+        bus = InspectingBus(clock=clock, events_path=tmp_path / "events.jsonl")
+        recorder = LiveRecorder(tmp_path, clock=clock)
+        bridge = ObservationBridge(bus=bus, recorder=recorder)
+    
+        await bridge.publish(observation)
+    
+        published = bus.pending_p2(EventKind.curve_tick, observation.mint)
+&gt;       assert published is not None
+E       assert None is not None
+
+tests/datafeed/test_bridge.py:59: AssertionError</failure></testcase></testsuite></testsuites>

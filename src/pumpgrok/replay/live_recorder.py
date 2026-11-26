@@ -1,137 +1,123 @@
-"""Live recorder (REC-01, REC-02, T-13-01b/c).
-
-Writes ticks plus gaps into a dataset directory; ``seal`` writes
-``manifest.json`` with the sha256 of every listed file so the sealed
-dataset passes :func:`pumpgrok.replay.fixtures.load_dataset` unchanged.
-Ticks land in ``events.jsonl`` (the name ``load_dataset`` requires);
-gaps land in ``gaps.jsonl``. Non-decreasing ``ts_utc`` is enforced at
-write time; a torn trailing line is truncated on startup and recorded.
-No back-fill, no interpolation, no external history. Never opens
-``var/ledger.sqlite``. Writes go through tmp plus ``os.replace``.
-"""
-
-from __future__ import annotations
+"""Durably record curve observations in the existing replay dataset format."""
 
 import hashlib
 import json
 import os
-import re
+import tempfile
 from pathlib import Path
-from typing import Any
 
-from pumpgrok.datafeed.events import CurveTick, GapEvent
-from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
+from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.replay.clock import Clock
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest
 
-GAPS_NAME = "gaps.jsonl"
-_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+def _sync_directory(path: Path) -> None:
+    """Persist directory entries before acknowledging their creation."""
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
-def validate_dataset_name(name: str) -> str:
-    """Mirror ``FixtureManifest.dataset``: one plain name, no separators or '..'."""
-    if not _NAME_RE.fullmatch(name) or ".." in name:
-        raise ValueError("dataset must be a plain name without separators or '..'")
-    return name
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _atomic_write(path: Path, data: bytes) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
+def _ensure_directory(path: Path) -> None:
+    """Create each missing ancestor and persist its entry in its parent."""
+    if path.is_dir():
+        return
+    _ensure_directory(path.parent)
+    try:
+        path.mkdir()
+    except FileExistsError:
+        if not path.is_dir():
+            raise
+    else:
+        _sync_directory(path.parent)
 
 
 class LiveRecorder:
-    """Append ticks/gaps; seal into a self-verifying dataset."""
+    """Append ticks before publication and seal their exact bytes with a manifest."""
 
-    def __init__(self, dataset_dir: Path) -> None:
-        self._dir = Path(dataset_dir)
-        self._dir.mkdir(parents=True, exist_ok=True)
-        self._notes: list[str] = []
-        self._recover(EVENTS_NAME)
-        self._recover(GAPS_NAME)
-        self._last_ts: float | None = None
-        self._seed_last_ts()
+    def __init__(self, dataset_dir: Path, *, clock: Clock) -> None:
+        self.dataset_dir = dataset_dir
+        self.clock = clock
+        self._first_utc: str | None = None
+        self._last_utc: str | None = None
+        self._last_epoch: float | None = None
+        self._sources: dict[str, str] = {}
+        self._failed = False
+        self._sealed = False
 
-    @property
-    def notes(self) -> tuple[str, ...]:
-        return tuple(self._notes)
+    def record(self, observation: CurveObservation) -> None:
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        epoch = observation.validate()
+        if self._last_epoch is not None and epoch < self._last_epoch:
+            raise ValueError("observation timestamps must not go backwards")
+        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        data = (json.dumps(observation.replay_tick(), separators=(",", ":")) + "\n").encode("utf-8")
+        try:
+            _ensure_directory(self.dataset_dir)
+            if (self.dataset_dir / MANIFEST_NAME).exists():
+                raise FileExistsError("dataset is already sealed")
+            if self._first_utc is None and any(self.dataset_dir.glob("*.jsonl")):
+                raise FileExistsError("dataset already contains JSONL files")
+            mode = "xb" if self._first_utc is None else "ab"
+            with (self.dataset_dir / EVENTS_NAME).open(mode) as stream:
+                if stream.write(data) != len(data):
+                    raise OSError("incomplete observation write")
+                stream.flush()
+                os.fsync(stream.fileno())
+            _sync_directory(self.dataset_dir)
+        except OSError:
+            self._failed = True
+            raise
+        if self._first_utc is None:
+            self._first_utc = observation.ts_utc
+        self._last_utc = observation.ts_utc
+        self._last_epoch = epoch
+        self._sources[observation.source] = observation.source
 
-    def _recover(self, name: str) -> None:
-        """Truncate a torn trailing line to the last complete line; record it."""
-        path = self._dir / name
-        if not path.is_file():
-            return
-        data = path.read_bytes()
-        if not data or data.endswith(b"\n"):
-            return
-        last_newline = data.rfind(b"\n")
-        kept = data[: last_newline + 1] if last_newline >= 0 else b""
-        removed = len(data) - len(kept)
-        _atomic_write(path, kept)
-        self._notes.append(f"recovered {name}: truncated {removed} torn bytes")
-
-    def _seed_last_ts(self) -> None:
-        path = self._dir / EVENTS_NAME
-        if not path.is_file():
-            return
-        for line in path.read_text(encoding="utf-8").splitlines():
-            try:
-                record = json.loads(line)
-                self._last_ts = parse_ts_utc(str(record["ts_utc"]))
-            except (ValueError, KeyError):
-                continue
-
-    def _append(self, name: str, record: dict[str, Any]) -> None:
-        path = self._dir / name
-        line = json.dumps(record, sort_keys=True).encode() + b"\n"
-        existing = path.read_bytes() if path.is_file() else b""
-        _atomic_write(path, existing + line)
-
-    def record_tick(self, tick: CurveTick) -> None:
-        stamp = parse_ts_utc(tick.ts_utc)
-        if self._last_ts is not None and stamp < self._last_ts:
-            raise ValueError("tick timestamps must be non-decreasing")
-        record = tick.model_dump(mode="json")
-        self._append(EVENTS_NAME, record)
-        self._last_ts = stamp
-
-    def record_gap(self, gap: GapEvent) -> None:
-        self._append(GAPS_NAME, gap.model_dump(mode="json"))
-
-    def seal(self, dataset_name: str, *, seed_hint: int = 0) -> Path:
-        """Write manifest.json listing every data file; return the dataset dir."""
-        validate_dataset_name(dataset_name)
-        sha: dict[str, str] = {}
-        ticks_path = self._dir / EVENTS_NAME
-        if ticks_path.is_file():
-            sha[EVENTS_NAME] = _sha256(ticks_path.read_bytes())
-        gaps_path = self._dir / GAPS_NAME
-        if gaps_path.is_file():
-            sha[GAPS_NAME] = _sha256(gaps_path.read_bytes())
-        if not sha:
-            raise ValueError("nothing recorded; seal refuses an empty dataset")
-        first = last = ""
-        if ticks_path.is_file():
-            lines = ticks_path.read_text(encoding="utf-8").splitlines()
-            if lines:
-                first = str(json.loads(lines[0])["ts_utc"])
-                last = str(json.loads(lines[-1])["ts_utc"])
-        if not first:
-            stamp = format_ts_utc(0.0)
-            first = last = stamp
-        manifest = FixtureManifest(
-            dataset=dataset_name,
-            recorded_from_utc=first,
-            recorded_to_utc=last,
-            seed_hint=seed_hint,
-            sources={"recorder": "live_recorder"},
-            sha256=sha,
-            notes="; ".join(self._notes),
-        )
-        payload = json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True).encode()
-        _atomic_write(self._dir / MANIFEST_NAME, payload)
-        return self._dir
+    def seal(self) -> None:
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if self._first_utc is None or self._last_utc is None:
+            raise ValueError("cannot seal a dataset without observations")
+        linked = False
+        try:
+            if any(path.name != EVENTS_NAME for path in self.dataset_dir.glob("*.jsonl")):
+                raise ValueError("dataset contains an unlisted JSONL file")
+            data = (self.dataset_dir / EVENTS_NAME).read_bytes()
+            manifest = FixtureManifest(
+                dataset=self.dataset_dir.name,
+                recorded_from_utc=self._first_utc,
+                recorded_to_utc=self._last_utc,
+                seed_hint=0,
+                sources=self._sources,
+                sha256={EVENTS_NAME: hashlib.sha256(data).hexdigest()},
+                notes="Read-only curve observations",
+            )
+            encoded = (manifest.model_dump_json(indent=2) + "\n").encode("utf-8")
+            with tempfile.NamedTemporaryFile(dir=self.dataset_dir, delete=False) as stream:
+                temporary = Path(stream.name)
+                try:
+                    if stream.write(encoded) != len(encoded):
+                        raise OSError("incomplete manifest write")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                    os.link(temporary, self.dataset_dir / MANIFEST_NAME)
+                    linked = True
+                finally:
+                    temporary.unlink(missing_ok=True)
+            _sync_directory(self.dataset_dir)
+        except BaseException:
+            self._failed = True
+            if linked:
+                try:
+                    (self.dataset_dir / MANIFEST_NAME).unlink()
+                    _sync_directory(self.dataset_dir)
+                except BaseException as cleanup_error:
+                    raise RuntimeError(
+                        "manifest rollback durability is indeterminate"
+                    ) from cleanup_error
+            raise
+        self._sealed = True
