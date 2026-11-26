@@ -137,3 +137,7 @@ def setup_logging(
     setattr(handler, HANDLER_MARK, True)
     root.addHandler(handler)
     root.setLevel(logging.INFO)
+    # httpx and httpcore log every request URL at INFO, and a URL can carry a provider path
+    # token or a key parameter. Their INFO lines are dropped here; WARNING and above still pass.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)

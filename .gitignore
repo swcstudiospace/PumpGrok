@@ -15,6 +15,7 @@ var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
-
 .coverage
 coverage.xml
+!.receipts/bot-02-risk/00057-omega-ci-runners.json
+!.receipts/bot-02-risk/l1-p1-risk.json

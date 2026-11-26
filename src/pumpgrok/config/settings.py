@@ -28,7 +28,8 @@ import re
 import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Literal, get_args
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import (
@@ -74,8 +75,6 @@ from pumpgrok.config.sections.v4 import (
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.risk.limits import EngineLimits
 
-# The section classes live in config/sections. They stay importable from this module because the
-# engine, backtest, replay and test modules import them from pumpgrok.config.settings by name.
 __all__ = [
     "BacktestV2Settings",
     "DataSettings",
@@ -107,6 +106,257 @@ __all__ = [
     "StrategiesSettings",
     "WalletSettings",
 ]
+
+
+def _require_scheme(url: str, schemes: tuple[str, ...], setting: str) -> str:
+    """Refuse a URL off the TLS schemes or carrying a credential (value never echoed).
+
+    A bad scheme raises ValueError, which pydantic reports by location and type only. A
+    credential raises ConfigError naming ``setting``.
+    """
+    if urlsplit(url).scheme.lower() not in schemes:
+        raise ValueError(f"URL must use {' or '.join(s + '://' for s in schemes)}")
+    _refuse_credential_url(url, setting)
+    return url
+
+
+class DataSettings(BaseModel):
+    """Pump.fun REST plus PumpPortal websocket ingress (D8)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rest_url: str = "https://frontend-api.pump.fun"
+    ws_url: str = "wss://pumpportal.fun/api/data"
+    ws_max_queue: int = Field(default=16, ge=1)
+    request_timeout: float = 10.0
+
+    @field_validator("rest_url")
+    @classmethod
+    def _tls_rest_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https",), "data.rest_url")
+
+    @field_validator("ws_url")
+    @classmethod
+    def _tls_ws_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https", "wss"), "data.ws_url")
+
+
+class RpcSettings(BaseModel):
+    """Solana JSON-RPC failover list. Endpoints are keyless URLs only.
+
+    Paid-provider keys travel in ``api_key`` and are sent as a header;
+    key-bearing endpoint values are refused at startup (T-02-01).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    endpoints: list[str] = Field(default_factory=lambda: ["https://api.mainnet-beta.solana.com"])
+    api_key: SecretStr = SecretStr("")
+
+    @field_validator("endpoints")
+    @classmethod
+    def _tls_endpoints(cls, v: list[str]) -> list[str]:
+        for endpoint in v:
+            _require_scheme(endpoint, ("https", "wss"), "rpc.endpoints")
+        return v
+
+
+class GrokSettings(BaseModel):
+    """x.ai chat completions (R48). Secrets arrive via env only."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    base_url: str = "https://api.x.ai/v1"
+    strong_model: str = "grok-4.3"
+    strong_effort: str = "low"
+    fast_model: str = "grok-4.20-0309-non-reasoning"
+    api_key: SecretStr = SecretStr("")
+
+    @field_validator("base_url")
+    @classmethod
+    def _tls_base_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https",), "grok.base_url")
+
+
+class JupiterSettings(BaseModel):
+    """Jupiter Swap V2 quote endpoint, informational only (R44, R38)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    quote_url: str = "https://api.jup.ag/swap/v2/order"
+
+    @field_validator("quote_url")
+    @classmethod
+    def _tls_quote_url(cls, v: str) -> str:
+        return _require_scheme(v, ("https", "wss"), "jupiter.quote_url")
+
+
+class FilterSettings(BaseModel):
+    """Launch-monitor admission gates (vendor FilterConfig, ASCII codes)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    min_unique_buyers: int = Field(default=5, ge=0)
+    max_curve_progress: float = Field(default=0.40, ge=0)
+    require_metadata: bool = True
+    min_age_seconds: float = Field(default=120.0, ge=0)
+    max_risk_score: float = Field(default=7.0, ge=0)
+    min_total_score: float = Field(default=0.65, ge=0)
+    block_creator_after_rugs: int = Field(default=1, ge=0)
+    rug_loss_pct: float = Field(default=60.0, ge=0)
+    one_position_per_creator: bool = True
+    forget_creators_after_days: float = Field(default=30.0, ge=0)
+
+
+class ScoringWeights(BaseModel):
+    """Component weights; must sum to 1 downstream (vendor ScoringWeights)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    audit: float = 0.30
+    narrative: float = 0.25
+    timing: float = 0.15
+    metrics: float = 0.30
+
+
+class ScoringSettings(BaseModel):
+    """Engine scoring knobs (vendor ScoringConfig)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    weights: ScoringWeights = Field(default_factory=ScoringWeights)
+    timing_cache_seconds: float = Field(default=900.0, ge=0)
+
+
+class ExitsSettings(BaseModel):
+    """Exit-rule thresholds. Separate from ``risk`` (Pitfall 15, R20)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stop_loss_pct: float = Field(default=30.0, ge=0)
+    take_profit_pct: float = Field(default=120.0, ge=0)
+    trailing_stop_pct: float = Field(default=35.0, ge=0)
+    max_hold_seconds: float = Field(default=3600.0, ge=0)
+    stop_loss_poll_seconds: float = Field(default=15.0, ge=0)
+
+
+class SafetyThresholds(BaseModel):
+    """Score-report check thresholds (TOOL-003; REVIEW defaults from agents/risk.md)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    transfer_tax_hard_fail_pct: float = Field(default=10.0, ge=0)
+    transfer_tax_warn_pct: float = Field(default=5.0, ge=0)
+    top10_concentration_warn_pct: float = Field(default=20.0, ge=0)
+    top10_concentration_fail_pct: float = Field(default=25.0, ge=0)
+    liquidity_multiple_min: float = Field(default=10.0, ge=0)
+    liquidity_multiple_recommended: float = Field(default=20.0, ge=0)
+    lp_lock_min_days: float = Field(default=180.0, ge=0)
+    creator_share_veto: float = Field(default=0.25, ge=0)
+    top5_share_veto: float = Field(default=0.80, ge=0)
+    kill_below_score: float = Field(default=40.0, ge=0)
+    conditional_below_score: float = Field(default=70.0, ge=0)
+
+
+class SafetySettings(BaseModel):
+    """Safety scoring knobs (TOOL-003). Secrets never live here (STRUCT-008)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    thresholds: SafetyThresholds = Field(default_factory=SafetyThresholds)
+
+
+class OpsSettings(BaseModel):
+    """Process-lifetime state paths (vendor OpsConfig subset, Phase 2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reputation_path: str = "var/reputation.json"
+
+
+class NotifySettings(BaseModel):
+    """Human alert destinations (TOOL-006, R39).
+
+    ``allowlist`` holds Telegram chat ids and webhook URLs; empty means
+    stdout and file only. The Telegram token travels via env
+    ``PUMPGROK_TELEGRAM_TOKEN`` only, never TOML and never this model.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    allowlist: list[str] = Field(default_factory=list)
+
+
+_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+_BASE58_INDEX = {char: index for index, char in enumerate(_BASE58_ALPHABET)}
+_PUBLIC_KEY_BYTES = 32
+# A 32-byte value encodes to at most 44 base58 characters, so longer input is
+# refused before any big-integer arithmetic.
+_PUBLIC_KEY_MAX_CHARS = 44
+
+
+def _base58_decode(text: str) -> bytes:
+    """Decode base58 with the stdlib; ValueError on any character outside the alphabet.
+
+    Each leading '1' stands for one zero byte.
+    """
+    number = 0
+    for char in text:
+        digit = _BASE58_INDEX.get(char)
+        if digit is None:
+            raise ValueError("character outside the base58 alphabet")
+        number = number * 58 + digit
+    leading_zeros = len(text) - len(text.lstrip("1"))
+    body = number.to_bytes((number.bit_length() + 7) // 8, "big")
+    return b"\x00" * leading_zeros + body
+
+
+def _is_public_key_text(text: str) -> bool:
+    """True when text is base58 and decodes to exactly 32 bytes; never raises."""
+    if len(text) > _PUBLIC_KEY_MAX_CHARS:
+        return False
+    try:
+        return len(_base58_decode(text)) == _PUBLIC_KEY_BYTES
+    except ValueError:
+        return False
+
+
+class PlatformSettings(BaseModel):
+    """Declares what the desk trades on. It selects no endpoint and changes no mode.
+
+    Live stays refused by the live gate.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    chain: Literal["solana"] = "solana"
+    venue: Literal["pumpfun-bonding-curve"] = "pumpfun-bonding-curve"
+    execution: Literal["paper"] = "paper"
+    quote_only: tuple[Literal["jupiter-swap-v2"], ...] = ("jupiter-swap-v2",)
+
+
+class WalletSettings(BaseModel):
+    """Wallet allowlist of PUBLIC KEYS only (base58, exactly 32 bytes each).
+
+    Seeds, private keys and keypairs are never valid here. A failing entry is
+    reported by its index alone; its value is never echoed.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    allowlist: tuple[str, ...] = ()
+
+    @field_validator("allowlist")
+    @classmethod
+    def _validate_allowlist(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        """Every entry must be a base58 string that decodes to exactly 32 bytes."""
+        for index, entry in enumerate(v):
+            if not _is_public_key_text(entry):
+                raise ValueError(f"allowlist entry {index} is not a 32-byte base58 public key")
+        return v
+
+
+Mode = Literal["paper", "live"]
 
 OVERLAY_PROFILES: tuple[str, str, str] = ("dev", "paper", "live")
 DEFAULT_PROFILE = "paper"
@@ -149,6 +399,37 @@ class ConfigError(RuntimeError):
             "settings are not fit to start:\n"
             + "\n".join(f"- {problem}" for problem in self.problems)
         )
+
+
+# Query parameter or path-style names that carry a credential: api-key, apikey, token, secret,
+# key, password and suffixed forms (x-api-key, access_token, client_secret). A separator must
+# precede the name, so innocent words such as monkey or tokenizer do not match.
+_CREDENTIAL_PARAM_RE = re.compile(
+    r"(?i)(?:^|[-_])(?:api[-_]?key|apikey|token|secret|key|password|passwd|pwd|auth)$"
+)
+# A long opaque token: 24+ URL-safe characters holding both a letter and a digit. Provider keys
+# ride in path segments or parameter values; plain words and short version segments do not match.
+_OPAQUE_TOKEN_RE = re.compile(r"(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}")
+
+
+def _refuse_credential_url(url: str, setting: str) -> None:
+    """Refuse a URL that carries a credential: userinfo, a key parameter or an opaque token.
+
+    Raises ConfigError naming ``setting`` only. It is a ConfigError rather than ValueError so
+    pydantic does not copy the rejected URL into its ValidationError text.
+    """
+    parts = urlsplit(url)
+    params = parse_qsl(parts.query, keep_blank_values=True)
+    tokens = [unquote(segment) for segment in parts.path.split("/")]
+    tokens.extend(value for _, value in params)
+    credential = (
+        "@" in parts.netloc
+        or KEY_BEARING_VALUE_RE.search(url) is not None
+        or any(_CREDENTIAL_PARAM_RE.search(name) for name, _ in params)
+        or any(_OPAQUE_TOKEN_RE.fullmatch(token) for token in tokens)
+    )
+    if credential:
+        raise ConfigError([f"{setting}: URL carries a credential (userinfo, key or opaque token)"])
 
 
 def mask(secret: str) -> str:
