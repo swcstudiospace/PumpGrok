@@ -233,6 +233,7 @@ def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int 
             return EXIT_CONFIG, wake_mode
     return None, wake_mode
 
+
 def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
     """`run --record DATASET`: seal a recorded dataset from the replay source.
 
@@ -252,6 +253,7 @@ def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
     recorder.seal_dataset(target.name or dataset.manifest.dataset, seed_hint=settings.replay.seed)
     _say(sys.stdout, f"recorded dataset sealed into {target}")
     return EXIT_OK
+
 
 def _run(args: argparse.Namespace, settings: Settings) -> int:
     if getattr(args, "record", None) is not None and getattr(args, "duration", None):

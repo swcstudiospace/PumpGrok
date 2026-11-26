@@ -360,6 +360,7 @@ class LiveRecorder:
         except BaseException:
             self._failed = True
             raise
+
     def record_tick(self, tick: object) -> None:
         """Append one CurveTick's dump to events.jsonl, stamped by the tick itself.
 

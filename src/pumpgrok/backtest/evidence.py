@@ -21,6 +21,7 @@ class ResultStore(Protocol):  # duck-typed sidecar (store or test double)
         self, strategy_version_id: str, params_hash: str
     ) -> tuple[dict[str, Any], ...]: ...
 
+
 __all__ = ["BacktestEvidenceProvider", "EvidenceRecord"]
 
 _ELIGIBLE = "promotion_eligible"
