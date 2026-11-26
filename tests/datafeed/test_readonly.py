@@ -275,9 +275,9 @@ async def test_rpc_request_ids_are_distinct() -> None:
 @pytest.mark.parametrize(
     "query",
     [
-        "signature=example-secret",
+        "signature=example-secret",  # pragma: allowlist secret: deliberate example signature placeholder
         "sig=example-secret",
-        "X-Amz-Signature=example-secret",
+        "X-Amz-Signature=example-secret",  # pragma: allowlist secret: deliberate example signature placeholder
     ],
 )
 async def test_signed_urls_swapped_in_after_construction_are_refused(

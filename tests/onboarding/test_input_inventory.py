@@ -173,7 +173,7 @@ def test_empty_grok_key_counts_as_missing_when_required(monkeypatch: pytest.Monk
 def test_present_grok_key_reports_env_source_and_never_its_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    secret = "xai-0123456789abcdef0123456789abcdef"
+    secret = "xai-0123456789abcdef0123456789abcdef"  # pragma: allowlist secret: synthetic test value
     monkeypatch.setenv("PUMPGROK_GROK_GATEWAY__ENABLED", "true")
     monkeypatch.setenv("PUMPGROK_GROK__API_KEY", secret)
     records = input_inventory(load_settings(mode="paper"), "paper")

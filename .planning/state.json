@@ -11,48 +11,48 @@
     {
       "number": "12",
       "name": "Event runtime core",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "13",
       "name": "Curve truth, live market data and recorder",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "14",
       "name": "Event-driven desk and Grok gateway",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "15",
       "name": "Strategy framework and multi-strategy paper",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "16",
       "name": "Backtest v2 and autonomous evaluation",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "17",
       "name": "Risk hardening and promotion lifecycle",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "18",
       "name": "Dormant live path, amendment-gated",
-      "status": "pending"
+      "status": "blocked"
     },
     {
       "number": "19",
       "name": "Observability, docs, hardening and milestone audit",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
     "command": "/gsd-progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "label": "Phase 18 blocked - owner amendment PR required",
+    "reason": "Phases 11-17 and 19 complete on main; Phase 18 (18-07) needs owner PR"
   },
-  "updated_at": "2026-11-22T04:42:00.585Z"
+  "updated_at": "2026-11-22T12:00:00.000Z"
 }

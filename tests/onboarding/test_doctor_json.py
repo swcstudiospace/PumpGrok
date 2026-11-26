@@ -142,7 +142,7 @@ def test_cli_live_json_exits_nonzero_on_an_empty_environment(
 def test_secret_values_never_reach_stdout_or_stderr(
     mode: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    xai_key = "xai-0123456789abcdef0123456789abcdef"
+    xai_key = "xai-0123456789abcdef0123456789abcdef"  # pragma: allowlist secret: synthetic test value
     hmac_key = "hmac-doctor-sentinel-08de"
     monkeypatch.setenv("PUMPGROK_GROK_GATEWAY__ENABLED", "true")
     monkeypatch.setenv("PUMPGROK_GROK__API_KEY", xai_key)
