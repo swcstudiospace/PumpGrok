@@ -9,8 +9,8 @@ Divergences from the oracle (deliberate):
 - No ``Bearer`` header is sent: no settings field carries a pump.fun key,
   so there is nothing to attach.
 - Every ``_get`` records a per-source health flag in ``Analyzer.health``;
-  a failed provider yields ``None`` plus ``False`` health, never an
-  exception (R47).
+  a failed provider raises ``DataStale`` plus ``False`` health, never a
+  stand-in value (R47).
 - ``_veto_reason`` returns ASCII codes (``creator_share_veto``,
   ``top5_share_veto``), not Russian sentences.
 - Time is fixed: the token factory uses an explicit ``NOW`` instead of
@@ -27,6 +27,7 @@ import httpx
 import pytest
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
+from pumpgrok.core.errors import DataStale
 from pumpgrok.engine.analyzer import (
     Analyzer,
     _veto_reason,
@@ -96,8 +97,8 @@ async def test_fetch_hits_three_endpoints(analyzer_parts: tuple) -> None:
     assert analyzer.source_health("/coins/Mint1/holders") is True
 
 
-async def test_failed_request_degrades_to_empty(analyzer_parts: tuple) -> None:
-    """The provider is silent: metrics run on what exists, not on a crash."""
+async def test_failed_request_raises_stale_not_empty(analyzer_parts: tuple) -> None:
+    """The provider is down: that is stale data, never an empty card and empty lists."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": "no"})
@@ -105,9 +106,112 @@ async def test_failed_request_degrades_to_empty(analyzer_parts: tuple) -> None:
     data, filter_cfg = analyzer_parts
     analyzer = Analyzer(data, filter_cfg, client(handler))
     async with analyzer:
-        info, holders, trades = await analyzer.fetch("Mint1")
-    assert (info, holders, trades) == ({}, [], [])
+        with pytest.raises(DataStale):
+            await analyzer.fetch("Mint1")
     assert analyzer.source_health("/coins/Mint1") is False
+
+
+def _transport_error(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("connection refused", request=request)
+
+
+def _html_body(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, content=b"<html>maintenance</html>", request=request)
+
+
+def _null_card(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/coins/Mint1":
+        return httpx.Response(200, content=b"null", request=request)
+    return httpx.Response(200, json=[], request=request)
+
+
+def _object_for_list(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/coins/Mint1":
+        return httpx.Response(200, json={}, request=request)
+    return httpx.Response(200, json={"error": "rate limited"}, request=request)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [_transport_error, _html_body, _null_card, _object_for_list],
+    ids=["transport_error", "non_json_body", "null_card", "object_for_list"],
+)
+async def test_failed_fetch_never_yields_a_clean_analysis(
+    analyzer_parts: tuple, handler: Any
+) -> None:
+    data, filter_cfg = analyzer_parts
+    analyzer = Analyzer(data, filter_cfg, client(handler))
+    async with analyzer:
+        with pytest.raises(DataStale):
+            await analyzer.analyze(token())
+
+
+async def test_healthy_empty_answer_is_not_stale(analyzer_parts: tuple) -> None:
+    """A provider that answers with nothing is a healthy empty answer, not a failure."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={} if request.url.path == "/coins/Mint1" else [])
+
+    data, filter_cfg = analyzer_parts
+    analyzer = Analyzer(data, filter_cfg, client(handler))
+    async with analyzer:
+        metrics = await analyzer.analyze(token())
+    assert metrics.trade_count == 0
+    assert analyzer.passes(metrics) == (False, "no_trade_data")
+    assert analyzer.source_health("/trades/all/Mint1") is True
+
+
+async def test_successful_fetch_yields_unchanged_analysis(analyzer_parts: tuple) -> None:
+    """Success path regression: these metrics are the values recorded before the fix."""
+    data, filter_cfg = analyzer_parts
+    card = {
+        "description": "a cat coin",
+        "twitter": "https://x.com/cat",
+        "telegram": "https://t.me/cat",
+    }
+    holders = [{"owner": f"h{i}", "percentage": 3 + (i % 3)} for i in range(15)]
+    trades = [
+        {
+            "user": f"w{i % 7}",
+            "txType": "sell" if i % 4 == 0 else "buy",
+            "solAmount": 0.1 + (i % 5) * 0.05,
+            "timestamp": NOW - 600 + i * 10,
+        }
+        for i in range(40)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/holders"):
+            return httpx.Response(200, json=holders)
+        if "/trades/all/" in path:
+            return httpx.Response(200, json=trades)
+        return httpx.Response(200, json=card)
+
+    tok = token()
+    analyzer = Analyzer(data, filter_cfg, client(handler))
+    async with analyzer:
+        metrics = await analyzer.analyze(tok)
+        verdict = analyzer.passes(metrics)
+
+    assert metrics.model_dump() == {
+        "buy_sell_ratio": 3.0,
+        "creator_share": 0.0,
+        "curve_health": 0.7815,
+        "risk_score": 2.77,
+        "sniper_count": 1,
+        "social_signals": 0.7,
+        "top5_share": 0.25,
+        "trade_count": 40,
+        "unique_wallets": 7,
+        "wallet_diversity": 0.1925,
+    }
+    assert verdict == (True, "ok")
+    assert (tok.description, tok.twitter, tok.telegram) == (
+        "a cat coin",
+        "https://x.com/cat",
+        "https://t.me/cat",
+    )
 
 
 async def test_analyze_rejects_token_without_trades(analyzer_parts: tuple) -> None:
