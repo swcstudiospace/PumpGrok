@@ -179,7 +179,7 @@ def _run_record(args: argparse.Namespace, settings: Settings) -> int:
             budget=settings.risk,
             limits=settings.limits,
             rng_seed=settings.replay.seed,
-            ws_url=settings.data.ws_url,
+            portal_ws_url=settings.data.ws_url,
         )
     except DatasetConflict as exc:
         _say(sys.stderr, f"usage error: {exc.message}")
