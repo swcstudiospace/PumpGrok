@@ -37,13 +37,20 @@ behaviors are implemented and tested on bot-00-chief/conflict-repair
 (test_event_desk_holder_flag, test_exit_sell_guard,
 test_promotion_cursor_restart), and the CHANGELOG Phase 17 narrative is present.
 
-Note: this verification does not claim a re-run at the current head;
-hash and exit-code evidence is transcribed from ROADMAP and CHANGELOG.md.
+Note: local evidence below is the close-out run at c21567d; the full-suite
+verdict is the GitHub CI run on PR #137.
 
-## Gate run at local main 8354ee6 (2026-11-26, documentation sync)
+## Gate run at c21567d (2026-11-26, Phase 17 close-out)
 
-check.sh exit 0. make lint, make typecheck and make test all FAIL at
-main HEAD due to conflict-marker residue (372 markers in 116 files;
-proven pre-existing via stash; details in 16-VERIFICATION.md gate-run
-section). No fix attempted in this documentation run. Push to origin
-is blocked until the markers are resolved.
+check.sh exit 0.
+make lint exit 0 (canonical: uv run ruff check . → All checks passed; ruff format applied to 18 files).
+make typecheck exit 0 (Success: no issues found in 340 source files).
+Targeted suites green (datafeed, replay/e2e, risk, execution, desk, backtest, cli, onboarding).
+
+## Close-out note
+
+The pre-existing conflict-marker residue (372 markers in 116 files) was
+repaired on bot-00-chief/conflict-repair; exit guard, promotion cursor and
+holder-flag wiring were implemented there and covered by the three Phase 17
+desk tests. Full local test green remains a CI-verdict item pending PR #137's
+GitHub CI run; no blocking merge on a self-contradicting verification.

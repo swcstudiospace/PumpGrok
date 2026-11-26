@@ -30,10 +30,12 @@
    "output_tail": "all ok (sole failure: fee model V2 testes rewritten to canonical model; execution green)"
   }
  ],
- "not_verified": [
+ "prs": [
+  137
+ ],
+ "task_id": "v4-p17-conflict-repair",
+ "unverified": [
   "Full `make test` suite locally (takes >30 min under box load); GitHub CI (test-fast, test-slow, Quality Gates) on PR #137 is authoritative.",
   "Greptile review: skipped per owner instruction (billing)."
- ],
- "prs": [137],
- "task_id": "v4-p17-conflict-repair"
+ ]
 }
