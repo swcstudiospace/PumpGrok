@@ -1,0 +1,160 @@
+openapi: 3.1.0
+info:
+  title: PumpGrok Desk Gateway
+  version: 1.0.0
+  description: >-
+    Paper-only seat-facing gateway contract (ADR-0003). POST /mcp/{short}
+    serves JSON-RPC 2.0 tools/list and tools/call over the in-process
+    pumpgrok tool registry. Every tool input forbids extra fields, so an
+    unknown field is rejected with a named error and exit code 1 (AC-010).
+    Live mode is refused (exit 3, AC-019); 0 live adapters register (AC-022).
+    Money is integer base units; prices and ratios are Decimal strings
+    (ADR-0002). Timestamps are ISO 8601 UTC from the injected Clock only.
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local paper gateway (DESK_GATEWAY_HOST/PORT)
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness probe without a token
+      responses:
+        '200':
+          description: Gateway is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          $ref: '#/components/responses/Refusal'
+  /mcp/{short}:
+    post:
+      operationId: postMcpToolsCall
+      summary: JSON-RPC tools/list and tools/call for one seat roster
+      description: >-
+        Auth runs before the body is read: no token 401, cross-seat token
+        403, seat without a configured token 503 fail-closed, body over
+        1 MiB 413. Uncertain state denies ordering and returns a named
+        refusal with 0 fills (AC-011).
+      parameters:
+        - name: short
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+      responses:
+        '200':
+          description: JSON-RPC result or named refusal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '503':
+          $ref: '#/components/responses/Refusal'
+components:
+  responses:
+    BadRequest:
+      description: Malformed body or unknown field; named error, exit code 1
+    Unauthorized:
+      description: Missing per-seat bearer token
+    Forbidden:
+      description: Token belongs to another seat
+    NotFound:
+      description: Unknown seat short name
+    PayloadTooLarge:
+      description: Body exceeds 1 MiB
+    Refusal:
+      description: Fail-closed refusal (live gate, unconfigured seat, uncertain state)
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [ok, service]
+      properties:
+        ok:
+          type: boolean
+        service:
+          type: string
+          enum: [desk-gateway]
+    JsonRpcRequest:
+      type: object
+      additionalProperties: false
+      required: [jsonrpc, id, method]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ['2.0']
+        id:
+          type: [string, 'null']
+        method:
+          type: string
+          enum: [initialize, 'notifications/initialized', tools/list, tools/call]
+        params:
+          type: object
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+            arguments:
+              type: object
+              additionalProperties: false
+              properties:
+                approval_id:
+                  type: string
+                rollback_plan:
+                  type: string
+                amount_lamports:
+                  type: integer
+                price_decimal:
+                  type: string
+                  pattern: '^[0-9]+(\\.[0-9]+)?$'
+                timestamp_iso8601_utc:
+                  type: string
+                  format: date-time
+    JsonRpcResponse:
+      type: object
+      additionalProperties: false
+      required: [jsonrpc, id, result]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ['2.0']
+        id:
+          type: [string, 'null']
+        result:
+          type: object
+          additionalProperties: false
+          required: [ok]
+          properties:
+            ok:
+              type: boolean
+            error:
+              type: string
+            event_hash:
+              type: string
+              pattern: '^[0-9a-f]{64}$'
+            amount_lamports:
+              type: integer
+x-nfr:
+  NFR-P1: {limit: 60, unit: s, note: replay smoke one full ten-seat cycle}
+  NFR-S1: {limit: 0, unit: secret shapes}
+  NFR-A1: {limit: 0, unit: non-ASCII bytes}
+  NFR-I1: {limit: 0, unit: locale-dependent formats}
+  NFR-C1: {limit: 0, unit: live adapters}
