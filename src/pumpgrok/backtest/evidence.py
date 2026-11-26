@@ -109,6 +109,7 @@ class BacktestEvidenceProvider:
             return refusal
         apply_candidate(ledger_store, binding.verdict, **apply_kwargs)
         return "applied"
+
     def get(self, strategy_id: str, param_hash: str) -> dict[str, Any]:
         """Persisted run record plus grading verdict for one (strategy, param hash).
 
@@ -132,7 +133,6 @@ class BacktestEvidenceProvider:
                     "reasons": list(result.get("reasons", [])),
                 }
         raise KeyError(f"no persisted run for {strategy_id!r}:{param_hash!r}")
-
 
 
 def _record(row: dict[str, Any]) -> EvidenceRecord:
