@@ -12,7 +12,6 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from pumpgrok.cli.codes import (
     _TRADE_UNAVAILABLE,
@@ -29,8 +28,13 @@ from pumpgrok.cli.errors import (
     _say,
     _tool_error,
 )
-from pumpgrok.cli.promotion import make_promotion_check
-from pumpgrok.cli.validators import _human_by, _mint_approval_id, _utc_now, size_sol_to_lamports
+from pumpgrok.cli.validators import (
+    _human_by,
+    _mint,
+    _mint_approval_id,
+    _utc_now,
+    size_sol_to_lamports,
+)
 from pumpgrok.cli.wiring import (
     _call_use,
     _repo_root,
@@ -38,12 +42,21 @@ from pumpgrok.cli.wiring import (
     _seat_manifest_id,
     _unflattened_lines,
 )
+from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings, health_port
 from pumpgrok.core.approvals import ApprovalRecord
-from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.core.tool import Tool
+from pumpgrok.datafeed import transport as datafeed_transport
+from pumpgrok.doctor import (
+    event_mode_problems,
+    failing_inputs,
+    input_inventory,
+    installed_job_findings,
+)
 from pumpgrok.execution.live.live_gate import LiveGate, refusal_lines
+from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.active_set import read_active_param_set
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -51,9 +64,7 @@ from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.replay.clock import WallClock, format_ts_utc
-from pumpgrok.replay.fixtures import load_dataset
-from pumpgrok.replay.live_recorder import LiveRecorder
-from pumpgrok.replay.normalize import to_curve_tick
+from pumpgrok.replay.live_recorder import DatasetConflict
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
@@ -61,7 +72,6 @@ from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 from pumpgrok.upgrade.params import ParamSet
-from pumpgrok.upgrade.space import load_declared_space
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -82,132 +92,178 @@ def operator_active_set(settings: Settings) -> ParamSet | None:
         store.close()
 
 
-def _declared_space() -> tuple[dict[str, Any], ...]:
-    """The declared search space; a load defect is the CLI's typed configuration error."""
+def _tool_authenticated(decisions: dict[str, oc.Decision], seat: str, tool: str) -> bool:
+    """True only when the latest decision for the tool is a bound allow; a revoke never counts."""
+    decision = decisions.get(oc.tool_scope(seat, tool))
+    return decision is not None and decision.allowed
+
+
+def _unauthenticated_seat_lines() -> list[str]:
+    """One line per seat whose roster tools lack an authenticated decision (ONB-04)."""
     try:
-        return load_declared_space()
-    except PumpgrokError as exc:
-        raise ConfigError([exc.message]) from exc
+        decisions = oc.read_authority(oc.OPERATOR_DIR, PAPER_LEDGER_PATH)
+    except (oc.OperatorChoiceError, OSError, ValueError, sqlite3.Error):
+        decisions = {}
+    lines: list[str] = []
+    for seat in EXPECTED_SEAT_IDS:
+        try:
+            tools = sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat))
+        except (OSError, ValueError):
+            lines.append(f"    - seat {seat}: roster is unreadable")
+            continue
+        lacking = [tool for tool in tools if not _tool_authenticated(decisions, seat, tool)]
+        if lacking:
+            lines.append(
+                f"    - seat {seat}: {len(lacking)} of {len(tools)} roster tools "
+                "lack an authenticated decision"
+            )
+    return lines
 
 
-def _run_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
-    """Record/serve/duration branches of `run`; None when the replay cycle runs."""
-    if args.record is not None and args.duration is not None:
-        return _not_implemented("run --duration")
-    if args.record is not None:
-        return _record_dataset(args, settings)
-    if args.duration is not None:
-        return _not_implemented("run --duration")
-    if getattr(args, "live_paper", False):
-        return _live_paper_outcome(args, settings)
-    return _serve_outcome(args, settings)
+def _paper_start_gate(settings: Settings) -> list[str]:
+    """Lines naming each missing paper input, or none when the start may proceed.
+
+    Runs before any supervisor starts. It names inputs, seats and counts, never a value. The
+    paper inventory marks the wallet not-read, so this reads no wallet input.
+    """
+    failing = failing_inputs(input_inventory(settings, "paper"))
+    lines = [f"  - {record.name}: {record.status} (required for paper)" for record in failing]
+    if any(record.name == "seat_tool_access" for record in failing):
+        lines.extend(_unauthenticated_seat_lines())
+    return lines
 
 
-def _serve_outcome(args: argparse.Namespace, settings: Settings) -> int | None:
-    """Serve branches of `run`; None when the replay cycle runs."""
-    if args.serve and (args.once or not args.replay):
-        _say(
-            sys.stderr,
-            "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
-        )
-        return EXIT_NOT_IMPLEMENTED
-    if args.serve:
-        return _serve_replay_loop(Path(args.replay), settings)
-    return None
+def _parse_mints(raw: str | None) -> frozenset[str] | None:
+    """Validate a comma-separated mint list. None means every mint is admitted."""
+    if raw is None:
+        return None
+
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if not parts:
+        raise UsageError("bad --mints: want a comma-separated mint list")
+    return frozenset(_mint(part) for part in parts)
 
 
-async def _no_place(_intent: object) -> None:
-    """Async place stub for the live-paper root: builds the desk, places nothing."""
-    return None
+def _run_record(args: argparse.Namespace, settings: Settings) -> int:
+    """Record a live-paper session into var/datasets/<name>/ and print the sealed path."""
 
+    if args.replay:
+        raise UsageError("run --record cannot be combined with --replay")
+    if args.duration is None or args.duration <= 0:
+        raise UsageError("run --record needs a positive --duration")
+    name = args.record
+    if not isinstance(name, str) or not DATASET_NAME_RE.fullmatch(name):
+        raise UsageError(f"dataset name is not a plain name: {name!r}")
+    mints = _parse_mints(getattr(args, "mints", None))
+    endpoints = settings.rpc.endpoints
+    if not endpoints:
+        raise UsageError("run --record needs an RPC endpoint")
+    endpoint = endpoints[0]
+    # Deferred so importing the CLI does not load the event bus.
+    from pumpgrok.datafeed import feed_loop  # noqa: PLC0415
 
-def _live_paper_outcome(args: argparse.Namespace, settings: Settings) -> int:
-    """Run the live-data paper root (HOST-16): paper only, OD-04 probe review gated."""
-    if settings.effective_mode != "paper":
-        _say(sys.stderr, "live-paper root is paper only")
-        return EXIT_LIVE
-    if os.environ.get("PUMPGROK_OD04_PROBE_REVIEW", "").strip() != "approved":
-        _say(sys.stderr, "live-paper root refused: PUMPGROK_OD04_PROBE_REVIEW must be approved")
-        return EXIT_NOT_IMPLEMENTED
-    from pumpgrok.core.adapter import ExecutionMode  # noqa: PLC0415
-    from pumpgrok.ledger.store import LedgerStore  # noqa: PLC0415
-    from pumpgrok.replay.clock import WallClock  # noqa: PLC0415
-    from pumpgrok.supervisor.live_paper import build_live_paper  # noqa: PLC0415
-
-    store = LedgerStore("var/ledger.sqlite")
     try:
-        desk = build_live_paper(
-            mode=ExecutionMode.PAPER,
-            store=store,
+        transport = datafeed_transport.make_read_transport(endpoint)
+    except ValueError as exc:
+        raise UsageError("run --record endpoint is invalid") from exc
+    dataset_dir = Path("var") / "datasets" / name
+    try:
+        sealed = feed_loop.record_session(
+            dataset_dir,
+            duration_s=args.duration,
+            mints=mints,
             clock=WallClock(),
-            place=_no_place,
+            transport=transport,
+            recorder_factory=feed_loop.recorder_factory,
+            endpoint=endpoint,
+            budget=settings.risk,
+            limits=settings.limits,
+            rng_seed=settings.replay.seed,
+            ws_url=settings.data.ws_url,
         )
-        _say(sys.stdout, f"live-paper desk up (paper only): {desk.mode}")
-    except Exception as exc:
-        _say(sys.stderr, f"live-paper root refused: {type(exc).__name__}")
-        return EXIT_NOT_IMPLEMENTED
-    finally:
-        with contextlib.suppress(Exception):
-            store._db.close()
+    except DatasetConflict as exc:
+        _say(sys.stderr, f"usage error: {exc.message}")
+        return EXIT_CONFIG
+    except ValueError as exc:
+        _say(sys.stderr, f"usage error: {exc}")
+        return EXIT_CONFIG
+    _say(sys.stdout, json.dumps({"dataset": str(sealed)}))
     return EXIT_OK
 
 
-def _run(args: argparse.Namespace, settings: Settings) -> int:
-    gate = LiveGate(
-        mode=settings.effective_mode,
-        environ=os.environ,
-        root=Path.cwd(),
-        live_enabled=settings.live.enabled,
-        wallet_allowlist=settings.wallet.allowlist,
-        notional_cap_lamports=settings.live.notional_cap_lamports,
-    )
+def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int | None, str]:
+    """Exit code that refuses a non-record run before a supervisor starts, plus wake mode."""
     if settings.effective_mode == "live":
+        gate = LiveGate(
+            mode=settings.effective_mode,
+            environ=os.environ,
+            root=Path.cwd(),
+            live_enabled=settings.live.enabled,
+            wallet_allowlist=settings.wallet.allowlist,
+            notional_cap_lamports=settings.live.notional_cap_lamports,
+        )
         preconditions = gate.evaluate(now=_utc_now().strftime("%Y-%m-%d"))
         if any(not item.met for item in preconditions):
             _say(sys.stderr, *refusal_lines(preconditions))
-            return EXIT_LIVE
-    if settings.effective_mode == "paper" and args.replay is None:
-        missing = check_start(os.environ, "paper")
+            return EXIT_LIVE, settings.events.wake_mode
+    refusal = _mode_refusal(args)
+    if refusal is not None:
+        return refusal, settings.events.wake_mode
+    wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
+    if wake_mode == "event":
+        problems = event_mode_problems(installed_job_findings())
+        if problems:
+            _say(
+                sys.stderr,
+                "event mode refused: no supervisor was started",
+                *(f"  - {problem}" for problem in problems),
+            )
+            return EXIT_CONFIG, wake_mode
+    if settings.effective_mode == "paper":
+        missing = _paper_start_gate(settings)
         if missing:
+            _say(
+                sys.stderr,
+                "paper start refused: required inputs are missing; no supervisor was started "
+                "(see `pumpgrok onboarding list`)",
+                *missing,
+            )
+            return EXIT_CONFIG, wake_mode
+    return None, wake_mode
+
+
+def _run(args: argparse.Namespace, settings: Settings) -> int:
+    if getattr(args, "record", None) is not None:
+        return _run_record(args, settings)
+    blocked, wake_mode = _run_start_block(args, settings)
+    if blocked is not None:
+        return blocked
+    if args.serve:
+        return _serve_replay_loop(Path(args.replay), settings, wake_mode)
+    return _skip_cycle(Path(args.replay), settings, wake_mode)
+
+
+def _mode_refusal(args: argparse.Namespace) -> int | None:
+    """Exit code refusing a `run` argument combination this release does not run, or None."""
+    if args.record is None and args.duration is not None:
+        return _not_implemented("run --record")
+    if args.serve:
+        if args.once or not args.replay:
             _say(
                 sys.stderr,
                 "paper start refused: missing required inputs: " + ", ".join(missing),
             )
             return EXIT_NOT_IMPLEMENTED
-    outcome = _run_outcome(args, settings)
-    if outcome is not None:
-        return outcome
-    if not (args.once and args.replay):
+    elif not (args.once and args.replay):
         _say(
             sys.stderr,
             "not implemented: this release runs only `run --mode paper --once --replay <dir>`",
         )
         return EXIT_NOT_IMPLEMENTED
-    return _skip_cycle(Path(args.replay), settings)
+    return None
 
 
-def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
-    """`run --record DATASET`: seal a recorded dataset from the replay source.
-
-    The source is `--replay <dir>` when given, else the bundled smoke
-    fixture; the sealed output passes load_dataset unchanged (REC-03).
-    """
-    source = (
-        Path(args.replay)
-        if args.replay
-        else _repo_root() / "tests" / "fixtures" / "replay" / "smoke"
-    )
-    dataset = load_dataset(source)
-    target = Path(str(args.record))
-    recorder = LiveRecorder(target)
-    for record in dataset.events:
-        recorder.record_tick(to_curve_tick(dict(record)))
-    recorder.seal(target.name or dataset.manifest.dataset, seed_hint=settings.replay.seed)
-    _say(sys.stdout, f"recorded dataset sealed into {target}")
-    return EXIT_OK
-
-
-def _serve_replay_loop(source: Path, settings: Settings) -> int:
+def _serve_replay_loop(source: Path, settings: Settings, wake_mode: str) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics."""
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
@@ -217,15 +273,6 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
         _say(sys.stderr, "run --serve needs a nonzero health port: set PUMPGROK_HEALTH__PORT")
         return EXIT_CONFIG
     host = settings.health.host
-    space = _declared_space()
-    promotion = make_promotion_check(
-        source,
-        space=space,
-        seed=settings.replay.seed,
-        initial_equity_lamports=settings.risk.paper_equity_lamports,
-        budget=settings.risk,
-        limits=settings.limits,
-    )
     log.info("serve starting (dataset=%s host=%s port=%d)", dataset_name, host, port)
     return asyncio.run(
         serve_replay(
@@ -238,12 +285,12 @@ def _serve_replay_loop(source: Path, settings: Settings) -> int:
             budget=settings.risk,
             limits=settings.limits,
             active_set=operator_active_set(settings),
-            promotion_check=promotion,
+            wake_mode=wake_mode,
         )
     )
 
 
-def _skip_cycle(source: Path, settings: Settings) -> int:
+def _skip_cycle(source: Path, settings: Settings, wake_mode: str) -> int:
     dataset_name = source.resolve().name
     if not DATASET_NAME_RE.fullmatch(dataset_name):
         raise ConfigError([f"replay directory name is not a plain name: {dataset_name!r}"])
@@ -256,6 +303,7 @@ def _skip_cycle(source: Path, settings: Settings) -> int:
         budget=settings.risk,
         limits=settings.limits,
         active_set=operator_active_set(settings),
+        wake_mode=wake_mode,
     )
     _say(sys.stdout, f"engine decision={result.decision} reason={result.reason}")
     _say(sys.stdout, *(format_trade(trade) for trade in result.trades))

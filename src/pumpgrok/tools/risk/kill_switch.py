@@ -31,6 +31,7 @@ from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.core.ids import Clock, ambient_correlation
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.logging.redaction import redact_text
@@ -377,8 +378,9 @@ def _status(
 def _flatten_intents(store: LedgerStore) -> list[FlattenIntent]:
     """One intent per position still holding units, folded from the ledger."""
     state = initial_state(source="paper", initial_equity_lamports=0, day_utc="")
+    deposits = position_deposits_by_seq(store)
     for event in store.read(limit=None):
-        state = reduce(state, event)
+        state = reduce(state, event, deposits)
     return [
         FlattenIntent(mint=pos.mint, ticket_id=pos.ticket_id, token_units=pos.token_units)
         for pos in state.positions.values()

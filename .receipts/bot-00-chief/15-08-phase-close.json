@@ -1,0 +1,90 @@
+{
+  "plan": "15-08",
+  "seat": "bot-00-chief",
+  "requirement": ["PRC-01", "PRC-03", "LIV-07"],
+  "criteria": [1, 13, 14, 15],
+  "status": "BLOCKED: criterion 1 failed (make lint, make typecheck, make test, paper smoke replay). Plan not marked complete. Owner checkpoint not reached.",
+  "base": {"head_at_run": "ddb78a6 (journal CHANGELOG commit on top of 4f7763d)", "v4_base_tag": "09f83beb592742ba3322e752d508bec69bb10cca"},
+  "commands_run": [
+    {
+      "command": "make lint",
+      "exit_code": 2,
+      "criterion": 1,
+      "result": "Found 14 errors (6 fixable with --fix). Files: src/pumpgrok/strategies/attribution.py:92, src/pumpgrok/strategies/legacy.py:21, src/pumpgrok/supervisor/intent_router.py:94, tests/desk/test_live_paper_root.py:175, tests/execution/test_fee_model_v2.py:175, tests/strategies/test_attribution.py:9 and :72, tests/strategies/test_base.py:88 and :220, tests/strategies/test_legacy_exception.py:65 and :82, tests/strategies/test_registry.py:100, tests/upgrade/test_paramset_strategy.py:95 and :109.",
+      "owner_files": "bot-02-risk (strategies, tests), bot-00-chief (supervisor/intent_router.py, tests/desk/test_live_paper_root.py)"
+    },
+    {
+      "command": "make typecheck",
+      "exit_code": 2,
+      "criterion": 1,
+      "result": "Found 4 errors in 2 files (checked 276 source files). src/pumpgrok/ledger/ticket_refs.py:68 (sidecar callable type vs LedgerStore.append_batch); src/pumpgrok/strategies/legacy.py:61 and :96 (event_epoch Mapping vs dict); src/pumpgrok/strategies/legacy.py:189 (clock: Clock vs FixtureClock).",
+      "owner_files": "bot-02-risk"
+    },
+    {
+      "command": "make test",
+      "exit_code": 2,
+      "criterion": 1,
+      "result": "Interrupted: 1 error during collection, no pass/fail counts. ERROR collecting tests/strategies/test_registry.py: 'import file mismatch: imported module test_registry has __file__ /root/src/repos/pumpgrok-wt/v4-phase-14/tests/core/test_registry.py, which is not the same as the test file we want to collect: /root/src/repos/pumpgrok-wt/v4-phase-14/tests/strategies/test_registry.py'. Pytest HINT: use a unique basename or remove __pycache__.",
+      "owner_files": "bot-02-risk (tests/strategies/test_registry.py); the name collision is open item (c)"
+    },
+    {
+      "command": "./scripts/check.sh",
+      "exit_code": 0,
+      "criterion": 1,
+      "result": "ok: 35 skills, 10 agents, 375 markdown files checked; PumpGrok repository structure looks healthy."
+    },
+    {
+      "command": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+      "exit_code": 1,
+      "criterion": 1,
+      "result": "paper start refused: required inputs are missing; no supervisor was started. seat_tool_access missing (required for paper); all 10 seats report every roster tool lacking an authenticated decision. The worktree has no var/operator directory and no var/ledger.sqlite. The seat record (src/pumpgrok/doctor.py::_seat_record) reads OPERATOR_DIR and PAPER_LEDGER_PATH; the Phase 14 replay grant seeds live in the replay ledger and are not read by that record.",
+      "owner_action": "Owner decision required: record operator choices for seat tool access in this environment, or direct a replay exemption in the paper start gate. Not done here: recording grants is an approval act."
+    },
+    {
+      "command": "uv run pumpgrok verify --fixture smoke-10m",
+      "exit_code": 0,
+      "criterion": 14,
+      "result": "events.hash 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (seq 146, events read 41). Plan value b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d does not match."
+    },
+    {
+      "command": "git diff --name-only v4-base -- contracts | wc -l",
+      "exit_code": 0,
+      "criterion": 13,
+      "result": "0 files changed under contracts/ against v4-base."
+    },
+    {
+      "command": "uv run pytest -q tests/replay/test_trading_smoke_pin.py",
+      "exit_code": 0,
+      "criterion": 14,
+      "result": "5 passed."
+    },
+    {
+      "command": "uv run pumpgrok run --mode live --once",
+      "exit_code": 3,
+      "criterion": 15,
+      "result": "Refused. Live preconditions unmet (items 8 adapter_registered and 9 no_active_stop among them). No transaction attempted."
+    }
+  ],
+  "criterion_14_composite": "Not run as one command. The plan's composite fails at the test a = b69c check, which is a discrepancy, not a regression: the measured smoke-10m hash is 1dffa784 at HEAD and in Phase 14's CHANGELOG. CHANGELOG grep checks (journal receipt 15-08-changelog.json): 1dffa784 before line exit 0; b69c before line exit 1 (by design); trading-smoke before regex exit 0; trading-smoke after equals pin exit 0; smoke-10m after line exit 0.",
+  "not_run": [
+    "make test: full pass and fail counts unavailable; the run was interrupted at collection.",
+    "Criterion 14 composite as written: blocked by the b69c value (see above)."
+  ],
+  "deviations": [
+    "Task 1 says stop at a failing gate, fix only in the owning seat's files. No code outside this plan's file set was edited. Fixing lint, typecheck, collection and the paper gate needs bot-02-risk and bot-00-chief file edits and an owner decision on the paper start gate, none in 15-08's file set. All five commands in the chain were still run once each so the failure set is complete.",
+    "docs/runbooks/strategies.md written (Task 3 runbook). ROADMAP.md not edited: marking Phase 15 deliverables or plan 15-08 done would claim a closure the gates do not support. The scoped ROADMAP edit is deferred until criterion 1 passes and the owner responds.",
+    "15-08-SUMMARY.md not written: shared instruction assigns SUMMARY files to CHIEF.",
+    "Stale receipts: .receipts/bot-04-sniper/15-07-fees.json and .receipts/bot-02-risk/15-07-default.json still say owner_review 'PENDING: trading-smoke re-pin not applied'. Commits e65a145 (re-pin) and the CHANGELOG entry show the re-pin applied. Those receipts need an owner_review update from their seats."
+  ],
+  "open_items": [
+    {"id": "a", "item": "read_ata_rent is not on the readonly boundary allowlist.", "owner": "bot-02-risk", "status": "carried from brief; not re-verified in this run"},
+    {"id": "b", "item": "build_live_paper_root has no production caller; deployment passes rent_rpc.", "owner": "bot-00-chief (supervisor/live_paper.py)", "status": "carried from brief; not re-verified in this run"},
+    {"id": "c", "item": "tests/strategies/test_registry.py and tests/core/test_registry.py share a basename with no __init__.py. make test fails at collection with 'import file mismatch' (exact error in commands_run).", "owner": "bot-02-risk", "status": "observed in this run; not renamed (outside 15-08 file set)"}
+  ],
+  "owner_checkpoint": {
+    "task": 3,
+    "status": "NOT REACHED. The PENDING parameter table, fee v2 proposal table, sizing exceptions (15-01, 15-03, 15-04, 15-07), and the two findings (15 criteria not 13; fee v2 absent in code at base 0052468) are in .planning/phases/15-strategy-framework-and-multi-strategy-paper/15-PLANS-INDEX.md. Owner response is pending."
+  },
+  "contracts_touched": [],
+  "push": "none"
+}

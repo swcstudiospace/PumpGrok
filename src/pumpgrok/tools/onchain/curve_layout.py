@@ -1,12 +1,9 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-Token-first layout: an 8-byte discriminator, token reserves before SOL
-reserves, five little-endian u64 counters, then a one-byte completion flag
-(0/1). Both the 49-byte account (counters only) and the 166-byte account
-(same counters plus token-mint and related pubkeys) decode. The layout is
-NOT verified against a mainnet account: every test fixture built with
-:func:`encode_curve_fixture` is marked ASSUMED, and user confirmation of
-the layout is pending. Shared by ``market.price`` and ``onchain.lp_status``.
+Token-first layout: an 8-byte discriminator, five token-first little-endian u64 counters, and a one-byte
+completion flag (0/1). The 49-byte token-first layout was approved by human review (LAYOUT_REVIEWED_BY).
+The 166-byte extended layout has no reviewed source and is refused (fail closed).
+Shared by ``market.price`` and ``onchain.lp_status``.
 
 RPC only: this module performs no HTTP reads outside the injected RPC
 client and references no quote endpoint (R44, R46, R47).
@@ -17,6 +14,7 @@ from __future__ import annotations
 import base64
 import struct
 from decimal import Decimal
+from enum import Enum
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict
@@ -35,18 +33,19 @@ CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
 _CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
 CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
 
-#: Accepted discriminator bytes: the ASSUMED fixture marker and the real
-#: bonding-curve discriminator the probe checks (the curve layout probe record).
-_DISCRIMINATOR = b"ASSUMED\x00"
+#: Verified bonding-curve discriminator accepted by :func:`decode_curve_account`
+#: (the real pump program value); the ASSUMED fixture marker is no longer accepted.
 _REAL_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
-_ACCEPTED_DISCRIMINATORS = frozenset({_DISCRIMINATOR, _REAL_DISCRIMINATOR})
+_BONDING_CURVE_DISCRIMINATOR = _REAL_DISCRIMINATOR
+_EXTENDED_CURVE_ACCOUNT_SIZE = CURVE_ACCOUNT_SIZE_166
 
-#: Bonding-curve layout verification state (R65). ASSUMED until a live probe
-#: against mainnet bonding-curve accounts decodes under this layout and a
-#: human reviews the probe record in tests/fixtures/rpc/bonding_curve/.
-#: While ASSUMED, no paper entry may consume an RPC-derived price: the
-#: PaperAdapter refuses with data_unavailable (fail closed).
-LAYOUT_STATUS: Final[str] = "ASSUMED"
+#: Bonding-curve layout verification state (R65). VERIFIED for the 49-byte
+#: token-first account only, set by the human reviewer named in
+#: ``LAYOUT_REVIEWED_BY``. The 166-byte extended layout stays ASSUMED and is
+#: refused by :func:`decode_curve_account`. Price admission does not read this
+#: status; it is gated by :func:`rpc_curve_price_allowed` provenance.
+LAYOUT_STATUS: Final[str] = "VERIFIED"
+LAYOUT_REVIEWED_BY: Final[str] = "human:Ove"
 
 #: Lamports of real SOL at which the curve is considered complete (catalog:
 #: 85 SOL, the retired oracle ``src/monitor.py:30``). [ASSUMED] threshold.
@@ -54,7 +53,7 @@ COMPLETION_SOL_LAMPORTS = sol_to_lamports(Decimal(85))
 
 
 class CurveDecodeError(ValueError):
-    """The account bytes do not match the ASSUMED curve layout."""
+    """The account bytes do not match the verified curve layout."""
 
 
 class CurveState(BaseModel):
@@ -68,34 +67,24 @@ class CurveState(BaseModel):
     real_token_reserves_units: int
     total_supply_units: int
     complete: bool
-    #: 32-byte token mint (hex) from the 166-byte account; empty for 49-byte.
-    token_mint: str = ""
-    #: Remaining bytes beyond the 49-byte layout (166-byte trailer), hex.
-    extended_data_hex: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
-    """Decode raw account bytes with the token-first ASSUMED layout.
-    Both the 49-byte and 166-byte accounts decode; the 166-byte variant
-    additionally yields its token mint. Raises :class:`CurveDecodeError`
-    on wrong length, a bad discriminator, or a non-boolean completion flag.
+    """Decode raw account bytes with the VERIFIED 49-byte token-first layout.
+
+    Raises :class:`CurveDecodeError` for the 166-byte extended layout (ASSUMED,
+    refused fail closed), an unsupported size, a discriminator, or a completion
+    flag; callers map it to ``DataStale``.
     """
-    if len(data) == CURVE_ACCOUNT_SIZE:
-        try:
-            (disc, vtok, vsol, rtok, rsol, supply, complete) = _CURVE_STRUCT.unpack(data)
-        except struct.error as exc:
-            raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
-        mint = b""
-    elif len(data) == CURVE_ACCOUNT_SIZE_166:
-        try:
-            vals = _CURVE_STRUCT_166.unpack(data)
-            disc, mint, vtok, vsol, rtok, rsol, supply, complete = vals[:8]
-        except struct.error as exc:
-            raise CurveDecodeError(f"curve account unpack failed: {type(exc).__name__}") from exc
-    else:
-        raise CurveDecodeError(f"curve account size {len(data)} not in token-first sizes")
-    if disc not in _ACCEPTED_DISCRIMINATORS:
-        raise CurveDecodeError("curve discriminator mismatch")
+    if len(data) == _EXTENDED_CURVE_ACCOUNT_SIZE:
+        raise CurveDecodeError(
+            f"{_EXTENDED_CURVE_ACCOUNT_SIZE}-byte extended curve layout is ASSUMED; refused"
+        )
+    if len(data) != CURVE_ACCOUNT_SIZE:
+        raise CurveDecodeError(f"unsupported curve account size {len(data)}")
+    discriminator, vtok, vsol, rtok, rsol, supply, complete = _CURVE_STRUCT.unpack_from(data)
+    if discriminator != _BONDING_CURVE_DISCRIMINATOR:
+        raise CurveDecodeError("invalid bonding curve discriminator")
     if complete not in (0, 1):
         raise CurveDecodeError(f"curve completion flag not boolean: {complete!r}")
     for name, value in (
@@ -113,9 +102,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_sol_reserves_lamports=rsol,
         real_token_reserves_units=rtok,
         total_supply_units=supply,
-        extended_data_hex=data[CURVE_ACCOUNT_SIZE:].hex(),
         complete=bool(complete),
-        token_mint=mint.hex() if mint else "",
     )
 
 
@@ -199,19 +186,24 @@ def curve_market_cap_lamports(state: CurveState) -> int:
     ) // state.virtual_token_reserves_units
 
 
-def rpc_curve_price_allowed(*, curve_source: str) -> bool:
-    """Allow fixture labels and independently verified RPC layouts for entry.
+class CurveProvenance(Enum):
+    """Where a bonding-curve snapshot came from. Only replay provenance may admit entry."""
 
-    RPC-derived reserves are untrusted bytes until the layout is VERIFIED
-    (T-04-08): while either status is ASSUMED they fail closed with
-    ``data_unavailable`` at the entry gate. Fixture, rest and pumpportal
-    integer ticks never pass through this layout, so replay is unaffected.
-    Replay and fixture sources are allowed; unknown sources are refused.
+    VERIFIED_REPLAY = "verified_replay"
+    UNVERIFIED_FIXTURE = "unverified_fixture"
+    LIVE_RPC = "live_rpc"
+    UNKNOWN = "unknown"
+
+
+#: The curve source label a verified replay read carries (replay/sources.py).
+VERIFIED_REPLAY_SOURCE: Final[str] = "fixture"
+
+
+def rpc_curve_price_allowed(*, curve_source: str, provenance: CurveProvenance) -> bool:
+    """Admit an entry price only from verified replay provenance (fail closed).
+
+    Every provenance other than ``VERIFIED_REPLAY`` is refused, including a
+    non-replay snapshot whose source label reads ``fixture``. ``LAYOUT_STATUS``
+    does not widen admission: no live RPC provenance is admitted yet.
     """
-    if curve_source in ("replay", "fixture", "rest", "pumpportal"):
-        return True
-    if curve_source != "rpc":
-        return False
-    if LAYOUT_STATUS != "VERIFIED":
-        return False
-    return EVENT_DECODE_STATUS == "VERIFIED"
+    return provenance is CurveProvenance.VERIFIED_REPLAY and curve_source == VERIFIED_REPLAY_SOURCE

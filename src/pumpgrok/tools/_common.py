@@ -15,6 +15,7 @@ from pydantic import Field
 
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.core.tool import RetryPolicy, ToolMeta
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock
@@ -66,6 +67,7 @@ def fold_current_state(
     source = store.get_meta("source") or "paper"
     day_utc = utcnow(clock).strftime("%Y-%m-%d")
     state = initial_state(source=source, initial_equity_lamports=initial, day_utc=day_utc)
+    deposits = position_deposits_by_seq(store)
     for event in store.read(limit=None):
-        state = reduce(state, event)
+        state = reduce(state, event, deposits)
     return state

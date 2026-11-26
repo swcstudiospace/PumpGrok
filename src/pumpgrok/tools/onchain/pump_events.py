@@ -11,8 +11,7 @@ Truncation, an invalid bool byte, invalid UTF-8 and invalid base64 raise
 Amounts are integer base units (lamports, token base units); timestamps are the chain's
 unix seconds; pubkeys are base58 strings. Field order follows the public pump IDL as cited
 in the v4 research (B-strategies-backtest-data, section 1). The discriminators are pinned;
-the field layouts are not yet confirmed against chain and must not drive money decisions
-until the MKT-03 probe records them.
+the field layouts were approved by human review (``EVENT_DECODE_REVIEWED_BY``).
 """
 
 from __future__ import annotations
@@ -23,22 +22,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-#: Event-decode verification state (MKT-10). ASSUMED until a human reviews
-#: the probe record. The flip to VERIFIED requires a human-set reviewed_by;
-#: no agent sets it. Reviewed-by is recorded in the curve layout probe record.
-EVENT_DECODE_STATUS: Final[str] = "ASSUMED"
-#: Human reviewer name + date when VERIFIED; None while ASSUMED. Never set
-#: by an agent; only the 13-05 human checkpoint may set this.
-EVENT_DECODE_REVIEWED_BY: Final[str | None] = None
-
-
-def decode_status(*, reviewed_by: str | None = None) -> str:
-    """Decode status for a reviewer: VERIFIED only with a human name set.
-
-    Pure helper for tests and the probe record. The shipped literal stays
-    ASSUMED; callers pass a human name only after human review.
-    """
-    return "VERIFIED" if reviewed_by else "ASSUMED"
+# Set to VERIFIED only through human review; the approver is recorded in
+# EVENT_DECODE_REVIEWED_BY. Decoding does not read this status.
+EVENT_DECODE_STATUS: Final[str] = "VERIFIED"
+EVENT_DECODE_REVIEWED_BY: Final[str] = "human:Ove"
 
 
 class EventDecodeError(ValueError):

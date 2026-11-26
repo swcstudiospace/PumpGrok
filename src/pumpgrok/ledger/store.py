@@ -16,7 +16,7 @@ import hashlib
 import json
 import sqlite3
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,8 @@ GENESIS_PREV_HASH = "0" * 64
 SCHEMA_VERSION = "1"
 
 SOURCES = frozenset({"paper", "replay", "manual"})
+
+SidecarWriter = Callable[[sqlite3.Connection, Sequence[Mapping[str, Any]]], None]
 
 _SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -66,6 +68,18 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events (type, ts_utc, seq);
 CREATE INDEX IF NOT EXISTS idx_events_correlation ON events (correlation_id, seq);
 CREATE INDEX IF NOT EXISTS idx_events_ts_seq ON events (ts_utc, seq);
+-- Sidecar tables (STR-03): derived state kept outside the hash chain. No event type or
+-- field is added; strategy_state rows are replaced on write, refs are keyed by ticket.
+CREATE TABLE IF NOT EXISTS strategy_ticket_refs (
+  ticket_id   TEXT PRIMARY KEY,
+  strategy_id TEXT NOT NULL,
+  event_id    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS strategy_state (
+  strategy_id TEXT PRIMARY KEY,
+  state_json  TEXT NOT NULL,
+  state_hash  TEXT NOT NULL
+);
 """
 
 
@@ -234,13 +248,20 @@ class LedgerStore:
             "hash": hash_,
         }
 
-    def append_batch(self, rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    def append_batch(
+        self,
+        rows: Sequence[Mapping[str, Any]],
+        *,
+        sidecar: SidecarWriter | None = None,
+    ) -> list[dict[str, Any]]:
         """Append many events atomically; the single transaction primitive.
 
         One write lock covers the repeat-check plus every row, with per-row
         hash chaining exactly as :meth:`append` does. Any error rolls back
         the whole batch, so no partial rows survive; a duplicate
         ``idempotency_key`` therefore refuses the entire batch.
+        ``sidecar``, when given, runs inside the same transaction after every row is
+        inserted, so its writes commit or roll back together with the rows.
         """
         pending = list(rows)
         if not pending:
@@ -303,6 +324,8 @@ class LedgerStore:
                         }
                     )
                     seq, prev_hash = seq + 1, hash_
+                if sidecar is not None:
+                    sidecar(db, stored)
                 db.execute("COMMIT;")
             except Exception:
                 with contextlib.suppress(sqlite3.Error):

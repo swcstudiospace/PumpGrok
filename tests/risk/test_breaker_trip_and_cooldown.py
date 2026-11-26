@@ -6,15 +6,17 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -35,7 +37,7 @@ def _store(tmp_path: Path) -> LedgerStore:
     recreate_ledger_db(path)
     store = LedgerStore(str(path))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     return store
 
 
@@ -68,7 +70,7 @@ def _buy(clock: FixtureClock, ids: IdFactory) -> OrderRequest:
 def _append(store: LedgerStore, clock: FixtureClock, type: str, payload: dict[str, Any]) -> None:
     store.append(
         ts_utc=format_ts_utc(clock.now()),
-        source="paper",
+        source="replay",
         correlation_id="test",
         idempotency_key=f"seed-{store.count() + 1}",
         type=type,
@@ -78,7 +80,7 @@ def _append(store: LedgerStore, clock: FixtureClock, type: str, payload: dict[st
 
 def _mtm(equity: int) -> dict[str, Any]:
     return {
-        "source": "paper",
+        "source": "replay",
         "ts_source": "curve",
         "cash_lamports": equity,
         "equity_lamports": equity,
@@ -89,7 +91,7 @@ def _mtm(equity: int) -> dict[str, Any]:
 
 def _reject_row(clock: FixtureClock, ids: IdFactory) -> dict[str, Any]:
     return {
-        "source": "paper",
+        "source": "replay",
         "order_id": ids.ulid(),
         "decision_id": ids.ulid(),
         "reason": "tx_dropped",
@@ -100,7 +102,7 @@ def _reject_row(clock: FixtureClock, ids: IdFactory) -> dict[str, Any]:
 
 def _trip_payload(name: str) -> dict[str, Any]:
     return {
-        "source": "paper",
+        "source": "replay",
         "breaker": name,
         "metric": "seeded",
         "threshold": "seeded",
@@ -111,12 +113,12 @@ def _trip_payload(name: str) -> dict[str, Any]:
 def _fill_for_velocity(store: LedgerStore, clock: FixtureClock, ids: IdFactory) -> None:
     store.append(
         ts_utc=format_ts_utc(clock.now()),
-        source="paper",
+        source="replay",
         correlation_id="test",
         idempotency_key=f"vel-{store.count() + 1}",
         type="FillRecorded",
         payload={
-            "source": "paper",
+            "source": "replay",
             "order_id": ids.ulid(),
             "decision_id": ids.ulid(),
             "side": "sell",
@@ -142,7 +144,7 @@ def _trip(store: LedgerStore, clock: FixtureClock, ids: IdFactory, name: str) ->
             engine.note_miss(
                 clock.now(),
                 ts_utc=format_ts_utc(clock.now()),
-                source="paper",
+                source="replay",
                 correlation_id="test",
             )
     elif name == "loss_velocity":
@@ -196,7 +198,7 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
             breaker,
             False,
             ts_utc=format_ts_utc(clock.now()),
-            source="paper",
+            source="replay",
             correlation_id="test",
         )
         assert engine._breakers.by_name(breaker).state == "open"
@@ -211,14 +213,14 @@ def test_breaker_lifecycle(tmp_path: Path, breaker: str) -> None:
             if current.state == "closed":
                 break
             if current.probe_inflight:
-                engine.resolve_probe(breaker, True, source="paper", correlation_id="test")
+                engine.resolve_probe(breaker, True, source="replay", correlation_id="test")
                 continue
             assert engine._breakers.admit_probe(breaker) is True
             engine._breakers.resolve_probe(
                 breaker,
                 True,
                 ts_utc=format_ts_utc(clock.now()),
-                source="paper",
+                source="replay",
                 correlation_id="test",
             )
         assert engine._breakers.by_name(breaker).state == "closed"
@@ -239,16 +241,6 @@ def test_breaker_names_match_r34_vocabulary() -> None:
     assert list(BREAKER_NAMES) == ["data_stale", "loss_velocity", "exec_errors"]
 
 
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
-
-
 async def _drive(coro: Any, clock: FixtureClock) -> Any:
     task = asyncio.create_task(coro)
     for _ in range(400):
@@ -266,15 +258,16 @@ async def test_breaker_rechecked_at_confirming(tmp_path: Path) -> None:
     try:
         ids = IdFactory(clock, make_rng(31))
         engine = _engine(store, clock)
-        snap = CurveSnapshot(mint=MINT_A, s_lamports=S0, t_units=T0)
-        adapter = PaperAdapter(
+        replay = replay_authority(tmp_path, clock, [tick(START, MINT_A, S0, T0)])
+        adapter = build_paper_adapter(
+            SimpleNamespace(risk=RiskBudget()),
             store=store,
             risk=engine,
             ids=ids,
             clock=clock,
             rng=make_rng(31),
-            budget=RiskBudget(),
-            price_source=_ScriptedCurves([snap, snap]),
+            replay=replay,
+            source="replay",
             p_drop=0.0,
         )
         task = asyncio.create_task(adapter.place(_buy(clock, ids), seat="bot-04-sniper"))

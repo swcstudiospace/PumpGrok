@@ -5,31 +5,59 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Set
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.curve_math import sell_out, spot
+from pumpgrok.execution.deposits import open_deposits
+from pumpgrok.execution.entry_hook import bound_replay_source
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _ledger_mark_epoch
 from pumpgrok.ledger.reducer import PositionView, position_value_lamports
 from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
 from pumpgrok.tools.onchain import curve_layout
+from pumpgrok.tools.onchain.curve_layout import CurveProvenance
 
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
+    from pumpgrok.execution.entry_hook import EntryPolicy
     from pumpgrok.execution.fees import FeeModel
+    from pumpgrok.execution.paper_adapter.models import PriceSource
     from pumpgrok.ledger.store import LedgerStore
     from pumpgrok.risk.limits import EngineLimits
+
+
+class _ExitValue(NamedTuple):
+    """A full exit's value: proceeds net of fees, and the ATA deposit credited beside them.
+
+    ``proceeds`` is the close's reported proceeds. ``refund`` is the deposit the close
+    returns to cash on top of proceeds; it is zero when the valuation already holds it.
+    """
+
+    proceeds: int
+    venue_fee: int
+    network_cost: int
+    refund: int
+
+
+def _realized_lamports(valued: _ExitValue, pos: PositionView) -> int:
+    """Realized P&L of a full exit: the cash it credits, less the full cost basis.
+
+    The deposit sits in both the cost basis and the credit, so it nets to zero.
+    """
+    return valued.proceeds + valued.refund - int(pos.cost_basis_lamports)
 
 
 class _MarksMixin:
     if TYPE_CHECKING:
         _clock: Clock
+        _entry_policy: EntryPolicy | None
         _fees: FeeModel
         _frozen_marks: dict[str, int]
         _ids: IdFactory
         _last_price_ts: dict[str, float]
+        _price: PriceSource | None
         _last_reserves: dict[str, tuple[int, int]]
         _limits: EngineLimits
         _source: Literal["paper", "replay", "manual"]
@@ -63,7 +91,7 @@ class _MarksMixin:
         return await self._force_close(
             mint,
             reason="graduated",
-            valued=self._curve_exit(last_s, last_t, pos.token_units),
+            valued=self._curve_exit(mint, last_s, last_t, pos.token_units),
             source=source,
             correlation_id=correlation_id,
         )
@@ -120,7 +148,7 @@ class _MarksMixin:
             return None
         gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
         venue = self._fees.venue_fee(gross)
-        mtm = gross - venue
+        mtm = gross - venue + self._open_deposits().get(mint, 0)
         cash = int(state.cash_lamports)
         # Book value: this mint at the fresh mark, every other open position at
         # its last ledger mark (the same sum the fold uses for equity).
@@ -188,9 +216,11 @@ class _MarksMixin:
         if not held:
             return None
         if supplied:
-            marks, values = self._price_supplied(held, supplied_snapshots, now)
+            marks, values = self._price_supplied(
+                held, supplied_snapshots, now, self._open_deposits()
+            )
         else:
-            marks, values = await self._price_held(held, now)
+            marks, values = await self._price_held(held, now, self._open_deposits())
         if not marks:
             return None
         row = self._append_mark_row(
@@ -217,7 +247,8 @@ class _MarksMixin:
         if set(snapshots) - held.keys():
             raise ValueError("mark input contains a mint without an open position")
         for mint, curve in snapshots.items():
-            if not self._admitted_curve(mint, curve):
+            # Supplied snapshots carry no source identity: they are never replay.
+            if not self._admitted_curve(mint, curve, self._provenance(None, curve)):
                 raise ValueError(f"untrusted or invalid curve snapshot for {mint}")
             if not self._admitted_timestamp(mint, held[mint], curve, now):
                 raise ValueError(f"invalid curve snapshot timestamp for {mint}")
@@ -235,22 +266,42 @@ class _MarksMixin:
             and (cached_time is None or recorded >= cached_time)
         )
 
+    def _provenance(self, read_from: object | None, curve: CurveSnapshot) -> CurveProvenance:
+        """Provenance of one mark snapshot.
+
+        VERIFIED_REPLAY only when the read came from the curve source bound by
+        ``verify_replay`` (identity check). LIVE_RPC for an rpc label. Anything
+        else, including a fixture label from any other source, is UNKNOWN.
+        """
+        if read_from is not None and read_from is bound_replay_source(self._entry_policy):
+            return CurveProvenance.VERIFIED_REPLAY
+        if curve.source == "rpc":
+            return CurveProvenance.LIVE_RPC
+        return CurveProvenance.UNKNOWN
+
     @staticmethod
-    def _admitted_curve(mint: str, curve: CurveSnapshot) -> bool:
+    def _admitted_curve(mint: str, curve: CurveSnapshot, provenance: CurveProvenance) -> bool:
         return (
             curve.mint == mint
             and curve.source in {"fixture", "rpc"}
             and not curve.complete
             and curve.s_lamports > 0
             and curve.t_units > 0
-            and curve_layout.rpc_curve_price_allowed(curve_source=curve.source)
+            and curve_layout.rpc_curve_price_allowed(
+                curve_source=curve.source, provenance=provenance
+            )
         )
+
+    def _open_deposits(self) -> dict[str, int]:
+        """ATA deposit held by each mint's open account, from the deposit sidecar."""
+        return open_deposits(self._store)
 
     def _price_supplied(
         self,
         held: dict[str, PositionView],
         snapshots: Mapping[str, CurveSnapshot],
         now: float,
+        deposits: Mapping[str, int],
     ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
         """Value validated supplied observations without reading or changing caches."""
         marks: dict[str, dict[str, Any]] = {}
@@ -258,9 +309,10 @@ class _MarksMixin:
         for mint, curve in snapshots.items():
             gross = sell_out(curve.s_lamports, curve.t_units, held[mint].token_units)
             venue = self._fees.venue_fee(gross)
-            values[mint] = gross - venue
+            mtm = gross - venue + deposits.get(mint, 0)
+            values[mint] = mtm
             marks[mint] = {
-                "mtm_lamports": gross - venue,
+                "mtm_lamports": mtm,
                 "venue_fee_lamports": venue,
                 "spot": str(spot(curve.s_lamports, curve.t_units)),
                 "source": "curve",
@@ -269,26 +321,32 @@ class _MarksMixin:
         return marks, values
 
     async def _price_held(
-        self, held: dict[str, PositionView], now: float
+        self,
+        held: dict[str, PositionView],
+        now: float,
+        deposits: Mapping[str, int],
     ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
         """Read each held mint's curve; a mint with no usable curve keeps its last mark."""
         marks: dict[str, dict[str, Any]] = {}
         values: dict[str, int] = {}
         for mint, pos in held.items():
+            read_from = self._price
             curve = await self._read_curve(mint)
-            if (
-                curve is None
-                or not self._admitted_curve(mint, curve)
-                or not self._admitted_timestamp(mint, pos, curve, now)
+            if curve is None or not self._admitted_curve(
+                mint, curve, self._provenance(read_from, curve)
             ):
+                values[mint] = position_value_lamports(pos)
+                continue
+            if not self._admitted_timestamp(mint, pos, curve, now):
                 values[mint] = position_value_lamports(pos)
                 continue
             recorded = curve.ts if curve.ts is not None else now
             gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
             venue = self._fees.venue_fee(gross)
-            values[mint] = gross - venue
+            mtm = gross - venue + deposits.get(mint, 0)
+            values[mint] = mtm
             marks[mint] = {
-                "mtm_lamports": gross - venue,
+                "mtm_lamports": mtm,
                 "venue_fee_lamports": venue,
                 "spot": str(spot(curve.s_lamports, curve.t_units)),
                 "source": "curve",
@@ -372,7 +430,6 @@ class _MarksMixin:
         valued = self._live_value(mint, pos, curve)
         if valued is None:
             return {"status": "no_mark", "mint": mint}
-        proceeds = valued[0]
         row = await self._force_close(
             mint,
             reason=reason,  # type: ignore[arg-type]
@@ -387,48 +444,51 @@ class _MarksMixin:
             "status": "closed",
             "mint": mint,
             "reason": reason,
-            "proceeds_lamports": proceeds,
-            "realized_pnl_lamports": proceeds - int(pos.cost_basis_lamports),
+            "proceeds_lamports": valued.proceeds,
+            "realized_pnl_lamports": _realized_lamports(valued, pos),
             "seq": int(row["seq"]),
         }
 
-    def _curve_exit(self, s_lamports: int, t_units: int, units: int) -> tuple[int, int, int]:
-        """``(proceeds, venue_fee, network_cost)`` for selling ``units`` on this curve.
+    def _curve_exit(self, mint: str, s_lamports: int, t_units: int, units: int) -> _ExitValue:
+        """Exit value for selling ``units`` on this curve, as a normal sell books it.
 
-        Same arithmetic as a normal sell: proceeds are gross less venue fee less
-        network cost, so cash moves by the proceeds and fees are reported.
+        Proceeds are gross less venue fee less network cost. The open account's ATA deposit is
+        not sale value: it is refunded to cash beside the proceeds.
         """
         gross = sell_out(s_lamports, t_units, units)
         venue = self._fees.venue_fee(gross)
         network = self._fees.network_cost()
-        return gross - venue - network, venue, network
+        refund = self._open_deposits().get(mint, 0)
+        return _ExitValue(gross - venue - network, venue, network, refund)
 
-    def _last_good_value(self, mint: str, pos: PositionView) -> tuple[int, int, int] | None:
+    def _last_good_value(self, mint: str, pos: PositionView) -> _ExitValue | None:
         """Last ledger mark, else the last-good reserves; never reads a live price.
 
-        A ledger mark is already net of the venue fee, so the close takes only the
-        network cost off it and books the venue fee stored with that mark. Marks
-        written before the venue key existed report a venue fee of 0 (disclosed);
-        their cash is unaffected. The reserves path reports both fees.
+        A ledger mark is market value and already holds the open account's ATA deposit, so
+        its proceeds are the mark less the network cost: the deposit returns to cash inside
+        them, once, with no separate refund. Marks written before the venue key existed
+        report a venue fee of 0 (disclosed); their cash is unaffected. The reserves path
+        refunds the deposit beside its proceeds instead.
         """
         if pos.last_mtm_lamports > 0:
             network = self._fees.network_cost()
-            return (
+            return _ExitValue(
                 int(pos.last_mtm_lamports) - network,
                 int(pos.last_mtm_venue_fee_lamports),
                 network,
+                0,
             )
         last = self._last_reserves.get(mint)
         if last is not None:
-            return self._curve_exit(last[0], last[1], pos.token_units)
+            return self._curve_exit(mint, last[0], last[1], pos.token_units)
         return None
 
     def _live_value(
         self, mint: str, pos: PositionView, curve: CurveSnapshot | None
-    ) -> tuple[int, int, int] | None:
+    ) -> _ExitValue | None:
         """Value of a full exit: the live curve when usable, else the last-good value."""
         if curve is not None and not curve.complete:
-            return self._curve_exit(curve.s_lamports, curve.t_units, pos.token_units)
+            return self._curve_exit(mint, curve.s_lamports, curve.t_units, pos.token_units)
         return self._last_good_value(mint, pos)
 
     async def _force_close(
@@ -436,7 +496,7 @@ class _MarksMixin:
         mint: str,
         *,
         reason: Literal["graduated", "blind_flatten", "kill_flatten", "rug_alert"],
-        valued: tuple[int, int, int],
+        valued: _ExitValue,
         source: str | None,
         correlation_id: str,
         ticket_id: str = "",
@@ -446,21 +506,62 @@ class _MarksMixin:
         pos = state.positions.get(mint)
         if pos is None or pos.token_units <= 0:
             return None
-        proceeds, venue_fee, network_cost = valued
-        realized = proceeds - int(pos.cost_basis_lamports)
-        pnl_pct, hold_seconds = self._close_stats(pos, realized)
+        proceeds = valued.proceeds
+        realized = _realized_lamports(valued, pos)
+        # PnL % is taken against cost basis net of the deposit, which the close refunds.
+        deposit = self._open_deposits().get(mint, 0)
+        pnl_pct, hold_seconds = self._close_stats(pos, realized, deposit)
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
         order_id = self._ids.ulid()
         price_exit = str(Decimal(proceeds) / Decimal(pos.token_units)) if pos.token_units else "0"
-        rows = [
+        rows = self._force_close_rows(
+            mint,
+            reason=reason,
+            valued=valued,
+            realized=realized,
+            pnl_pct=pnl_pct,
+            hold_s=hold_seconds,
+            order_id=order_id,
+            venue_tx_ref=venue_tx_ref,
+            units=pos.token_units,
+            price_exit=price_exit,
+            ticket_id=ticket_id,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
+        stored = self._store.append_batch(rows)
+        self._frozen_marks[mint] = proceeds
+        self._last_price_ts.pop(mint, None)
+        return stored[1]
+
+    def _force_close_rows(
+        self,
+        mint: str,
+        *,
+        reason: str,
+        valued: _ExitValue,
+        realized: int,
+        pnl_pct: Decimal,
+        hold_s: int,
+        order_id: str,
+        venue_tx_ref: str,
+        units: int,
+        price_exit: str,
+        ticket_id: str,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> list[dict[str, Any]]:
+        """Fill, close and escalation rows of one forced close, in ledger order."""
+        return [
             self._force_close_fill_row(
                 mint,
                 order_id=order_id,
                 venue_tx_ref=venue_tx_ref,
-                proceeds=proceeds,
-                venue_fee=venue_fee,
-                network_cost=network_cost,
-                units=pos.token_units,
+                proceeds=valued.proceeds,
+                venue_fee=valued.venue_fee,
+                network_cost=valued.network_cost,
+                refund_lamports=valued.refund,
+                units=units,
                 price_exit=price_exit,
                 ledger_source=ledger_source,
                 correlation_id=correlation_id,
@@ -468,10 +569,10 @@ class _MarksMixin:
             self._force_close_position_row(
                 mint,
                 reason=reason,
-                proceeds=proceeds,
+                proceeds=valued.proceeds,
                 realized=realized,
                 pnl_pct=pnl_pct,
-                hold_s=hold_seconds,
+                hold_s=hold_s,
                 venue_tx_ref=venue_tx_ref,
                 price_exit=price_exit,
                 ledger_source=ledger_source,
@@ -480,21 +581,16 @@ class _MarksMixin:
             self._force_close_escalation_row(
                 mint,
                 reason=reason,
-                proceeds=proceeds,
+                proceeds=valued.proceeds,
                 ticket_id=ticket_id,
                 ledger_source=ledger_source,
                 correlation_id=correlation_id,
             ),
         ]
 
-        stored = self._store.append_batch(rows)
-        self._frozen_marks[mint] = proceeds
-        self._last_price_ts.pop(mint, None)
-        return stored[1]
-
-    def _close_stats(self, pos: PositionView, realized: int) -> tuple[Decimal, int]:
-        """PnL fraction against cost basis, and hold seconds floored at zero."""
-        basis = int(pos.cost_basis_lamports)
+    def _close_stats(self, pos: PositionView, realized: int, deposit: int) -> tuple[Decimal, int]:
+        """PnL fraction against basis net of the refunded deposit; hold seconds floored at zero."""
+        basis = int(pos.cost_basis_lamports) - deposit
         pnl_pct = Decimal(realized) / Decimal(basis) if basis else Decimal("0")
         try:
             hold_s = int(self._clock.now() - parse_ts_utc(pos.opened_ts_utc))
@@ -511,6 +607,7 @@ class _MarksMixin:
         proceeds: int,
         venue_fee: int,
         network_cost: int,
+        refund_lamports: int,
         units: int,
         price_exit: str,
         ledger_source: str,
@@ -534,7 +631,7 @@ class _MarksMixin:
                 "price_avg": price_exit,
                 "venue_fee_lamports": venue_fee,
                 "network_cost_lamports": network_cost,
-                "cash_delta_lamports": proceeds,
+                "cash_delta_lamports": proceeds + refund_lamports,
                 "venue_tx_ref": venue_tx_ref,
                 "route": "curve",
             },

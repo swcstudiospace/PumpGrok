@@ -1,0 +1,53 @@
+{
+  "plan": "15-05",
+  "phase": "15-strategy-framework-and-multi-strategy-paper",
+  "requirement": "MKT-09",
+  "criteria": [10],
+  "seat": "bot-00-chief",
+  "branch": "bot-00-chief/v4-phase-14",
+  "base": {
+    "commit": "0052468",
+    "head_before_plan": "e86ad93"
+  },
+  "commits": [
+    {"sha": "7e971dc", "author": "bot-00-chief <bot-00-chief@local>", "subject": "feat(15-05): live-data paper composition root, paper-only, explicit endpoint (MKT-09, criterion 10)", "files": ["src/pumpgrok/supervisor/live_paper.py", "tests/desk/test_live_paper_root.py"]},
+    {"sha": "adb5231", "author": "bot-00-chief <bot-00-chief@local>", "subject": "feat(15-05): exit book skips a strategy position with a pending sell (criterion 10)", "files": ["src/pumpgrok/supervisor/exit_rules.py", "tests/desk/test_exit_rules_filter.py"]}
+  ],
+  "endpoint_policy": "No default endpoint. build_live_paper_root takes endpoint as a required keyword; an absent, empty or non-string endpoint is refused before any I/O. The owner chooses the endpoint at deployment (owner decision 4). Tests use the read-only double only.",
+  "red_evidence": [
+    {
+      "task": 1,
+      "file": "tests/desk/test_live_paper_root.py",
+      "result": "collection error before implementation: ImportError: cannot import name 'live_paper' from 'pumpgrok.supervisor'"
+    },
+    {
+      "task": 2,
+      "file": "tests/desk/test_exit_rules_filter.py",
+      "result": "1 failed, 4 passed before the filter; the failure is test_pending_strategy_sell_blocks_second_global_sell: the global book placed a second stop_loss sell on a strategy ticket with a pending sell (AssertionError: [('MintFilter...', 'stop_loss')] == [])"
+    }
+  ],
+  "green_evidence": [
+    {"command": "uv run python -m pytest -q -p no:cacheprovider tests/desk/test_live_paper_root.py tests/desk/test_exit_rules_filter.py tests/datafeed/test_readonly.py", "exit_code": 0, "result": "criterion 10 set: 74 passed (17 desk + 57 readonly), 0 skipped; counted from progress dots because addopts -q suppresses the summary line"},
+    {"command": "uv run python -m pytest -q -p no:cacheprovider tests/safety/test_import_graph_no_live.py tests/safety/test_no_signing_outside_live_stub.py", "exit_code": 0, "result": "criterion 12 set: 42 passed, 0 skipped; counted from progress dots; shared with bot-02-risk receipt"}
+  ],
+  "checks": {
+    "contracts_diff_vs_v4_base": 0,
+    "ascii_only": true,
+    "lines_over_100": 0,
+    "legacy_pins_touched": false,
+    "readonly_py_touched_by_this_plan": false,
+    "safety_tests_touched_by_this_plan": false,
+    "network_or_socket_opened_by_tests": false
+  },
+  "deviations": [
+    "Exit filter scope: the fold tracks one open position per mint, so two strategies cannot hold concurrent positions on one mint. test_each_position_on_a_mint_is_filtered_by_its_own_ticket covers the reachable case: strategy A closes on a mint, then strategy B re-enters it under its own ticket, and B's ticket is not blocked by A's pending sell.",
+    "Exit filter also skips a graduation close for a strategy position with a pending sell. The plan text names only rule sells; a graduation close on the same position would otherwise close it while its pending sell is still open. Non-strategy positions are unchanged.",
+    "build_live_paper_root takes budget, limits, max_age_s and max_observations as required keyword arguments with no defaults. The staleness and observation bounds are deployment choices and are not pinned here.",
+    "The root's risk engine uses the default manual-ticket autonomy and the host kill-switch file under data_dir. The root has no event consumers; its EventBus dead-letter sink raises instead of dropping an event.",
+    "Plan 15-05 names a SUMMARY file. Not written, per the shared rule against writing .planning/**/SUMMARY files in this wave."
+  ],
+  "open_findings": [
+    "Adjacent exit tests were not run because this wave runs only the files each plan names: tests/integrity/test_peaks_survive_restart.py, tests/integrity/test_serve_restart_keeps_peaks.py and tests/degradation/test_grok_hang_exit.py exercise LedgerExitBook and ExitRules. Main agent should run them before phase close.",
+    "Owner decision needed before deployment: the root's max_age_s and max_observations values and the endpoint chosen at deployment."
+  ]
+}

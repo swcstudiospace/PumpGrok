@@ -1,4 +1,4 @@
-.PHONY: help sync lint fmt typecheck test test-soak test-all cov mutation-smoke audit run-paper gateway replay report gates prompts check doctor clean
+.PHONY: help sync lint fmt typecheck test test-soak test-all cov mutation-smoke audit run-paper gateway replay report gates idle-grok prompts check doctor clean
 
 UV ?= uv
 BOT ?= bot-00-chief
@@ -64,12 +64,12 @@ report: sync     ## daily report from the ledger
 doctor: sync     ## effective config, data sources, ledger, killswitch
 	$(UV) run pumpgrok doctor
 
-gates:           ## G-1..G-7 for BOT/TASK (stdlib + pyyaml only, like CI)
+gates:           ## G-1..G-8 for BOT/TASK (stdlib + pyyaml only, like CI)
 	python3 -P ci/gates/run_all.py --bot $(BOT) --base origin/main --receipt .receipts/$(BOT)/$(TASK).json
 
-
-idle-grok:       ## idle-grok gate: 24 virtual hours, zero Grok calls
+idle-grok: sync ## G-8: idle event desk makes zero Grok calls over 24 virtual hours (EVT-12)
 	$(UV) run python ci/gates/check_idle_grok.py
+
 prompts:         ## assemble prompts and regenerate agent templates
 	ASSEMBLE_UV='$(UV)' bash scripts/assemble-prompts.sh
 	$(UV) run python scripts/generate-templates.py

@@ -12,6 +12,7 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.engine.reputation import ReputationBook
+from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import format_ts_utc
@@ -140,8 +141,9 @@ class RiskEngine(_EngineSteps):
             initial_equity_lamports=initial,
             day_utc=utc_day(self._clock.now()),
         )
+        deposits = position_deposits_by_seq(self._store)
         for event in events:
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
         return state
 
     def attach_flatten_hook(self, hook: Callable[[], Awaitable[None]]) -> None:

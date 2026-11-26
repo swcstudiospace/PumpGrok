@@ -38,6 +38,7 @@ from pumpgrok.backtest.equity import net_lamports
 from pumpgrok.backtest.manifest import _resolve_dataset_dir, dataset_digest, file_digest
 from pumpgrok.backtest.split import holdout_split, walk_forward_folds
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.reducer import initial_state
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, event_epoch, load_dataset
@@ -153,19 +154,21 @@ def _net_lamports(ledger_path: Path) -> int:
     the reducer carries fills by their cash delta and refusals by their fees. A
     row with no payload mapping, a non-integer money field or an unknown side
     raises, as does a ledger without its opening equity. A window with no fills
-    nets only the fees its refusals paid, and an empty window nets 0.
+    nets only the fees its refusals paid, and an empty window nets 0. Each opening
+    folds with the ATA deposit it recorded, as the engine does.
     """
     store = LedgerStore(ledger_path)
     try:
         rows = store.read(limit=None)
         meta = store.get_meta("initial_equity_lamports")
+        deposits = position_deposits_by_seq(store)
     finally:
         store.close()
     _check_money_rows(rows)
     if meta is None:
         raise ValueError(f"eval ledger {ledger_path} holds no initial_equity_lamports meta")
     genesis = initial_state(source="replay", initial_equity_lamports=int(meta), day_utc="")
-    return net_lamports(genesis, rows)
+    return net_lamports(genesis, rows, deposits)
 
 
 def _effective_budget(budget: RiskBudget | None) -> RiskBudget:

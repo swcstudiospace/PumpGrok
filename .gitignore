@@ -11,6 +11,8 @@ build/
 .receipts/**/*.json
 !.receipts/**/.gitkeep
 !.receipts/bot-0*/v4-p*.json
+!.receipts/*/15-*.json
+!.receipts/*/16-*.json
 var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp

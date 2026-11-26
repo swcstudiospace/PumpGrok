@@ -11,8 +11,8 @@ from pydantic import ValidationError
 
 from pumpgrok.config.settings import LiveSettings, PlatformSettings, WalletSettings
 
-# 32 zero bytes in base58: the Solana system program, a valid public key.
-SYSTEM_PROGRAM = "11111111111111111111111111111111"
+# A real Ed25519 public key (RFC 8032 TEST 1) in base58; not a small-order point.
+VALID_KEY = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
 # 88 leading '1' characters decode to 88 zero bytes, never 32: must be rejected.
 EIGHTY_EIGHT_ONES = "1" * 88
 
@@ -22,8 +22,8 @@ def test_default_allowlist_is_empty() -> None:
 
 
 def test_valid_public_key_is_accepted() -> None:
-    settings = WalletSettings(allowlist=(SYSTEM_PROGRAM,))
-    assert settings.allowlist == (SYSTEM_PROGRAM,)
+    settings = WalletSettings(allowlist=(VALID_KEY,))
+    assert settings.allowlist == (VALID_KEY,)
 
 
 def test_string_decoding_to_wrong_length_is_rejected() -> None:
@@ -34,12 +34,12 @@ def test_string_decoding_to_wrong_length_is_rejected() -> None:
 def test_character_outside_base58_alphabet_is_rejected() -> None:
     # '0' is not in the base58 alphabet; the rest of the string is valid.
     with pytest.raises(ValidationError):
-        WalletSettings(allowlist=(SYSTEM_PROGRAM[:-1] + "0",))
+        WalletSettings(allowlist=(VALID_KEY[:-1] + "0",))
 
 
 @pytest.mark.parametrize(
     "entry",
-    [SYSTEM_PROGRAM + " ", " " + SYSTEM_PROGRAM, SYSTEM_PROGRAM + "\n"],
+    [VALID_KEY + " ", " " + VALID_KEY, VALID_KEY + "\n"],
 )
 def test_whitespace_is_rejected(entry: str) -> None:
     with pytest.raises(ValidationError):

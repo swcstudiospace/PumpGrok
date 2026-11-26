@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import random
+from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import VerifiedReplay, build_paper_adapter
 from pumpgrok.execution.curve_math import sell_out
 from pumpgrok.execution.fees import FeeModel
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
@@ -22,8 +25,11 @@ from pumpgrok.ledger.reducer import initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
+from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
+
+from .replay_support import replay_authority, tick
 
 START = 1_769_900_000.0
 EQUITY = 10_000_000_000
@@ -95,8 +101,43 @@ def _mark(store: LedgerStore, clock: FixtureClock, mint: str, mtm: int, key: str
     )
 
 
+def _replay(tmp_path: Path, clock: FixtureClock) -> VerifiedReplay:
+    """Verified replay over one S0/T0 tick at START: the only source that admits marks."""
+    return replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+
+
+def _record_reads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record the mint of every read the bound replay source serves."""
+    reads: list[str] = []
+    real = FixtureCurveSource.curve
+
+    async def curve(self: FixtureCurveSource, mint: str) -> CurveSnapshot | None:
+        reads.append(mint)
+        return await real(self, mint)
+
+    monkeypatch.setattr(FixtureCurveSource, "curve", curve)
+    return reads
+
+
+def _rewrite_reads(
+    monkeypatch: pytest.MonkeyPatch, rewrite: Callable[[CurveSnapshot], CurveSnapshot]
+) -> None:
+    """Every later read of the bound replay source returns ``rewrite(snapshot)``."""
+    real = FixtureCurveSource.curve
+
+    async def curve(self: FixtureCurveSource, mint: str) -> CurveSnapshot | None:
+        snapshot = await real(self, mint)
+        return None if snapshot is None else rewrite(snapshot)
+
+    monkeypatch.setattr(FixtureCurveSource, "curve", curve)
+
+
 def _adapter(
-    store: LedgerStore, clock: FixtureClock, *, price_source: CountingSource
+    store: LedgerStore,
+    clock: FixtureClock,
+    *,
+    price_source: CountingSource | None = None,
+    replay: VerifiedReplay | None = None,
 ) -> PaperAdapter:
     engine = RiskEngine(
         store=store,
@@ -107,6 +148,18 @@ def _adapter(
         get_reserves=lambda _mint: (S0, T0),
         env={},
     )
+    if replay is not None:
+        return build_paper_adapter(
+            SimpleNamespace(),
+            store=store,
+            risk=engine,
+            ids=IdFactory(clock, make_rng(52)),
+            clock=clock,
+            rng=make_rng(52),
+            replay=replay,
+            source="replay",
+            p_drop=0.0,
+        )
     return PaperAdapter(
         store=store,
         risk=engine,
@@ -140,7 +193,7 @@ def _fold(store):
     return state
 
 
-async def test_supplied_trusted_mark_preserves_multiple_gaps(tmp_path: Path) -> None:
+async def test_replay_trusted_mark_preserves_multiple_gaps(tmp_path: Path) -> None:
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
@@ -150,14 +203,12 @@ async def test_supplied_trusted_mark_preserves_multiple_gaps(tmp_path: Path) -> 
         _mark(store, clock, OTHER, OTHER_MTM, "prior-gap")
         _mark(store, clock, ZERO, 25_000_000, "prior-zero")
         clock.advance_to(START + 5)
-        source = CountingSource(_snapshot())
-        adapter = _adapter(store, clock, price_source=source)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         before = store.read(limit=None)
 
-        row = await adapter.mark_open_positions(snapshots={MINT: _snapshot()})
+        row = await adapter.mark_open_positions()
 
         assert row is not None
-        assert source.reads == []
         new_rows = store.read(limit=None)[len(before) :]
         assert [event["type"] for event in new_rows] == ["MarkToMarket"]
         body = json.loads(str(row["payload_json"]))
@@ -200,8 +251,8 @@ async def test_timeout_zero_is_rejected_and_last_good_exit_survives_restart(
     try:
         _seed_position(store, clock, MINT, units, BASIS)
         source = CountingSource()
-        adapter = _adapter(store, clock, price_source=source)
-        assert await adapter.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
+        assert await adapter.mark_open_positions() is not None
         clock.advance_to(START + 5)
         before = store.read(limit=None)
         reserves = adapter._last_reserves.copy()
@@ -304,9 +355,10 @@ async def test_unknown_zero_mint_rejects_without_writes_or_cache_changes(tmp_pat
         store.close()
 
 
-async def test_trust_demotion_rejects_previously_accepted_rpc_snapshot(
+async def test_supplied_rpc_snapshot_is_never_admitted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """LIVE_RPC provenance is refused by the strict gate, whatever LAYOUT_STATUS says."""
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
@@ -315,36 +367,31 @@ async def test_trust_demotion_rejects_previously_accepted_rpc_snapshot(
         adapter = _adapter(store, clock, price_source=source)
         snap = _snapshot(source="rpc")
         monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
-        assert (
-            await adapter.mark_open_positions(snapshots={MINT: snap}, zero_mints=set()) is not None
-        )
         before_rows = store.read(limit=None)
-        before_reserves = adapter._last_reserves.copy()
-        before_times = adapter._last_price_ts.copy()
-        clock.advance_to(START + 5)
-        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
 
         with pytest.raises(ValueError):
             await adapter.mark_open_positions(snapshots={MINT: snap}, zero_mints=set())
 
         assert store.read(limit=None) == before_rows
-        assert adapter._last_reserves == before_reserves
-        assert adapter._last_price_ts == before_times
+        assert adapter._last_reserves == {}
+        assert adapter._last_price_ts == {}
         assert source.reads == []
     finally:
         store.close()
 
 
-async def test_default_mark_call_still_reads_existing_price_source(tmp_path: Path) -> None:
+async def test_default_mark_call_still_reads_existing_price_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        source = CountingSource(_snapshot())
-        adapter = _adapter(store, clock, price_source=source)
+        reads = _record_reads(monkeypatch)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         row = await adapter.mark_open_positions(correlation_id="legacy")
         assert row is not None
-        assert source.reads == [MINT]
+        assert reads == [MINT]
         gross = sell_out(S0, T0, UNITS)
         assert _fold(store).positions[MINT].last_mtm_lamports == gross - FeeModel().venue_fee(gross)
     finally:
@@ -382,18 +429,16 @@ async def test_default_rpc_demotion_preserves_last_trusted_mark(
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        source = CountingSource(_snapshot(source="rpc"))
-        adapter = _adapter(store, clock, price_source=source)
-        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         assert await adapter.mark_open_positions() is not None
         before = store.read(limit=None)
         reserves = adapter._last_reserves.copy()
         timestamps = adapter._last_price_ts.copy()
         clock.advance_to(START + 5)
-        source.snapshot = _snapshot(source="rpc").model_copy(
-            update={"s_lamports": S0 * 2, "ts": START + 5}
+        _rewrite_reads(
+            monkeypatch,
+            lambda snap: snap.model_copy(update={"source": "rpc", "s_lamports": S0 * 2}),
         )
-        monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
 
         assert await adapter.mark_open_positions() is None
         assert store.read(limit=None) == before
@@ -411,8 +456,8 @@ async def test_supplied_future_or_regressing_timestamps_reject_atomically(
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        adapter = _adapter(store, clock, price_source=CountingSource())
-        assert await adapter.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
+        assert await adapter.mark_open_positions() is not None
         clock.advance_to(START + 10)
         before = store.read(limit=None)
         reserves = adapter._last_reserves.copy()
@@ -430,17 +475,12 @@ async def test_supplied_future_or_regressing_timestamps_reject_atomically(
 
 
 async def test_default_gap_uses_unmarked_position_basis_in_row_equity(tmp_path: Path) -> None:
-    class PerMintSource(CountingSource):
-        async def curve(self, mint: str) -> CurveSnapshot | None:
-            self.reads.append(mint)
-            return _snapshot() if mint == MINT else None
-
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
         _seed_position(store, clock, OTHER, OTHER_UNITS, OTHER_BASIS)
-        adapter = _adapter(store, clock, price_source=PerMintSource())
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         row = await adapter.mark_open_positions()
         assert row is not None
         body = json.loads(str(row["payload_json"]))
@@ -458,8 +498,8 @@ async def test_out_of_order_snapshot_rejected_after_adapter_restart(tmp_path: Pa
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        marker = _adapter(store, clock, price_source=CountingSource())
-        assert await marker.mark_open_positions(snapshots={MINT: _snapshot()}) is not None
+        marker = _adapter(store, clock, replay=_replay(tmp_path, clock))
+        assert await marker.mark_open_positions() is not None
     finally:
         store.close()
 
@@ -480,20 +520,22 @@ async def test_out_of_order_snapshot_rejected_after_adapter_restart(tmp_path: Pa
 
 @pytest.mark.parametrize("timestamp", [START + 302, START - 1, float("nan"), float("inf")])
 async def test_default_invalid_timestamp_preserves_mark_and_blind_deadline(
-    tmp_path: Path, timestamp: float
+    tmp_path: Path, timestamp: float, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     clock = FixtureClock(START)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, 3_000_000_000, BASIS)
-        source = CountingSource(_snapshot())
-        adapter = _adapter(store, clock, price_source=source)
+        adapter = _adapter(store, clock, replay=_replay(tmp_path, clock))
         assert await adapter.mark_open_positions() is not None
         before = store.read(limit=None)
         reserves = adapter._last_reserves.copy()
         times = adapter._last_price_ts.copy()
         clock.advance_to(START + 301)
-        source.snapshot = _snapshot().model_copy(update={"s_lamports": S0 * 2, "ts": timestamp})
+        _rewrite_reads(
+            monkeypatch,
+            lambda snap: snap.model_copy(update={"s_lamports": S0 * 2, "ts": timestamp}),
+        )
 
         assert await adapter.mark_open_positions() is None
         assert store.read(limit=None) == before
@@ -512,7 +554,7 @@ async def test_default_regressing_timestamp_is_gap_after_restart(tmp_path: Path)
     store = _store(tmp_path)
     try:
         _seed_position(store, clock, MINT, UNITS, BASIS)
-        marker = _adapter(store, clock, price_source=CountingSource(_snapshot()))
+        marker = _adapter(store, clock, replay=_replay(tmp_path, clock))
         assert await marker.mark_open_positions() is not None
     finally:
         store.close()

@@ -39,7 +39,8 @@ from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS, FeeModel
+from pumpgrok.execution.fees import BASE_FEE_LAMPORTS, VENUE_FEE_BPS
+from pumpgrok.execution.paper_factory import paper_fee_model
 from pumpgrok.replay.fixtures import FixtureDataset, event_epoch, load_dataset
 from pumpgrok.replay.import_data import import_ticks
 from pumpgrok.replay.rebuild_ticks import rebuild_ticks
@@ -271,11 +272,13 @@ def _settle(
     return _Settled(outcome=outcome, eligible=eligible, reasons=reasons, gate=gate)
 
 
-def _emit_report(plan: _Plan, harness_result: HarnessResult, settled: _Settled) -> None:
+def _emit_report(
+    plan: _Plan, harness_result: HarnessResult, settled: _Settled, settings: Settings
+) -> None:
     """Build the deterministic backtest report from the run and print it (CONTEXT G-01)."""
     outcome = settled.outcome
     gate = settled.gate
-    fees = FeeModel()
+    fees = paper_fee_model(settings)
     report = build_report(
         run_id=plan.manifest.run_id,
         dataset=plan.dataset.name,
@@ -336,22 +339,19 @@ def _backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     summary over the recording's span; SharedResult.compare enforces window
     equality before divergence.check gates promotion (PAP-02, G-08). Without
     it promotion stays ineligible with reason divergence not compared. This
-    verb places no paper orders itself.
+    verb places no paper orders itself. ``--strategy`` does not enter this
+    body; it dispatches to the strategy backtest handler.
     """
-    strategy = getattr(args, "strategy", None)
-    if strategy is not None:
-        dataset = _backtest_dataset(str(args.fixture))
-        result = run_strategy(dataset.directory, str(strategy), seed=settings.replay.seed)
-        line = (
-            f"strategy {result.strategy_id} on {result.dataset}: net {result.net_lamports} lamports"
-        )
-        _say(sys.stdout, line)
-        return 0
+    if getattr(args, "strategy", None) is not None:
+        # Import cycle: strategy_backtest imports _backtest_dataset from this module.
+        from pumpgrok.cli.strategy_backtest import strategy_backtest_verb  # noqa: PLC0415
+
+        return strategy_backtest_verb(args, settings)
     plan = _backtest_plan(args, settings)
     with _run_lock(plan.run_dir):
         harness_result = _run_trials(plan)
         settled = _settle(args, settings, plan, harness_result)
-        _emit_report(plan, harness_result, settled)
+        _emit_report(plan, harness_result, settled, settings)
     return settled.gate.exit_code
 
 

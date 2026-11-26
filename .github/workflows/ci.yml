@@ -58,6 +58,9 @@ jobs:
       - name: idle-grok
         run: uv run python ci/gates/check_idle_grok.py
 
+      - name: Idle event desk makes zero Grok calls (G-8, EVT-12)
+        run: make idle-grok
+
   soak:
     name: Nightly slow soak
     runs-on: ubuntu-latest

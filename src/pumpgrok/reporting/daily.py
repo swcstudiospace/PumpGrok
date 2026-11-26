@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,7 @@ from pumpgrok.ledger.views import (
     win_rate,
 )
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
+from pumpgrok.reporting.strategy_section import bind_strategy_section, section_from_events
 
 _RO_URI_TEMPLATE = "file:{path}?mode=ro"
 _SIGNED_PCT_TEMPLATE = "{value:+.2f}"
@@ -102,6 +105,56 @@ def read_initial_equity_readonly(ledger_path: Path) -> int:
     return int(row[0])
 
 
+def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
+    """Read the position_deposits sidecar (PositionOpened seq -> deposit) without writing.
+
+    Returns {} when the ledger file is absent or no deposit was ever recorded (a legacy
+    ledger), so the fold holds no deposit. The table is written by execution/deposits.py.
+    """
+    if not ledger_path.exists():
+        return {}
+    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    db = sqlite3.connect(uri, uri=True)
+    try:
+        rows = db.execute("SELECT opened_seq, deposit_lamports FROM position_deposits").fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        db.close()
+    return {int(seq): int(lamports) for seq, lamports in rows}
+
+
+def read_ticket_refs_readonly(ledger_path: Path) -> dict[str, str]:
+    """Read ticket-to-strategy refs without creating files.
+
+    Returns {} when the ledger is absent, the sidecar is missing, or no ticket
+    is attributed. An empty map means the period has no strategy rows.
+    """
+    if not ledger_path.exists():
+        return {}
+    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    db = sqlite3.connect(uri, uri=True)
+    try:
+        rows = db.execute("SELECT ticket_id, strategy_id FROM strategy_ticket_refs").fetchall()
+    except sqlite3.Error:
+        return {}
+    finally:
+        db.close()
+    return {str(ticket): str(strategy) for ticket, strategy in rows}
+
+
+def _inclusive_days(day: str, last: str) -> Decimal:
+    """Inclusive UTC day count from ``day`` through ``last``."""
+    count = 1
+    cursor = day
+    while cursor != last:
+        cursor = day_next(cursor)[:10]
+        count += 1
+        if count > 4000:
+            raise ValueError(f"report span {day} to {last} is not a calendar range")
+    return Decimal(count)
+
+
 def day_start(day: str) -> str:
     """UTC instant at which a YYYY-MM-DD day starts, in the ledger ``ts_utc`` form.
 
@@ -131,7 +184,11 @@ def _in_window(ts: str, start: str, end: str) -> bool:
 
 
 def _fold_bounded(
-    events: list[dict[str, Any]], genesis: LedgerState, start: str, end: str
+    events: list[dict[str, Any]],
+    genesis: LedgerState,
+    start: str,
+    end: str,
+    deposits: Mapping[int, int] | None = None,
 ) -> tuple[LedgerState, LedgerState, list[dict[str, Any]]]:
     """Fold only events before ``end``; return (state at ``start``, state at ``end``, visible).
 
@@ -145,8 +202,8 @@ def _fold_bounded(
         if ts >= end:
             continue
         if ts < start:
-            start_state = reduce(start_state, event)
-        state = reduce(state, event)
+            start_state = reduce(start_state, event, deposits)
+        state = reduce(state, event, deposits)
         visible.append(event)
     return start_state, state, visible
 
@@ -281,6 +338,7 @@ class DailyReport:
     ) -> ReportModel:
         last = day if last_day is None else last_day
         events = read_events_readonly(ledger_path)
+        deposits = read_deposits_readonly(ledger_path)
         start = day_start(day)
         end = day_next(last)
         window = [e for e in events if _in_window(str(e.get("ts_utc", "")), start, end)]
@@ -289,7 +347,7 @@ class DailyReport:
             initial_equity_lamports=read_initial_equity_readonly(ledger_path),
             day_utc=day,
         )
-        start_state, state, visible = _fold_bounded(events, genesis, start, end)
+        start_state, state, visible = _fold_bounded(events, genesis, start, end, deposits)
         position_rows = _position_rows(state)
         closed = [e for e in window if e["type"] == "PositionClosed"]
         fills = [e for e in window if e["type"] == "FillRecorded"]
@@ -298,7 +356,7 @@ class DailyReport:
         wr = win_rate(visible, since_ts=start, until_ts=end)
         dd = drawdown_fraction(state)
 
-        return ReportModel(
+        model = ReportModel(
             period="daily",
             day=day,
             mode=mode,
@@ -326,3 +384,27 @@ class DailyReport:
             data_freshness=_data_freshness(visible),
             unverified=_unverified(window, position_rows),
         )
+        bind_strategy_section(model, _strategy_section(ledger_path, events, deposits, day, last))
+        return model
+
+
+def _strategy_section(
+    ledger_path: Path,
+    events: list[dict[str, Any]],
+    deposits: Mapping[int, int],
+    day: str,
+    last: str,
+) -> str:
+    """The period's strategy section, or "" when no strategy row exists."""
+    refs = read_ticket_refs_readonly(ledger_path)
+    if not refs:
+        return ""
+    return section_from_events(
+        events,
+        refs,
+        start=day_start(day),
+        end=day_next(last),
+        elapsed_days=_inclusive_days(day, last),
+        initial_equity_lamports=read_initial_equity_readonly(ledger_path),
+        deposits=deposits,
+    )

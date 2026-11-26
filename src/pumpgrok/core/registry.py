@@ -11,6 +11,8 @@ Invariants (I1-I5):
   I5 Seats may only write ledger events through journal.append and desk.event_emit
      with kind in {journal_note, escalation}; every other event type is appended
      by library code only.
+  I6 With an operator gate (ONB-04), a roster grant resolves only when the gate allows that
+     seat and tool; otherwise the refusal reason is not_operator_approved.
 """
 
 import logging
@@ -93,6 +95,7 @@ class ToolRegistry:
         audit_sink: Callable[[GrantAudit], None],
         limits_checker: Callable[[OrderRequest, str], Awaitable[bool]],
         rng: random.Random | None = None,
+        operator_gate: Callable[[str, str], bool] | None = None,
     ) -> None:
         self._clock = clock
         self._tools: dict[str, Tool] = {}
@@ -102,6 +105,7 @@ class ToolRegistry:
         # from the composition-root seed; the default below is test-only.
         self._rng = rng if rng is not None else make_rng()
         self._limiters: dict[str, RateLimiter] = {}
+        self._operator_gate = operator_gate
 
     def _limiter_for(self, key: str) -> RateLimiter:
         """One limiter per rate_limit_key; created lazily so keys stay in code."""
@@ -167,20 +171,10 @@ class ToolRegistry:
                     str(cid),
                     live=True,
                 )
-            grant = bot.grant_for(spec.name)
-            if grant is None:
+            denial = self._denial(spec, bot, max_side_effect)
+            if denial is not None:
                 if capability == spec.name:
-                    self._refuse(bot, spec.name, spec.side_effect, "not_in_roster", str(cid))
-                continue
-            if spec.side_effect.exceeds(grant.side_effect):
-                if capability == spec.name:
-                    self._refuse(bot, spec.name, spec.side_effect, "exceeds_grant", str(cid))
-                continue
-            if spec.side_effect.exceeds(max_side_effect):
-                if capability == spec.name:
-                    self._refuse(
-                        bot, spec.name, spec.side_effect, "exceeds_requested_max", str(cid)
-                    )
+                    self._refuse(bot, spec.name, spec.side_effect, denial, str(cid))
                 continue
             self._audit(
                 GrantAudit(
@@ -196,6 +190,19 @@ class ToolRegistry:
             return self._wrap(t, bot)
         self._refuse(bot, capability, max_side_effect, "no_granted_tool_in_namespace", str(cid))
         raise AssertionError("unreachable")
+
+    def _denial(self, spec: ToolSpec, bot: BotManifest, max_side_effect: SideEffect) -> str | None:
+        """Why `bot` may not be granted `spec` at `max_side_effect`, or None when it may."""
+        grant = bot.grant_for(spec.name)
+        if grant is None:
+            return "not_in_roster"
+        if spec.side_effect.exceeds(grant.side_effect):
+            return "exceeds_grant"
+        if spec.side_effect.exceeds(max_side_effect):
+            return "exceeds_requested_max"
+        if self._operator_gate is not None and not self._operator_gate(bot.id, spec.name):
+            return "not_operator_approved"
+        return None
 
     def _refuse(
         self,

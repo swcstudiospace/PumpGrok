@@ -35,6 +35,7 @@ ALL_GATE_SCRIPTS = [
     "check_contracts.py",
     "check_rollback.py",
     "check_desk_integrity.py",
+    "check_idle_grok.py",
     "run_all.py",
 ]
 
@@ -1022,7 +1023,7 @@ def _fixture_path(tmp_path: Path, doc: dict) -> Path:
 
 
 class TestEveryGateIsWired:
-    def test_run_all_runs_g1_to_g7_in_order(self, monkeypatch):
+    def test_run_all_runs_g1_to_g8_in_order(self, monkeypatch):
         run_all = _load("run_all")
         calls: list[tuple[str, list[str]]] = []
 
@@ -1035,15 +1036,15 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         assert run_all.main() == 0
-        # Trusted-overlay semantics: gate-self-test overlays ci/gates/ from base
-        # main, so a branch-introduced gate (idle-grok) and its run_all
-        # registration are absent under the overlay. Derive the expectation from
-        # the overlaid run_all rather than hardcoding idle-grok: post-merge
-        # (no overlay) run_all registers it and it is asserted last.
-        expected = ["G-1", "G-2", "G-3", "G-4", "G-5/G-6", "G-7"]
-        if "idle-grok" in (GATES / "run_all.py").read_text():
-            expected.append("idle-grok")
-        assert [name.split()[0] for name, _ in calls] == expected
+        assert [name.split()[0] for name, _ in calls] == [
+            "G-1",
+            "G-2",
+            "G-3",
+            "G-4",
+            "G-5/G-6",
+            "G-7",
+            "G-8",
+        ]
 
     def test_g7_takes_no_bot_argument(self, monkeypatch):
         run_all = _load("run_all")
@@ -1055,9 +1056,12 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         run_all.main()
-        g7_argv = calls[5][1]
+        argv_by_gate = {name.split()[0]: argv for name, argv in calls}
+        g7_argv = argv_by_gate["G-7"]
         assert "--bot" not in g7_argv
         assert "--repo" in g7_argv
+        # G-8 reads no arguments (check_idle_grok.py has no argparse): its argv is the script alone.
+        assert argv_by_gate["G-8"] == [str(GATES / "check_idle_grok.py")]
 
     @pytest.mark.parametrize("script", ALL_GATE_SCRIPTS)
     def test_gate_imports_stay_in_stdlib_and_pyyaml(self, script):

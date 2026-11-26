@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from pumpgrok.core.adapter import Fill, FillStatus, OrderRequest
 from pumpgrok.core.errors import OrderRejectedError
 from pumpgrok.execution.curve_math import sell_out
+from pumpgrok.execution.deposits import open_deposits
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.replay.clock import parse_ts_utc
 
@@ -309,6 +310,7 @@ class _SellStagesMixin:
         curve1: CurveSnapshot,
         latency_s: float,
         figures: SellFigures,
+        refund_lamports: int,
         ledger_source: str,
         correlation_id: str,
     ) -> dict[str, Any]:
@@ -330,7 +332,7 @@ class _SellStagesMixin:
                 "price_avg": str(figures.price_avg),
                 "venue_fee_lamports": figures.venue_fee,
                 "network_cost_lamports": figures.network_cost,
-                "cash_delta_lamports": figures.proceeds,
+                "cash_delta_lamports": figures.proceeds + refund_lamports,
                 "latency_s": str(Decimal(str(latency_s))),
                 "venue_tx_ref": figures.venue_tx_ref,
                 "curve_before_s": curve0.s_lamports,
@@ -352,14 +354,13 @@ class _SellStagesMixin:
         ledger_source: str,
         correlation_id: str,
         exit_reason: str | None,
+        deposit: int,
     ) -> dict[str, Any]:
-        realized = figures.proceeds - int(pos.cost_basis_lamports)
+        # The ATA deposit is an asset until refunded, so realized P&L is measured without it.
+        basis = int(pos.cost_basis_lamports) - deposit
+        realized = figures.proceeds - basis
         close_reason = exit_reason or "manual"
-        pnl_pct = (
-            Decimal(realized) / Decimal(int(pos.cost_basis_lamports))
-            if int(pos.cost_basis_lamports)
-            else Decimal("0")
-        )
+        pnl_pct = Decimal(realized) / Decimal(basis) if basis else Decimal("0")
         try:
             hold_s = int(self._clock.now() - parse_ts_utc(pos.opened_ts_utc))
         except ValueError:
@@ -397,7 +398,13 @@ class _SellStagesMixin:
         correlation_id: str,
         exit_reason: str | None,
     ) -> list[dict[str, Any]]:
-        """The FillRecorded row, plus PositionClosed when the exit empties the holding."""
+        """The FillRecorded row, plus PositionClosed when the exit empties the holding.
+
+        A full close credits the position's ATA deposit back to cash on the fill; a partial
+        exit keeps the deposit whole until the holding is emptied.
+        """
+        closes = pos is not None and pos.token_units > 0 and plan.filled_units >= pos.token_units
+        deposit = open_deposits(self._store).get(request.mint, 0) if closes else 0
         rows = [
             self._sell_fill_row(
                 request,
@@ -406,11 +413,11 @@ class _SellStagesMixin:
                 curve1=curve1,
                 latency_s=latency_s,
                 figures=figures,
+                refund_lamports=deposit,
                 ledger_source=ledger_source,
                 correlation_id=correlation_id,
             )
         ]
-        closes = pos is not None and pos.token_units > 0 and plan.filled_units >= pos.token_units
         if closes and pos is not None:
             rows.append(
                 self._position_closed_row(
@@ -421,6 +428,7 @@ class _SellStagesMixin:
                     ledger_source=ledger_source,
                     correlation_id=correlation_id,
                     exit_reason=exit_reason,
+                    deposit=deposit,
                 )
             )
         return rows
@@ -454,7 +462,9 @@ class _SellStagesMixin:
         )
         stored = self._store.append_batch(rows)
         self._inflight.discard(plan.order_id)
-        self._last_price_ts[request.mint] = self._clock.now()
+        # The fill is priced at the CONFIRMING tick; a live read (ts None) is priced now.
+        observed = curve1.ts
+        self._last_price_ts[request.mint] = observed if observed is not None else self._clock.now()
         self._last_reserves[request.mint] = (curve1.s_lamports, curve1.t_units)
         return Fill(
             order_id=plan.order_id,

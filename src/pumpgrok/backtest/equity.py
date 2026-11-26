@@ -34,14 +34,19 @@ def equity_lamports(state: LedgerState) -> int:
     return total
 
 
-def net_lamports(genesis: LedgerState, rows: Sequence[Mapping[str, Any]]) -> int:
+def net_lamports(
+    genesis: LedgerState,
+    rows: Sequence[Mapping[str, Any]],
+    deposits: Mapping[int, int] | None = None,
+) -> int:
     """Closing equity of the window less its opening equity, folding rows in order.
 
     genesis is the window's opening state. Each row folds through the reducer,
     so fills carry their cash delta and refusals their fees, each counted once.
+    ``deposits`` maps PositionOpened seqs to their ATA deposits, as in reduce().
     A window with no rows nets 0.
     """
     state = genesis
     for row in rows:
-        state = reduce(state, row)
+        state = reduce(state, row, deposits)
     return equity_lamports(state) - equity_lamports(genesis)

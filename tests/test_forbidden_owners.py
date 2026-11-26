@@ -12,6 +12,8 @@ import pytest
 
 from pumpgrok.cli import EXIT_CONFIG, main
 
+pytestmark = pytest.mark.usefixtures("roster_operator_grants")
+
 TICKET = "SOL-20260101-001"
 MINT = "So11111111111111111111111111111111111111112"
 APPROVAL = "apr-01ARZ3NDEKTSV4RRFFQ69G5FAV"
