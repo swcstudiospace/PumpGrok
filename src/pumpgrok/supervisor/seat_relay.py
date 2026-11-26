@@ -116,6 +116,44 @@ def append_escalation(
     )
 
 
+async def _relay_one(notifier: Notifier | None, event: dict[str, Any]) -> bool:
+    """Send one ledger row to notify.alert; True when it landed or needs no send."""
+    event_type = str(event.get("type", ""))
+    if event_type not in RELAY_TYPES or notifier is None:
+        return True
+    payload = event.get("payload")
+    detail = payload.get("detail", "") if isinstance(payload, dict) else ""
+    kind = _RELAY_KIND.get(event_type, "escalation")
+    if event_type == "Escalation" and isinstance(payload, dict):
+        kind = str(payload.get("kind", "escalation"))
+    try:
+        result = await notifier.send(
+            severity="critical" if event_type != "Escalation" else escalation_severity(kind),
+            kind=kind,
+            text=f"{event_type}: {detail}",
+            fields={"seq": event.get("seq")},
+            idempotency_key=f"relay|{event_type}|{event.get('seq')}",
+        )
+    except Exception as exc:
+        log.warning("tail relay failed at seq %s: %s", event.get("seq"), exc)
+        return False
+    if not _sinks_landed(result):
+        log.warning("tail relay sink failed at seq %s; will retry", event.get("seq"))
+        return False
+    return True
+
+
+def _sinks_landed(result: object) -> bool:
+    """False when Notifier.send reports a failed sink in its result.
+
+    Notifier.send reports per-sink failures as ``ok: false`` rows rather than
+    raising; a result without a ``delivered`` list carries no failure to report.
+    """
+    if not isinstance(result, dict):
+        return True
+    return all(bool(row.get("ok")) for row in result.get("delivered") or [])
+
+
 async def relay_tail(
     store: LedgerStore,
     notifier: Notifier | None,
@@ -124,7 +162,9 @@ async def relay_tail(
 ) -> int:
     """Relay new Escalation/HaltSet/KillSwitchSet/BreakerTripped rows.
 
-    Returns the new high-water seq. A None notifier only advances the
+    Returns the new high-water seq. The mark advances only past rows that were
+    delivered or need no send; the first failed row stops the pass and is retried
+    on the next one, so no alert is dropped. A None notifier only advances the
     cursor; relay failures never raise.
     """
     try:
@@ -134,23 +174,7 @@ async def relay_tail(
         return cursor_seq
     high = cursor_seq
     for event in events:
+        if not await _relay_one(notifier, event):
+            return high
         high = max(high, int(event.get("seq", high)))
-        event_type = str(event.get("type", ""))
-        if event_type not in RELAY_TYPES or notifier is None:
-            continue
-        payload = event.get("payload")
-        detail = payload.get("detail", "") if isinstance(payload, dict) else ""
-        kind = _RELAY_KIND.get(event_type, "escalation")
-        if event_type == "Escalation" and isinstance(payload, dict):
-            kind = str(payload.get("kind", "escalation"))
-        try:
-            await notifier.send(
-                severity="critical" if event_type != "Escalation" else escalation_severity(kind),
-                kind=kind,
-                text=f"{event_type}: {detail}",
-                fields={"seq": event.get("seq")},
-                idempotency_key=f"relay|{event_type}|{event.get('seq')}",
-            )
-        except Exception as exc:
-            log.warning("tail relay failed at seq %s: %s", event.get("seq"), exc)
     return high
