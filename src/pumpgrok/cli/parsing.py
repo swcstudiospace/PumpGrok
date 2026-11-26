@@ -103,12 +103,6 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     backtest.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to backtest")
     backtest.add_argument("--params", default=None, metavar="PATH", help="parameter-set JSON file")
     backtest.add_argument(
-        "--strategy",
-        default=None,
-        metavar="ID",
-        help="run one strategy over the dataset through the replay runtime",
-    )
-    backtest.add_argument(
         "--paper-ledger",
         default=None,
         metavar="PATH",
@@ -324,6 +318,25 @@ def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
         help="ledger.sqlite recorded by this desk (source paper)",
     )
     imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
+def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    ledger = verbs.add_parser("ledger", parents=[mode_option], help="ledger backup and restore")
+    ledger_cmd = ledger.add_subparsers(dest="cmd", required=True, metavar="LEDGER")
+    backup = ledger_cmd.add_parser("backup", help="write a ledger copy under the state directory")
+    backup.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore = ledger_cmd.add_parser(
+        "restore", help="verify then atomically replace the active ledger"
+    )
+    restore.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore.add_argument("--from", dest="from_", required=True, help="candidate ledger to verify")
+
+
+def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
+    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
+    demote = promotion_cmd.add_parser("demote", help="roll a strategy back one stage")
+    demote.add_argument("--strategy", required=True, help="strategy id to roll back")
+    demote.add_argument("--by", default="human:operator", help="acting human (human:<name>)")
+
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -6,13 +6,13 @@ a gap holds the last good value (marked stale, never reused as new); a
 timeout marks zero. Every call consults ``rpc_curve_price_allowed``.
 """
 
+from __future__ import annotations
+
 import logging
 import math
 from collections import OrderedDict
 from collections.abc import Callable
 from typing import Final
-
-from __future__ import annotations
 
 from pumpgrok.datafeed.events import CurveObservation, CurveTick, GapEvent
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor

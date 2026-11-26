@@ -18,7 +18,6 @@ from typing import Any
 
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
-from pumpgrok.cli.serve_feed import FeedServer, health_probe
 from pumpgrok.cli.validators import (
     _human_by,
     _jsonable,
@@ -27,7 +26,6 @@ from pumpgrok.cli.validators import (
     _utc_now,
 )
 from pumpgrok.cli.verbs_state import operator_active_set
-from pumpgrok.cli.wake_mode import event_mode_refusal as _event_mode_refusal
 from pumpgrok.cli.wiring import _repo_root
 from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings
@@ -91,26 +89,6 @@ def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
     )
 
 
-def _doctor_json_verb(settings: Settings) -> int:
-    """Print one readiness record per operator input; exit 1 on failure cases."""
-    mode = settings.effective_mode
-    env = os.environ
-    records = doctor_records(env, mode)
-    _say(
-        sys.stdout,
-        json.dumps(
-            [
-                {
-                    "name": record.name,
-                    "required_for_mode": record.required_for_mode,
-                    "status": record.status,
-                    "source": record.source,
-                }
-                for record in records
-            ]
-        ),
-    )
-    return 1 if failing_records(records) else 0
 
 
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
@@ -121,22 +99,6 @@ def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     return _not_implemented(f"live {args.cmd}")
 
 
-def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
-    """`live serve`: expose the read-only feed endpoint for a dataset."""
-
-    server = FeedServer(Path(str(args.dataset)), int(args.port))
-    server.start()
-    try:
-        probe = health_probe(server.port)
-        _say(
-            sys.stdout,
-            f"serving {probe['dataset']} on port {server.port}: {probe['ticks']} ticks",
-        )
-        if not args.once:
-            threading.Event().wait()
-    finally:
-        server.stop()
-    return 0
 
 
 def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:
