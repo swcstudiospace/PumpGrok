@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from pumpgrok.config.settings import ExitsSettings, FilterSettings
 from pumpgrok.core.idempotency import canonical_json
@@ -101,6 +101,7 @@ def _normalized_strategy(mapping: Mapping[str, Mapping[str, Any]] | None) -> dic
     }
 
 class CandidateParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     """One candidate parameter set: filter, exits and strategy overrides.
 
     Every mapping is optional; absent means desk defaults. Each provided

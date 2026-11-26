@@ -19,6 +19,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.datafeed.graduation import GapSettings
 from pumpgrok.datafeed.marks import HeldMarkScheduler, InMemoryTimeoutSink, MarksLoop
 from pumpgrok.datafeed.mintbook import MintBook
+from pumpgrok.datafeed.watchset import WatchSet
 from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
@@ -35,7 +36,7 @@ def _loop(book: MintBook, clock: FixtureClock, sink: list) -> MarksLoop:
 
 
 def test_flat_means_no_timer() -> None:
-    book = MintBook()
+    book = MintBook(watch=WatchSet(max_watched_mints=8))
     clock = FixtureClock(1_000.0)
     sink: list = []
     loop = _loop(book, clock, sink)
@@ -46,9 +47,12 @@ def test_flat_means_no_timer() -> None:
 
 
 def test_held_mints_marked_within_60s() -> None:
-    book = MintBook()
-    book.hold("m1")
-    book.hold("m2")
+    watch = WatchSet(max_watched_mints=8)
+    book = MintBook(watch=watch)
+    book.admit_created("m1", "2026-01-01T00:00:00Z")
+    book.admit_created("m2", "2026-01-01T00:00:00Z")
+    watch.pin("m1")
+    watch.pin("m2")
     clock = FixtureClock(1_000.0)
     sink: list = []
     loop = _loop(book, clock, sink)
@@ -62,8 +66,10 @@ def test_held_mints_marked_within_60s() -> None:
 
 
 def test_marks_stop_starting_when_book_empties() -> None:
-    book = MintBook()
-    book.hold("m1")
+    watch = WatchSet(max_watched_mints=8)
+    book = MintBook(watch=watch)
+    book.admit_created("m1", "2026-01-01T00:00:00Z")
+    watch.pin("m1")
     clock = FixtureClock(1_000.0)
     sink: list = []
     loop = _loop(book, clock, sink)

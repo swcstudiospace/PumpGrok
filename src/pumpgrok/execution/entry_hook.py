@@ -51,7 +51,11 @@ class EntryHook:
         if side != "buy":
             return
         provenance = (
-            CurveProvenance.LIVE_RPC if curve_source == "rpc" else CurveProvenance.UNKNOWN
+            CurveProvenance.VERIFIED_REPLAY
+            if curve_source == "fixture"
+            else CurveProvenance.LIVE_RPC
+            if curve_source == "rpc"
+            else CurveProvenance.UNKNOWN
         )
         if not rpc_curve_price_allowed(curve_source=curve_source, provenance=provenance):
             raise EntryRefusedError(f"entry refused: source {curve_source!r} is not allowed")

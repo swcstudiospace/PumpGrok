@@ -16,11 +16,11 @@ def test_buy_rpc_refused() -> None:
 
 def test_buy_completed_refused() -> None:
     with pytest.raises(EntryRefusedError):
-        HOOK.check_place(side="buy", curve_source="replay", complete=True)
+        HOOK.check_place(side="buy", curve_source="fixture", complete=True)
 
 
 def test_buy_replay_allowed() -> None:
-    HOOK.check_place(side="buy", curve_source="replay")
+    HOOK.check_place(side="buy", curve_source="fixture")
 
 
 def test_sells_never_blocked() -> None:

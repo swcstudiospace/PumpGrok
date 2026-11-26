@@ -6,8 +6,6 @@ Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356
 Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
-Phase 17 status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery).
-Desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart and the narrative changelog entry (PR #100) are absent; PRs #98-#100 remain open on GitHub.
 
 Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
@@ -20,6 +18,39 @@ Phase 15: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84
 # Changelog
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
+
+## [Unreleased] - v4 Phase 17: risk hardening and promotion lifecycle
+
+### Added
+
+- Strategy exposure slice and strategy-scoped kills (RSK-01, RSK-02, RSK-08); the decision cache key holds strategy_id.
+- Entry checks and mint lists (RSK-05).
+- Promotion stages as ledger rows with fail-closed thresholds, gate reuse and demotion (PRM-01 to PRM-04, PRM-06; S-B4, S-P2).
+- Event-driven promotion evaluator with no timers and no Grok call (PRM-05), and an explicit promotion mode (S-P1).
+- Event desk composition root (RT-03) at `supervisor/` (supersedes the PR-branch `events/` path).
+- Restart recovery from the ledger (RT-04, narrowed): probation, the desk-wide watch set, exit deadlines and exit peaks. Tapes start empty.
+
+### Fixed
+
+- Feed health and loss-velocity breaker fixes (RSK-03; S-B1, S-B2). An already-active halt returns an explicit verdict.
+
+### Changed
+
+- The entry gate is wired into the paper path by an owner-approved cross-seat change in the paper factory.
+- Criterion 1 paper smoke is deferred to deployment by owner decision (D17-2).
+- Moved to Phase 18 by owner decision 2026-11-18: the live-side RSK-04 work and tape restore.
+
+### Verification
+
+- Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (equal to before)
+- Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (equal to before)
+- Criterion 12: git diff --name-only v4-base -- contracts lists exactly six files: contracts/changes/g7-tool-packs-required.yaml, contracts/changes/phase-17-strategy-kill-events.yaml, contracts/events/promotion_stage_set.schema.json, contracts/events/strategy_kill_cleared.schema.json, contracts/events/strategy_kill_set.schema.json, contracts/tool-packs/.gitkeep.
+- Criterion 14: uv run pumpgrok run --mode live --once exits 3 (refused; no transaction attempted).
+- At the integration head this run lands on: make lint, make typecheck and ./scripts/check.sh exit 0 (orchestrator gate run 2026-11-26); full suite result recorded on the merge PR CI.
+- Criterion 1 is deferred; see Changed.
+Status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery). Exit-sell guard (S-X1) and a persisted promotion cursor are absent (no try/except in exit_rules _sell; no meta cursor in promotion/event_desk); desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart remain to port (PRs #98-#100 still open).
 
 ## [Unreleased] - v4 Phase 14: event-driven desk and Grok gateway
 

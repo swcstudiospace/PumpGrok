@@ -49,13 +49,11 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
         help="consumed ApprovalRecord id (apr-<ULID>)",
     )
     _add_seat(parser)
-
-
 def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--wake-mode",
         choices=WAKE_MODES,
-        default=None,
+        default="cadence",
         dest="wake_mode",
         help="supervisor wake: cadence (default) or event; overrides events.wake_mode",
     )
@@ -243,14 +241,6 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
         "--strategy", default=None, help="clear only the kill of this strategy id"
     )
     killswitch_cmd.add_parser("status", help="report killswitch state")
-    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
-    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
-    promotion_demote = promotion_cmd.add_parser(
-        "demote", help="roll one strategy down one promotion stage (human only)"
-    )
-    promotion_demote.add_argument("--strategy", required=True, help="strategy id to demote")
-    promotion_demote.add_argument("--reason", required=True, help="why the strategy steps down")
-    promotion_demote.add_argument("--by", required=True, help="human demoting the strategy")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")
     paper_buy = paper_cmd.add_parser("buy", help="paper buy against the paper engine")
