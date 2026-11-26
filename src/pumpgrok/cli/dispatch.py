@@ -18,6 +18,7 @@ from pumpgrok.cli.codes import (
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
 from pumpgrok.cli.ledger import _ledger_verb
+from pumpgrok.cli.onboarding import onboarding_verb
 from pumpgrok.cli.promotion_verb import _promotion_verb
 from pumpgrok.cli.parsing import build_parser
 from pumpgrok.cli.verbs_ops import (

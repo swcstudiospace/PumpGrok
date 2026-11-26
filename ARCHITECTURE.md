@@ -12,7 +12,7 @@ PumpGrok turns a host agent runtime into a ten-seat Solana memecoin trading desk
 | `skills/*/SKILL.md` | Named procedures the host loads by frontmatter `name` | A framework or SDK |
 | `rules/pumpgrok-team.mdc` | Always-applied constitution (`alwaysApply: true`) | Runtime enforcement code |
 | `src/pumpgrok/tools/*` | Fail-closed tool registry (JSON via guarded `pumpgrok` verbs) | Signers, senders, or wallets |
-| Screening engine (`src/pumpgrok/engine/`) | Replay-only port of the vendored grokbot-pumpfun engine. `vendor/grokbot-pumpfun/` is absent from this checkout; formerly vendored (see `docs/VENDOR_PIN.md`) | Signers, senders, or wallets; no trade subscription |
+| Screening engine (`src/pumpgrok/engine/`) | Port of the vendored grokbot-pumpfun engine; the replay CLI uses only its pure helpers (`engine/pipeline.py`, `engine/monitor.py`). `vendor/grokbot-pumpfun/` is absent from this checkout; formerly vendored (see `docs/VENDOR_PIN.md`) | Signers, senders, or wallets; no trade subscription |
 | Plugin manifests | How Cursor / Claude Code / Grok Build / Grok Bot discover the pack | A deployable service |
 
 This tree runs no always-on services behind the desk. The process that “runs” the desk is the host (Grok Bot, Cursor, Claude Code, or Grok Build). The one long-running form is `pumpgrok run --mode paper --serve --replay <dataset>`: it replays a recorded dataset in a loop while serving read-only `/healthz` and `/metrics` (paper-only; the compose `pumpgrok` service runs this form). Humans approve every spend by exact ticket ID. Only SNIPER may send buys; only EXIT may send sells.
@@ -29,9 +29,9 @@ External systems named in skills or tools:
 | Solana JSON-RPC (default `https://api.mainnet-beta.solana.com`) | `onchain.authorities` (`getAccountInfo`), `onchain.priority_fee` (`getRecentPrioritizationFees`), `onchain.top_holders` (`getTokenLargestAccounts`) |
 | `PUMPGROK_RPC__ENDPOINTS` | Same RPC methods; SETUP.md mentions a private RPC (Helius, QuickNode, etc.) as an operator choice |
 | Browser sites (tool-connections / discovery) | X / Twitter, pump.fun, gmgn.ai, jupiter.ag, Photon / Axiom, solscan.io, rugcheck.xyz — opened by the human/host browser, not by these Python tools |
-| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `config/settings.py` (`ws_url`, x.ai `base_url`). Clients that remain in the package: the PumpPortal websocket consumer `LaunchMonitor.stream` (`src/pumpgrok/engine/monitor.py`) and the x.ai client `GrokAgent._call` (`src/pumpgrok/engine/agents/base.py`, used by the auditor, timing, narrative and checker agents). The offline replay CLI path calls neither `LaunchMonitor.stream` nor `GrokAgent._call`; it imports only pure helpers from `engine/monitor.py`. The in-tree REST analyzer (`src/pumpgrok/engine/analyzer.py`) and the pump.fun read client (`src/pumpgrok/tools/social/client.py`) call pump.fun REST; the read client is not registered as a tool. The retired vendor engine made these calls (see `docs/VENDOR_PIN.md`) |
+| x.ai Grok API, pump.fun frontend REST, PumpPortal WS | Endpoints are declared in `src/pumpgrok/config/settings.py` (`ws_url`, x.ai `base_url`). Clients that remain in the package: the PumpPortal websocket consumer `LaunchMonitor.stream` (`src/pumpgrok/engine/monitor.py`) and the x.ai client `GrokAgent._call` (`src/pumpgrok/engine/agents/base.py`, used by the auditor, timing, narrative and checker agents). The offline replay CLI path calls neither `LaunchMonitor.stream` nor `GrokAgent._call`; it imports only pure helpers from `engine/monitor.py`. The in-tree REST analyzer (`src/pumpgrok/engine/analyzer.py`) and the pump.fun read client (`src/pumpgrok/tools/social/client.py`) call pump.fun REST; the read client is not registered as a tool. |
 
-No server database, message bus, or secrets manager is referenced. Tools take no API keys. The operator paper ledger is one SQLite file, `var/ledger.sqlite`; each recorded-data replay run writes its own ledger under `var/replay/<dataset>/ledger.sqlite`. There are no `os.environ` / `.env` readers in the instruction pack's own files; the retired vendor engine (absent from this checkout; see `docs/VENDOR_PIN.md`) kept its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
+No server database, message bus, or secrets manager is referenced. Tools take no API keys as arguments; the modules that read environment variables are listed in the configuration table. The operator paper ledger is one SQLite file, `var/ledger.sqlite`; each recorded-data replay run writes its own ledger under `var/replay/<dataset>/ledger.sqlite`. There are no `os.environ` / `.env` readers in the instruction pack's own files; the retired vendor engine (absent from this checkout; see `docs/VENDOR_PIN.md`) kept its own `GROKBOT_*` environment contract outside PumpGrok and desk files.
 
 ```mermaid
 flowchart LR
@@ -198,20 +198,22 @@ This repository itself stores instruction files, plugin JSON, Python helpers, th
 
 | Mechanism | Where |
 |-----------|--------|
-| `PUMPGROK_RPC__ENDPOINTS` | `authority_check.py`, `priority_fee.py`, `holder_check.py` |
+| `PUMPGROK_RPC__ENDPOINTS` | `tools/onchain/authorities.py`, `tools/onchain/priority_fee.py`, `tools/onchain/top_holders.py` (`RpcSettings` in `src/pumpgrok/config/settings.py`) |
 | `--desk` | `paper_sim.py` (default `/workspace/trading-desk`) |
 | Quote params | `jupiter_quote.py` flags |
 | Desk record | `/workspace/trading-desk/desk.md` (engagement, public address, RPC note) |
 | Risk numbers | `/workspace/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
 | `GROKBOT_*` environment variables | Vendored engine only (`vendor/grokbot-pumpfun`, e.g. `GROKBOT_GROK_API_KEY`); never stored in PumpGrok or trading-desk files |
-| `PUMPGROK_RPC__ENDPOINTS` | `tools/onchain/authorities.py`, `tools/onchain/priority_fee.py`, `tools/onchain/top_holders.py` (`RpcSettings` in `config/settings.py`) |
 | `PUMPGROK_DESK` | `scripts/hermes-bootstrap.sh`, `scripts/hermes-install-cron.sh`, `scripts/hermes-verify-isolation.sh` (default `${HOME}/trading-desk`; their `--desk` flag overrides it) |
 | Quote params | `src/pumpgrok/tools/market/jupiter.py` (`QUOTE_URL`) |
 | Desk record | `$HOME/trading-desk/desk.md` (engagement, public address, RPC note) |
 | Risk numbers | `$HOME/trading-desk/risk-limits.md` from the RISK/CHIEF interview |
 | `GROKBOT_*` environment variables | None read by this tree; the retired vendor engine used them (see `docs/VENDOR_PIN.md`); never stored in PumpGrok or desk files |
+| `JUPITER_API_KEY` | `tools/market/jupiter.py` |
+| Telegram bot token | Variable named by `TELEGRAM_ENV_VAR` in `tools/notify/telegram.py` |
+| `PUMPGROK_KILLSWITCH` | `tools/risk/halt_status.py`, `tools/risk/kill_switch.py` |
 
-Do not put seed phrases, private keys, or live RPC credentials in git. Connection is screen hand-off; only the public address is recorded. Tools do not read environment variables.
+Do not put seed phrases, private keys, or live RPC credentials in git. Connection is screen hand-off; only the public address is recorded. The tool modules that read environment variables are listed in the table above.
 
 ## Cross-cutting
 
@@ -242,10 +244,7 @@ Keep the tool registry read/prepare-only. Keep RISK KILL non-overridable. Keep S
 
 ## Unknowns
 
-- Plugin manifests carry `"license": "AGPL-3.0"` and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace).
-- `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
-- Whether a given host actually creates eight persistent Bots and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
-- Plugin manifests `plugin.json` and `pyproject.toml` carry `"license": "AGPL-3.0"` (plugin.json) and `https://github.com/swcstudiospace/PumpGrok` URLs, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace). The two marketplace manifests and `SETUP.md` still carry a placeholder organisation name, which `scripts/check.sh` allowlists until the real organisation is supplied.
+- Plugin manifests `plugin.json` and `pyproject.toml` carry `https://github.com/swcstudiospace/PumpGrok` URLs. `plugin.json` carries `"license": "AGPL-3.0"` and `pyproject.toml` carries `AGPL-3.0-only`, matching the root [LICENSE](LICENSE) (GNU Affero General Public License v3.0 for Spectrum Web Co LLC / swcstudiospace). The two marketplace manifests and `SETUP.md` still carry a placeholder organisation name, which `scripts/check.sh` allowlists until the real organisation is supplied.
 - `jupiter-routing` shows `priority_fee` percentile/multiplier inputs (default multiplier 1.2); the retired fee-cap flag is removed.
 - Whether a given host actually creates ten seats and a Trading Floor group depends on that host. This repo only supplies files and SETUP.md instructions.
 

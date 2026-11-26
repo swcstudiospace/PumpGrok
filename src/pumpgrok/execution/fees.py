@@ -39,7 +39,6 @@ __all__ = [
     "PAPER_DEFAULT_FEE_MODEL",
     "PRIORITY_FEE_CAP_LAMPORTS",
     "VENUE_FEE_BPS",
-    "VENUE_FEE_BPS",
     "FeeModel",
     "FeeModelV2",
     "fee_model_for",

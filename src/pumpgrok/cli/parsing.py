@@ -76,6 +76,7 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run.add_argument(
         "--duration", metavar="SECONDS", default=None, type=int, help="record duration in seconds"
     )
+    run.add_argument(
         "--mints",
         default=None,
         metavar="LIST",
