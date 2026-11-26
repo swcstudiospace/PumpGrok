@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-"""Entry-gate hook on exec.place (FEE-01, V4-12, T-13-03c).
-
-Enforces, on buys only, the ``rpc_curve_price_allowed`` allowlist and the
-graduation refusal. Exit and flatten sells pass through untouched.
-=======
 """Injected entry policy: BUY curve reads are bound to one source object.
 
 The adapter asks the policy before and after every awaited BUY read. A replaced
@@ -14,15 +8,19 @@ stay available. The policy never signs, never sends and never moves funds.
 Replay provenance is granted only by a :class:`VerifiedReplay` token minted by
 ``verify_replay``. Without the token a bound policy still checks source identity,
 but its curve reads carry no verified provenance and every BUY is refused.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
+from typing import TYPE_CHECKING, Protocol
+
 from pumpgrok.datafeed.graduation import entry_refused
 from pumpgrok.risk.entry_checks import EntryChecks, MintFacts
-from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
+from pumpgrok.tools.onchain.curve_layout import CurveProvenance, rpc_curve_price_allowed
+
+if TYPE_CHECKING:
+    from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+    from pumpgrok.execution.paper_factory import VerifiedReplay
 
 
 class EntryRefusedError(ValueError):
@@ -52,7 +50,10 @@ class EntryHook:
         """
         if side != "buy":
             return
-        if not rpc_curve_price_allowed(curve_source=curve_source):
+        provenance = (
+            CurveProvenance.LIVE_RPC if curve_source == "rpc" else CurveProvenance.UNKNOWN
+        )
+        if not rpc_curve_price_allowed(curve_source=curve_source, provenance=provenance):
             raise EntryRefusedError(f"entry refused: source {curve_source!r} is not allowed")
         if entry_refused(complete=complete):
             raise EntryRefusedError("entry refused: curve is complete")
@@ -60,14 +61,6 @@ class EntryHook:
             refusal = entry_checks.check(mint_facts)
             if refusal is not None:
                 raise EntryRefusedError(f"entry refused: {refusal}")
-=======
-from typing import TYPE_CHECKING, Protocol
-
-from pumpgrok.tools.onchain.curve_layout import CurveProvenance, rpc_curve_price_allowed
-
-if TYPE_CHECKING:
-    from pumpgrok.execution.paper_adapter.models import CurveSnapshot
-    from pumpgrok.execution.paper_factory import VerifiedReplay
 
 __all__ = [
     "BoundEntryPolicy",
@@ -180,4 +173,3 @@ def entry_provenance(policy: EntryPolicy | None, snapshot: CurveSnapshot) -> Cur
     if snapshot.source == "fixture":
         return CurveProvenance.UNVERIFIED_FIXTURE
     return CurveProvenance.UNKNOWN
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

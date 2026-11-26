@@ -1,38 +1,21 @@
-<<<<<<< HEAD
-"""Resync: seed exactly the held mints through the supervisor (MKT-06).
-
-A corrupt cursor starts clean (the supervisor owns that path).
-=======
 """Bounded recovery for feeds: rolling-window limiter, dedup window, gap ledger, reconnect.
 
 A feed's frame source may raise a transport failure. Recovery marks the source
 disconnected, opens a gap, backs off on the injected clock, reconnects, reseeds the held
 subscriptions and closes the gap at the moment the reseed succeeds, even when no later
 trade arrives. Every failed attempt is counted so backoff keeps growing.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from typing import Any
-
-from pumpgrok.datafeed.mintbook import MintBook
-
-
-def resync_held(supervisor: Any, book: MintBook) -> tuple[str, ...]:
-    """Seed the supervisor with exactly the held mints; return the seed."""
-    held = tuple(sorted(book.held()))
-    supervisor.resync(held)
-    return held
-=======
 import asyncio
 import math
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
+from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay.clock import Clock
 
@@ -222,4 +205,10 @@ class Recovery:
                 continue
             self._gaps.close()
             return
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
+
+
+def resync_held(supervisor: Any, book: MintBook) -> tuple[str, ...]:
+    """Seed the supervisor with exactly the held mints; return the seed."""
+    held = tuple(sorted(book.held))
+    supervisor.resync(held)
+    return held

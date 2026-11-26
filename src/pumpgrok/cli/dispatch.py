@@ -19,8 +19,8 @@ from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
 from pumpgrok.cli.ledger import _ledger_verb
 from pumpgrok.cli.onboarding import onboarding_verb
-from pumpgrok.cli.promotion_verb import _promotion_verb
 from pumpgrok.cli.parsing import build_parser
+from pumpgrok.cli.promotion_verb import _promotion_verb
 from pumpgrok.cli.verbs_ops import (
     _doctor_verb,
     _live_verb,
@@ -31,7 +31,6 @@ from pumpgrok.cli.verbs_ops import (
 from pumpgrok.cli.verbs_state import (
     _killswitch,
     _paper,
-    _promotion_demote,
     _run,
     _state,
     _ticket_verb,
@@ -98,7 +97,6 @@ _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "paper": _paper,
     "state": _state,
     "killswitch": _killswitch,
-    "promotion": _promotion_demote,
     "ticket": _ticket_verb,
     "live": _live_verb,
     "verify": _verify_verb,

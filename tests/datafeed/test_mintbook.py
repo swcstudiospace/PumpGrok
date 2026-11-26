@@ -1,27 +1,8 @@
-<<<<<<< HEAD
-"""Mint book ledger (MKT-05)."""
-=======
 """Mint book: records are bounded to the watch set and follow migration."""
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
 from __future__ import annotations
 
 from pumpgrok.datafeed.mintbook import MintBook
-<<<<<<< HEAD
-
-
-def test_hold_release() -> None:
-    book = MintBook()
-    assert len(book) == 0
-    assert bool(book) is False
-    book.hold("m1")
-    book.hold("m2")
-    assert book.is_held("m1") is True
-    assert book.held() == frozenset({"m1", "m2"})
-    book.release("m1")
-    assert book.is_held("m1") is False
-    assert len(book) == 1
-=======
 from pumpgrok.datafeed.watchset import WatchSet
 
 TS = "2026-01-01T00:00:00.000000Z"
@@ -87,4 +68,3 @@ def test_release_drops_the_record_and_frees_the_slot() -> None:
     assert book.record("M1") is None
     assert len(book) == 0
     assert book.admit_created("M2", TS) is True
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

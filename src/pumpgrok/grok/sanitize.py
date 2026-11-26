@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-"""Sanitizer plus strict JSON parse (GRK-02, T-14-01-01).
-
-Untrusted model output is parsed as data only. Trailing text, code fences,
-or an injected instruction string inside the payload make the parse fail;
-the transport result is rejected rather than repaired.
-=======
 """Strict parsing of model answers (GRK-05, output side).
 
 Input sanitization (NFKC, control and format characters removed) lives in
@@ -14,7 +7,6 @@ An answer is accepted only when the whole reply is exactly one JSON object,
 with no duplicate keys, no non-finite numbers, and no keys beyond the
 result model. Prose, code fences and trailing text are refused. Error
 messages never echo model text, so an injected key name cannot reach logs.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
@@ -22,7 +14,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-<<<<<<< HEAD
+from pydantic import BaseModel, ValidationError
+
+from pumpgrok.core.errors import PumpgrokError
+
 _INJECTION_MARKERS = (
     "ignore previous",
     "ignore all previous",
@@ -32,8 +27,6 @@ _INJECTION_MARKERS = (
 )
 
 
-class StrictParseError(ValueError):
-    """Model output was not a single strict JSON object free of injection."""
 
 
 def sanitize_prompt(text: str) -> str:
@@ -66,12 +59,8 @@ def parse_strict_json(text: str) -> dict[str, Any]:
     if _has_injection(parsed):
         raise StrictParseError("injected instruction in payload")
     return parsed
-=======
-from pydantic import BaseModel, ValidationError
 
-from pumpgrok.core.errors import PumpgrokError
-
-__all__ = ["StrictParseError", "parse_strict"]
+__all__ = ["StrictParseError", "parse_strict", "parse_strict_json", "sanitize_prompt"]
 
 
 class StrictParseError(PumpgrokError):
@@ -119,4 +108,3 @@ def parse_strict[T: BaseModel](raw: str, model: type[T]) -> T:
         raise StrictParseError(
             "model answer violates the schema", errors=exc.error_count()
         ) from None
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

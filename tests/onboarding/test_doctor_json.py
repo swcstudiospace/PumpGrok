@@ -1,38 +1,3 @@
-<<<<<<< HEAD
-"""Doctor --json prints one record per input and exits non-zero on failure."""
-
-import json
-import subprocess
-
-from pumpgrok.onboarding.doctor_report import doctor_records
-
-
-def test_doctor_json_records_per_input() -> None:
-    proc = subprocess.run(
-        ["uv", "run", "pumpgrok", "doctor", "--json", "--mode", "paper"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if proc.returncode != 0:
-        # Clean-env refusal is also acceptable: missing required inputs.
-        assert proc.returncode == 1
-    records = json.loads(proc.stdout)
-    names = {record["name"] for record in records}
-    assert "xai_api_key" in names
-    assert "hmac_confirmation_key" in names
-    for record in records:
-        assert set(record) >= {"name", "required_for_mode", "status", "source"}
-
-
-def test_doctor_records_module() -> None:
-
-    records = doctor_records({}, "paper")
-    assert len(records) == 5
-    names = {record.name for record in records}
-    assert names.issuperset({"xai_api_key", "wallet_public_address"})  # pragma: allowlist secret
-=======
 """ONB-02 and ONB-05: `doctor --json` names each input with its requirement, status and source.
 
 Each record carries exactly name, required_for_mode, status and source. No value ever appears in
@@ -203,4 +168,3 @@ def test_complete_live_authority_exits_zero_and_every_required_input_is_present(
     assert records["rpc_endpoint"]["status"] == "present"
     assert records["seat_tool_access"]["status"] == "present"
     assert VALID_ADDRESS not in captured.out
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

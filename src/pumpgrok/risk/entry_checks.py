@@ -31,12 +31,12 @@ from pumpgrok.tools.safety.checks import HOLDER_ADVISORY_PAIR, REQUIRED_IDS, Che
 __all__ = [
     "DEFAULT_HOLDER_LIMIT",
     "DEFAULT_MINT_LISTS_PATH",
+    "REJECT_EXTENSIONS",
     "EntryChecks",
     "EntryRefusal",
     "EntryVerdict",
     "MintFacts",
     "MintLists",
-    "REJECT_EXTENSIONS",
     "default_mint_lists_path",
     "evaluate_entry",
     "load_mint_lists",
@@ -187,6 +187,9 @@ class EntryChecks:
             return cls(holder_limit=holder_limit, lists_available=False)
         allowlist = mint_lists.deny
         blocklist = mint_lists.warn
+        return cls(
+            holder_limit=holder_limit, allowlist=allowlist, blocklist=blocklist
+        )
 
     def check(self, facts: MintFacts) -> EntryRefusal | None:
         """Run every check in fixed order; first failure wins, else None."""
@@ -293,10 +296,10 @@ def _check_authorities(authorities: Mapping[str, Any] | None, reasons: list[str]
     if authorities is None:
         reasons.append("authority metadata missing")
         return
-    for field, label in _AUTHORITY_FIELDS.items():
-        value = authorities.get(field)
+    for name, label in _AUTHORITY_FIELDS.items():
+        value = authorities.get(name)
         if not isinstance(value, bool):
-            reasons.append(f"{field} missing from authority metadata")
+            reasons.append(f"{name} missing from authority metadata")
         elif value:
             reasons.append(f"{label} is live")
 

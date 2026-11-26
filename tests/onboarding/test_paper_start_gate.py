@@ -1,24 +1,3 @@
-<<<<<<< HEAD
-"""Paper start is refused until required inputs are complete."""
-
-from pathlib import Path
-
-from pumpgrok.onboarding.access import record_access
-from pumpgrok.onboarding.start_gate import check_start
-
-
-def test_clean_env_refuses() -> None:
-    missing = check_start({}, "paper")
-    assert "xai_api_key" in missing
-    assert any(name.startswith("bot-") for name in missing)
-
-
-def test_with_inputs_and_access_starts(tmp_path: Path) -> None:
-    access = tmp_path / "access.jsonl"
-    for seat in ("bot-01-scout", "bot-02-risk", "bot-06-exit"):
-        record_access(access, seat)
-    assert check_start({"PUMPGROK_GROK__API_KEY": "x"}, "paper", access_path=access) == []
-=======
 """Paper startup gate: every missing input is listed before any supervisor starts.
 
 A clean environment refuses the paper start, names each missing input and each seat that lacks
@@ -225,4 +204,3 @@ def test_paper_start_never_reads_the_wallet_settings(
     code, text = _run_paper_once(capsys)
     assert code == EXIT_OK, text
     assert startup_spy == [("once", Path(SMOKE))]
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

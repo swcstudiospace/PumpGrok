@@ -1,22 +1,3 @@
-<<<<<<< HEAD
-"""HMAC confirmation key is forbidden in live."""
-
-from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
-
-
-def test_present_key_fails_live() -> None:
-    records = doctor_records({"PUMPGROK_CONFIRMATION_KEY": "x"}, "live")
-    by_name = {record.name: record for record in records}
-    assert by_name["hmac_confirmation_key"].status == "forbidden-present"
-    assert failing_records(records)
-
-
-def test_absent_key_in_paper_is_optional() -> None:
-    records = doctor_records({}, "paper")
-    by_name = {record.name: record for record in records}
-    assert by_name["hmac_confirmation_key"].status == "missing"
-    assert by_name["hmac_confirmation_key"].required_for_mode is False
-=======
 """ONB-10: in a live desk environment the HMAC confirmation key is forbidden.
 
 Doctor reports the key present or absent by name and source only. A present key fails the live
@@ -151,4 +132,3 @@ def test_present_paper_hmac_is_optional_and_does_not_fail_paper(
     captured = capsys.readouterr()
     assert code == EXIT_OK, captured.out
     assert HMAC_SENTINEL not in captured.out
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

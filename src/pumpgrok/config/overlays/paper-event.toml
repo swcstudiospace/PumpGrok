@@ -1,13 +1,6 @@
-<<<<<<< HEAD
 # Paper event profile (STR-01, D-04). Paper-identical to paper.toml
 # except the two event-capacity risk keys below; inert unless selected
 # as a profile or passed as the operator config file.
-=======
-# Paper-event profile: paper with wider limits for the multi-strategy paper run.
-# Selected with PUMPGROK_PROFILE=paper-event. Every value except the two [risk]
-# limits below is copied from paper.toml; paper.toml and live.toml are unchanged.
-# Later sources win: PUMPGROK_* env > PUMPGROK_CONFIG operator TOML > this file > defaults.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
 [execution]
 mode = "paper"

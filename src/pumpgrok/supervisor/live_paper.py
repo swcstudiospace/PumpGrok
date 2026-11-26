@@ -1,16 +1,3 @@
-<<<<<<< HEAD
-"""Live-data paper composition root (MKT-09, D-06).
-
-Composes the Phase 13 datafeed into a paper desk: the fail-closed live price
-source, the held-mint marks loop, the 15-03 strategy runtime under slice
-allocation, and the Intent router as the only path to order placement.
-
-The root refuses to build unless the execution mode is paper — a live mode
-raises :class:`LivePaperError` before any component is constructed. Feed
-access goes through the read-only allowlist only: :meth:`LivePaperDesk.feed_call`
-checks the method name before touching the transport, so nothing outside the
-five allowlisted read methods is reachable from this root.
-=======
 """Live-data paper composition root (MKT-09, criterion 10).
 
 :func:`build_live_paper_root` is the one composition of the live-data paper path: a
@@ -27,32 +14,60 @@ decision 4). The transport is injected, and this module opens no socket.
 ATA rent (FEE-01): with ``rent_rpc`` the rent-exempt minimum is read from RPC once at build time
 (:func:`read_ata_rent`); a failed read fails the build. Without it the recorded offline pin
 (:data:`PAPER_DEFAULT_FEE_MODEL`) is used.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
 from collections.abc import Callable
+from contextlib import ExitStack, closing
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Protocol
 
 from pumpgrok.core.adapter import ExecutionMode
+from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.datafeed.bridge import ObservationBridge, build_observation_bridge
 from pumpgrok.datafeed.marks import MarksLoop
 from pumpgrok.datafeed.mintbook import MintBook
-from pumpgrok.datafeed.price import LivePriceSource
-from pumpgrok.datafeed.readonly import ALLOWED_METHODS, guarded_call
+from pumpgrok.datafeed.price import LivePriceSource, ReservesCache
+from pumpgrok.datafeed.readonly import (
+    ALLOWED_METHODS,
+    ReadOnlyBoundary,
+    ReadTransport,
+    guarded_call,
+)
+from pumpgrok.datafeed.watchset import WatchSet
+from pumpgrok.events.models import Event
+from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.execution.entry_hook import EntryHook
+from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel, read_ata_rent
+from pumpgrok.execution.paper_adapter import PaperAdapter
+from pumpgrok.execution.paper_factory import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, FixtureClock, WallClock
+from pumpgrok.replay.live_recorder import LiveRecorder
+from pumpgrok.replay.rng import make_rng
+from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.entry_checks import EntryChecks
+from pumpgrok.risk.killswitch import killswitch_file
+from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.strategies.allocation import Allocation
 from pumpgrok.strategies.registry import is_known_strategy, resolve_factory
 from pumpgrok.strategies.runtime import StrategyRuntime
 from pumpgrok.strategies.tape import Tape
 from pumpgrok.supervisor.intent_router import IntentRouter, Place
+from pumpgrok.tools import RESERVES_CACHE_CAPACITY, ensure_paper_genesis
 
-__all__ = ["LivePaperDesk", "LivePaperError", "build_live_paper", "strategy_factory"]
+__all__ = [
+    "LivePaperDesk",
+    "LivePaperError",
+    "LivePaperRoot",
+    "build_live_paper",
+    "build_live_paper_root",
+    "strategy_factory",
+]
 
 
 class LivePaperError(ValueError):
@@ -111,6 +126,9 @@ def build_live_paper(
     slices_lamports: dict[str, int] | None = None,
     tape: Tape | None = None,
     entry_checks: EntryChecks | None = None,
+    max_age_s: float = 10.0,
+    max_observations: int = 4,
+    price_health: SourceSupervisor | None = None,
 ) -> LivePaperDesk:
     """Compose the paper desk; refuse unless the execution mode is paper."""
     if mode != ExecutionMode.PAPER:
@@ -137,12 +155,21 @@ def build_live_paper(
         allocation=allocation,
         params=params,
     )
-    prices = LivePriceSource()
-    book = MintBook()
+    health = (
+        price_health
+        if price_health is not None
+        else SourceSupervisor(
+            clock, make_rng(), path=store.path.with_name("live-paper-cursor.sqlite")
+        )
+    )
+    prices = LivePriceSource(
+        clock=clock, health=health, max_age_s=max_age_s, max_observations=max_observations
+    )
+    book = MintBook(watch=WatchSet(max_watched_mints=64))
     marks = MarksLoop(
         book,
         clock,
-        lambda mint: prices.price(mint, now_epoch=clock.now()),
+        lambda mint: None,
         lambda mint, price: None,
     )
     router = IntentRouter(store=store, place=place, clock=clock)
@@ -159,32 +186,6 @@ def build_live_paper(
         entry_checks=entry_checks,
         entry_hook=EntryHook(),
     )
-=======
-from contextlib import ExitStack, closing
-from dataclasses import dataclass
-from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, Protocol
-
-from pumpgrok.core.ids import Clock, IdFactory
-from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.datafeed.bridge import ObservationBridge, build_observation_bridge
-from pumpgrok.datafeed.price import LivePriceSource, ReservesCache
-from pumpgrok.datafeed.readonly import ReadOnlyBoundary, ReadTransport
-from pumpgrok.events.models import Event
-from pumpgrok.events.sources import SourceSupervisor
-from pumpgrok.execution.fees import PAPER_DEFAULT_FEE_MODEL, FeeModel, read_ata_rent
-from pumpgrok.execution.paper_adapter import PaperAdapter
-from pumpgrok.execution.paper_factory import build_paper_adapter
-from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.live_recorder import LiveRecorder
-from pumpgrok.replay.rng import make_rng
-from pumpgrok.risk.engine import RiskEngine
-from pumpgrok.risk.killswitch import killswitch_file
-from pumpgrok.risk.limits import EngineLimits
-from pumpgrok.tools import RESERVES_CACHE_CAPACITY, ensure_paper_genesis
-
-__all__ = ["LivePaperRoot", "build_live_paper_root"]
 
 LEDGER_FILE = "ledger.sqlite"
 CURSOR_FILE = "live-cursor.sqlite"
@@ -317,4 +318,3 @@ async def build_live_paper_root(
         )
         stack.pop_all()
     return root
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

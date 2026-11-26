@@ -30,8 +30,12 @@ from pumpgrok.risk.engine.constants import (
     SYSTEM_EXIT_REASONS,
 )
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
-from pumpgrok.risk.strategy_slice import SliceConfig, spent_from_ledger
-from pumpgrok.risk.strategy_slice import strategy_cap, strategy_held_basis
+from pumpgrok.risk.strategy_slice import (
+    SliceConfig,
+    spent_from_ledger,
+    strategy_cap,
+    strategy_held_basis,
+)
 
 # Verdict of ``evaluate_halts`` when a halt is already latched; never a breach reason.
 HALT_ALREADY_ACTIVE = "already_active"

@@ -1,6 +1,9 @@
 """PRM-02 (criterion 6): thresholds load fail-closed; a looser value refuses to load.
 
-One parametrized looser-than-floor case per floor, plus missing-key and unparsable cases. The floors are single-sourced from the live gate module, never retyped. The shipped file equals the LiveGate floors. A zero-loss paper record never passes the profit-factor check (D17-3).
+One parametrized looser-than-floor case per floor, plus missing-key and
+unparsable cases. The floors are single-sourced from the live gate module,
+never retyped. The shipped file equals the LiveGate floors. A zero-loss
+paper record never passes the profit-factor check (D17-3).
 """
 
 from __future__ import annotations
@@ -12,8 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from pumpgrok.config.settings import ConfigError
+import pytest
 
+from pumpgrok.config.settings import ConfigError
 from pumpgrok.execution.live.live_gate import (
     MAX_DRAWDOWN_FRACTION,
     MIN_CLOSED_TRADES,
@@ -25,9 +29,6 @@ from pumpgrok.promotion.thresholds import (
     FLOOR_DRAWDOWN_FRACTION,
     FLOOR_PAPER_DAYS,
     FLOOR_PROFIT_FACTOR,
-    load_thresholds,
-)
-from pumpgrok.promotion.thresholds import (
     PaperRecord,
     PromotionThresholdError,
     default_thresholds_path,
@@ -43,10 +44,15 @@ DEFAULT = (
     / "promotion_thresholds.toml"
 )
 
-
-def _write(tmp_path: Path, body: str) -> Path:
-    path = tmp_path / "thresholds.toml"
-    path.write_text(body, encoding="utf-8")
+def _write(
+    tmp_path: Path, body: str | None = None, *, days=14, trades=50, pf=1.2, dd=0.15
+) -> Path:
+    if body is not None:
+        path = tmp_path / "thresholds.toml"
+        path.write_text(body, encoding="utf-8")
+        return path
+    path = tmp_path / "promotion_thresholds.toml"
+    path.write_text(_VALID.format(days=days, trades=trades, pf=pf, dd=dd), encoding="utf-8")
     return path
 
 
@@ -137,11 +143,6 @@ min_profit_factor = {pf}
 max_drawdown_fraction = {dd}
 """
 
-
-def _write(tmp_path: Path, *, days=14, trades=50, pf=1.2, dd=0.15) -> Path:
-    path = tmp_path / "promotion_thresholds.toml"
-    path.write_text(_VALID.format(days=days, trades=trades, pf=pf, dd=dd), encoding="utf-8")
-    return path
 
 
 def test_shipped_file_equals_the_live_floors() -> None:

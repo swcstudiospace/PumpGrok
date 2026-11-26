@@ -1,6 +1,11 @@
 """PRM-06 (criterion 9): only writers write stages, and stored content is verified first.
 
-Only is_writer callers write: a non-writer caller raises instead of writing; a writer (human or gate) writes through the same helpers. A stage change or demotion needs a human: or gate: caller, and the parameter set's stored content must verify before any row is written; a refused call appends nothing. Stored stage content is read back from the ledger and verified (hash-chain intact) before use.
+Only is_writer callers write: a non-writer caller raises instead of writing;
+a writer (human or gate) writes through the same helpers. A stage change or
+demotion needs a human: or gate: caller, and the parameter set's stored
+content must verify before any row is written; a refused call appends
+nothing. Stored stage content is read back from the ledger and verified
+(hash-chain intact) before use.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from promotion_support import CORR, HUMAN, NOW, STRATEGY, activate, advance, pap
 
 from pumpgrok.ledger.active_set import is_writer, verify_stored_content
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.promotion import Stage, StageRefused, current_stage
+from pumpgrok.promotion import StageRefused, current_stage
 from pumpgrok.promotion import stages as stages_module
 from pumpgrok.promotion.demote import demote
 from pumpgrok.promotion.stages import (
@@ -27,12 +32,11 @@ from pumpgrok.promotion.stages import (
     append_stage_row,
     append_transition,
     read_stage_row,
+    stage_rows,
 )
-from pumpgrok.promotion.stages import stage_rows
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
-STRATEGY = "momentum_breakout"
 
 
 def _store(tmp_path: Path) -> LedgerStore:

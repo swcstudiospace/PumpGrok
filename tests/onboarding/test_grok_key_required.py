@@ -1,21 +1,3 @@
-<<<<<<< HEAD
-"""Empty x.ai key counts as missing; no empty-bearer request is sent."""
-
-from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
-
-
-def test_empty_key_is_missing() -> None:
-    records = doctor_records({"PUMPGROK_GROK__API_KEY": ""}, "paper")
-    by_name = {record.name: record for record in records}
-    assert by_name["xai_api_key"].status == "missing"
-    assert failing_records(records)
-
-
-def test_present_key_satisfies() -> None:
-    records = doctor_records({"PUMPGROK_GROK__API_KEY": "x"}, "paper")
-    by_name = {record.name: record for record in records}
-    assert by_name["xai_api_key"].status == "present"
-=======
 """An enabled Grok seat needs a nonempty x.ai key, checked at paper startup before any supervisor.
 
 With the Grok gateway disabled the key stays optional. With it enabled, an empty or unset key is
@@ -152,4 +134,3 @@ def test_disabled_grok_seat_does_not_require_an_xai_key(
     code, text = _run_once(capsys)
     assert code == EXIT_OK, text
     assert startup_spy == [("once", Path(SMOKE))]
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

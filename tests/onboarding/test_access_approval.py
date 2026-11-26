@@ -1,21 +1,3 @@
-<<<<<<< HEAD
-"""Seat access grants exist only as operator-choice ledger rows."""
-
-from pathlib import Path
-
-from pumpgrok.onboarding.access import has_access, record_access
-
-
-def test_no_grant_by_default(tmp_path: Path) -> None:
-    assert not has_access(tmp_path / "access.jsonl", "bot-01-scout")
-
-
-def test_grant_is_recorded(tmp_path: Path) -> None:
-    path = tmp_path / "access.jsonl"
-    record_access(path, "bot-01-scout")
-    assert has_access(path, "bot-01-scout")
-    assert not has_access(path, "bot-02-risk")
-=======
 """ONB-04: roster-derived tool choices, no default grant, authenticated revocable decisions.
 
 Authority comes only from protected, operator-authenticated records (HMAC under the operator
@@ -347,4 +329,3 @@ def test_registry_resolves_a_tool_only_after_an_authenticated_allow(
         "not_operator_approved",
         "not_operator_approved",
     ]
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

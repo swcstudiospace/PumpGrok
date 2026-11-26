@@ -1,19 +1,37 @@
 """PRM-03 (criterion 6): promotion reuses the upgrade gate; it adds no second search.
 
-The upgrade gate checks are reused: same evidence, same verdict from the upgrade path and the promotion paper path — bounds, trial count, holdout and divergence all run through ``evaluate_candidate`` with the paper parameter. A stage advance calls upgrade.gate.evaluate_candidate exactly once, against the strategy's own paper report. Only that module constructs an eligible verdict, and the promotion package defines no search and imports no search entry point. A zero-loss paper record is refused before the gate runs (D17-3); the trial count comes from the evidence record. The divergence tests pin their return-gap threshold explicitly, so they do not depend on the D7 default.
+The upgrade gate checks are reused: same evidence, same verdict from the
+upgrade path and the promotion paper path -- bounds, trial count, holdout
+and divergence all run through ``evaluate_candidate`` with the paper
+parameter. A stage advance calls upgrade.gate.evaluate_candidate exactly
+once, against the strategy's own paper report. Only that module constructs
+an eligible verdict, and the promotion package defines no search and
+imports no search entry point. A zero-loss paper record is refused before
+the gate runs (D17-3); the trial count comes from the evidence record. The
+divergence tests pin their return-gap threshold explicitly, so they do not
+depend on the D7 default.
 """
 
 from __future__ import annotations
 
+import ast
 import sys
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+import pytest
+from promotion_support import NOW, STRATEGY, activate, advance, paper_history
+
+from pumpgrok.backtest import divergence
 from pumpgrok.backtest.harness import HarnessResult
 from pumpgrok.backtest.metrics import MetricsReport
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.promotion import Stage, StageRefused, current_stage
+from pumpgrok.promotion import stages as stages_module
+from pumpgrok.promotion.stages import paper_window
 from pumpgrok.upgrade.bounds import load_bounds
 from pumpgrok.upgrade.gate import (
     REASON_BELOW_AUTONOMY_LEVEL,
@@ -94,28 +112,8 @@ def test_paper_path_reuses_bounds_holdout_and_divergence_verdicts(tmp_path: Path
             assert paper.reason in (REASON_PASS, "holdout_failed", "too_many_trials")
         else:
             assert paper.reason == upgrade.reason
-    store.close()
 
 
-import ast
-from dataclasses import replace
-from decimal import Decimal
-from pathlib import Path
-
-import pytest
-from promotion_support import (
-    NOW,
-    STRATEGY,
-    activate,
-    advance,
-    paper_history,
-)
-
-from pumpgrok.backtest import divergence
-from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.promotion import Stage, StageRefused, current_stage
-from pumpgrok.promotion import stages as stages_module
-from pumpgrok.promotion.stages import paper_window
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 PROMOTION_DIR = SRC / "promotion"

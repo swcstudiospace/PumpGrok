@@ -13,8 +13,6 @@ a second strategy in the same mint is not charged the first strategy's cost basi
 
 from __future__ import annotations
 
-import itertools
-import json
 import random
 import sys
 from datetime import UTC, datetime
@@ -24,11 +22,8 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-import pytest
 
-from pumpgrok.cli import main
 from pumpgrok.core.adapter import OrderRequest
-from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore

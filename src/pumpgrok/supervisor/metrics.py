@@ -40,7 +40,7 @@ cadence mode exposes exactly the nine families with unchanged bytes.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -51,7 +51,8 @@ from prometheus_client import (
     generate_latest,
 )
 
-from pumpgrok.supervisor.metrics_events import EventCollectors
+if TYPE_CHECKING:
+    from pumpgrok.supervisor.metrics_events import EventCollectors
 
 #: Content type for the GET /metrics exposition bytes.
 EXPOSITION_CONTENT_TYPE = CONTENT_TYPE_LATEST
@@ -144,7 +145,12 @@ class Metrics:
         self._known_sources: set[str] = set()
         self._known_breakers: set[str] = set()
         # After the nine: the exposition lists registration order, so the nine blocks lead.
-        self._events = EventCollectors(self._registry) if event_mode else None
+        if event_mode:
+            from pumpgrok.supervisor.metrics_events import EventCollectors  # noqa: PLC0415 - circular import
+
+            self._events: EventCollectors | None = EventCollectors(self._registry)
+        else:
+            self._events = None
 
     @property
     def events(self) -> EventCollectors | None:

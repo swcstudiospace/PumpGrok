@@ -6,6 +6,9 @@ Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356
 Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 17 status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery).
+Desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart and the narrative changelog entry (PR #100) are absent; PRs #98-#100 remain open on GitHub.
+
 Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 16: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54

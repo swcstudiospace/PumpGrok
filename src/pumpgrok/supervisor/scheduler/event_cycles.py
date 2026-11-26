@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-"""Ten event-mode seat cycle bodies (RT-01, T-14-04-01/03).
-
-Each body invokes the same seat logic cadence uses (SeatTask.run_guarded)
-with the waking event's typed fields only; no raw payload passthrough, no
-copied seat logic, at most one cycle per seat per wake. Cadence cycle
-bodies and their hashes are untouched.
-=======
 """Event-driven seat cycles for the trading and safety roles (EVT-10, 14-04 slice A).
 
 Each body runs on the bus event that woke its seat (``TRIGGER_EVENT``). A timer start has no
@@ -16,18 +8,43 @@ makes. Nothing here reads a price from an event payload: prices and reserves com
 source at the injected clock's time, and orders go through the sniper's granted ``exec.place``,
 which runs risk and the paper adapter. The exit path does not import the Grok gateway, so no
 model call can hold a protective exit.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from collections.abc import Callable
+import functools
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from pumpgrok.events.models import Event
+from pumpgrok.core.ids import CorrelationId, bind_correlation
+from pumpgrok.engine.pipeline import SKIP, decide_token, tick_to_candidate
+from pumpgrok.events.models import Event, EventKind
+from pumpgrok.logging.json import bind_seat
 from pumpgrok.replay.clock import Clock
-from pumpgrok.supervisor.scheduler.wake import Wake
+from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
+from pumpgrok.supervisor.scheduler.orders import _run_exit_rules
+from pumpgrok.supervisor.scheduler.replay_runtime import (
+    REPLAY_BUY_LAMPORTS,
+    REPLAY_SLIPPAGE_BPS,
+    REPLAY_TICKET,
+    _await_order,
+    _replay_trade,
+    _ReplayTrading,
+)
+from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
+from pumpgrok.supervisor.scheduler.wake import (
+    AUX_EVENT_CYCLE_SEATS,
+    EVENT_CYCLE_SEATS,
+    Wake,
+)
+from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
+
+if TYPE_CHECKING:
+    from pumpgrok.config.settings import FilterSettings
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.replay.sources import FixtureCurveSource
+    from pumpgrok.risk.engine import RiskEngine
 
 TEN_SEATS: tuple[str, ...] = (
     "bot-00-chief",
@@ -83,34 +100,6 @@ def run_wake(wakes: list[Wake], *, clock: Clock) -> list[CycleResult]:
 def event_typed_fields(event: Event) -> dict[str, str]:
     """The only fields a cycle body may read from the waking event."""
     return {"kind": str(event.kind), "entity_id": event.entity_id}
-=======
-import functools
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-from pumpgrok.core.ids import CorrelationId, bind_correlation
-from pumpgrok.engine.pipeline import SKIP, decide_token, tick_to_candidate
-from pumpgrok.events.models import Event, EventKind
-from pumpgrok.logging.json import bind_seat
-from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
-from pumpgrok.supervisor.scheduler.orders import _run_exit_rules
-from pumpgrok.supervisor.scheduler.replay_runtime import (
-    REPLAY_BUY_LAMPORTS,
-    REPLAY_SLIPPAGE_BPS,
-    REPLAY_TICKET,
-    _await_order,
-    _replay_trade,
-    _ReplayTrading,
-)
-from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
-from pumpgrok.supervisor.scheduler.wake import AUX_EVENT_CYCLE_SEATS, EVENT_CYCLE_SEATS
-from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
-
-if TYPE_CHECKING:
-    from pumpgrok.config.settings import FilterSettings
-    from pumpgrok.ledger.store import LedgerStore
-    from pumpgrok.replay.sources import FixtureCurveSource
-    from pumpgrok.risk.engine import RiskEngine
 
 __all__ = ["build_event_cycles", "merge_event_cycles"]
 
@@ -307,4 +296,3 @@ def merge_event_cycles(
             raise ValueError(f"event body bound to a seat no event wakes: {refused}")
         merged.update(bodies)
     return merged
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

@@ -24,9 +24,11 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import halt_key
 from pumpgrok.supervisor.seat_relay import (
+    _RELAY_KIND,
     KIND_HEARTBEAT_STALE,
     KIND_LEDGER_READ_FAILED,
     KIND_RESTART_EXHAUSTED,
+    RELAY_TYPES,
     append_escalation,
     escalation_severity,
 )

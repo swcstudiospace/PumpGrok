@@ -1,13 +1,3 @@
-<<<<<<< HEAD
-"""Inventory lists every operator input and is snapshot-pinned."""
-
-from pumpgrok.onboarding.inventory import INVENTORY, inventory_snapshot_hash
-
-
-def test_inventory_covers_five_inputs() -> None:
-    names = {spec.name for spec in INVENTORY}
-    assert names == {
-=======
 """ONB-01: the onboarding inventory per mode, pinned as a snapshot, with presence and source only.
 
 Policy-supported cells are fixed: paper never reads the wallet; an enabled Grok seat needs a
@@ -146,29 +136,11 @@ def _complete_authority(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_input_names_are_the_policy_inputs_in_order() -> None:
     assert INPUT_NAMES == (
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
         "xai_api_key",
         "wallet_public_address",
         "rpc_endpoint",
         "seat_tool_access",
         "hmac_confirmation_key",
-<<<<<<< HEAD
-    }
-
-
-def test_snapshot_hash_is_stable() -> None:
-    assert inventory_snapshot_hash() == inventory_snapshot_hash()
-    assert len(inventory_snapshot_hash()) == 64
-
-
-def test_modes_are_classified() -> None:
-    by_name = {spec.name: spec for spec in INVENTORY}
-    assert by_name["wallet_public_address"].kind_for("paper") == "not-read"
-    assert by_name["wallet_public_address"].kind_for("live") == "required"
-    assert by_name["hmac_confirmation_key"].kind_for("live") == "forbidden"
-    assert by_name["xai_api_key"].kind_for("paper") == "required"
-    assert by_name["rpc_endpoint"].kind_for("paper") == "optional"
-=======
     )
 
 
@@ -285,4 +257,3 @@ def test_complete_paper_and_live_states_have_no_failing_inputs(
     assert failing_inputs(paper) == []
     assert failing_inputs(live) == []
     assert _by_name(live)["seat_tool_access"].status == "present"
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

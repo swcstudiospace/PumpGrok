@@ -1,7 +1,8 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-Token-first layout: an 8-byte discriminator, five token-first little-endian u64 counters, and a one-byte
-completion flag (0/1). The 49-byte token-first layout was approved by human review (LAYOUT_REVIEWED_BY).
+Token-first layout: an 8-byte discriminator, five token-first little-endian u64 counters, and a
+one-byte completion flag (0/1). The 49-byte token-first layout was approved by human review
+(LAYOUT_REVIEWED_BY).
 The 166-byte extended layout has no reviewed source and is refused (fail closed).
 Shared by ``market.price`` and ``onchain.lp_status``.
 
@@ -21,7 +22,6 @@ from pydantic import BaseModel, ConfigDict
 
 from pumpgrok.core.units import lamports_to_sol, sol_to_lamports
 from pumpgrok.tools._common import UNITS_PER_TOKEN
-from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS
 
 #: Token-first 49-byte layout: disc, virt_token, virt_sol, real_token,
 #: real_sol, total_supply, completion flag. Token fields precede SOL fields.

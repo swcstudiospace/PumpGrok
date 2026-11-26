@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-"""Deterministic bus and journal rollup (EVT-08, RT-01).
-
-`DeterministicBus` is the Phase 12 drain under `fixture_compat`: identical
-bytes for identical inputs, exact hash equality, no tolerance band.
-=======
 """Event-driven seat cycles for the whale, signal and journal roles (EVT-10, 14-04 slice B).
 
 Each body runs on the bus event that woke its seat (``TRIGGER_EVENT``). A journal timer start has
@@ -21,18 +15,35 @@ Each body calls the role's existing service and never invents an observation:
   seat, and renders the daily report from the ledger on the timer or on a position close.
 
 Only the injected clock is read. Nothing here imports the Grok gateway or calls a model.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
+import functools
 import random
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+from pumpgrok.core.errors import DataStale
+from pumpgrok.core.ids import bind_calling_seat
+from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 from pumpgrok.events.drain import DrainBytes, drain
-from pumpgrok.events.models import Event
-from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.events.models import Event, EventKind
+from pumpgrok.ledger.events import NoteKind
+from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
+from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
+from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
+from pumpgrok.tools.journal.append import JournalAppendIn, run_journal_append
+from pumpgrok.tools.journal.render_report import RenderReportIn, run_render_report
+from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn, run_large_transfers
+from pumpgrok.tools.onchain.rpc import RpcError
+
+if TYPE_CHECKING:
+    from pumpgrok.ledger.store import LedgerStore
+    from pumpgrok.supervisor.scheduler.degraded import DegradedState
+    from pumpgrok.supervisor.scheduler.replay_runtime import _ReplayTrading
+    from pumpgrok.tools.onchain.rpc import RpcClient
 
 #: Seed pinned by the smoke datasets (manifest seed_hint).
 FIXTURE_SEED = 20260101
@@ -49,30 +60,6 @@ class DeterministicBus:
         if not fixture_compat:
             raise ValueError("deterministic bus requires fixture_compat")
         return drain(events, self._clock, self._rng)
-=======
-import functools
-from collections.abc import Mapping, Sequence
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from pumpgrok.core.errors import DataStale
-from pumpgrok.core.ids import bind_calling_seat
-from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
-from pumpgrok.events.models import Event, EventKind
-from pumpgrok.ledger.events import NoteKind
-from pumpgrok.replay.clock import parse_ts_utc
-from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
-from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
-from pumpgrok.tools.journal.append import JournalAppendIn, run_journal_append
-from pumpgrok.tools.journal.render_report import RenderReportIn, run_render_report
-from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn, run_large_transfers
-from pumpgrok.tools.onchain.rpc import RpcError
-
-if TYPE_CHECKING:
-    from pumpgrok.ledger.store import LedgerStore
-    from pumpgrok.supervisor.scheduler.degraded import DegradedState
-    from pumpgrok.supervisor.scheduler.replay_runtime import _ReplayTrading
-    from pumpgrok.tools.onchain.rpc import RpcClient
 
 __all__ = ["build_aux_event_cycles", "synthetic_signal_score"]
 
@@ -282,4 +269,3 @@ def build_aux_event_cycles(
             reports_dir=reports_dir,
         ),
     }
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

@@ -21,7 +21,6 @@ from pumpgrok.backtest.manifest import RunManifest, build_manifest, param_set_ha
 from pumpgrok.backtest.report import build_report
 from pumpgrok.backtest.report import render as render_backtest
 from pumpgrok.backtest.split import HoldoutSplit, holdout_split
-from pumpgrok.backtest.strategy_run import run_strategy
 from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.cli.backtest_holdout import (
     _Dataset,

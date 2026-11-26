@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-"""Event and Grok metric families (GRK-10, T-14-03-03).
-
-Registered only when `wake_mode=event`. The nine existing families in
-`metrics.py` keep their names, labels, and values. Labels are fixed names
-only, never payload values. Integer counters only.
-=======
 """Event-mode metric families: bus and Grok gateway observations (EVT-12, GRK-10).
 
 Registered only when the supervisor runs in event mode (``Metrics(event_mode=True)``), on the
@@ -23,15 +16,14 @@ Families (names verbatim):
 
 The observers wrap the seams the real bus and gateway already take: the bus handler and DLQ
 callables, and the gateway transport. A wrapper never changes a result or an exception.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from prometheus_client import CollectorRegistry, Counter
+from collections.abc import Awaitable, Callable
+from typing import Protocol, TypeVar
 
-from pumpgrok.supervisor.metrics import NINE_FAMILIES, build_registry
+from prometheus_client import CollectorRegistry, Counter
 
 EVENTS_TOTAL = "pumpgrok_events_total"
 WAKES_TOTAL = "pumpgrok_wakes_total"
@@ -41,6 +33,8 @@ GROK_TRANSPORT_CALLS_TOTAL = "pumpgrok_grok_transport_calls_total"
 STRATEGY_P_TOTAL = "pumpgrok_strategy_p_total"
 STRATEGY_LIVE_L_TOTAL = "pumpgrok_strategy_l_total"
 STRATEGY_STAGE = "pumpgrok_strategy_stage"
+EVENT_DLQ_TOTAL = "pumpgrok_event_dlq_total"
+GROK_CALLS_TOTAL = "pumpgrok_grok_calls_total"
 
 EVENT_FAMILIES: tuple[str, ...] = (
     EVENTS_TOTAL,
@@ -63,6 +57,8 @@ class EventMetrics:
     """The event-mode families. Constructing this registers them on the registry."""
 
     def __init__(self, registry: CollectorRegistry | None = None) -> None:
+        from pumpgrok.supervisor.metrics import build_registry  # noqa: PLC0415 - circular import
+
         self._registry = registry if registry is not None else build_registry()
         self.events_total = Counter(
             EVENTS_TOTAL, "Bus events by kind.", ["kind"], registry=self._registry
@@ -96,18 +92,15 @@ class EventMetrics:
             "Strategy stage transitions.",
             ["strategy", "stage"],
             registry=self._registry,
-=======
-from collections.abc import Awaitable, Callable
-from typing import Protocol, TypeVar
+        )
 
-from prometheus_client import CollectorRegistry, Counter
+    @property
+    def registry(self) -> CollectorRegistry:
+        return self._registry
 
-#: Verbatim family names.
-EVENTS_TOTAL = "pumpgrok_events_total"
-EVENT_DLQ_TOTAL = "pumpgrok_event_dlq_total"
-GROK_CALLS_TOTAL = "pumpgrok_grok_calls_total"
 
-EVENT_FAMILIES: tuple[str, ...] = (EVENTS_TOTAL, EVENT_DLQ_TOTAL, GROK_CALLS_TOTAL)
+
+
 
 
 class _Kind(Protocol):
@@ -166,25 +159,10 @@ class EventCollectors:
             "Charged Grok transport calls by agent and outcome.",
             ["agent", "outcome"],
             registry=registry,
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
         )
 
     @property
     def registry(self) -> CollectorRegistry:
-<<<<<<< HEAD
-        return self._registry
-
-
-def build_event_registry(wake_mode: str) -> CollectorRegistry | None:
-    """Event families exist only in event mode. Cadence returns None."""
-    if wake_mode != "event":
-        return None
-    return EventMetrics().registry
-
-
-def assert_nine_families_unchanged() -> bool:
-    return len(NINE_FAMILIES) == 9
-=======
         """The registry these families are bound to."""
         return self._registry
 
@@ -241,4 +219,16 @@ class _ObservedTransport[R: _Request]:
         outcome = "ok" if isinstance(response, str) else "error"
         self._calls.labels(agent=request.agent, outcome=outcome).inc()
         return response
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
+
+
+def build_event_registry(wake_mode: str) -> CollectorRegistry | None:
+    """Event families exist only in event mode. Cadence returns None."""
+    if wake_mode != "event":
+        return None
+    return EventMetrics().registry
+
+
+def assert_nine_families_unchanged() -> bool:
+    from pumpgrok.supervisor.metrics import NINE_FAMILIES  # noqa: PLC0415 - circular import
+
+    return len(NINE_FAMILIES) == 9

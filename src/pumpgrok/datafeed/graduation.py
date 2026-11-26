@@ -68,7 +68,7 @@ def _is_reserve(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
+def _is_bound_tick(snapshot: CurveSnapshot, replay: VerifiedReplay) -> bool:
     """True when ``snapshot`` equals a tick of the dataset ``replay`` verified.
 
     A hand-built snapshot that only carries the ``fixture`` label matches no
@@ -93,7 +93,7 @@ def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
 
 
 def _provenance(
-    snapshot: CurveSnapshot, replay: "VerifiedReplay | None"
+    snapshot: CurveSnapshot, replay: VerifiedReplay | None
 ) -> curve_layout.CurveProvenance:
     """Honest origin of a snapshot, from what the caller can prove.
 
@@ -112,7 +112,7 @@ def _provenance(
     return curve_layout.CurveProvenance.UNKNOWN
 
 
-def _admitted(snapshot: CurveSnapshot, replay: "VerifiedReplay | None") -> bool:
+def _admitted(snapshot: CurveSnapshot, replay: VerifiedReplay | None) -> bool:
     return (
         snapshot.source in {"fixture", "rpc"}
         and snapshot.s_lamports > 0
@@ -128,7 +128,7 @@ def entry_allowed(
     *,
     now: float,
     max_age_s: float,
-    replay: "VerifiedReplay | None" = None,
+    replay: VerifiedReplay | None = None,
 ) -> bool:
     """Authorize only a fresh, admitted, incomplete paper entry observation."""
     if (
@@ -155,7 +155,7 @@ def position_action(
     last_trusted_at: float,
     now: float,
     settings: GapSettings,
-    replay: "VerifiedReplay | None" = None,
+    replay: VerifiedReplay | None = None,
 ) -> PositionAction:
     """Select a mark, hold, zero mark, or graduated signal without executing it.
 

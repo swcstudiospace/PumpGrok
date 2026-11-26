@@ -45,6 +45,8 @@ DEFAULT_TIMEOUT_S = 15.0
 
 # Owner and discriminator a bonding-curve account must carry before its bytes are
 # trusted. Both match docs/CURVE_LAYOUT_PROBE.md.
+EXPECTED_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+EXPECTED_DISCRIMINATOR_HEX = "17b7f83760d8ac60"
 
 STATUS_DECODED = "decoded_pending_review"
 STATUS_ASSUMED = "ASSUMED"

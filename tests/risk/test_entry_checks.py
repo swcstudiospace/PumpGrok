@@ -20,6 +20,7 @@ from pumpgrok.execution.entry_hook import EntryHook, EntryRefusedError
 from pumpgrok.risk.entry_checks import (
     EntryChecks,
     EntryEvidence,
+    MintFacts,
     MintListError,
     MintLists,
     default_mint_lists_path,

@@ -59,7 +59,7 @@ class MarksLoop:
             return None
         due = [
             self._last_mark.get(mint, self._clock.now() - MARK_INTERVAL_S) + MARK_INTERVAL_S
-            for mint in self._book.held()
+            for mint in self._book.held
         ]
         return min(due) if due else None
 
@@ -67,7 +67,7 @@ class MarksLoop:
         """Emit marks for mints due; return the marked mints. Flat: no-op."""
         now = self._clock.now()
         marked: list[str] = []
-        for mint in sorted(self._book.held()):
+        for mint in sorted(self._book.held):
             last = self._last_mark.get(mint, now - MARK_INTERVAL_S)
             if now - last >= MARK_INTERVAL_S:
                 self._on_mark(mint, self._price(mint))

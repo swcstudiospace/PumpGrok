@@ -1,6 +1,13 @@
 """PRM-01 (criterion 6): stage changes are ledger rows with a decision log.
 
-Stages move BACKTEST -> PAPER -> LIVE_ELIGIBLE on recorded evidence, one step per row. The stage is folded from the rows, so a fresh ledger handle reads the same stage. Forward moves run the one gate on eligible evidence; a step to LIVE_ELIGIBLE also needs a paper record that meets the thresholds. Each refusal class (ineligible evidence, below-threshold evidence) stays put, and a refused step writes nothing. LIVE is derived and never stored, and every transition lands in the decision log. All evidence is fabricated records; no backtest run, no network.
+Stages move BACKTEST -> PAPER -> LIVE_ELIGIBLE on recorded evidence, one step
+per row. The stage is folded from the rows, so a fresh ledger handle reads
+the same stage. Forward moves run the one gate on eligible evidence; a step
+to LIVE_ELIGIBLE also needs a paper record that meets the thresholds. Each
+refusal class (ineligible evidence, below-threshold evidence) stays put, and
+a refused step writes nothing. LIVE is derived and never stored, and every
+transition lands in the decision log. All evidence is fabricated records;
+no backtest run, no network.
 """
 
 from __future__ import annotations
@@ -25,7 +32,7 @@ from promotion_support import (
 )
 
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.promotion import Stage, StageRefused, current_stage
+from pumpgrok.promotion import StageRefused, current_stage
 from pumpgrok.promotion.evaluator import EvidenceView, PromotionEvaluator
 from pumpgrok.promotion.stages import (
     Stage,
@@ -35,13 +42,12 @@ from pumpgrok.promotion.stages import (
     append_transition,
     decision_log,
     read_stage_row,
+    stage_rows,
 )
-from pumpgrok.promotion.stages import stage_rows
 from pumpgrok.promotion.thresholds import PromotionThresholds
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
-STRATEGY = "momentum_breakout"
 
 
 def _store(tmp_path: Path) -> LedgerStore:

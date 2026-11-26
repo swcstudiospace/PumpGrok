@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import math
 import tomllib
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from pumpgrok.config.settings import ConfigError
 from pumpgrok.core.errors import PumpgrokError
@@ -53,6 +52,11 @@ FLOOR_PAPER_DAYS = MIN_PAPER_DAYS
 FLOOR_CLOSED_TRADES = MIN_CLOSED_TRADES
 FLOOR_PROFIT_FACTOR = Decimal(str(MIN_PROFIT_FACTOR))
 FLOOR_DRAWDOWN_FRACTION = Decimal(str(MAX_DRAWDOWN_FRACTION))
+
+#: Version-controlled thresholds file consulted at promotion time.
+DEFAULT_THRESHOLDS_PATH = (
+    Path(__file__).resolve().parents[1] / "config" / "promotion_thresholds.toml"
+)
 
 
 class PromotionThresholdError(PumpgrokError):
@@ -177,7 +181,7 @@ def load_thresholds(path: Path | str | None = None) -> PromotionThresholds:
 
 def default_thresholds_path() -> Path:
     """In-package promotion_thresholds.toml path."""
-    return Path(__file__).resolve().parents[1] / "config" / "promotion_thresholds.toml"
+    return DEFAULT_THRESHOLDS_PATH
 
 
 def _int_value(table: dict[str, Any], key: str) -> int:

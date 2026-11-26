@@ -18,7 +18,7 @@ from pumpgrok.datafeed.events import CurveObservation, CurveTick, GapEvent
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.replay.clock import Clock, parse_ts_utc
-from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
+from pumpgrok.tools.onchain.curve_layout import CurveProvenance, rpc_curve_price_allowed
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,10 @@ class LivePriceSource:
         tick = self._ticks.get(mint)
         if tick is None:
             return False
-        if not rpc_curve_price_allowed(curve_source=tick.curve_source):
+        provenance = (
+            CurveProvenance.LIVE_RPC if tick.curve_source == "rpc" else CurveProvenance.UNKNOWN
+        )
+        if not rpc_curve_price_allowed(curve_source=tick.curve_source, provenance=provenance):
             return False
         return not tick.complete
 

@@ -1,21 +1,21 @@
 ---
 gsd_state_version: "1.0"
 milestone: v4
-status: Awaiting next milestone
-last_updated: "2026-11-22T04:42:00.507Z"
-last_activity: 2026-11-22
-last_activity_desc: Milestone v4 completed and archived
-state_head: d3d7d5f9c2c653c20f083431843ee4642f849ca8
+status: Phase 17 partial (3 PRs remaining)
+last_updated: "2026-11-26T00:00:00.000Z"
+last_activity: 2026-11-26
+last_activity_desc: Phases 13-16 closed on local main 8354ee6; Phase 17 partial (22/25 stack merged locally, PRs #98-#100 remaining)
+state_head: 8354ee6666139a7817ca246bef9ca2e5a0b3b4b8
 progress:
   total_phases: 14
-  completed_phases: 6
-  total_plans: 95
-  completed_plans: 74
-  percent: 43
+  completed_phases: 11
+  total_plans: 114
+  completed_plans: 87
+  percent: 76
   blocked_phases: 0
 milestone_name: PumpGrok Desk v4
-current_phase: 12
-stopped_at: Phase 12 verified 12/12 at 9d32a35 (report commit 57da233). Draft PRs open for bot-02-risk, bot-09-journal and bot-00-chief on phase-12-event-runtime; not merged. Resume after the owner adds approved_by to the three v4-p12 receipts and the PRs merge. Phase 13 starts only after Phase 12 merges (ROADMAP Execution Order).
+current_phase: 17
+stopped_at: Phase 17 partial at local main 8354ee6. Core code on origin/main and local main via c96e993/cb91cf6 (2026-11-22). Absent on main: test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart, Phase 17 changelog narrative (PRs #98-#100 still OPEN, stale tips d44cf93/cd68a68/71ac14d). Merge those, fix conflict markers, then push and close Phase 17.
 ---
 
 paid_rpc_provider: none
@@ -28,10 +28,18 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-Phase: Milestone v4 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-22 — Milestone v4 completed and archived
+Phase: 17 (partial, 3 PRs remaining)
+Plan: 17-07 changelog pending
+Status: Phase 17 partial - 22/25 stack merged to local main 8354ee6
+Last activity: 2026-11-26 - Phases 13-16 closed on local main 8354ee6 (local-only, not pushed); Phase 17 partial
+
+## Local vs Origin (2026-11-26)
+
+- Local main 8354ee6 is 443 ahead of origin/main 7dc5db3 (0 behind).
+- IN-MAIN on local only: #23-26, #64-70, #73, #75, #76-97, #101, #106, #136 (38 PRs, GitHub still lists them OPEN until push).
+- Stale PR tips NOT on main: #98-#100 (d44cf93/cd68a68/71ac14d; core code on main via c96e993/cb91cf6, 3 desk test files and changelog narrative absent) and sweep backlog #102-105, #107-127 (content confirmed absent by git cherry).
+- Phases 13-16 are closed only as local-main records until push.
+- Gates at 8354ee6 (run 2026-11-26): check.sh exit 0; make lint/typecheck/test FAIL. 372 conflict markers remain in 116 files (src/ and tests/) from the local PR merges; proven pre-existing via stash (identical failure without doc changes). Push is blocked until markers are resolved and gates are green.
 
 ## Discovery (2026-10-25)
 

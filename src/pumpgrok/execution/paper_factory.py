@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-"""Paper factory: the only constructor path for paper adapters (FEE-01).
-
-Builds the PaperAdapter with the configured FeeModel. Never imports
-``pumpgrok.execution.live.*`` (the import-graph guard covers this module).
-=======
 """Paper adapter composition: the one production construction boundary (13-03).
 
 :func:`build_paper_adapter` is the only production path that builds a
@@ -17,33 +11,15 @@ provenance is admitted, and it serves sells, flatten and protective exits.
 
 This module never imports ``pumpgrok.execution.live`` and never signs or moves
 funds. Time comes from the injected clock; money is integer lamports.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from typing import Any
-
-from pumpgrok.config.sections.v4 import PaperFeesSettings
-from pumpgrok.execution.fees import FeeModel, fee_model_for
-from pumpgrok.execution.paper_adapter import PaperAdapter
-
-
-def paper_fees_from(settings: PaperFeesSettings) -> FeeModel:
-    """The FeeModel selected by config; every existing v1 number is unchanged."""
-    return fee_model_for(settings.model)
-
-
-def build_paper_adapter(settings: PaperFeesSettings, **kwargs: Any) -> PaperAdapter:
-    """Build a PaperAdapter with the configured model, forwarding the harness."""
-    fees = paper_fees_from(settings)
-    return PaperAdapter(fees=fees, **kwargs)
-=======
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal
 
+from pumpgrok.config.sections.v4 import PaperFeesSettings
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution.entry_hook import BoundEntryPolicy, EntryPolicy
@@ -59,9 +35,13 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from pumpgrok.datafeed.price import LivePriceSource
-    from pumpgrok.execution.fees import FeeModel
     from pumpgrok.execution.paper_adapter import CurveSnapshot
     from pumpgrok.replay.sources import FixtureCurveSource
+
+def paper_fees_from(settings: PaperFeesSettings) -> FeeModel:
+    """The FeeModel selected by config; every existing v1 number is unchanged."""
+    return fee_model_for(settings.model)
+
 
 __all__ = ["VerifiedReplay", "build_paper_adapter", "paper_fee_model", "verify_replay"]
 
@@ -239,4 +219,3 @@ def build_paper_adapter(
         source=source,
         p_drop=p_drop,
     )
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

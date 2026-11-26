@@ -10,14 +10,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-
 from pumpgrok.events.sources import SourceStatus
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.breakers import DATA_STALE_S, DataStaleBreaker
 from pumpgrok.risk.feed_health import (
+    PRICE_FEED,
     FeedHealth,
     FeedSpec,
-    PRICE_FEED,
     feed_verdict,
 )
 

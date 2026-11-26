@@ -13,7 +13,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from replay_support import replay_authority, tick
 
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
@@ -27,6 +26,8 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.sources import FixtureCurveSource
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.tools.onchain import curve_layout
+
+from .replay_support import replay_authority, tick
 
 
 def _loop(book: MintBook, clock: FixtureClock, sink: list) -> MarksLoop:

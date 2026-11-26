@@ -16,6 +16,7 @@ import stat
 import struct
 import subprocess
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 

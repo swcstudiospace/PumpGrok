@@ -1,21 +1,3 @@
-<<<<<<< HEAD
-"""Paper never reads the wallet field."""
-
-from pumpgrok.onboarding.doctor_report import doctor_records
-
-
-def test_wallet_is_not_read_in_paper() -> None:
-    records = doctor_records({"PUMPGROK_WALLET": "anything"}, "paper")
-    by_name = {record.name: record for record in records}
-    assert by_name["wallet_public_address"].status == "not-read"
-
-
-def test_wallet_is_required_in_live() -> None:
-    records = doctor_records({}, "live")
-    by_name = {record.name: record for record in records}
-    assert by_name["wallet_public_address"].required_for_mode
-    assert by_name["wallet_public_address"].status == "missing"
-=======
 """ONB-07: paper needs no wallet, so the wallet input is never read on the paper path.
 
 A paper start with no address, or with a malformed one, is not blocked by the wallet. The
@@ -222,4 +204,3 @@ def test_paper_settings_section_is_default_not_parsed(
     settings = settings_mod.load_settings()
     assert settings.wallet == settings_mod.WalletSettings()
     assert wallet_sentinel == []
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

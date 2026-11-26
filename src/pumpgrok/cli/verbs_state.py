@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
 import json
 import logging
 import os
@@ -37,7 +36,6 @@ from pumpgrok.cli.validators import (
 )
 from pumpgrok.cli.wiring import (
     _call_use,
-    _repo_root,
     _run_wired,
     _seat_manifest_id,
     _unflattened_lines,
@@ -62,7 +60,6 @@ from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
-from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.promotion.demote import demote
 from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.live_recorder import DatasetConflict
@@ -253,7 +250,7 @@ def _mode_refusal(args: argparse.Namespace) -> int | None:
         if args.once or not args.replay:
             _say(
                 sys.stderr,
-                "paper start refused: missing required inputs: " + ", ".join(missing),
+                "not implemented: `run --serve` needs `--replay <dir>` without `--once`",
             )
             return EXIT_NOT_IMPLEMENTED
     elif not (args.once and args.replay):

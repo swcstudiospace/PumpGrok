@@ -15,6 +15,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from pumpgrok.backtest.roundtrip import (
+    RoundTripFill,
+    RoundTripsResult,
+    group_round_trips,
+    per_strategy_breakdown,
+)
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.views import (
@@ -27,7 +33,7 @@ from pumpgrok.ledger.views import (
     win_rate,
 )
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
-from pumpgrok.reporting.strategy_section import bind_strategy_section, section_from_events
+from pumpgrok.reporting.strategy_section import render_strategy_section
 
 _RO_URI_TEMPLATE = "file:{path}?mode=ro"
 _SIGNED_PCT_TEMPLATE = "{value:+.2f}"
@@ -383,15 +389,82 @@ class DailyReport:
             bot_health=(),
             data_freshness=_data_freshness(visible),
             unverified=_unverified(window, position_rows),
+            strategy_section=_strategy_section(ledger_path, events, day, last),
         )
-        bind_strategy_section(model, _strategy_section(ledger_path, events, deposits, day, last))
         return model
+
+
+def _strategy_fills(
+    events: list[dict[str, Any]],
+    refs: Mapping[str, str],
+    start: str,
+    end: str,
+) -> list[RoundTripFill]:
+    """Window fills keyed by mint, each attributed to its PositionOpened ticket."""
+    fills: list[RoundTripFill] = []
+    ticket_by_mint: dict[str, str] = {}
+    pending_buys: dict[str, list[int]] = {}
+    for event in sorted(events, key=lambda item: int(item.get("seq", 0))):
+        payload_raw = event.get("payload")
+        payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else {}
+        event_type = event.get("type")
+        if event_type == "PositionOpened":
+            ticket = str(payload.get("ticket_id", ""))
+            mint = str(payload.get("mint", ""))
+            if not ticket:
+                continue
+            ticket_by_mint[mint] = ticket
+            for index in pending_buys.pop(mint, []):
+                previous = fills[index]
+                fills[index] = RoundTripFill(
+                    key=previous.key,
+                    side=previous.side,
+                    lamports=previous.lamports,
+                    strategy_id=refs.get(ticket, "unattributed"),
+                )
+            continue
+        if event_type != "FillRecorded" or not (start <= str(event.get("ts_utc", "")) < end):
+            continue
+        side = str(payload.get("side", ""))
+        if side not in ("buy", "sell"):
+            continue
+        mint = str(payload.get("mint", ""))
+        ticket = ticket_by_mint.get(mint, "")
+        lamports = abs(int(payload.get("cash_delta_lamports", 0)))
+        strategy = refs.get(ticket, "unattributed") if ticket else "unattributed"
+        fills.append(
+            RoundTripFill(
+                key=mint or ticket or "unknown",
+                side=side,
+                lamports=lamports,
+                strategy_id=strategy,
+            )
+        )
+        if side == "buy" and not ticket:
+            pending_buys.setdefault(mint, []).append(len(fills) - 1)
+    return fills
+
+
+def _strategy_win_stats(result: RoundTripsResult) -> tuple[dict[str, float], dict[str, int]]:
+    trip_counts: dict[str, int] = {}
+    wins: dict[str, int] = {}
+    for trip in result.trips:
+        if trip.unclosed:
+            continue
+        trip_counts[trip.strategy_id] = trip_counts.get(trip.strategy_id, 0) + 1
+        if trip.realized_net_lamports > 0:
+            wins[trip.strategy_id] = wins.get(trip.strategy_id, 0) + 1
+    win_rates = {
+        strategy: wins.get(strategy, 0) / count
+        for strategy, count in trip_counts.items()
+        if count > 0
+    }
+    return win_rates, trip_counts
 
 
 def _strategy_section(
     ledger_path: Path,
     events: list[dict[str, Any]],
-    deposits: Mapping[int, int],
     day: str,
     last: str,
 ) -> str:
@@ -399,12 +472,10 @@ def _strategy_section(
     refs = read_ticket_refs_readonly(ledger_path)
     if not refs:
         return ""
-    return section_from_events(
-        events,
-        refs,
-        start=day_start(day),
-        end=day_next(last),
-        elapsed_days=_inclusive_days(day, last),
-        initial_equity_lamports=read_initial_equity_readonly(ledger_path),
-        deposits=deposits,
-    )
+    fills = _strategy_fills(events, refs, day_start(day), day_next(last))
+    result = group_round_trips(fills)
+    breakdown = per_strategy_breakdown(result)
+    if not breakdown or set(breakdown) == {"unattributed"}:
+        return ""
+    win_rates, trip_counts = _strategy_win_stats(result)
+    return render_strategy_section(breakdown, win_rates, trip_counts)

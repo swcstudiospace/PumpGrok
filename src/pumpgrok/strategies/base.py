@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Frozen strategy surface (STR-01, D-02).
 
 :class:`Strategy` is the frozen protocol every strategy implements: an id,
@@ -14,34 +13,39 @@ TOML entry is a refusal, not a warning.
 Hooks receive read-only contexts only: a frozen dataclass the runtime
 hands over; mutation raises. No hook reaches an LLM client, the network,
 or the risk engine. Money is integer lamports throughout.
-=======
-"""Strategy protocol, read-only context, Intent, and the strategy version id (STR-01).
-
-A strategy hook receives exactly one frozen StrategyContext and returns a tuple
-of Intent. The context holds immutable snapshots only: no store, no clock, no
-ledger handle. Money is integer lamports; floats never carry money.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
 import hashlib
-<<<<<<< HEAD
 import importlib
 import inspect
+import json
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, runtime_checkable
 
 from pumpgrok.core.idempotency import canonical_json
+
+if TYPE_CHECKING:
+    from pumpgrok.upgrade.bounds import KeyBound
 
 __all__ = [
     "LEGACY_STRATEGY_ID",
     "STRATEGY_IDS",
     "Intent",
+    "Side",
+    "Strategy",
     "StrategyContext",
     "StrategyProtocol",
+    "TapePoint",
+    "TickSnapshot",
     "bounds_for",
     "code_digest",
+    "source_digest",
+    "version_id",
 ]
 
 #: The four D-01 ids. legacy_screening is the legacy arrival path; the
@@ -115,26 +119,7 @@ class Intent:
             raise ValueError("an Intent names a mint")
         if isinstance(self.size_lamports, bool) or not isinstance(self.size_lamports, int):
             raise ValueError("size_lamports must be integer lamports")
-=======
-import json
-import sys
-from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, ClassVar, Literal, Protocol
 
-from pumpgrok.upgrade.bounds import KeyBound
-
-__all__ = [
-    "Intent",
-    "Side",
-    "Strategy",
-    "StrategyContext",
-    "TapePoint",
-    "TickSnapshot",
-    "source_digest",
-    "version_id",
-]
 
 Side = Literal["buy", "sell"]
 _SIDES: frozenset[str] = frozenset({"buy", "sell"})
@@ -158,12 +143,10 @@ class TapePoint:
 
     ts: float  # epoch seconds
     price_lamports: int  # integer lamports; never a float
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
 
 @dataclass(frozen=True)
 class StrategyContext:
-<<<<<<< HEAD
     """Read-only context handed to hooks: tape snapshot plus parameters."""
 
     tape: tuple[Any, ...] = field(default_factory=tuple)
@@ -202,34 +185,6 @@ def strategy_version_id(strategy_id: str, params: dict[str, Any], code: str | No
         "params": dict(params),
     }
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
-=======
-    """The only input a strategy hook receives. Snapshots, no handles."""
-
-    now: float  # epoch seconds, injected by the runtime from its clock
-    version_id: str  # the strategy's version id, stamped onto every Intent
-    tick: TickSnapshot
-    tape: tuple[TapePoint, ...]
-
-
-@dataclass(frozen=True)
-class Intent:
-    """A strategy's request to trade. It is not an order and carries no approval."""
-
-    strategy_id: str
-    mint: str
-    side: Side
-    size_lamports: int
-    decision_id: str
-    reason: str
-    version_id: str
-
-    def __post_init__(self) -> None:
-        if isinstance(self.size_lamports, bool) or not isinstance(self.size_lamports, int):
-            raise TypeError("Intent.size_lamports must be an int number of lamports")
-        if self.size_lamports <= 0:
-            raise ValueError("Intent.size_lamports must be positive")
-        if self.side not in _SIDES:
-            raise ValueError(f"Intent.side must be one of {sorted(_SIDES)}")
 
 
 class Strategy(Protocol):
@@ -270,4 +225,3 @@ def version_id(strategy: type[Strategy], params: Mapping[str, Any]) -> str:
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-"""Canonical cache with per-agent TTLs (GRK-03, T-14-01-02).
-
-The cache key payload is an explicit dict of ints/strings only; a float leaf
-raises TypeError. Fallback results are never stored (callers pass the flag,
-and `set` refuses them).
-=======
 """Sidecar response cache and canonical key for Grok admission (GRK-02; Design A section 4).
 
 The key is ``canonical_request_hash`` over an explicit payload. The payload
@@ -15,17 +8,22 @@ refused too, so two different inputs can never share a key.
 Successful responses keep the per-agent TTL. Transport errors are negative
 entries for 30 s, so a failing upstream is not retried in a storm. Fallbacks
 are never written here; the gateway enforces that.
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-import hashlib
+import contextlib
+import sqlite3
+from collections.abc import Mapping
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
-from pumpgrok.core.idempotency import canonical_json
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.replay.clock import Clock
+from pumpgrok.replay.recorder import _VOLATILE_RE
+from pumpgrok.replay.recorder import canonical_request_hash as _recorder_hash
 
 AGENT_TTL_S: dict[str, float] = {
     "chief": 60.0,
@@ -61,11 +59,15 @@ def _assert_int_str(payload: dict[str, Any]) -> None:
 
 
 def canonical_request_hash(payload: dict[str, Any]) -> str:
-    """sha256 of the canonical payload. Float leaves raise TypeError."""
+    """sha256 of the canonical payload. Float leaves raise TypeError.
+
+    Float leaves are refused here; validated payloads hash exactly like the
+    replay recorder's canonical request hash.
+    """
     for value in payload.values():
         if isinstance(value, float):
             raise TypeError("cache key payload must be ints/strings only, float found")
-    return hashlib.sha256(canonical_json(payload).encode()).hexdigest()
+    return _recorder_hash(payload)
 
 
 class Cache:
@@ -92,17 +94,6 @@ class Cache:
 
     def __len__(self) -> int:
         return len(self._entries)
-=======
-import contextlib
-import sqlite3
-from collections.abc import Mapping
-from dataclasses import dataclass
-from decimal import Decimal
-from pathlib import Path
-
-from pumpgrok.core.errors import PumpgrokError
-from pumpgrok.replay.clock import Clock
-from pumpgrok.replay.recorder import _VOLATILE_RE, canonical_request_hash
 
 TTL_S_BY_AGENT: Mapping[str, int] = {
     "narrative": 86400,
@@ -287,4 +278,3 @@ def _count(con: sqlite3.Connection) -> int:
 def _rollback_quietly(con: sqlite3.Connection) -> None:
     with contextlib.suppress(sqlite3.Error):
         con.execute("ROLLBACK")
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

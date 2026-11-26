@@ -28,7 +28,7 @@ import re
 import tomllib
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, get_args
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError

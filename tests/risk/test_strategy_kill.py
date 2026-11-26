@@ -23,6 +23,8 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.risk.engine import RiskEngine
+from pumpgrok.risk.strategy_kill import StrategyKillRefused, set_strategy_kill
+from pumpgrok.risk.strategy_kill import clear_strategy_kill as kill_clear_strategy_kill
 from pumpgrok.risk.strategy_slice import (
     clear_strategy_kill,
     killed_strategies,
@@ -271,7 +273,7 @@ def test_a_strategy_kill_clears_only_through_a_human_killswitch_clear(tmp_path: 
     try:
         set_strategy_kill(store, "alpha", "halt alpha", "human:alice", ts_utc=format_ts_utc(START))
         with pytest.raises(StrategyKillRefused):
-            clear_strategy_kill(
+            kill_clear_strategy_kill(
                 store,
                 _clear_approval(clock, ids, kind="halt_clear"),
                 "alpha",
@@ -281,7 +283,7 @@ def test_a_strategy_kill_clears_only_through_a_human_killswitch_clear(tmp_path: 
         assert _engine(store, clock).check(
             _buy(ids), seat=BUY_SEAT, strategy_id="alpha"
         ).reason == ("kill_switch")
-        cleared = clear_strategy_kill(
+        cleared = kill_clear_strategy_kill(
             store, _clear_approval(clock, ids), "alpha", "all clear", ts_utc=format_ts_utc(START)
         )
         assert cleared["type"] == "StrategyKillCleared"
@@ -290,7 +292,7 @@ def test_a_strategy_kill_clears_only_through_a_human_killswitch_clear(tmp_path: 
             _buy(ids), seat=BUY_SEAT, strategy_id="alpha"
         ).reason != ("kill_switch")
         with pytest.raises(StrategyKillRefused):
-            clear_strategy_kill(
+            kill_clear_strategy_kill(
                 store, _clear_approval(clock, ids), "alpha", "again", ts_utc=format_ts_utc(START)
             )
     finally:
