@@ -8,6 +8,7 @@ source, then published as ``curve_tick``. Portal and trade facts publish as the
 existing ``token_created``, ``migration`` and ``trade`` kinds without a
 recorder: they carry no reserves and never authorize a price.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping

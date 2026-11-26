@@ -61,6 +61,7 @@ class DeterministicBus:
             raise ValueError("deterministic bus requires fixture_compat")
         return drain(events, self._clock, self._rng)
 
+
 __all__ = ["build_aux_event_cycles", "synthetic_signal_score"]
 
 WHALE = "bot-03-whale"

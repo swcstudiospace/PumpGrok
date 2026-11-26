@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from pumpgrok.execution.paper_adapter import CurveSnapshot
     from pumpgrok.replay.sources import FixtureCurveSource
 
+
 def paper_fees_from(settings: PaperFeesSettings) -> FeeModel:
     """The FeeModel selected by config; every existing v1 number is unchanged."""
     return fee_model_for(settings.model)

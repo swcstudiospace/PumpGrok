@@ -370,6 +370,8 @@ class SeatTask:
             )
         except Exception as exc:
             log.warning("escalation relay failed for %s: %s", self.seat_id, exc)
+
+
 async def relay_tail(
     store: LedgerStore,
     notifier: Notifier | None,

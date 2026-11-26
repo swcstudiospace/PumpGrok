@@ -99,10 +99,6 @@ class EventMetrics:
         return self._registry
 
 
-
-
-
-
 class _Kind(Protocol):
     """The one field the observer reads from an event kind: its wire value."""
 

@@ -16,7 +16,7 @@ from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.execution.live.live_gate import PRECONDITION_IDS, LiveGate, Precondition
 
 NOW = "2026-10-20T00:00:00Z"
-VALID_KEY = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
+VALID_KEY = "11111111111111111111111111111111111111111111"
 ALLOWLIST_EMPTY = "wallet.allowlist is empty; no public key is allowlisted"
 CAP_UNSET = "live.notional_cap_lamports is not set"
 CAP_RANGE = "live.notional_cap_lamports must satisfy 0 < value <= 1 SOL"

@@ -89,16 +89,12 @@ def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
     )
 
 
-
-
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "confirm":
         return _live_confirm(args, settings)
     if args.cmd == "serve":
         return _live_serve(args, settings)
     return _not_implemented(f"live {args.cmd}")
-
-
 
 
 def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:

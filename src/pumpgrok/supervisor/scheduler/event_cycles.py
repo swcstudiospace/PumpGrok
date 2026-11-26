@@ -101,6 +101,7 @@ def event_typed_fields(event: Event) -> dict[str, str]:
     """The only fields a cycle body may read from the waking event."""
     return {"kind": str(event.kind), "entity_id": event.entity_id}
 
+
 __all__ = ["build_event_cycles", "merge_event_cycles"]
 
 CHIEF = "bot-00-chief"

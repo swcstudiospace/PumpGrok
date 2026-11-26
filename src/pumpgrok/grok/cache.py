@@ -95,6 +95,7 @@ class Cache:
     def __len__(self) -> int:
         return len(self._entries)
 
+
 TTL_S_BY_AGENT: Mapping[str, int] = {
     "narrative": 86400,
     "auditor": 300,

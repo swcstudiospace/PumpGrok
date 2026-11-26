@@ -193,9 +193,7 @@ class EntryChecks:
             return cls(holder_limit=holder_limit, lists_available=False)
         allowlist = mint_lists.deny
         blocklist = mint_lists.warn
-        return cls(
-            holder_limit=holder_limit, allowlist=allowlist, blocklist=blocklist
-        )
+        return cls(holder_limit=holder_limit, allowlist=allowlist, blocklist=blocklist)
 
     def check(self, facts: MintFacts) -> EntryRefusal | None:
         """Run every check in fixed order; first failure wins, else None."""

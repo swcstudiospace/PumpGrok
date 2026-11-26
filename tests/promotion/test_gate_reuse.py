@@ -114,7 +114,6 @@ def test_paper_path_reuses_bounds_holdout_and_divergence_verdicts(tmp_path: Path
             assert paper.reason == upgrade.reason
 
 
-
 SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 PROMOTION_DIR = SRC / "promotion"
 GATE_MODULE = SRC / "upgrade" / "gate.py"

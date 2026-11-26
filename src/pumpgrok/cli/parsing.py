@@ -49,6 +49,8 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
         help="consumed ApprovalRecord id (apr-<ULID>)",
     )
     _add_seat(parser)
+
+
 def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--wake-mode",
@@ -316,6 +318,8 @@ def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
         help="ledger.sqlite recorded by this desk (source paper)",
     )
     imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
+
+
 def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:
     ledger = verbs.add_parser("ledger", parents=[mode_option], help="ledger backup and restore")
     ledger_cmd = ledger.add_subparsers(dest="cmd", required=True, metavar="LEDGER")
@@ -334,7 +338,6 @@ def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
     demote = promotion_cmd.add_parser("demote", help="roll a strategy back one stage")
     demote.add_argument("--strategy", required=True, help="strategy id to roll back")
     demote.add_argument("--by", default="human:operator", help="acting human (human:<name>)")
-
 
 
 def build_parser() -> argparse.ArgumentParser:

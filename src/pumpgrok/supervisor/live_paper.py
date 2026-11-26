@@ -187,6 +187,7 @@ def build_live_paper(
         entry_hook=EntryHook(),
     )
 
+
 LEDGER_FILE = "ledger.sqlite"
 CURSOR_FILE = "live-cursor.sqlite"
 TICKS_DIR = "live-ticks"

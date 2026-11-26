@@ -100,6 +100,7 @@ def _normalized_strategy(mapping: Mapping[str, Mapping[str, Any]] | None) -> dic
         if overrides
     }
 
+
 class CandidateParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     """One candidate parameter set: filter, exits and strategy overrides.
@@ -119,7 +120,6 @@ class CandidateParams(BaseModel):
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
     strategy: dict[str, dict[str, Any]] | None = None
-
 
     @field_validator("filter")
     @classmethod

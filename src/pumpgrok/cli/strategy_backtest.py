@@ -28,9 +28,7 @@ def strategy_backtest_verb(args: argparse.Namespace, settings: Settings) -> int:
     strategy_id = str(getattr(args, "strategy", "") or "")
     _require_strategy(strategy_id)
     dataset = _backtest_dataset(str(args.fixture))
-    result = run_strategy(
-        dataset.directory, strategy_id, seed=settings.replay.seed
-    )
+    result = run_strategy(dataset.directory, strategy_id, seed=settings.replay.seed)
     report = render_strategy_report(
         dataset.name,
         dataset_digest(dataset.directory),

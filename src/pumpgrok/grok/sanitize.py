@@ -27,8 +27,6 @@ _INJECTION_MARKERS = (
 )
 
 
-
-
 def sanitize_prompt(text: str) -> str:
     """Trim surrounding whitespace only. Content is the caller's; parse enforces shape."""
     return text.strip()
@@ -59,6 +57,7 @@ def parse_strict_json(text: str) -> dict[str, Any]:
     if _has_injection(parsed):
         raise StrictParseError("injected instruction in payload")
     return parsed
+
 
 __all__ = ["StrictParseError", "parse_strict", "parse_strict_json", "sanitize_prompt"]
 

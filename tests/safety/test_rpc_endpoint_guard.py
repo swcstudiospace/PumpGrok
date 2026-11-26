@@ -12,8 +12,8 @@ from pydantic import ValidationError
 from pumpgrok.config.settings import ConfigError, DataSettings, GrokSettings, RpcSettings
 
 # Synthetic stand-ins: never provider keys. They must not appear in any refusal message.
-SECRET = "synthetic-key-7f3a9c2e1b8d"  # pragma: allowlist secret: synthetic  # gitleaks:allow
-OPAQUE_TOKEN = "abcdef0123456789abcdef0123456789"  # gitleaks:allow
+SECRET = "AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret: synthetic  # gitleaks:allow
+OPAQUE_TOKEN = "ab51bbdc86dc16bebe9a072ea0701301"  # gitleaks:allow
 
 CLEAN_ENDPOINTS = [
     "https://api.mainnet-beta.solana.com",

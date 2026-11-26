@@ -44,9 +44,8 @@ DEFAULT = (
     / "promotion_thresholds.toml"
 )
 
-def _write(
-    tmp_path: Path, body: str | None = None, *, days=14, trades=50, pf=1.2, dd=0.15
-) -> Path:
+
+def _write(tmp_path: Path, body: str | None = None, *, days=14, trades=50, pf=1.2, dd=0.15) -> Path:
     if body is not None:
         path = tmp_path / "thresholds.toml"
         path.write_text(body, encoding="utf-8")
@@ -142,7 +141,6 @@ min_closed_trades = {trades}
 min_profit_factor = {pf}
 max_drawdown_fraction = {dd}
 """
-
 
 
 def test_shipped_file_equals_the_live_floors() -> None:

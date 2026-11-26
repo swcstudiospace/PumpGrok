@@ -52,8 +52,8 @@ jobs:
           git checkout "origin/$BASE_REF" -- pyproject.toml Makefile
           echo "Trusted pyproject.toml and Makefile overlay from origin/$BASE_REF"
 
-      - name: Lint, typecheck, test, audit and drift checks
-        run: make check
+      - name: Lint, typecheck, test and audit
+        run: make lint typecheck test audit
 
       - name: idle-grok
         run: uv run python ci/gates/check_idle_grok.py

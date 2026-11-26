@@ -96,18 +96,14 @@ class FeedHealth:
             return SourceStatus.stale
         return SourceStatus.live
 
-    def check(
-        self, mode: Mode = "paper", *, held_mints: int = 0
-    ) -> LegacyFeedVerdict:
+    def check(self, mode: Mode = "paper", *, held_mints: int = 0) -> LegacyFeedVerdict:
         """Evaluate every feed on read and return one verdict.
 
         Idle-quiet: with zero ticks ever recorded and zero held mints the
         desk is healthy even if required feeds have never ticked.
         """
         if not self._last_tick and held_mints <= 0:
-            return LegacyFeedVerdict(
-                status="healthy", detail="idle desk: no ticks, no held mints"
-            )
+            return LegacyFeedVerdict(status="healthy", detail="idle desk: no ticks, no held mints")
         stale: list[str] = []
         never_ticked: list[str] = []
         required_failed: list[str] = []

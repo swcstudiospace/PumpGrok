@@ -57,9 +57,7 @@ class EntryHook:
             if curve_source == "rpc"
             else CurveProvenance.UNKNOWN
         )
-        canonical_source = (
-            "fixture" if curve_source == "replay" else curve_source
-        )
+        canonical_source = "fixture" if curve_source == "replay" else curve_source
         if not rpc_curve_price_allowed(curve_source=canonical_source, provenance=provenance):
             raise EntryRefusedError(f"entry refused: source {curve_source!r} is not allowed")
         if entry_refused(complete=complete):
@@ -68,6 +66,7 @@ class EntryHook:
             refusal = entry_checks.check(mint_facts)
             if refusal is not None:
                 raise EntryRefusedError(f"entry refused: {refusal}")
+
 
 __all__ = [
     "BoundEntryPolicy",
