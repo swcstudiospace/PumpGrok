@@ -66,6 +66,14 @@ regexes = [
   '''xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6''',  # pragma: allowlist secret: synthetic test value
   '''xai-abcdef1234567890abcdef1234567890''',  # pragma: allowlist secret: synthetic test value
   '''AbCdEfGhIjKlMnOpQrStUvWx1234''',
+  # Synthetic fixtures planted in the merged PR wave tests (redaction, onboarding,
+  # safety and wallet settings). Each is a full literal.
+  '''hunter2-synthetic-9876''',  # pragma: allowlist secret: synthetic test value
+  '''FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z''',  # pragma: allowlist secret: synthetic test value
+  '''xai-doctor-sentinel-41c9''',  # pragma: allowlist secret: synthetic test value
+  '''xai-inventory-sentinel-7f3a''',  # pragma: allowlist secret: synthetic test value
+  '''synthetic-key-7f3a9c2e1b8d''',  # pragma: allowlist secret: synthetic test value
+  '''abcdef0123456789abcdef0123456789''',  # pragma: allowlist secret: synthetic test value
   # "." matches one character, so this entry holds no Telegram-token-shaped literal.
   '''123456789:AAFake.yntheticTelegramTokenValue_0''',  # pragma: allowlist secret: synthetic test value
   # Telegram-shaped placeholder the redaction tests build in tests/risk/test_alert_channel.py.
