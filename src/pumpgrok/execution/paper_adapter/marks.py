@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Set
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.execution.curve_math import sell_out, spot
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot, _ledger_mark_epoch
-from pumpgrok.ledger.reducer import PositionView
+from pumpgrok.ledger.reducer import PositionView, position_value_lamports
 from pumpgrok.ledger.store import LedgerInconsistent
 from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
 from pumpgrok.risk.engine import SYSTEM_EXIT_REASONS
+from pumpgrok.tools.onchain import curve_layout
 
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock, IdFactory
@@ -160,25 +163,37 @@ class _MarksMixin:
         *,
         source: str | None = None,
         correlation_id: str = "desk",
+        snapshots: Mapping[str, CurveSnapshot] | None = None,
+        zero_mints: Set[str] | None = None,
     ) -> dict[str, Any] | None:
         """Mark every open position in one ``MarkToMarket`` row for this instant.
 
-        All prices are read before anything is written, so the row carries the combined
-        equity and the reducer's peak never sees a mix of new and old prices. Each mint's
-        mark keeps the recorded time of the snapshot it was priced from, not the current
-        time, so a silent mint shows its true age. A position with no usable curve keeps
-        its last ledger mark. Returns the row, or None when nothing is open or this exact
-        state was already marked at this instant.
+        By default, curves are read from the adapter's price source. When either
+        ``snapshots`` or ``zero_mints`` is supplied, those inputs are authoritative:
+        omitted positions retain their last value and no price source is read.
+        Supplied snapshots must match an open mint and pass the current trust gate.
+        Nonempty zero marks are rejected until durable last-good exits are supported.
+        All marks for this instant are written in one row.
         """
+        if zero_mints:
+            raise ValueError("timeout-zero marks require durable last-good exit support")
         ledger_source = source if source is not None else self._source
         state = self._fold_state()
         held = {m: p for m, p in state.positions.items() if p.token_units > 0 and not p.mtm_frozen}
+        now = self._clock.now()
+        supplied = snapshots is not None or zero_mints is not None
+        if supplied:
+            supplied_snapshots = snapshots if snapshots is not None else {}
+            self._validate_supplied_marks(held, supplied_snapshots, now)
         if not held:
             return None
-        marks, values = await self._price_held(held, self._clock.now())
+        if supplied:
+            marks, values = self._price_supplied(held, supplied_snapshots, now)
+        else:
+            marks, values = await self._price_held(held, now)
         if not marks:
             return None
-        return self._append_mark_row(
+        row = self._append_mark_row(
             state,
             held,
             marks=marks,
@@ -186,6 +201,72 @@ class _MarksMixin:
             ledger_source=ledger_source,
             correlation_id=correlation_id,
         )
+        if supplied and row is not None:
+            for mint, curve in supplied_snapshots.items():
+                self._last_reserves[mint] = (curve.s_lamports, curve.t_units)
+                self._last_price_ts[mint] = curve.ts if curve.ts is not None else now
+        return row
+
+    def _validate_supplied_marks(
+        self,
+        held: dict[str, PositionView],
+        snapshots: Mapping[str, CurveSnapshot],
+        now: float,
+    ) -> None:
+        """Reject the whole batch before pricing, writing or changing caches."""
+        if set(snapshots) - held.keys():
+            raise ValueError("mark input contains a mint without an open position")
+        for mint, curve in snapshots.items():
+            if not self._admitted_curve(mint, curve):
+                raise ValueError(f"untrusted or invalid curve snapshot for {mint}")
+            if not self._admitted_timestamp(mint, held[mint], curve, now):
+                raise ValueError(f"invalid curve snapshot timestamp for {mint}")
+
+    def _admitted_timestamp(
+        self, mint: str, pos: PositionView, curve: CurveSnapshot, now: float
+    ) -> bool:
+        recorded = curve.ts if curve.ts is not None else now
+        ledger_time = _ledger_mark_epoch(pos)
+        cached_time = self._last_price_ts.get(mint)
+        return (
+            math.isfinite(recorded)
+            and recorded <= now
+            and (ledger_time is None or recorded >= ledger_time)
+            and (cached_time is None or recorded >= cached_time)
+        )
+
+    @staticmethod
+    def _admitted_curve(mint: str, curve: CurveSnapshot) -> bool:
+        return (
+            curve.mint == mint
+            and curve.source in {"fixture", "rpc"}
+            and not curve.complete
+            and curve.s_lamports > 0
+            and curve.t_units > 0
+            and curve_layout.rpc_curve_price_allowed(curve_source=curve.source)
+        )
+
+    def _price_supplied(
+        self,
+        held: dict[str, PositionView],
+        snapshots: Mapping[str, CurveSnapshot],
+        now: float,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+        """Value validated supplied observations without reading or changing caches."""
+        marks: dict[str, dict[str, Any]] = {}
+        values = {mint: position_value_lamports(pos) for mint, pos in held.items()}
+        for mint, curve in snapshots.items():
+            gross = sell_out(curve.s_lamports, curve.t_units, held[mint].token_units)
+            venue = self._fees.venue_fee(gross)
+            values[mint] = gross - venue
+            marks[mint] = {
+                "mtm_lamports": gross - venue,
+                "venue_fee_lamports": venue,
+                "spot": str(spot(curve.s_lamports, curve.t_units)),
+                "source": "curve",
+                "ts_utc": format_ts_utc(curve.ts if curve.ts is not None else now),
+            }
+        return marks, values
 
     async def _price_held(
         self, held: dict[str, PositionView], now: float
@@ -195,8 +276,12 @@ class _MarksMixin:
         values: dict[str, int] = {}
         for mint, pos in held.items():
             curve = await self._read_curve(mint)
-            if curve is None or curve.complete:
-                values[mint] = int(pos.last_mtm_lamports)
+            if (
+                curve is None
+                or not self._admitted_curve(mint, curve)
+                or not self._admitted_timestamp(mint, pos, curve, now)
+            ):
+                values[mint] = position_value_lamports(pos)
                 continue
             recorded = curve.ts if curve.ts is not None else now
             gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
