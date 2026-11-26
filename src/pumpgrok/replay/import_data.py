@@ -20,7 +20,7 @@ def import_ticks(
 ) -> Path:
     """Convert an external JSONL tick file into a sealed dataset directory."""
     FixtureManifest._plain_dataset_name(dataset_name)
-    recorder = LiveRecorder(Path(dataset_dir), clock=WallClock())
+    recorder = LiveRecorder(Path(dataset_dir), clock=WallClock(), dataset_name=dataset_name)
     first_utc: str | None = None
     last_utc: str | None = None
     sources: dict[str, str] = {}
@@ -52,5 +52,6 @@ def import_ticks(
         sources=sources,
         seed_hint=seed_hint,
         notes="Imported external tick file",
+        dataset_name=dataset_name,
     )
     return Path(dataset_dir)

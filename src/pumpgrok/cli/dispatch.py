@@ -7,7 +7,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from pumpgrok.cli.backtest import _backtest_verb
+from pumpgrok.cli.backtest import _backtest_verb, _replay_verb
 from pumpgrok.cli.codes import (
     _FIND_ONLY_ROUTES,
     EXIT_CONFIG,
@@ -24,7 +24,6 @@ from pumpgrok.cli.promotion_verb import _promotion_verb
 from pumpgrok.cli.verbs_ops import (
     _doctor_verb,
     _live_verb,
-    _replay_verb,
     _report_verb,
     _verify_verb,
 )

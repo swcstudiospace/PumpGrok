@@ -55,7 +55,7 @@ def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--wake-mode",
         choices=WAKE_MODES,
-        default="cadence",
+        default=None,
         dest="wake_mode",
         help="supervisor wake: cadence (default) or event; overrides events.wake_mode",
     )
@@ -288,36 +288,19 @@ def _positive_int(text: str) -> int:
 def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    trim = replay_cmd.add_parser("trim", help="trim a dataset: mints with fills plus 5 percent")
-    trim.add_argument("--dataset", required=True, metavar="NAME", help="dataset under var/datasets")
-    trim.add_argument(
-        "--max-events",
-        required=True,
-        type=_positive_int,
-        dest="max_events",
-        metavar="N",
-        help="keep the last N kept events",
-    )
-    trim.add_argument(
-        "--keep-mints-with-fills",
-        required=True,
-        action="store_true",
-        dest="keep_mints_with_fills",
-        help="keep every event of a mint with an order (the only keep rule)",
-    )
-    rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
-    rebuild.add_argument(
-        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
-    )
-    imported = replay_cmd.add_parser("import", help="import a ledger this desk recorded")
-    imported.add_argument(
-        "--from",
-        required=True,
-        dest="source",
-        metavar="LEDGER",
-        help="ledger.sqlite recorded by this desk (source paper)",
-    )
-    imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
+    replay_trim = replay_cmd.add_parser("trim", help="trim a replay dataset")
+    replay_trim.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_trim.add_argument("--to", dest="to_dir", required=True, help="destination dir")
+    replay_trim.add_argument("--name", required=True, help="sealed dataset name")
+    replay_trim.add_argument("--from-ts", dest="from_ts", required=True, help="window start UTC")
+    replay_trim.add_argument("--to-ts", dest="to_ts", required=True, help="window end UTC")
+    replay_rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_rebuild.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_rebuild.add_argument("--to", dest="to_file", required=True, help="ticks file to write")
+    replay_import = replay_cmd.add_parser("import", help="import an external tick file")
+    replay_import.add_argument("--source", required=True, help="external JSONL tick file")
+    replay_import.add_argument("--to", dest="to_dir", required=True, help="dataset dir to write")
+    replay_import.add_argument("--name", required=True, help="sealed dataset name")
 
 
 def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:

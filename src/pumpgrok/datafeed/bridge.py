@@ -12,7 +12,7 @@ recorder: they carry no reserves and never authorize a price.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pumpgrok.datafeed.events import (
     CurveObservation,
@@ -27,7 +27,9 @@ from pumpgrok.datafeed.events import (
 from pumpgrok.events.bus import Dlq, EventBus, Handler
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.replay.clock import Clock
-from pumpgrok.replay.live_recorder import LiveRecorder
+
+if TYPE_CHECKING:
+    from pumpgrok.replay.live_recorder import LiveRecorder
 
 Publisher = Callable[[Event], None]
 

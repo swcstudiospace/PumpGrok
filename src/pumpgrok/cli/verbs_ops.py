@@ -10,13 +10,12 @@ import json
 import logging
 import os
 import sys
-import tempfile
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_LEDGER, EXIT_OK
+from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.validators import (
     _human_by,
@@ -55,13 +54,13 @@ log = logging.getLogger("pumpgrok.cli")
 
 def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
     wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
-    if not args.json:
-        _say(sys.stdout, *doctor_report(settings, wake_mode=wake_mode))
-        return EXIT_OK
     if wake_mode == "event":
         problems = event_mode_problems(installed_job_findings())
         if problems:
             raise ConfigError(problems)
+    if not args.json:
+        _say(sys.stdout, *doctor_report(settings, wake_mode=wake_mode))
+        return EXIT_OK
     records = input_inventory(settings, settings.effective_mode)
     _say(sys.stdout, inventory_json(records))
     return EXIT_CONFIG if failing_inputs(records) else EXIT_OK
@@ -211,69 +210,6 @@ def _report_verb(args: argparse.Namespace, settings: Settings) -> int:
         os.replace(tmp, target)
     _say(sys.stdout, body.rstrip("\n"))
     return EXIT_OK
-
-
-def _replay_verb(args: argparse.Namespace, settings: Settings) -> int:
-    """Dataset maintenance: ``replay trim``, ``replay rebuild-ticks`` and ``replay import``.
-
-    Exit codes: 0 on success, printing the written directory as one JSON line; 1 for usage and
-    target conflicts; 2 for a ledger that fails verification or holds a row this desk did not
-    record; 4 for a corrupt dataset or a rebuild read the recording does not hold (CorruptFixture,
-    mapped by the dispatcher).
-    """
-    # Deferred so importing the CLI does not load the event bus.
-    from pumpgrok.replay.maintenance import (  # noqa: PLC0415
-        MaintenanceRefused,
-        import_dataset,
-        rebuild_ticks,
-        trim,
-    )
-
-    root = PAPER_LEDGER_PATH.parent
-    try:
-        if args.cmd == "trim":
-            written = trim(
-                args.dataset,
-                root=root,
-                max_events=args.max_events,
-                seed=settings.replay.seed,
-                mints_with_orders=lambda directory: _mints_with_orders(directory, settings),
-            )
-        elif args.cmd == "rebuild-ticks":
-            written = rebuild_ticks(args.dataset, root=root)
-        else:
-            written = import_dataset(Path(args.source), name=args.dataset, root=root)
-    except MaintenanceRefused as exc:
-        _say(sys.stderr, f"replay {args.cmd} refused: {exc.message}")
-        return EXIT_LEDGER if exc.fields.get("kind") == "ledger" else EXIT_CONFIG
-    except (DataStale, ReplayMissingRecord) as exc:
-        _say(sys.stderr, f"replay failed: {exc.code}: {exc.message}")
-        return EXIT_CONFIG
-    _say(sys.stdout, json.dumps({"ok": True, "path": str(written)}, sort_keys=True))
-    return EXIT_OK
-
-
-def _mints_with_orders(dataset_dir: Path, settings: Settings) -> frozenset[str]:
-    """Mints with an OrderPlaced row when the dataset replays, from a scratch ledger that is
-    discarded once the rows are read."""
-    with tempfile.TemporaryDirectory() as scratch:
-        ledger = Path(scratch) / "ledger.sqlite"
-        run_once_replay(
-            dataset_dir,
-            settings.filter,
-            seed=settings.replay.seed,
-            ledger_path=ledger,
-            exits=settings.exits,
-            budget=settings.risk,
-            limits=settings.limits,
-            active_set=operator_active_set(settings),
-        )
-        store = LedgerStore(str(ledger))
-        try:
-            rows = store.read(types=["OrderPlaced"], limit=None)
-        finally:
-            store.close()
-    return frozenset(str(row["payload"]["mint"]) for row in rows)
 
 
 def _verify_verb(args: argparse.Namespace, settings: Settings) -> int:
