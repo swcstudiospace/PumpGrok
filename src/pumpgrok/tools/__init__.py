@@ -260,7 +260,7 @@ def _register_desk(
         alert_file=data_dir / "alerts.jsonl",
     )
     reg.register(build_alert_tool(notifier, clock))
-    reg.register(build_brief_tool(store, bank, clock, None, "paper"))
+    reg.register(build_brief_tool(store, bank, clock, killswitch_file(data_dir), "paper"))
     reg.register(build_docs_search_tool(repo_root, clock))
     reg.register(build_memory_retain_tool(bank, clock))
     reg.register(build_memory_recall_tool(bank, clock))

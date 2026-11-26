@@ -1,0 +1,28 @@
+change_id: phase-17-strategy-kill-events
+proposed_by: bot-02-risk
+surface: contracts/events/strategy_kill_set.schema.json
+surfaces:
+- contracts/events/strategy_kill_cleared.schema.json
+breaking: false
+version: "1.2.0"
+previous_version: "1.1.0"
+summary: >-
+  Adds two event types for the strategy kill pair (RSK-02): StrategyKillSet, a human-set kill
+  that refuses one strategy's buys and never its sells, and StrategyKillCleared, a human clear
+  that consumes a killswitch_clear approval. Additive and non-breaking: no existing event schema
+  changes, and the desk-wide KillSwitchSet and KillSwitchCleared are untouched. Version 1.2.0 is
+  the next minor after 1.1.0 of contracts/changes/phase-3-seat-manifests.yaml, the latest change
+  document whose surfaces include contracts/events/**.
+semantic_changes: []
+migration_note: ""
+acknowledgements:
+- bot: bot-00-chief
+  ack: true
+- bot: bot-01-scout
+  ack: true
+- bot: bot-02-risk
+  ack: true
+- bot: bot-03-whale
+  ack: true
+- bot: bot-04-sniper
+  ack: true

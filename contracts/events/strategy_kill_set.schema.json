@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strategy kill engaged by a human (killswitch set --strategy); refuses its buys.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "strategy_id": {
+      "title": "Strategy Id",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "set_by": {
+      "description": "\"human:<name>\"",
+      "title": "Set By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "strategy_id",
+    "reason",
+    "set_by"
+  ],
+  "title": "StrategyKillSet",
+  "type": "object"
+}

@@ -31,6 +31,7 @@ from pumpgrok.risk.engine.constants import (
 )
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
 from pumpgrok.risk.strategy_slice import SliceConfig, spent_from_ledger
+from pumpgrok.risk.strategy_slice import strategy_cap, strategy_held_basis
 
 
 class _EngineSteps:
@@ -202,6 +203,9 @@ class _EngineSteps:
         ctx.mark("kill_switch")
         if ctx.kill is not None:
             raise _Fail("kill_switch", f"source={ctx.kill[0]}")
+        killed = ctx.strategy_id is not None and ctx.strategy_id in ctx.state.strategy_kills
+        if ctx.is_buy and killed:
+            raise _Fail("kill_switch", f"strategy_kill:{ctx.strategy_id}")
 
     def _step_halted(self, ctx: _StepCtx) -> None:
         ctx.mark("halted")
@@ -351,8 +355,15 @@ class _EngineSteps:
             return
         assert ctx.final_size is not None
         pos = ctx.state.positions.get(ctx.order.mint)
-        basis = int(pos.cost_basis_lamports) if pos is not None else 0
-        cap = int(self._budget.max_token_fraction * ctx.equity) - basis
+        if ctx.strategy_id is None:
+            basis = int(pos.cost_basis_lamports) if pos is not None else 0
+            cap = int(self._budget.max_token_fraction * ctx.equity) - basis
+        else:
+            # TODO(owner): the full fraction applies to each strategy; whether the cap divides
+            # across strategies is open (index Finding 7).
+            cap = strategy_cap(
+                self._budget, ctx.equity, strategy_held_basis(pos, ctx.strategy_tickets)
+            )
         if ctx.final_size > cap:
             if cap < int(self._limits.min_trade_lamports):
                 raise _Fail("max_token_fraction", f"cap={cap} below minimum")

@@ -1,4 +1,4 @@
-"""Task RED: 18 R32 event models and schema export."""
+"""Task RED: 20 event models (18 R32 plus the strategy kill pair) and schema export."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from pumpgrok.ledger.events import (
 )
 
 
-def test_all_18_models_validate_and_forbid_extra() -> None:
-    assert len(EventType) == 18
-    assert len(EVENT_MODELS) == 18
+def test_all_20_models_validate_and_forbid_extra() -> None:
+    assert len(EventType) == 20
+    assert len(EVENT_MODELS) == 20
     seen_types = set()
     for event_type in EventType:
         model = EVENT_MODELS[event_type]
@@ -48,7 +48,7 @@ def test_all_18_models_validate_and_forbid_extra() -> None:
         seen_types.add(event_type.value)
         with pytest.raises(ValidationError):
             model(**{**kwargs, "bogus_extra_field": 1})
-    assert len(seen_types) == 18
+    assert len(seen_types) == 20
 
 
 def test_journal_note_kind_note_ok_halt_rejected() -> None:
@@ -97,9 +97,9 @@ def test_money_int_and_decimal_string_price() -> None:
         )
 
 
-def test_schema_export_produces_18_valid_schemas() -> None:
+def test_schema_export_produces_20_valid_schemas() -> None:
     schemas = event_json_schemas()
-    assert len(schemas) == 18
+    assert len(schemas) == 20
     for _name, schema in schemas.items():
         assert isinstance(schema, dict)
         assert schema.get("type") == "object"

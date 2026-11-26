@@ -104,6 +104,7 @@ class LedgerState(BaseModel):
     last_mtm_ts_utc: str = ""
     unknown_events: list[str] = Field(default_factory=list)
     meta: dict[str, str] = Field(default_factory=dict)
+    strategy_kills: dict[str, str] = Field(default_factory=dict)
 
 
 def initial_state(
@@ -402,6 +403,22 @@ def _on_kill_cleared(state: LedgerState, _row: dict[str, Any], _ts: str, _cid: s
     return state.model_copy(update={"kill_switch": KillSwitchView(active=False)})
 
 
+def _on_strategy_kill_set(
+    state: LedgerState, row: dict[str, Any], _ts: str, _cid: str
+) -> LedgerState:
+    kills = dict(state.strategy_kills)
+    kills[str(row.get("strategy_id", ""))] = str(row.get("reason", ""))
+    return state.model_copy(update={"strategy_kills": kills})
+
+
+def _on_strategy_kill_cleared(
+    state: LedgerState, row: dict[str, Any], _ts: str, _cid: str
+) -> LedgerState:
+    kills = dict(state.strategy_kills)
+    kills.pop(str(row.get("strategy_id", "")), None)
+    return state.model_copy(update={"strategy_kills": kills})
+
+
 def _on_breaker_tripped(
     state: LedgerState, row: dict[str, Any], ts_utc: str, _correlation_id: str
 ) -> LedgerState:
@@ -457,6 +474,8 @@ _HANDLERS = {
     "HaltCleared": _on_halt_cleared,
     "KillSwitchSet": _on_kill_set,
     "KillSwitchCleared": _on_kill_cleared,
+    "StrategyKillSet": _on_strategy_kill_set,
+    "StrategyKillCleared": _on_strategy_kill_cleared,
     "BreakerTripped": _on_breaker_tripped,
     "BreakerReset": _on_breaker_reset,
     "DailyRollover": _on_rollover,

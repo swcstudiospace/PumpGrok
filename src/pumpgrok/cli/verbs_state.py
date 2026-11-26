@@ -69,6 +69,7 @@ from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import ClearRefused, KillSwitch, killswitch_file
+from pumpgrok.risk.strategy_kill import clear_strategy_kill, set_strategy_kill
 from pumpgrok.supervisor.scheduler import run_once_replay, serve_replay
 from pumpgrok.tools import ensure_paper_genesis
 from pumpgrok.upgrade.params import ParamSet
@@ -449,7 +450,7 @@ def _state(args: argparse.Namespace, settings: Settings) -> int:
     return _run_wired(verb, args.seat, settings, ("risk.halt_status",), _call_use(verb, 0, {}))
 
 
-def _killswitch_clear(by: str, reason: str, settings: Settings) -> int:
+def _killswitch_clear(by: str, reason: str, settings: Settings, strategy: str | None = None) -> int:
     """Append ``KillSwitchCleared`` plus the ``killswitch_clear`` approval."""
     verb = "killswitch clear"
     store = LedgerStore(str(PAPER_LEDGER_PATH))
@@ -469,14 +470,47 @@ def _killswitch_clear(by: str, reason: str, settings: Settings) -> int:
             at=datetime.fromtimestamp(clock.now(), UTC),
         )
         try:
-            switch.request_clear(
-                approval, reason, ts_utc=format_ts_utc(clock.now()), source="paper"
-            )
+            if strategy is None:
+                switch.request_clear(
+                    approval, reason, ts_utc=format_ts_utc(clock.now()), source="paper"
+                )
+            else:
+                clear_strategy_kill(
+                    store, approval, strategy, reason, ts_utc=format_ts_utc(clock.now())
+                )
         except (ClearRefused, ValueError, sqlite3.IntegrityError, LedgerInconsistent) as exc:
             return _tool_error(verb, "killswitch_clear_refused", str(exc))
     finally:
         store.close()
-    _say(sys.stdout, json.dumps({"ok": True, "killswitch": "cleared", "by": by, "reason": reason}))
+    result = {"ok": True, "killswitch": "cleared", "by": by, "reason": reason}
+    if strategy is not None:
+        result["strategy"] = strategy
+    _say(sys.stdout, json.dumps(result))
+    return EXIT_OK
+
+
+def _strategy_kill_set(strategy: str, reason: str, by: str, settings: Settings) -> int:
+    """Append ``StrategyKillSet`` for one strategy; human only (RSK-02)."""
+    verb = "killswitch set"
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        ensure_paper_genesis(store, settings.risk)
+        clock = WallClock()
+        try:
+            row = set_strategy_kill(store, strategy, reason, by, ts_utc=format_ts_utc(clock.now()))
+        except (ValueError, sqlite3.IntegrityError, LedgerInconsistent) as exc:
+            return _tool_error(verb, "strategy_kill_refused", str(exc))
+    finally:
+        store.close()
+    result = {
+        "ok": True,
+        "killswitch": "set",
+        "strategy": strategy,
+        "by": by,
+        "reason": reason,
+        "recorded": row is not None,
+    }
+    _say(sys.stdout, json.dumps(result))
     return EXIT_OK
 
 
@@ -486,7 +520,11 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
         # Human-only (R22): the ledger KillSwitchCleared + ApprovalRecord.
         # No seat: the human identity in --by is the authorization.
         by = _human_by(args.by, verb)
-        return _killswitch_clear(by, args.reason, settings)
+        return _killswitch_clear(by, args.reason, settings, args.strategy)
+    if args.cmd == "set" and args.strategy is not None:
+        # Human-only (RSK-02): a strategy kill row; the desk-wide set below is unchanged.
+        by = _human_by(args.by, verb)
+        return _strategy_kill_set(args.strategy, args.reason, by, settings)
     if args.cmd == "set":
         return _run_wired(
             verb,
