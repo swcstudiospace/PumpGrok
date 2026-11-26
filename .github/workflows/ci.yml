@@ -55,6 +55,13 @@ jobs:
       - name: Lint, typecheck, test and audit
         run: make lint typecheck test audit
 
+      - name: Drift and instruction checks
+        run: |
+          ASSEMBLE_UV='uv' bash scripts/assemble-prompts.sh --check
+          uv run python scripts/generate-templates.py --check
+          uv run python scripts/generate-event-schemas.py --check
+          ./scripts/check.sh
+
       - name: idle-grok
         run: uv run python ci/gates/check_idle_grok.py
 
