@@ -382,13 +382,18 @@ def check_template(path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _yaml_files(directory: Path) -> list[Path]:
+    """Every YAML file in a directory, under either extension (.yaml or .yml)."""
+    return sorted({*directory.glob("*.yaml"), *directory.glob("*.yml")})
+
+
 def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) -> list[str]:
     problems = []
     if not rosters_dir.is_dir():
         return [f"{_rel(rosters_dir, repo)}: roster directory not found"]
     core_tools, core_problems = load_core_tools(rosters_dir)
     problems.extend(f"{_rel(rosters_dir / CORE_ROSTER, repo)}: {p}" for p in core_problems)
-    for path in sorted(rosters_dir.glob("*.yaml")):
+    for path in _yaml_files(rosters_dir):
         if path.name == CORE_ROSTER:
             continue
         counts["rosters"] += 1
@@ -397,13 +402,12 @@ def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) ->
 
 
 def _check_packs_dir(repo: Path, packs_dir: Path, counts: dict[str, int]) -> list[str]:
+    if not packs_dir.is_dir():
+        return [f"{_rel(packs_dir, repo)}: pack directory not found"]
     problems = []
-    if packs_dir.is_dir():
-        for path in sorted(packs_dir.glob("*.yaml")):
-            counts["packs"] += 1
-            problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
-    else:
-        print(f"  NOTE: {_rel(packs_dir, repo)}/ not found — pack check skipped")
+    for path in _yaml_files(packs_dir):
+        counts["packs"] += 1
+        problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
     return problems
 
 

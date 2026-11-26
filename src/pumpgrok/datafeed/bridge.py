@@ -1,15 +1,17 @@
-<<<<<<< HEAD
-"""Bus bridge: datafeed events onto the Phase 12 bus via one EventKind catalog.
+"""Bridge datafeed events and read-only market observations onto the event bus.
 
 Imports events models only: never the supervisor, never a network client.
 The publisher is injected, so tests pass a recording fake.
 
-Also bridges read-only curve observations onto the existing event bus.
+Curve observations are recorded durably first, then handed to the live price
+source, then published as ``curve_tick``. Portal and trade facts publish as the
+existing ``token_created``, ``migration`` and ``trade`` kinds without a
+recorder: they carry no reserves and never authorize a price.
 """
-
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from typing import Protocol
 
 from pumpgrok.datafeed.events import (
     CurveObservation,
@@ -21,29 +23,11 @@ from pumpgrok.datafeed.events import (
     TokenCreated,
     TradeSeen,
 )
-from pumpgrok.events.bus import EventBus
-=======
-"""Bridge read-only market observations onto the existing event bus.
-
-Curve observations are recorded durably first, then handed to the live price source,
-then published as ``curve_tick``. Portal and trade facts publish as the existing
-``token_created``, ``migration`` and ``trade`` kinds without a recorder: they carry no
-reserves and never authorize a price.
-"""
-
-from __future__ import annotations
-
-from collections.abc import Mapping
-from typing import Protocol
-
-from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.bus import Dlq, EventBus, Handler
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.replay.clock import Clock
 from pumpgrok.replay.live_recorder import LiveRecorder
 
-<<<<<<< HEAD
 Publisher = Callable[[Event], None]
 
 
@@ -81,13 +65,13 @@ def publish(record: DatafeedEvent, publisher: Publisher) -> Event:
     event = to_bus_event(record)
     publisher(event)
     return event
-=======
+
+
 MARKET_KINDS = frozenset({EventKind.token_created, EventKind.migration, EventKind.trade})
 
 
 class PriceObserver(Protocol):
     def observe(self, observation: CurveObservation) -> None: ...
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
 
 class ObservationBridge:

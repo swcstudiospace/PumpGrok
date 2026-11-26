@@ -1,24 +1,23 @@
 """Fail-closed live price source (MKT-07, T-13-02a).
 
-<<<<<<< HEAD
 No network call inside: the caller feeds ticks/gaps. Disconnected yields
 None; a completed curve refuses entry via :mod:`pumpgrok.datafeed.graduation`;
 a gap holds the last good value (marked stale, never reused as new); a
 timeout marks zero. Every call consults ``rpc_curve_price_allowed``.
 """
-=======
+
 import logging
 import math
 from collections import OrderedDict
 from collections.abc import Callable
 from typing import Final
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
 from __future__ import annotations
 
-from pumpgrok.datafeed.events import CurveTick, GapEvent
-from pumpgrok.datafeed.graduation import entry_refused
-from pumpgrok.replay.clock import parse_ts_utc
+from pumpgrok.datafeed.events import CurveObservation, CurveTick, GapEvent
+from pumpgrok.events.sources import SourceStatus, SourceSupervisor
+from pumpgrok.execution.paper_adapter.models import CurveSnapshot
+from pumpgrok.replay.clock import Clock, parse_ts_utc
 from pumpgrok.tools.onchain.curve_layout import rpc_curve_price_allowed
 
 log = logging.getLogger(__name__)
@@ -28,23 +27,8 @@ LIVE_SOURCE: Final[str] = "rpc"
 
 
 class LivePriceSource:
-    """Thin wrapper over the tick stream and the allowlist price gate."""
+    """Thin wrapper over the observation stream and the allowlist price gate."""
 
-    def __init__(self, *, timeout_s: float = 120.0) -> None:
-        self._timeout_s = timeout_s
-        self._connected = False
-        self._ticks: dict[str, CurveTick] = {}
-        self._gaps: set[str] = set()
-        self._last_seen: dict[str, float] = {}
-
-<<<<<<< HEAD
-    def set_connected(self, connected: bool) -> None:
-        self._connected = connected
-
-    @property
-    def connected(self) -> bool:
-        return self._connected
-=======
     def __init__(
         self, *, clock: Clock, health: SourceSupervisor, max_age_s: float, max_observations: int
     ) -> None:
@@ -61,6 +45,9 @@ class LivePriceSource:
         self._observations: dict[str, tuple[float, CurveObservation, int]] = {}
         self._observer: Callable[[CurveSnapshot], None] | None = None
         self.observer_failures = 0
+        self._ticks: dict[str, CurveTick] = {}
+        self._gaps: set[str] = set()
+        self._last_seen: dict[str, float] = {}
 
     def set_observer(self, observer: Callable[[CurveSnapshot], None] | None) -> None:
         """Install a synchronous observer of each snapshot curve() is about to return."""
@@ -98,7 +85,6 @@ class LivePriceSource:
                 raise OverflowError("live observation capacity exhausted")
         if previous is None or previous[2] != generation or stamp >= previous[0]:
             self._observations[observation.mint] = (stamp, observation, generation)
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
 
     def on_tick(self, tick: CurveTick) -> None:
         self._ticks[tick.mint] = tick
@@ -114,34 +100,24 @@ class LivePriceSource:
         return mint in self._gaps
 
     def entry_allowed(self, mint: str) -> bool:
-        """False when disconnected, unverified, or the curve is complete."""
-        if not self._connected:
-            return False
+        """False when the mint has no tick, the source is barred, or the curve is complete."""
         tick = self._ticks.get(mint)
         if tick is None:
             return False
         if not rpc_curve_price_allowed(curve_source=tick.curve_source):
             return False
-        return not entry_refused(complete=tick.complete)
+        return not tick.complete
 
-    def price(self, mint: str, *, now_epoch: float) -> int | None:
-        """Integer lamports price, or None when no price may be used.
+    async def curve(self, mint: str) -> CurveSnapshot | None:
+        """Return the latest admitted live snapshot for ``mint``, or None.
 
-        Timeout yields 0 (mark zero) rather than a stale price.
+        Stale, future, wrong-generation or non-live observations are refused; a failed
+        observer never changes the admission result.
         """
-        if not self._connected:
+        now = self._clock.now()
+        current = self._observations.get(mint)
+        if current is None:
             return None
-        tick = self._ticks.get(mint)
-        if tick is None:
-            return None
-        if not rpc_curve_price_allowed(curve_source=tick.curve_source):
-            return None
-<<<<<<< HEAD
-        last = self._last_seen.get(mint, now_epoch)
-        if now_epoch - last > self._timeout_s:
-            return 0
-        return tick.virtual_sol_reserves_lamports
-=======
         stamp, observation, generation = current
         if (
             stamp > now
@@ -202,4 +178,3 @@ class ReservesCache:
 
     def get(self, mint: str) -> tuple[int, int] | None:
         return self._entries.get(mint)
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687

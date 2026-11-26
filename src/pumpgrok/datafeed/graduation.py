@@ -52,7 +52,6 @@ class GapSettings:
             raise ValueError("timeout must not precede the gap threshold")
 
 
-<<<<<<< HEAD
 def entry_refused(*, complete: bool) -> bool:
     """True when a completed curve refuses a new entry."""
     return complete
@@ -65,8 +64,6 @@ def graduation_refusal_reason(*, complete: bool) -> str | None:
     return None
 
 
-def _admitted(snapshot: CurveSnapshot) -> bool:
-=======
 def _is_reserve(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -116,7 +113,6 @@ def _provenance(
 
 
 def _admitted(snapshot: CurveSnapshot, replay: "VerifiedReplay | None") -> bool:
->>>>>>> 02a755d6b17b7752d8a56fd3cfe0beb35def2687
     return (
         snapshot.source in {"fixture", "rpc"}
         and snapshot.s_lamports > 0

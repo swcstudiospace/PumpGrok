@@ -975,6 +975,8 @@ class TestG7DeskIntegrity:
         )
         for directory in ("prompts", "prompts-assembled", "agents"):
             (tmp_path / directory).mkdir()
+        (tmp_path / "contracts" / "tool-packs").mkdir(parents=True)
+        (tmp_path / "grokbot" / "templates").mkdir(parents=True)
         problems, counts = integrity_gate.run(
             tmp_path,
             rosters,
