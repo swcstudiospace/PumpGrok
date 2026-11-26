@@ -27,10 +27,11 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock, parse_ts_utc
+from pumpgrok.risk.feed_health import PRICE_FEED, feed_verdict
 
 EXEC_ERROR_REASONS: frozenset[str] = frozenset(
     {"tx_dropped", "slippage_exceeded", "quote_unavailable", "rpc_error"}
@@ -136,7 +137,7 @@ class Breaker:
         """``open``, ``half-open`` or ``closed`` (vendor mirror vocabulary)."""
         if self.is_open:
             return "open"
-        return "half-open" if self.consecutive_failures else "closed"
+        return "half-open" if self.half_open else "closed"
 
     def remaining_cooldown(self) -> float:
         """Seconds until half-open; zero when closed or already half-open."""
@@ -203,11 +204,15 @@ class DataStaleBreaker(Breaker):
         cooldown_s: float = DATA_STALE_COOLDOWN_S,
         reset_after_ok: int = DATA_STALE_RESET_OK,
         fresh_window_s: float = DATA_STALE_FRESH_WINDOW_S,
+        live: bool = False,
+        required_feeds: frozenset[str] = frozenset(),
     ) -> None:
         super().__init__(max_misses, cooldown_s, now, reset_after_ok)
         self.data_stale_s = data_stale_s
         self.max_misses = max_misses
         self.fresh_window_s = fresh_window_s
+        self.live = live
+        self.required_feeds = frozenset(required_feeds)
         self.last_tick: float | None = None
         self.consecutive_misses = 0
         self._prev_tick: float | None = None
@@ -232,11 +237,29 @@ class DataStaleBreaker(Breaker):
         if self.consecutive_misses >= self.max_misses and not self.is_open:
             self.trip()
 
-    def evaluate(self, now: float) -> str:
-        """Trip on silence; never trips before the first tick is observed."""
-        if self.is_open or self.half_open:
+    def evaluate(self, now: float, *, subscribed: Collection[str] = (PRICE_FEED,)) -> str:
+        """Judge the feed lazily at ``now``; there is no timer.
+
+        ``subscribed`` names the feeds with a subscribed mint. An idle desk has none,
+        so it is never stale. A required feed that never ticked fails closed in live.
+        """
+        # TODO(owner): the mint subscription source is not in the repo; the price feed
+        # is assumed subscribed until the owner supplies it.
+        if self.is_open:
             return self.state
-        if self.last_tick is not None and now - self.last_tick >= self.data_stale_s:
+        verdict = feed_verdict(
+            last_tick={PRICE_FEED: self.last_tick},
+            subscribed=subscribed,
+            required=self.required_feeds,
+            now=now,
+            stale_s=self.data_stale_s,
+            live=self.live,
+        )
+        if self.half_open:
+            # A half-open probe decides a stale feed; a never-ticked required feed trips again.
+            if verdict.never_ticked:
+                self.trip()
+        elif verdict.tripped:
             self.trip()
         return self.state
 
@@ -369,11 +392,18 @@ class BreakerSet:
     ``resolve_probe``.
     """
 
-    def __init__(self, store: LedgerStore, clock: Clock) -> None:
+    def __init__(
+        self,
+        store: LedgerStore,
+        clock: Clock,
+        *,
+        live: bool = False,
+        required_feeds: frozenset[str] = frozenset(),
+    ) -> None:
         self._store = store
         self._clock = clock
         now: Callable[[], float] = clock.now
-        self.data_stale = DataStaleBreaker(now)
+        self.data_stale = DataStaleBreaker(now, live=live, required_feeds=required_feeds)
         self.loss_velocity = LossVelocityBreaker(now)
         self.exec_errors = ExecErrorsBreaker(now)
 
@@ -541,9 +571,16 @@ class BreakerSet:
             self._append_reset(name, ts_utc, source, correlation_id, probe_ok)
 
     @classmethod
-    def rebuild(cls, store: LedgerStore, clock: Clock) -> BreakerSet:
+    def rebuild(
+        cls,
+        store: LedgerStore,
+        clock: Clock,
+        *,
+        live: bool = False,
+        required_feeds: frozenset[str] = frozenset(),
+    ) -> BreakerSet:
         """Rebuild openness from ledger events (restart cannot bypass cooldown)."""
-        made = cls(store, clock)
+        made = cls(store, clock, live=live, required_feeds=required_feeds)
         open_since: dict[str, float] = {}
         trips: dict[str, int] = {}
         for event in store.read(limit=None):

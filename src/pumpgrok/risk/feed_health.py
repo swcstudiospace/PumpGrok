@@ -1,17 +1,16 @@
-"""Lazy, idle-quiet feed health over ``SourceStatus`` (RSK-03, T-17-03).
+"""Feed health verdict: lazy staleness and the never-ticked fail-closed rule (RSK-03).
 
-Staleness is evaluated on read at check time from the injected Clock: no
-timer, no thread, and no cached boolean. An idle desk (zero ticks and zero
-held mints) reports healthy, never stale. Each feed declares required
-versus optional; an optional feed going stale degrades only its own
-stream. In paper mode a never-ticked required feed degrades; in live mode
-it fails closed and blocks entries.
+Pure: no clock reads and no timers. The caller passes ``now`` at check time, so
+staleness is evaluated only when a breaker is asked for a verdict and an idle
+desk with no subscribed feed is never stale.
 
-Time comes only from the Clock; this module never reads the wall clock.
+Also provides ``FeedHealth`` (clock-driven) for callers that prefer an object
+interface; both share the same staleness rule.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -20,7 +19,13 @@ from pumpgrok.events.sources import SourceStatus
 if TYPE_CHECKING:
     from pumpgrok.core.ids import Clock
 
-__all__ = ["STALE_AFTER_S", "FeedHealth", "FeedSpec", "FeedVerdict"]
+#: The desk-wide price feed observed by ``DataStaleBreaker``.
+PRICE_FEED = "price"
+
+#: TODO(owner): the list of required feeds is an open owner decision (index Finding 7).
+#: No decision or constant in the repo defines it; the owner supplies it here. Empty
+#: means no feed is required, so a never-ticked feed never fails closed.
+REQUIRED_FEEDS: frozenset[str] = frozenset()
 
 #: Staleness window per feed, seconds (mirrors events STALE_AFTER_S).
 STALE_AFTER_S = 120.0
@@ -39,6 +44,18 @@ class FeedSpec:
 
 @dataclass(frozen=True)
 class FeedVerdict:
+    """Feeds that are stale, and required feeds that never ticked in live mode."""
+
+    stale: frozenset[str]
+    never_ticked: frozenset[str]
+
+    @property
+    def tripped(self) -> bool:
+        return bool(self.stale or self.never_ticked)
+
+
+@dataclass(frozen=True)
+class LegacyFeedVerdict:
     """One lazy staleness evaluation: healthy, degraded, or failed closed."""
 
     status: Literal["healthy", "degraded", "failed"]
@@ -79,14 +96,18 @@ class FeedHealth:
             return SourceStatus.stale
         return SourceStatus.live
 
-    def check(self, mode: Mode = "paper", *, held_mints: int = 0) -> FeedVerdict:
+    def check(
+        self, mode: Mode = "paper", *, held_mints: int = 0
+    ) -> LegacyFeedVerdict:
         """Evaluate every feed on read and return one verdict.
 
         Idle-quiet: with zero ticks ever recorded and zero held mints the
         desk is healthy even if required feeds have never ticked.
         """
         if not self._last_tick and held_mints <= 0:
-            return FeedVerdict(status="healthy", detail="idle desk: no ticks, no held mints")
+            return LegacyFeedVerdict(
+                status="healthy", detail="idle desk: no ticks, no held mints"
+            )
         stale: list[str] = []
         never_ticked: list[str] = []
         required_failed: list[str] = []
@@ -106,25 +127,49 @@ class FeedHealth:
         if required_failed:
             if mode == "live":
                 bad = tuple(required_failed)
-                return FeedVerdict(
+                return LegacyFeedVerdict(
                     status="failed",
                     stale_feeds=tuple(stale),
                     never_ticked=tuple(never_ticked),
                     detail=f"required feeds unhealthy in live mode: {bad}",
                 )
-            return FeedVerdict(
+            return LegacyFeedVerdict(
                 status="degraded",
                 stale_feeds=tuple(stale),
                 never_ticked=tuple(never_ticked),
                 detail=f"required feeds unhealthy: {tuple(required_failed)}",
             )
         if optional_stale:
-            return FeedVerdict(
+            return LegacyFeedVerdict(
                 status="degraded",
                 stale_feeds=tuple(stale),
                 never_ticked=tuple(never_ticked),
                 detail=f"optional feeds stale: {tuple(optional_stale)}",
             )
-        return FeedVerdict(
+        return LegacyFeedVerdict(
             status="healthy", stale_feeds=tuple(stale), never_ticked=tuple(never_ticked)
         )
+
+
+def feed_verdict(
+    *,
+    last_tick: Mapping[str, float | None],
+    subscribed: Collection[str],
+    required: Collection[str],
+    now: float,
+    stale_s: float,
+    live: bool,
+) -> FeedVerdict:
+    """Judge feed health at ``now``.
+
+    A subscribed feed is stale once its last tick is ``stale_s`` or more old. A
+    subscribed feed that has never ticked is not stale: it has nothing to age.
+    A required feed that never ticked fails closed, but only in live mode.
+    """
+    stale = frozenset(
+        feed
+        for feed in subscribed
+        if (seen := last_tick.get(feed)) is not None and now - seen >= stale_s
+    )
+    never_ticked = frozenset(feed for feed in required if live and last_tick.get(feed) is None)
+    return FeedVerdict(stale=stale, never_ticked=never_ticked)

@@ -42,6 +42,7 @@ from pumpgrok.risk.engine.rules import (
     walk_steps,
 )
 from pumpgrok.risk.engine.steps import _EngineSteps
+from pumpgrok.risk.feed_health import REQUIRED_FEEDS
 from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.risk.strategy_slice import SliceConfig, killed_strategies
@@ -93,7 +94,9 @@ class RiskEngine(_EngineSteps):
             env=env,
             alert_channel=alert_channel,
         )
-        self._breakers = BreakerSet(store, clock)
+        self._breakers = BreakerSet(
+            store, clock, live=(mode == "live"), required_feeds=REQUIRED_FEEDS
+        )
         self._get_reserves = get_reserves
         self._live_check = live_check
         self._observe_only = observe_only
