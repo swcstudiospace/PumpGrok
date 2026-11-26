@@ -13,7 +13,7 @@ from pumpgrok.config.settings import ConfigError, DataSettings, GrokSettings, Rp
 
 # Synthetic stand-ins: never provider keys. They must not appear in any refusal message.
 SECRET = "AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret: synthetic  # gitleaks:allow
-OPAQUE_TOKEN = "ab51bbdc86dc16bebe9a072ea0701301"  # pragma: allowlist secret: synthetic test value
+OPAQUE_TOKEN = "ab51bbdc86dc16bebe9a072ea0701301"  # pragma: allowlist secret: synthetic
 
 CLEAN_ENDPOINTS = [
     "https://api.mainnet-beta.solana.com",

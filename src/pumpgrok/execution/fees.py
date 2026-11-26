@@ -190,7 +190,10 @@ async def read_ata_rent(rpc: _RentRpc, *, base: FeeModelV2 = PAPER_DEFAULT_FEE_M
     The RPC result replaces the offline pin. A non-integer or non-positive result is
     refused. Epoch is None because this read does not return one.
     """
-    lamports = await rpc.call("getMinimumBalanceForRentExemption", [ATA_TOKEN_ACCOUNT_DATA_LEN])  # pragma: allowlist secret: public RPC method name, never a credential
+    lamports = await rpc.call(
+        "getMinimumBalanceForRentExemption",  # pragma: allowlist secret
+        [ATA_TOKEN_ACCOUNT_DATA_LEN],
+    )
     if type(lamports) is not int or lamports <= 0:
         raise ValueError("rent read is not a positive integer")
     return replace(
