@@ -1,0 +1,37 @@
+{
+  "task_id": "v4-p13-02-decoder",
+  "bot": "bot-05-rug",
+  "branch": "bot-05-rug/phase-13-curve-layout",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-02 decoder slice: token-first account layouts and discriminator validation",
+  "status": "Focused checks recorded; independent receipt approval and phase integration pending.",
+  "admission_red_evidence": "Local untracked JUnit SHA-256 294187b5b5fd640213190c0e47ba229109b0f75f9f435889cc7f6c090290e786; classifier record SHA-256 49c8d36e5477ca891ff36a516753a0127022999e5ce4ca613485c7b01289899c. The classifier returned RED_EVIDENCE_OK for unknown source admission.",
+  "curve_red_evidence": "The unchanged raw JUnit report is preserved byte-for-byte in the output field of .receipts/bot-05-rug/p13-02-curve-red.evidence; SHA-256 ecf0c8d4680287c70d15e723979280652b82bc390f5a3aef1ddb0d30fc3db611. A duplicate raw XML file is kept locally and in prior git history.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_curve_layout.py tests/tools/onchain/test_onchain_reads.py tests/tools/market/test_price.py tests/tools/market/test_market_reads.py tests/safety/test_blind_advisory.py --junitxml=curve-green.xml", "exit_code": 0, "output_tail": "JUnit: 54 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run pytest -q tests/replay/test_replay_hash_pin.py tests/replay/test_trading_smoke_pin.py --junitxml=curve-pins.xml", "exit_code": 0, "output_tail": "JUnit: 8 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_curve_layout.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_curve_layout.py", "exit_code": 0, "output_tail": "2 files already formatted."},
+    {"cmd": "uv run mypy src/pumpgrok/tools/onchain/curve_layout.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_price_gate.py tests/tools/onchain/test_curve_layout.py tests/execution/test_curve_source_gate.py tests/safety/test_blind_advisory.py --junitxml=admission-green.xml", "exit_code": 0, "output_tail": "JUnit: 43 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_price_gate.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check src/pumpgrok/tools/onchain/curve_layout.py tests/tools/onchain/test_price_gate.py", "exit_code": 0, "output_tail": "2 files already formatted."},
+    {"cmd": "uv run pytest -q tests/tools/onchain/test_curve_layout.py tests/tools/onchain/test_price_gate.py tests/execution/test_curve_source_gate.py --junitxml=decoder-separated.xml", "exit_code": 0, "output_tail": "JUnit: 27 tests, 0 failures, 0 errors, 0 skipped; SHA-256 70d5d5f82a369e86bb670b460e841c50b1a806f42c645c718e4668dc2bc9812f."}
+  ],
+  "claims": [
+    {"claim": "Focused offline decoder and pricing tests passed.", "evidence_command_index": 0},
+    {"claim": "Both replay pin test files passed.", "evidence_command_index": 1},
+    {"claim": "The decoder and its test passed focused lint, format, and type checks.", "evidence_command_index": 2},
+    {"claim": "Focused tests reject unknown source labels and unverified RPC while preserving fixture-label behavior.", "evidence_command_index": 5},
+    {"claim": "The named decoder, source-label and entry-gate tests pass after separating the event-status task.", "evidence_command_index": 8}
+  ],
+  "unverified": [
+    "Independent human receipt approval is absent; no seat self-approval.",
+    "The Phase 13-02 price source, marks, authentic replay provenance boundary, and full phase gates are not completed by this slice. A forged fixture label from an injected non-replay source remains a known risk.",
+    "Layout status remains ASSUMED; no human account-layout review or live provider probe was performed.",
+    "Phase 12 verification remains stale and its TDD review unresolved.",
+    "Task 0 event-status implementation and receipt are in separate draft PR #70 and are absent from this branch until integrated. This decoder work was authored before Task 0's required independent review; the original task-order handoff remains unproven and needs adjudication.",
+    "The full CI check has two probe fixture failures; draft PR #66 contains the compatible chief-owned fix, but neither that PR nor this one is merged."
+  ],
+  "rollback_plan": "Revert the decoder branch commits with git revert in a reviewed pull request. Recovery takes under five minutes; source and tests revert while ledger and operator data remain unchanged."
+}

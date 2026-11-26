@@ -29,10 +29,12 @@ from pumpgrok.tools.onchain.pump_events import EVENT_DECODE_STATUS
 #: real_sol, total_supply, completion flag. Token fields precede SOL fields.
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
+
 #: Token-first 166-byte layout: disc, token_mint, counters (token-first),
 #: completion flag, creator, amm_pool, reserved trailer.
 _CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
 CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
+
 #: Accepted discriminator bytes: the ASSUMED fixture marker and the real
 #: bonding-curve discriminator the probe checks (the curve layout probe record).
 _DISCRIMINATOR = b"ASSUMED\x00"
@@ -68,11 +70,12 @@ class CurveState(BaseModel):
     complete: bool
     #: 32-byte token mint (hex) from the 166-byte account; empty for 49-byte.
     token_mint: str = ""
+    #: Remaining bytes beyond the 49-byte layout (166-byte trailer), hex.
+    extended_data_hex: str = ""
 
 
 def decode_curve_account(data: bytes) -> CurveState:
     """Decode raw account bytes with the token-first ASSUMED layout.
-
     Both the 49-byte and 166-byte accounts decode; the 166-byte variant
     additionally yields its token mint. Raises :class:`CurveDecodeError`
     on wrong length, a bad discriminator, or a non-boolean completion flag.
@@ -110,6 +113,7 @@ def decode_curve_account(data: bytes) -> CurveState:
         real_sol_reserves_lamports=rsol,
         real_token_reserves_units=rtok,
         total_supply_units=supply,
+        extended_data_hex=data[CURVE_ACCOUNT_SIZE:].hex(),
         complete=bool(complete),
         token_mint=mint.hex() if mint else "",
     )
@@ -145,7 +149,7 @@ def encode_curve_fixture(
     flag = 1 if complete else 0
     if size == CURVE_ACCOUNT_SIZE_166:
         return _CURVE_STRUCT_166.pack(
-            _DISCRIMINATOR,
+            _REAL_DISCRIMINATOR,
             bytes(token_mint).ljust(32, b"\x00")[:32],
             virtual_token_reserves_units,
             virtual_sol_reserves_lamports,
@@ -158,7 +162,7 @@ def encode_curve_fixture(
             b"\x00" * 21,
         )
     return _CURVE_STRUCT.pack(
-        _DISCRIMINATOR,
+        _REAL_DISCRIMINATOR,
         virtual_token_reserves_units,
         virtual_sol_reserves_lamports,
         real_token_reserves_units,
@@ -196,7 +200,7 @@ def curve_market_cap_lamports(state: CurveState) -> int:
 
 
 def rpc_curve_price_allowed(*, curve_source: str) -> bool:
-    """True when a price from ``curve_source`` may price a paper entry.
+    """Allow fixture labels and independently verified RPC layouts for entry.
 
     RPC-derived reserves are untrusted bytes until the layout is VERIFIED
     (T-04-08): while either status is ASSUMED they fail closed with
