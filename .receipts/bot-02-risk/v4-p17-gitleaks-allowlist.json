@@ -15,10 +15,12 @@
    "output_tail": "1 file changed, 8 insertions(+)"
   }
  ],
- "not_verified": [
+ "prs": [
+  139
+ ],
+ "task_id": "v4-p17-gitleaks-allowlist",
+ "unverified": [
   "Scan suppression is verified by CI (Gitleaks job) on this PR.",
   "Greptile review: skipped per owner instruction (billing)."
- ],
- "prs": [139],
- "task_id": "v4-p17-gitleaks-allowlist"
+ ]
 }
