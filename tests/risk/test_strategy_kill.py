@@ -228,7 +228,7 @@ def test_a_strategy_kill_refuses_only_that_strategys_buys(tmp_path: Path) -> Non
         alpha = engine.check(_buy(ids), seat=BUY_SEAT, strategy_id="alpha")
         assert alpha.passed is False
         assert alpha.reason == "kill_switch"
-        beta = engine.check(_buy(ids, "SOL-20260201-002"), seat=BUY_SEAT, strategy_id="beta")
+        beta = engine.check(_buy(ids, ticket="SOL-20260201-002"), seat=BUY_SEAT, strategy_id="beta")
         assert beta.reason != "kill_switch"
     finally:
         store.close()

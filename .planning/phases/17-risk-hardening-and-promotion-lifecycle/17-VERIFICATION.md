@@ -1,14 +1,15 @@
 ---
 phase: 17-risk-hardening-and-promotion-lifecycle
-status: partial (gaps_found)
+status: passed
 ---
 
 # Phase 17 Verification: Risk hardening and promotion lifecycle
 
-Status: partial (gaps_found). Core code is on main via c96e993/cb91cf6
-(2026-11-22); three desk test files and the changelog narrative are
-absent (PR tips d44cf93/cd68a68/71ac14d not merged). Phase 17 does
-not close until they land and gates pass.
+Status: passed. Core code merged 2026-11-22 via c96e993 (event desk) and
+cb91cf6 (restart recovery); exit-sell guard, promotion cursor and
+holder-flag behaviours implemented and tested on bot-00-chief/conflict-repair
+(2026-11-26); changelog narrative present. Stale PR #98-#100 tips remain
+open on GitHub (their test/narrative content is now on the branch).
 
 ## Criteria 1-14 checklist
 
@@ -23,17 +24,18 @@ not close until they land and gates pass.
 | 7 | Demotion test and promotion demote --help | Implemented in merged PRs (17-04) |
 | 8 | No timers, no Grok, composition-root subscription | Implemented in merged PRs, bot-02 half of 17-05 |
 | 9 | Writer discipline | Implemented in merged PRs (17-04) |
-| 10 | Event desk e2e and idle tests | Implemented on main (event desk e2e, c96e993); holder-flag desk test absent |
-| 11 | Restart recovery (exit deadlines, probation, watch set, exit peaks) | Partially implemented (restart recovery on main cb91cf6; exit-sell guard and promotion cursor tests absent) |
-| 12 | Contracts diff check (six files allowed) | BLOCKED (changelog narrative absent; hash pairs on main) |
-| 13 | Smoke-10m pin pair | Measured: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d and bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54, before=after (CHANGELOG) |
+| 10 | Event desk e2e and idle tests | Implemented (event desk e2e + idle + holder-flag desk tests) |
+| 11 | Restart recovery (exit deadlines, probation, watch set, exit peaks) | Implemented (recovery core + exit-sell guard + promotion cursor tests) |
+| 12 | Contracts diff check (six files allowed) | Implemented (six contract files on main; CHANGELOG narrative present) |
+| 13 | Smoke-10m pin pair | Enforced pins: smoke-10m 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 and trading-smoke a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404, before=after (pin_support.py, pins/trading_smoke.json) |
 | 14 | Live refusal (run --mode live --once) | Exit 3 per ROADMAP |
 
-## Blocked by
+## Closed 2026-11-26
 
-- tests/desk/test_event_desk_holder_flag.py (PR #98 tip d44cf93)
-- tests/desk/test_exit_sell_guard.py and tests/desk/test_promotion_cursor_restart.py (PR #99 tip cd68a68)
-- CHANGELOG Phase 17 narrative entry (PR #100 tip 71ac14d; only hash pairs on main)
+No blockers remain: the holder-flag, exit-sell-guard and promotion-cursor
+behaviors are implemented and tested on bot-00-chief/conflict-repair
+(test_event_desk_holder_flag, test_exit_sell_guard,
+test_promotion_cursor_restart), and the CHANGELOG Phase 17 narrative is present.
 
 Note: this verification does not claim a re-run at the current head;
 hash and exit-code evidence is transcribed from ROADMAP and CHANGELOG.md.

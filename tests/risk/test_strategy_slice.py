@@ -60,7 +60,7 @@ def _open(path: Path) -> LedgerStore:
 
 def _engine(store: LedgerStore, clock: FixtureClock, *, enabled: bool = True) -> RiskEngine:
     config = SliceConfig(
-        weights={STRATEGY: Decimal("0.02")},
+        weights={STRATEGY: Decimal("0.02"), "alpha": Decimal("0.02"), "beta": Decimal("0.02")},
         reserve=Decimal("0.80"),
         enabled=enabled,
     )
@@ -231,7 +231,7 @@ def test_strategy_buy_above_its_slice_is_capped_on_max_token_fraction(tmp_path: 
     try:
         _seed_alpha_position(store, clock, basis=400_000_000)
         decision = _engine(store, clock).check(
-            _buy(ids, ALPHA_TICKET, 200_000_000), seat=BUY_SEAT, strategy_id="alpha"
+            _buy(ids, 200_000_000, ticket=ALPHA_TICKET), seat=BUY_SEAT, strategy_id="alpha"
         )
         assert decision.passed is True
         assert decision.caps["max_token_fraction"] == 100_000_000
@@ -247,7 +247,7 @@ def test_strategy_buy_under_its_slice_is_unchanged(tmp_path: Path) -> None:
     try:
         _seed_alpha_position(store, clock, basis=400_000_000)
         decision = _engine(store, clock).check(
-            _buy(ids, ALPHA_TICKET, 50_000_000), seat=BUY_SEAT, strategy_id="alpha"
+            _buy(ids, 50_000_000, ticket=ALPHA_TICKET), seat=BUY_SEAT, strategy_id="alpha"
         )
         assert decision.passed is True
         assert "max_token_fraction" not in decision.caps
@@ -263,13 +263,15 @@ def test_second_strategy_in_the_same_mint_is_not_charged_the_first_basis(tmp_pat
     try:
         _seed_alpha_position(store, clock, basis=400_000_000)
         beta = _engine(store, clock).check(
-            _buy(ids, BETA_TICKET, 200_000_000), seat=BUY_SEAT, strategy_id="beta"
+            _buy(ids, 200_000_000, ticket=BETA_TICKET), seat=BUY_SEAT, strategy_id="beta"
         )
         assert beta.passed is True
         assert "max_token_fraction" not in beta.caps
         assert beta.size_lamports == 200_000_000
 
-        desk = _engine(store, clock).check(_buy(ids, BETA_TICKET, 200_000_000), seat=BUY_SEAT)
+        desk = _engine(store, clock).check(
+            _buy(ids, 200_000_000, ticket=BETA_TICKET), seat=BUY_SEAT
+        )
         assert desk.caps["max_token_fraction"] == 100_000_000
     finally:
         store.close()

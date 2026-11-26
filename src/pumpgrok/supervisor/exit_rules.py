@@ -116,6 +116,10 @@ class LedgerExitBook:
         self._sold_tickets.add(ticket_id)
         return True
 
+    def release_ticket(self, ticket_id: str) -> None:
+        """Release a claimed ticket after a failed sell, so the next pass retries it."""
+        self._sold_tickets.discard(ticket_id)
+
     @property
     def exit_config(self) -> ExitsSettings:
         return self.exits
@@ -233,7 +237,21 @@ class ExitRules:
         ticket = self._book.ticket(position.mint)
         if not self._book.claim_ticket(ticket):
             return
-        result = await self._place_sell(position.mint, ticket, int(position.token_amount), reason)
+        try:
+            result = await self._place_sell(
+                position.mint, ticket, int(position.token_amount), reason
+            )
+        except Exception as exc:
+            # One failing sell must not end the pass: later positions are still checked.
+            # The position is not held out and the ticket claim is released, so the next
+            # pass offers it again.
+            name = type(exc).__name__
+            log.warning("sell of %s failed: %s", position.mint[:8], name)
+            self._book.release_ticket(ticket)
+            self._sold.append(
+                RuleSell(mint=position.mint, rule=reason, status="error", reason=name)
+            )
+            return
         status = str(result["status"])
         if status == "unknown":
             self._book.hold_out(position.mint)
@@ -263,9 +281,20 @@ class ExitRules:
             reserves = self._curves.last_open_reserves(mint)
             if reserves is None:
                 continue
-            if not self._book.claim_ticket(self._book.ticket(mint)):
+            ticket = self._book.ticket(mint)
+            if not self._book.claim_ticket(ticket):
                 continue
-            row = await self._graduate(mint, reserves[0], reserves[1])
+            try:
+                row = await self._graduate(mint, reserves[0], reserves[1])
+            except Exception as exc:
+                # One failing close must not end the pass: later positions are still closed.
+                name = type(exc).__name__
+                log.warning("graduation close of %s failed: %s", mint[:8], name)
+                self._book.release_ticket(ticket)
+                self._sold.append(
+                    RuleSell(mint=mint, rule="graduated", status="error", reason=name)
+                )
+                continue
             if row is not None:
                 self._sold.append(RuleSell(mint=mint, rule="graduated", status="filled", reason=""))
 

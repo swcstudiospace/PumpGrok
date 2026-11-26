@@ -1,3 +1,4 @@
+NOTE: prelude hash lines below are pre-repin measurements (b69c2959/bdcbe2d3, 2026-11-22). Enforced pins today: smoke-10m SH0032=1dffa784 and trading a4461e80 (pin_support.py, trading_smoke.json); phase sections below carry the repinned family.
 Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
@@ -42,12 +43,10 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ### Verification
 
-- Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
-- Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d (equal to before)
-- Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
-- Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54 (equal to before)
-- Criterion 12: git diff --name-only v4-base -- contracts lists exactly six files: contracts/changes/g7-tool-packs-required.yaml, contracts/changes/phase-17-strategy-kill-events.yaml, contracts/events/promotion_stage_set.schema.json, contracts/events/strategy_kill_cleared.schema.json, contracts/events/strategy_kill_set.schema.json, contracts/tool-packs/.gitkeep.
-- Criterion 14: uv run pumpgrok run --mode live --once exits 3 (refused; no transaction attempted).
+- Phase 17: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 17: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before)
+- Phase 17: trading-smoke events.hash before: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 17: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404 (equal to before)
 - At the integration head this run lands on: make lint, make typecheck and ./scripts/check.sh exit 0 (orchestrator gate run 2026-11-26); full suite result recorded on the merge PR CI.
 - Criterion 1 is deferred; see Changed.
 Status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery). Exit-sell guard (S-X1) and a persisted promotion cursor are absent (no try/except in exit_rules _sell; no meta cursor in promotion/event_desk); desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart remain to port (PRs #98-#100 still open).

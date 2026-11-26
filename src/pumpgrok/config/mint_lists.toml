@@ -9,7 +9,5 @@
 #
 # Both lists ship empty. Add a mint only with a recorded decision.
 
-allowlist = []
-blocklist = []
 deny = []
 warn = []

@@ -148,6 +148,8 @@ def load_mint_lists(path: Path | str | None = None) -> MintLists:
     caller does not enter.
     """
     resolved = Path(path) if path is not None else default_mint_lists_path()
+    if not resolved.exists():
+        raise MintListError(f"mint list file missing: {resolved}")
     with open(resolved, "rb") as handle:
         raw = tomllib.load(handle)
     if set(raw) != set(_LIST_KEYS):
@@ -173,6 +175,10 @@ class EntryChecks:
     allowlist: frozenset[str] = field(default_factory=frozenset)
     blocklist: frozenset[str] = field(default_factory=frozenset)
     lists_available: bool = True
+    #: True while no paid RPC provider is recorded: a BLIND SAFE-4 holder row
+    #: only warns instead of rejecting (amendment 2026-10-25). The composition
+    #: root stamps this from ``tools/safety/provider`` at build time.
+    holder_blind_advisory: bool = False
 
     @classmethod
     def from_mint_lists(

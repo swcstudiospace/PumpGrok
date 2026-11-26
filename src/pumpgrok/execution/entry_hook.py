@@ -52,12 +52,15 @@ class EntryHook:
             return
         provenance = (
             CurveProvenance.VERIFIED_REPLAY
-            if curve_source == "fixture"
+            if curve_source in ("fixture", "replay")
             else CurveProvenance.LIVE_RPC
             if curve_source == "rpc"
             else CurveProvenance.UNKNOWN
         )
-        if not rpc_curve_price_allowed(curve_source=curve_source, provenance=provenance):
+        canonical_source = (
+            "fixture" if curve_source == "replay" else curve_source
+        )
+        if not rpc_curve_price_allowed(curve_source=canonical_source, provenance=provenance):
             raise EntryRefusedError(f"entry refused: source {curve_source!r} is not allowed")
         if entry_refused(complete=complete):
             raise EntryRefusedError("entry refused: curve is complete")

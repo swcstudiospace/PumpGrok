@@ -166,8 +166,8 @@ def test_unparsable_mint_list_fails_closed(tmp_path: Path) -> None:
 def test_mint_lists_toml_parses_as_toml() -> None:
     path = Path(__file__).resolve().parents[2] / "src" / "pumpgrok" / "config" / "mint_lists.toml"
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    assert isinstance(raw["allowlist"], list)
-    assert isinstance(raw["blocklist"], list)
+    assert isinstance(raw["deny"], list)
+    assert isinstance(raw["warn"], list)
 
 
 def test_hook_refuses_bad_mint_before_adapter() -> None:
@@ -400,7 +400,7 @@ def test_shipped_mint_lists_parse_with_tomllib_and_are_empty() -> None:
 
 
 def test_missing_mint_lists_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(MintListError):
         load_mint_lists(tmp_path / "absent.toml")
 
 
