@@ -17,7 +17,9 @@ from pumpgrok.upgrade.scheduled import apply_candidate
 
 
 class ResultStore(Protocol):  # duck-typed sidecar (store or test double)
-    def rows_for(self, strategy_version_id: str, params_hash: str) -> tuple[dict[str, Any], ...]: ...
+    def rows_for(
+        self, strategy_version_id: str, params_hash: str
+    ) -> tuple[dict[str, Any], ...]: ...
 
 __all__ = ["BacktestEvidenceProvider", "EvidenceRecord"]
 
