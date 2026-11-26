@@ -50,7 +50,7 @@ class _ClosedModel(BaseModel):
 
 
 class EventType(StrEnum):
-    """The CamelCase event types: the R32 types plus the Phase 17 strategy kill pair."""
+    """The CamelCase event types: the R32 types plus the Phase 17 kill and stage types."""
 
     OrderPlaced = "OrderPlaced"
     OrderRejected = "OrderRejected"
@@ -64,6 +64,7 @@ class EventType(StrEnum):
     KillSwitchCleared = "KillSwitchCleared"
     StrategyKillSet = "StrategyKillSet"
     StrategyKillCleared = "StrategyKillCleared"
+    PromotionStageSet = "PromotionStageSet"
     BreakerTripped = "BreakerTripped"
     BreakerReset = "BreakerReset"
     DailyRollover = "DailyRollover"
@@ -246,6 +247,26 @@ class StrategyKillCleared(_ClosedModel):
     approval_id: str = ""
 
 
+class PromotionStageSet(_ClosedModel):
+    """One strategy stage change (PRM-01) with its decision log.
+
+    params_hash is the active parameter set the stage was granted under; a later change of the
+    active set resets the strategy to BACKTEST. paper_window_start is the first PositionOpened of
+    the strategy's paper window (D17-3). evidence_hash binds the gate verdict, candidate and
+    paper record.
+    """
+
+    source: EventSource
+    strategy_id: str
+    from_stage: str
+    to_stage: str
+    decision: str
+    by: str = Field(description='"human:<name>" or "gate:<name>"')
+    params_hash: str = ""
+    paper_window_start: str = ""
+    evidence_hash: str = ""
+
+
 class BreakerTripped(_ClosedModel):
     """Risk breaker tripped."""
 
@@ -357,6 +378,7 @@ EVENT_MODELS: dict[EventType, type[_ClosedModel]] = {
     EventType.ApprovalRecorded: ApprovalRecorded,
     EventType.StrategyKillSet: StrategyKillSet,
     EventType.StrategyKillCleared: StrategyKillCleared,
+    EventType.PromotionStageSet: PromotionStageSet,
 }
 
 _CAMEL_BOUNDARY = re.compile(r"(?<!^)(?=[A-Z])")

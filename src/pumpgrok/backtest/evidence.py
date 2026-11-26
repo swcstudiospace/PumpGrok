@@ -83,6 +83,34 @@ class EvidenceRecord:
     absent: bool
 
 
+@dataclass(frozen=True)
+class _PromotionBinding:
+    """One promotion decision: the gate verdict, the candidate it names and the evidence read.
+
+    Built only inside feed_promotion. The three values are checked together before any write,
+    so a verdict cannot reach apply_candidate for a candidate other than the one its evidence
+    was read for.
+    """
+
+    verdict: GateVerdict
+    candidate_hash: str | None
+    params_hash: str
+    evidence: EvidenceRecord
+
+    def refusal(self) -> str | None:
+        """Why this binding may not be written, or None when it may."""
+        if self.evidence.absent or self.evidence.grade != _ELIGIBLE:
+            return "withheld"
+        if self.candidate_hash is None or self.candidate_hash != self.params_hash:
+            return "refused"
+        return None
+
+
+def _candidate_of(apply_kwargs: dict[str, Any]) -> str | None:
+    candidate = apply_kwargs.get("candidate_hash")
+    return candidate if isinstance(candidate, str) else None
+
+
 class BacktestEvidenceProvider:
     """Read the sidecar. Writes nothing."""
 
@@ -105,16 +133,23 @@ class BacktestEvidenceProvider:
         params_hash: str,
         apply_kwargs: dict[str, Any],
     ) -> str:
-        """Hand an existing gate verdict to UPG-05, or withhold it.
+        """Hand an existing gate verdict to UPG-05, or withhold or refuse it.
 
-        Research-only and absent evidence write nothing. A promotion-eligible
-        record is not judged here: ``apply_candidate`` receives the verdict
-        the gate already returned.
+        Research-only and absent evidence are withheld. A candidate hash that is
+        missing or differs from params_hash is refused. Nothing is written in either
+        case. A promotion-eligible record is not judged here: ``apply_candidate``
+        receives the verdict the gate already returned.
         """
-        record = self.evidence_for(strategy_version_id, params_hash)
-        if record.absent or record.grade != _ELIGIBLE:
-            return "withheld"
-        apply_candidate(ledger_store, verdict, **apply_kwargs)
+        binding = _PromotionBinding(
+            verdict=verdict,
+            candidate_hash=_candidate_of(apply_kwargs),
+            params_hash=params_hash,
+            evidence=self.evidence_for(strategy_version_id, params_hash),
+        )
+        refusal = binding.refusal()
+        if refusal is not None:
+            return refusal
+        apply_candidate(ledger_store, binding.verdict, **apply_kwargs)
         return "applied"
 
 

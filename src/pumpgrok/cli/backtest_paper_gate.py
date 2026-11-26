@@ -16,16 +16,12 @@ from typing import Any
 from pumpgrok.backtest.divergence import DivergenceVerdict, breach_line, check, enforce
 from pumpgrok.backtest.metrics import MetricsReport
 from pumpgrok.backtest.results import SharedResult
-from pumpgrok.cli.backtest_holdout import (
-    _fills_from_rows,
-    _read_window_ledger,
-    _row_stamp,
-    _window_metrics,
-)
+from pumpgrok.cli.backtest_holdout import _read_window_ledger
 from pumpgrok.cli.codes import EXIT_OK
 from pumpgrok.cli.errors import UsageError, _say
 from pumpgrok.config.settings import ConfigError
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
+from pumpgrok.upgrade.window_metrics import fills_from_rows, row_stamp, summarize_window
 
 
 @dataclass(frozen=True)
@@ -57,7 +53,7 @@ def _paper_window(
     opening = initial_state(source="backtest", initial_equity_lamports=initial, day_utc="")
     window_rows: list[Mapping[str, Any]] = []
     for row in rows:
-        stamp = _row_stamp(row)
+        stamp = row_stamp(row)
         if stamp < cutoff:
             opening = reduce(opening, row, deposits)
         elif stamp < window_end:
@@ -85,8 +81,8 @@ def _paper_evidence(
         initial=paper_initial,
         deposits=paper_deposits,
     )
-    paper_fills, _ = _fills_from_rows(window_rows)
-    paper_metrics = _window_metrics(
+    paper_fills, _ = fills_from_rows(window_rows)
+    paper_metrics = summarize_window(
         paper_fills,
         genesis=opening,
         rows=window_rows,

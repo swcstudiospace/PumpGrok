@@ -63,6 +63,7 @@ from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.onboarding.start_gate import check_start
+from pumpgrok.promotion.demote import demote
 from pumpgrok.replay.clock import WallClock, format_ts_utc
 from pumpgrok.replay.live_recorder import DatasetConflict
 from pumpgrok.replay.rng import make_rng
@@ -547,6 +548,38 @@ def _killswitch(args: argparse.Namespace, settings: Settings) -> int:
             ),
         )
     return _run_wired(verb, "risk", settings, ("risk.halt_status",), _call_use(verb, 0, {}))
+
+
+def _promotion_demote(args: argparse.Namespace, settings: Settings) -> int:
+    """Roll one strategy down one stage in one ledger row (PRM-04); human only."""
+    verb = "promotion demote"
+    by = _human_by(args.by, verb)
+    store = LedgerStore(str(PAPER_LEDGER_PATH))
+    try:
+        ensure_paper_genesis(store, settings.risk)
+        clock = WallClock()
+        try:
+            row = demote(
+                store,
+                args.strategy,
+                by=by,
+                reason=args.reason,
+                ts_utc=format_ts_utc(clock.now()),
+            )
+        except (ValueError, sqlite3.IntegrityError, LedgerInconsistent) as exc:
+            return _tool_error(verb, "promotion_demote_refused", str(exc))
+    finally:
+        store.close()
+    result = {
+        "ok": True,
+        "promotion": "demoted",
+        "strategy": args.strategy,
+        "to_stage": row["payload"]["to_stage"],
+        "by": by,
+        "reason": args.reason,
+    }
+    _say(sys.stdout, json.dumps(result))
+    return EXIT_OK
 
 
 def _ticket_verb(args: argparse.Namespace, settings: Settings) -> int:

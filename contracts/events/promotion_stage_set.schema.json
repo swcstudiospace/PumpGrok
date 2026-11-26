@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One strategy stage change (PRM-01) with its decision log.\n\nparams_hash is the active parameter set the stage was granted under; a later change of the\nactive set resets the strategy to BACKTEST. paper_window_start is the first PositionOpened of\nthe strategy's paper window (D17-3). evidence_hash binds the gate verdict, candidate and\npaper record.",
+  "properties": {
+    "source": {
+      "enum": [
+        "paper",
+        "replay",
+        "manual"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "strategy_id": {
+      "title": "Strategy Id",
+      "type": "string"
+    },
+    "from_stage": {
+      "title": "From Stage",
+      "type": "string"
+    },
+    "to_stage": {
+      "title": "To Stage",
+      "type": "string"
+    },
+    "decision": {
+      "title": "Decision",
+      "type": "string"
+    },
+    "by": {
+      "description": "\"human:<name>\" or \"gate:<name>\"",
+      "title": "By",
+      "type": "string"
+    },
+    "params_hash": {
+      "default": "",
+      "title": "Params Hash",
+      "type": "string"
+    },
+    "paper_window_start": {
+      "default": "",
+      "title": "Paper Window Start",
+      "type": "string"
+    },
+    "evidence_hash": {
+      "default": "",
+      "title": "Evidence Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "strategy_id",
+    "from_stage",
+    "to_stage",
+    "decision",
+    "by"
+  ],
+  "title": "PromotionStageSet",
+  "type": "object"
+}

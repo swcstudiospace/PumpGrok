@@ -26,12 +26,9 @@ from pumpgrok.backtest.trials import MAX_ALLOWED_TRIALS, MAX_ELIGIBLE_TRIALS
 from pumpgrok.cli.backtest_holdout import (
     _Dataset,
     _evaluate_holdout,
-    _fills_from_rows,
     _HoldoutOutcome,
     _read_window_ledger,
     _rejection_fees,
-    _row_stamp,
-    _window_curve,
 )
 from pumpgrok.cli.backtest_paper_gate import _paper_gate, _paper_window, _PaperOutcome
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
@@ -52,13 +49,10 @@ from pumpgrok.risk.limits import EngineLimits
 __all__ = [
     "_Dataset",
     "_evaluate_holdout",
-    "_fills_from_rows",
     "_paper_gate",
     "_paper_window",
     "_read_window_ledger",
     "_rejection_fees",
-    "_row_stamp",
-    "_window_curve",
 ]
 
 log = logging.getLogger("pumpgrok.cli")
