@@ -109,6 +109,30 @@ class BacktestEvidenceProvider:
             return refusal
         apply_candidate(ledger_store, binding.verdict, **apply_kwargs)
         return "applied"
+    def get(self, strategy_id: str, param_hash: str) -> dict[str, Any]:
+        """Persisted run record plus grading verdict for one (strategy, param hash).
+
+        Refuses unknown pairs with KeyError. Fixture-kind runs never
+        promote (D-05).
+        """
+        for record in self._store.load_all():  # type: ignore[attr-defined]
+            if (
+                record.get("strategy_id") == strategy_id
+                and record.get("param_hash") == param_hash
+                and record.get("kind") == "run"
+            ):
+                result = dict(record.get("result") or {})
+                eligible = bool(result.get("eligible"))
+                kind = str(result.get("kind", ""))
+                if kind in ("fixture", "traded_only", "hand-authored"):
+                    eligible = False
+                return {
+                    "record": record,
+                    "eligible": eligible,
+                    "reasons": list(result.get("reasons", [])),
+                }
+        raise KeyError(f"no persisted run for {strategy_id!r}:{param_hash!r}")
+
 
 
 def _record(row: dict[str, Any]) -> EvidenceRecord:

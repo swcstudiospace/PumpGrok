@@ -14,7 +14,7 @@ def test_default_is_cadence() -> None:
     assert DEFAULT_WAKE_MODE == "cadence"
     assert default_wake_mode() == "cadence"
     parser = build_parser()
-    assert parser.parse_args(["run", "--mode", "paper", "--once"]).wake_mode == "cadence"
+    assert parser.parse_args(["run", "--mode", "paper", "--once"]).wake_mode is None
     assert (
         parser.parse_args(["run", "--mode", "paper", "--once", "--wake-mode", "event"]).wake_mode
         == "event"
