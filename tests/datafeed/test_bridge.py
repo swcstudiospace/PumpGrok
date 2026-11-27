@@ -6,10 +6,16 @@ import json
 import random
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from pumpgrok.datafeed.bridge import ObservationBridge, publish, to_bus_event
+from pumpgrok.datafeed.bridge import (
+    ObservationBridge,
+    build_observation_bridge,
+    publish,
+    to_bus_event,
+)
 from pumpgrok.datafeed.events import (
     CurveObservation,
     CurveTick,
@@ -364,3 +370,30 @@ def test_to_bus_event_refuses_unknown_records() -> None:
 
     with pytest.raises(TypeError):
         to_bus_event(object())  # type: ignore[arg-type]
+
+
+def test_build_observation_bridge_constructs_real_bus() -> None:
+
+    handled: list[Event] = []
+
+    async def _handler(event: Event) -> None:
+        handled.append(event)
+
+    async def _dlq(event: Event) -> None: ...
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.records: list[Any] = []
+
+        def record(self, observation: Any) -> None:
+            self.records.append(observation)
+
+    recorder = _Recorder()
+    bridge = build_observation_bridge(
+        clock=FixtureClock(),
+        handler=_handler,  # type: ignore[arg-type]
+        dlq=_dlq,  # type: ignore[arg-type]
+        recorder=recorder,  # type: ignore[arg-type]
+    )
+    assert isinstance(bridge, ObservationBridge)
+    assert bridge.recorder is recorder

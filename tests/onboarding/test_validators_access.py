@@ -17,6 +17,7 @@ from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
 from pumpgrok.onboarding.inventory import SPEC_BY_NAME, inventory_snapshot_hash
 from pumpgrok.onboarding.start_gate import check_start
 from pumpgrok.onboarding.validators import (
+    _is_curve_point,
     host_only,
     is_valid_wallet_address,
     record_choice_via_text,
@@ -111,3 +112,12 @@ def test_check_start_missing_until_seats_granted(tmp_path: Path) -> None:
 
 def test_inventory_hash_is_stable() -> None:
     assert inventory_snapshot_hash() == inventory_snapshot_hash()
+
+
+def test_curve_point_rejects_bad_shapes() -> None:
+    assert _is_curve_point(b"\x00" * 31) is False
+    assert _is_curve_point(b"\xff" * 32) is False  # y >= field, non-canonical
+    rfc = bytes.fromhex(
+        "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    )
+    assert _is_curve_point(rfc) is True

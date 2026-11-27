@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 import tomllib
 from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
 
 from pumpgrok.strategies.base import (
     Intent,
@@ -113,3 +119,32 @@ def test_source_digest_and_version_id_of_a_strategy_class() -> None:
     version = version_id(DummyStrategy, {"breakout_bps": 100})  # type: ignore[arg-type]
     assert len(version) == 64
     assert version != version_id(DummyStrategy, {"breakout_bps": 101})  # type: ignore[arg-type]
+
+
+def test_code_digest_empty_when_module_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(name: str) -> Any:
+        raise ImportError("no such module")
+
+    monkeypatch.setattr(importlib, "import_module", _boom)
+    assert code_digest("momentum_breakout") == ""
+
+
+def test_source_digest_refuses_a_module_without_a_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    fake = ModuleType("fake_strategy_mod")
+    monkeypatch.setitem(sys.modules, "fake_strategy_mod", fake)
+
+    class NoFileStrategy:
+        strategy_id = "momentum_breakout"
+        __module__ = "fake_strategy_mod"
+
+    try:
+        source_digest(NoFileStrategy)  # type: ignore[arg-type]
+    except ValueError as exc:
+        assert "no source file" in str(exc)
+    else:
+        raise AssertionError("module without a source file accepted")
