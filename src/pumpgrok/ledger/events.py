@@ -104,6 +104,7 @@ class OrderPlaced(_ClosedModel):
     quote_json: str = ""
     approval_json: str = ""
     risk_json: str = ""
+    seat: str = ""
 
 
 class OrderRejected(_ClosedModel):
