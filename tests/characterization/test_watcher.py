@@ -45,7 +45,7 @@ def position(
     entry: float = 1.0,
     sol: float = 0.5,
     peak: float | None = None,
-    opened_at: float = 0.0,
+    opened_at: float | None = None,
 ) -> ExitPosition:
     return ExitPosition(
         mint=mint,
