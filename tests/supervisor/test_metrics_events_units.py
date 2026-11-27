@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from types import SimpleNamespace
 
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.supervisor.metrics import Metrics
