@@ -20,6 +20,9 @@ log = logging.getLogger("pumpgrok.supervisor.scheduler")
 #: Bounded buffer for orders while the ledger is unwritable (paper-engine.md 6.7).
 LEDGER_BUFFER_CAP = 1000
 
+#: WS silence after which a pump-portal frame loss reads as DataStale.
+WS_STALE_S = 120.0
+
 
 @dataclass(frozen=True)
 class LedgerLatches:
@@ -117,21 +120,45 @@ class DegradedState:
     ledger_writable: bool = True
     #: Buffered order rows while the ledger is unwritable, in order.
     ledger_buffer: list[dict[str, Any]] = field(default_factory=list)
+    #: WS frame timestamp; DataStale trips after WS_STALE_S of silence.
+    ws_last_frame_at: float | None = None
+    #: When set, the desk is observe-only for buys unless the LLM answers.
+    require_llm: bool = False
     #: persistence_down escalation already raised for the current outage.
     persistence_raised: bool = False
 
     # -- LLM (paper-engine.md 6.7 row 1) ---------------------------------
     def signal_scoring_mode(self, *, replay: bool) -> str:
-        """``llm`` | ``rule_fallback`` | ``replay``."""
+        """``llm`` | ``rule_fallback`` | ``observe_only_buys`` | ``replay``."""
         if replay:
             return "replay"
-        return "llm" if self.llm_available else "rule_fallback"
+        if self.llm_available:
+            return "llm"
+        if self.require_llm:
+            return "observe_only_buys"
+        return "rule_fallback"
 
     # -- RPC (paper-engine.md 6.7 row 2) ----------------------------------
     @property
     def rpc_blind(self) -> bool:
         """True after every failover endpoint fails."""
         return bool(self.rpc_endpoints) and not any(self.rpc_endpoints)
+
+    def note_rpc_result(self, index: int, ok: bool) -> None:
+        """Record one endpoint probe; healthy probes recover BLIND."""
+        if 0 <= index < len(self.rpc_endpoints):
+            self.rpc_endpoints[index] = ok
+
+    # -- WS (paper-engine.md 6.7 rows 3-4) --------------------------------
+    def note_ws_frame(self, at: float) -> None:
+        """Fresh PumpPortal frame; recovers DataStale."""
+        self.ws_last_frame_at = at
+
+    def ws_data_stale(self, now: float) -> bool:
+        """DataStale trips after 120 s of WS silence."""
+        if self.ws_last_frame_at is None:
+            return False
+        return now - self.ws_last_frame_at > WS_STALE_S
 
     # -- ledger (paper-engine.md 6.7 row: unwritable) ----------------------
     def buffer_order(self, row: Mapping[str, Any]) -> None:

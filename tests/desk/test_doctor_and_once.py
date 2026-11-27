@@ -41,6 +41,9 @@ _REPORT_SHAPES = tuple(
     re.compile(shape)
     for shape in (
         r"info  mode=\S+ profile=\S+",
+        r"info  bus depth=\d+ lanes=\S+ sidecar=\S+ enabled=(True|False)",
+        r"info  source \S+ status=(ok|unknown)",
+        r"info  time-sync: read-only probe, offset not adjusted",
         r"info  clock-sync \((not NTP-synchronized; wall clock may drift"
         r"|unknown: timedatectl unavailable)\)",
         r"info  hermes-jobs: (store unreadable for profile .+|superseded enabled: .+)"
@@ -54,6 +57,11 @@ _REPORT_SHAPES = tuple(
         r"warn  /(healthz|metrics) \(not served: health\.port=0, only `run --serve` binds"
         r" a port\)",
         r"doctor: \d+ present, \d+ not-yet-implemented \(warnings\), exit 0",
+        r"info  grok-budget \S+ state=\S+",
+        r"info  stages none|info  stage \S+ stage=\S+",
+        r"info  kills none|info  kill \S+|warn  kills unreadable",
+        r"info  signer attestation=\S+ source=settings",
+        r"warn  source \S+ status=unknown",
     )
 )
 
