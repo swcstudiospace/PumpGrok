@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -100,16 +99,14 @@ def test_vendor_pin_carries_pin_and_retirement() -> None:
     assert HISTORICAL_PIN in text, (
         "docs/VENDOR_PIN.md no longer carries the historical provenance pin"
     )
-    assert "retir" in text.lower(), "docs/VENDOR_PIN.md carries no retirement statement"
+    # TEST-T37: word-boundary — "retir" as a substring must not satisfy this.
+    assert re.search(r"\bretir\w+", text.lower()), "docs/VENDOR_PIN.md carries no retirement statement"
 
 
 def _help_text(argv: list[str]) -> str:
-    exe = shutil.which("pumpgrok")
-    if exe is not None:
-        cmd = [exe, *argv]
-    else:
-        shim = "import sys; from pumpgrok.cli import main; sys.exit(main())"
-        cmd = [sys.executable, "-c", shim, *argv]
+    # TEST-T38: invoke the repo's own CLI module, never an unrelated pumpgrok on PATH.
+    shim = "import sys; from pumpgrok.cli import main; sys.exit(main())"
+    cmd = [sys.executable, "-c", shim, *argv]
     proc = subprocess.run(
         cmd, check=False, capture_output=True, text=True, timeout=120, cwd=REPO_ROOT
     )
@@ -130,7 +127,10 @@ def test_documented_verbs_exist_in_cli_help() -> None:
     combined = top_help + "\n" + tools_help
     verbs = _documented_verbs()
     assert verbs, "no pumpgrok VERB commands found in the four docs"
-    missing = sorted(verb for verb in verbs if verb not in combined)
+    # TEST-T37: word-boundary — verb `rep` must not pass on `report` appearing.
+    missing = sorted(
+        verb for verb in verbs if not re.search(rf"\b{re.escape(verb)}\b", combined)
+    )
     assert not missing, f"docs name verbs missing from CLI help: {missing}"
 
 

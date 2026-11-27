@@ -8,6 +8,7 @@ guards in test_security_workflows.py, which also cover the new job.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -46,11 +47,15 @@ def test_sbom_job_skips_fork_pull_requests(sbom_job: dict):
 
 
 def test_sbom_is_generated_from_the_locked_export(sbom_run: str):
-    assert (
-        "uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes"
-        in sbom_run
-    )
-    assert "cyclonedx-py requirements req.txt" in sbom_run
+    # Assert on parsed step arguments (TEST-T39), not an exact command string:
+    # a comment carrying the text must not pass, whitespace must not fail.
+    tokens = shlex.split(sbom_run)
+    assert tokens[:2] == ["uv", "export"], tokens[:4]
+    for flag in ("--frozen", "--no-dev", "--no-emit-project", "--no-hashes"):
+        assert flag in tokens, f"{flag} missing from parsed step args"
+    assert tokens[tokens.index("--format") + 1] == "requirements-txt"
+    generator = ["cyclonedx-py", "requirements", "req.txt"]
+    assert all(token in tokens for token in generator), tokens
 
 
 def test_sbom_generator_is_pinned_and_run_ephemerally(sbom_run: str):

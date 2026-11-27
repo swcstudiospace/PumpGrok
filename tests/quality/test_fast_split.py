@@ -7,10 +7,14 @@ runs tests, so the soak suite is not started here.
 
 from __future__ import annotations
 
+import os
 import shlex
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -21,8 +25,14 @@ def _ini_options() -> dict:
 
 
 def _make_dry_run(target: str) -> str:
+    make = shutil.which("make")
+    # TEST-D-10: one policy — fail when make is absent in CI, skip locally.
+    if make is None and os.environ.get("CI"):
+        pytest.fail("make is required in CI")
+    if make is None:
+        pytest.skip("make is not installed")
     result = subprocess.run(
-        ["make", "-n", target],
+        [make, "-n", target],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -30,6 +40,15 @@ def _make_dry_run(target: str) -> str:
         timeout=60,
     )
     return result.stdout
+
+
+def _make_tokens(target: str) -> list[str]:
+    """TEST-T24: parsed dry-run argv, not Makefile wording."""
+    tokens: list[str] = []
+    for line in _make_dry_run(target).splitlines():
+        if line.strip():
+            tokens.extend(shlex.split(line))
+    return tokens
 
 
 def test_slow_marker_is_registered():
@@ -50,28 +69,35 @@ def test_soak_suite_is_marked_slow():
 
 
 def test_make_test_is_the_fast_path():
-    assert "-m 'not slow'" in _make_dry_run("test")
+    tokens = _make_tokens("test")
+    assert "-m" in tokens
+    assert tokens[tokens.index("-m") + 1] == "not slow"
 
 
 def test_make_test_soak_selects_only_the_slow_marker():
-    recipe = _make_dry_run("test-soak")
-    assert "-m slow" in recipe
-    assert "not slow" not in recipe
+    tokens = _make_tokens("test-soak")
+    assert "-m" in tokens
+    assert tokens[tokens.index("-m") + 1] == "slow"
+    assert "not slow" not in tokens
 
 
 def test_make_test_all_selects_every_marker():
-    assert "-m 'slow or not slow'" in _make_dry_run("test-all")
+    tokens = _make_tokens("test-all")
+    assert "-m" in tokens
+    assert tokens[tokens.index("-m") + 1] == "slow or not slow"
 
 
 def test_make_cov_measures_branches_and_writes_coverage_xml():
-    recipe = _make_dry_run("cov")
-    assert "--cov=pumpgrok" in recipe
-    assert "coverage.xml" in recipe
-    assert "-m 'not slow'" in recipe
+    tokens = _make_tokens("cov")
+    assert "--cov=pumpgrok" in tokens
+    assert "--cov-report=xml:coverage.xml" in tokens
+    assert "-m" in tokens
+    assert tokens[tokens.index("-m") + 1] == "not slow"
 
 
 def test_coverage_floor_is_declared_with_branch_measurement():
     config = tomllib.loads(PYPROJECT.read_text())["tool"]["coverage"]
     assert config["run"]["branch"] is True
     floor = config["report"]["fail_under"]
-    assert 0 < floor < 100
+    # TEST-T26: the floor must not be lowerable to nothing.
+    assert 85 <= floor < 100

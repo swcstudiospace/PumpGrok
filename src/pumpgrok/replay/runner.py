@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from itertools import pairwise
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pumpgrok.config.settings import FilterSettings
 from pumpgrok.core.errors import DataStale
@@ -145,6 +145,31 @@ def ledger_events_hash(ledger_path: str | Path) -> str:
     return digest.hexdigest()
 
 
+def _stored_verdict(
+    store: LedgerStore,
+    verdict: dict[str, Any],
+    verdict_key: str,
+    resuming: bool,
+) -> list[dict[str, Any]]:
+    """Append the verdict once, or reuse the resumed ledger's own copy.
+
+    A resumed ledger already holds this verdict from the run that wrote it;
+    appending the same idempotency key again would be refused. Resume is only
+    for the ledger this same replay wrote: a foreign ledger is refused, not
+    appended to, so two runs never share one chain.
+    """
+    prior = store.by_key(verdict_key) if resuming else None
+    if resuming and prior is None:
+        raise LedgerInconsistent("resumed ledger holds no verdict for this replay")
+    if prior is None:
+        return store.append_batch([verdict])
+    prior_payload: dict[str, Any] = prior.get("payload") or {}
+    expected_payload = cast("dict[str, Any]", verdict["payload"])
+    if str(prior_payload.get("text")) != str(expected_payload.get("text")):
+        raise LedgerInconsistent("resumed verdict diverges from the stored verdict")
+    return [prior]
+
+
 def run_replay(
     dataset_dir: str | Path,
     filter_cfg: FilterSettings,
@@ -238,14 +263,7 @@ def run_replay(
                     "refs": [],
                 },
             }
-            # A resumed ledger already holds this verdict from the run that wrote it;
-            # appending the same idempotency key again would be refused.
-            prior = store.by_key(verdict_key) if resuming else None
-            if resuming and prior is None:
-                # Resume is only for the ledger this same replay wrote. A foreign ledger
-                # is refused, not appended to, so two runs never share one chain.
-                raise LedgerInconsistent("resumed ledger holds no verdict for this replay")
-            stored = [prior] if prior is not None else store.append_batch([verdict])
+            stored = _stored_verdict(store, verdict, verdict_key, resuming)
             if not store.verify():
                 raise LedgerInconsistent("replay ledger failed verification")
         except Exception:

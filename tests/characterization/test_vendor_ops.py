@@ -35,6 +35,7 @@ import pytest
 from pumpgrok.core.ratelimit import RateLimiter
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.risk.breakers import Breaker
+from pumpgrok.supervisor.lifecycle import drain
 
 log = logging.getLogger(__name__)
 
@@ -182,22 +183,7 @@ def test_closed_breaker_has_no_cooldown() -> None:
     assert breaker.state == "closed"
 
 
-# --- test-local mirrors (pending supervisor lifecycle, plan 04-07) ---------------
-
-
-async def drain(tasks: set[asyncio.Task[Any]], grace: float) -> tuple[int, int]:
-    """Let in-flight tasks finish, cancel the rest. Returns (done, cancelled).
-
-    Test-local mirror of vendor ``ops.py:406-417``.
-    """
-    if not tasks:
-        return 0, 0
-    done, pending = await asyncio.wait(tasks, timeout=grace)
-    for task in pending:
-        task.cancel()
-    if pending:
-        await asyncio.gather(*pending, return_exceptions=True)
-    return len(done), len(pending)
+# --- drain: the production port (supervisor/lifecycle.py) ----------------------
 
 
 async def test_drain_waits_for_quick_tasks() -> None:
@@ -205,19 +191,29 @@ async def test_drain_waits_for_quick_tasks() -> None:
         return "ok"
 
     tasks = {asyncio.create_task(quick()) for _ in range(3)}
-    assert await drain(tasks, grace=5.0) == (3, 0)
+    assert await drain(tasks, grace_s=5.0, clock=FixtureClock()) == (3, 0)
 
 
 async def test_drain_cancels_stuck_tasks() -> None:
     async def stuck() -> None:
         await asyncio.sleep(3600.0)
 
+    clock = FixtureClock()
     tasks = {asyncio.create_task(stuck())}
-    assert await drain(tasks, grace=0.01) == (0, 1)
+
+    async def advance() -> None:
+        # Production drain waits on clock.sleep(grace_s); fixture time only
+        # moves via advance_to, so drive it once drain has registered the timer.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        clock.advance_to(0.01)
+
+    result, _ = await asyncio.gather(drain(tasks, grace_s=0.01, clock=clock), advance())
+    assert result == (0, 1)
 
 
 async def test_drain_on_empty_set() -> None:
-    assert await drain(set(), grace=1.0) == (0, 0)
+    assert await drain(set(), grace_s=1.0, clock=FixtureClock()) == (0, 0)
 
 
 class Heartbeat:

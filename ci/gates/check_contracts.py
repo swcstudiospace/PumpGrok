@@ -115,7 +115,7 @@ def _surface_match(pattern: str, path: str) -> bool:
 def changed_files(base: str) -> list[str]:
     try:
         out = subprocess.run(
-            ["git", "diff", "--name-only", "--no-renames", f"{base}...HEAD"],
+            ["git", "diff", "-z", "--name-only", "--no-renames", f"{base}...HEAD"],
             capture_output=True,
             text=True,
             check=True,
@@ -124,7 +124,9 @@ def changed_files(base: str) -> list[str]:
     except subprocess.CalledProcessError as exc:
         # A failed diff must not read as "no contract surfaces touched".
         sys.exit(f"check_contracts: git diff failed: {exc.stderr}")
-    return [line for line in out.stdout.splitlines() if line.strip()]
+    # -z: git quotes non-ASCII paths otherwise, so a contract file with such a
+    # name would never match _match and G-4 would pass (TEST-T18).
+    return [name for name in out.stdout.split("\x00") if name.strip()]
 
 
 def touched_contracts(files: list[str], manifest: dict) -> list[str]:

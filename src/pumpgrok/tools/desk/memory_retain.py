@@ -32,15 +32,22 @@ class MemoryRetainIn(ToolInput):
     """One record; provenance (receipt or source) is mandatory."""
 
     content: str = Field(min_length=1, max_length=8000)
-    receipt_path: str | None = None
-    source: str | None = None
-    task_id: str | None = None
-    tags: list[str] = Field(default_factory=list)
+    receipt_path: str | None = Field(default=None, max_length=1024)
+    source: str | None = Field(default=None, max_length=1024)
+    task_id: str | None = Field(default=None, max_length=256)
+    tags: list[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def _provenance_required(self) -> Self:
         if not self.receipt_path and not self.source:
             raise ValueError("memory_retain refused: receipt_path or source is required")
+        for tag in self.tags:
+            if len(tag) > 64:
+                raise ValueError("memory_retain tag exceeds 64 characters")
+        try:
+            self.content.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("memory_retain content must be encodable as UTF-8") from exc
         return self
 
 

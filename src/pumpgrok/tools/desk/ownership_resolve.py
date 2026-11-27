@@ -57,7 +57,14 @@ OWNERSHIP_RESOLVE_SPEC = ToolSpec(
 
 
 def _load_rules(manifest_path: Path) -> list[dict[str, Any]]:
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"ownership manifest unreadable: {manifest_path}") from exc
+    except yaml.YAMLError as exc:
+        raise ValueError(f"ownership manifest is not valid YAML: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"ownership manifest is not a mapping: {manifest_path}")
     rules = manifest.get("ownership", [])
     return [r for r in rules if isinstance(r, dict) and "pattern" in r and "owner" in r]
 

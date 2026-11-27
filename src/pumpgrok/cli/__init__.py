@@ -4,8 +4,9 @@ Verbs: `run` (paper, `--once --replay <dir>` runs one engine-decision cycle) and
 print text (exemptions: the replay checkpoint prints the engine-decision line and the
 doctor report is human-readable). Every other section-12 verb is a thin JSON wrapper
 over catalog tools through `build_operator_registry` + `registry.find` (TOOL-011, I1):
-`paper buy|sell` (simulate then place against the paper engine; fail closed on
-unknown `--approval-id`, exit 1, R63), `state` (status, halt, halt --clear,
+`paper buy|sell` (simulate then place against the paper engine; the paper
+verb returns `unavailable` before any `--approval-id` check runs in this
+release, exit 1, R63), `state` (status, halt, halt --clear,
 autonomy, resume), `killswitch` (set, flatten, status, clear), `ticket`
 (next, create, list), `verify`, plus the find-only orchestration verbs
 (`scout`, `risk`, `chief`, `rug`, `journal`, `report`, `audit`) and the

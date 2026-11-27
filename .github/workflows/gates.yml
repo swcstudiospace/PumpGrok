@@ -159,14 +159,16 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          # The change document must be the one THIS change adds; an older valid document
-          # would otherwise clear a breaking change it never described.
-          CHANGE=$(git diff --name-only --diff-filter=d \
+          # Every change document this diff adds is validated (TEST-T19): the
+          # first one alone must not clear the rest.
+          git diff --name-only --diff-filter=d \
             "origin/$BASE_REF...HEAD" -- contracts/changes \
-            | grep -E '\.ya?ml$' | head -n1 || true)
-          if [[ -n "$CHANGE" ]]; then
-            python3 -P ci/gates/check_contracts.py \
-              --base "origin/$BASE_REF" --change "$CHANGE"
+            | grep -E '\.ya?ml$' > change-docs.txt || true
+          if [[ -s change-docs.txt ]]; then
+            while IFS= read -r CHANGE; do
+              python3 -P ci/gates/check_contracts.py \
+                --base "origin/$BASE_REF" --change "$CHANGE"
+            done < change-docs.txt
           else
             python3 -P ci/gates/check_contracts.py --base "origin/$BASE_REF"
           fi
@@ -210,3 +212,20 @@ jobs:
         run: uv sync --frozen
       - name: Gate test suite
         run: uv run --frozen pytest ci/tests/ -v
+  post-merge-gates:
+    # TEST-D-08: a required post-merge gate run on push to main. The PR gates
+    # job remains pull_request-only (same-repo), but the merged tree is
+    # re-gated here so pushes to main never bypass the checks.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gate dependencies
+        run: python -m pip install pyyaml
+      - name: G-1 — Manifest self-check
+        run: python3 -P ci/gates/check_ownership.py --validate-manifest
+      - name: G-7 — Desk integrity
+        run: python3 -P ci/gates/check_desk_integrity.py --repo .

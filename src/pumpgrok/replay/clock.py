@@ -163,7 +163,12 @@ class FixtureClock:
         def expire() -> None:
             nonlocal expired
             expired = True
-            task.cancel()
+            # A deadline that fires from inside the timed task (advance_to
+            # runs on the same task) still cancels it: the CancelledError
+            # lands at the next suspension and is converted to TimeoutError
+            # below (DESK-R-32). Never cancel a finished task.
+            if not task.done():
+                task.cancel()
 
         timer = self._schedule(seconds, expire)
         try:

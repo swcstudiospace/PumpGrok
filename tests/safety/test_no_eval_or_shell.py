@@ -111,14 +111,39 @@ def _scan_file(path: Path, rel: str, allowed_importers: set[str] | None = None) 
             if resolved in FORBIDDEN_CALLS:
                 flag(node.lineno, f"forbidden call {resolved}")
                 continue
+            # TEST-T31: dynamic imports and getattr indirection are not
+            # resolved by _dotted, so flag them by shape. `__import__` is a
+            # direct callee (`__import__(...)`); `import_module` is flagged
+            # when it names subprocess — the allowlist bypass. Loaders that
+            # take a computed module name (e.g. contracts/projection.py over
+            # walk_packages) are out of scope and stay clean.
+            if resolved == "__import__":
+                flag(node.lineno, "dynamic import is not allowed")
+            elif (
+                resolved == "importlib.import_module"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and str(node.args[0].value).split(".", maxsplit=1)[0] == "subprocess"
+            ):
+                flag(node.lineno, "dynamic import of subprocess is not allowed")
+            if (
+                isinstance(node.func, ast.Call)
+                and isinstance(node.func.func, ast.Name)
+                and node.func.func.id == "getattr"
+                and len(node.func.args) >= 2
+                and isinstance(node.func.args[1], ast.Constant)
+                and str(node.func.args[1].value) in ("system", "popen")
+            ):
+                flag(node.lineno, "getattr indirection to os.system/os.popen")
             if resolved is not None and resolved.startswith("subprocess."):
                 for keyword in node.keywords:
-                    if (
+                    # TEST-T31: a `**` splat can carry shell=True unobserved.
+                    if keyword.arg is None or (
                         keyword.arg == "shell"
                         and isinstance(keyword.value, ast.Constant)
                         and keyword.value.value is True
                     ):
-                        flag(node.lineno, "subprocess call with shell=True")
+                        flag(node.lineno, "subprocess call with shell=True or **kwargs")
                 if node.args:
                     first = node.args[0]
                     if isinstance(first, ast.Starred):
@@ -150,7 +175,10 @@ def _scoped_files() -> list[tuple[Path, str]]:
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*.py")):
-            if SKIP_PARTS & set(path.parts):
+            # TEST-T32: SKIP_PARTS applies to repo-relative parts, so a checkout
+            # under a `venv`-named directory still scans.
+            rel_parts = set(path.relative_to(REPO_ROOT).parts)
+            if SKIP_PARTS & rel_parts:
                 continue
             files.append((path, path.relative_to(REPO_ROOT).as_posix()))
     skills = REPO_ROOT / "skills"
@@ -174,6 +202,9 @@ def find_violations() -> list[str]:
 
 def test_no_eval_exec_or_shell_true() -> None:
     """INV-S-04: no eval/exec, no shell=True, list argv only."""
+    # TEST-T32: assert a minimum scanned-file count so an empty scope cannot pass.
+    files = _scoped_files()
+    assert len(files) >= 50, f"scoped scan covered only {len(files)} files"
     assert find_violations() == []
 
 
@@ -205,6 +236,10 @@ PROBES: list[tuple[str, str, bool]] = [
     ("ci/gates/check_x.py", "import subprocess\nsubprocess.run(['git', 'x'])\n", False),
     ("src/pumpgrok/cli.py", "import subprocess\nsubprocess.run(['git', 'x'])\n", False),
     ("src/pumpgrok/other.py", "import subprocess\nsubprocess.run(['git', 'x'])\n", True),
+    ("pkg/mod.py", "import subprocess\nsubprocess.run(['ls'], **opts)\n", True),
+    ("pkg/mod.py", "import importlib\nimportlib.import_module('subprocess')\n", True),
+    ("pkg/mod.py", "import os\nx = __import__('os')\n", True),
+    ("pkg/mod.py", "import os\ngetattr(os, 'system')('ls')\n", True),
 ]
 
 

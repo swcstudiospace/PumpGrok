@@ -27,6 +27,7 @@ from pumpgrok.config.settings import NotifySettings
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools import build_registry, register_read_tools
+from pumpgrok.tools.notify.notifier import Notifier
 from pumpgrok.tools.onchain.rpc import RpcClient
 
 REPO = Path(__file__).resolve().parents[2]
@@ -96,10 +97,31 @@ def test_social_has_no_write_verbs_sc4_literal() -> None:
 
 
 def test_social_has_no_manipulation_helpers() -> None:
+    # TEST-T30: check AST identifiers only, never file text (comments and
+    # words like "unlikely" must not count).
     for path in sorted(SOCIAL.glob("*.py")):
-        lowered = path.read_text(encoding="utf-8").lower()
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text, filename=str(path))
+        identifiers = {
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        } | {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        } | {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+        }
         for stem in _STEMS:
-            assert stem not in lowered, f"{path.name} mentions manipulation stem {stem!r}"
+            assert not any(
+                ident == stem
+                or ident.startswith(stem + "_")
+                or ident.endswith("_" + stem)
+                for ident in identifiers
+            ), f"{path.name} uses manipulation identifier {stem!r}"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr in ("post", "put", "patch", "delete"):
@@ -208,6 +230,38 @@ def test_notify_posts_only_to_allowlisted_destinations() -> None:
     assert "partition_destinations" in notifier_text, "fan-out must gate through the allowlist"
     assert "allowlist" in NotifySettings.model_fields, "the allowlist setting must exist"
 
+
+async def test_notify_posts_nothing_to_a_non_allowlisted_destination(tmp_path: Path) -> None:
+    """TEST-T07: drive the notifier; a non-allowlisted destination never posts."""
+
+    class RecordingNotifier(Notifier):
+        def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            super().__init__(**kwargs)
+            self.network_calls: list[tuple[str, str]] = []
+
+        async def send_telegram(self, chat_id: str, text: str) -> None:
+            self.network_calls.append(("telegram", chat_id))
+
+        async def send_webhook(self, url: str, payload: dict) -> None:  # type: ignore[no-untyped-def]
+            self.network_calls.append(("webhook", url))
+
+    notifier = RecordingNotifier(
+        allowlist=["111111111"],
+        clock=FixtureClock(start=1_700_000_000.0),
+        alert_file=tmp_path / "alerts.jsonl",
+    )
+    result = await notifier.send(
+        severity="high",
+        kind="test",
+        text="hello",
+        destinations=["999999999"],
+    )
+    assert notifier.network_calls == []
+    assert result["delivered"][-1] == {
+        "sink": "999999999",
+        "ok": False,
+        "error": "not_allowlisted",
+    }
 
 def test_browser_ops_skill_has_no_posting_or_wallet_procedure() -> None:
     """browser-ops skill text states detection only (R39); wallet UI is refusal-framed."""
