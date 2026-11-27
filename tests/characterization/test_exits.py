@@ -52,7 +52,7 @@ def position(
     entry: float = 1.0,
     sol: float = 0.5,
     peak: float | None = None,
-    opened_at: float = 0.0,
+    opened_at: float | None = None,
 ) -> ExitPosition:
     return ExitPosition(
         mint=mint,
@@ -85,7 +85,7 @@ def test_take_profit_boundary(exits: ExitsSettings) -> None:
 
 def test_stop_loss_wins_over_everything(exits: ExitsSettings) -> None:
     """A drawdown below the stop closes the position even after a peak."""
-    signal = exit_signal(position(entry=1.0, peak=3.0, opened_at=0.0), _px(0.6), exits, now=1.0)
+    signal = exit_signal(position(entry=1.0, peak=3.0, opened_at=None), _px(0.6), exits, now=1.0)
     assert signal is not None and signal.reason == "stop_loss"
 
 
@@ -144,6 +144,12 @@ def test_max_hold_does_not_cut_a_runner(exits: ExitsSettings) -> None:
     pos = position(entry=1.0, opened_at=1000.0)
     signal = exit_signal(pos, _px(2.5), exits, now=1000.0 + 7200.0)
     assert signal is not None and signal.reason == "take_profit"
+
+
+def test_unknown_entry_time_holds_the_time_rule(exits: ExitsSettings) -> None:
+    """An unknown entry time is None, not 0.0: the clock far past 0.0 must not fire max_hold."""
+    pos = position(entry=1.0, opened_at=None)
+    assert exit_signal(pos, _px(1.5), exits, now=NOW) is None
 
 
 def test_zero_price_is_full_loss_stop(exits: ExitsSettings) -> None:
