@@ -271,6 +271,6 @@ class ExitPosition(BaseModel):
     peak_price: int = 0  # scaled by PRICE_SCALE; max since entry, for the trailing stop
     sol_spent: int = 0  # lamports
     token_amount: int = 0  # token base units
-    opened_at: float = 0.0
+    opened_at: float | None = None  # epoch seconds; None = entry time unknown, time rule holds
     tx_hash: str = ""
     score: float = 0.0
