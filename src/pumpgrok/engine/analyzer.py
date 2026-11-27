@@ -116,7 +116,6 @@ class Analyzer:
         self.health[path] = True
         return body
 
-
     async def fetch(self, mint: str) -> tuple[dict[str, Any], list[Holder], list[Trade]]:
         """Card, holders, and trades: three parallel requests.
 
