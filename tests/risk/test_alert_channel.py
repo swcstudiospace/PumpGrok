@@ -119,8 +119,6 @@ def _buy(clock: FixtureClock, ids: IdFactory) -> OrderRequest:
     )
 
 
-
-
 def _adapter(
     store: LedgerStore, clock: FixtureClock, engine: RiskEngine, ids: IdFactory, tmp_path: Path
 ) -> PaperAdapter:
@@ -313,7 +311,11 @@ def test_restart_does_not_reengage_a_consumed_kill(tmp_path: Path) -> None:
 
 
 def _flatten_engine(
-    store: LedgerStore, clock: FixtureClock, ids: IdFactory, fake: FakeTelegram, desk: Path,
+    store: LedgerStore,
+    clock: FixtureClock,
+    ids: IdFactory,
+    fake: FakeTelegram,
+    desk: Path,
     tmp_path: Path,
 ) -> tuple[RiskEngine, Any]:
     engine = _engine(
