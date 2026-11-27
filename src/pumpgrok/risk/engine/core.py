@@ -12,8 +12,10 @@ from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.engine.reputation import ReputationBook
+from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.ticket_refs import load_refs
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.alert_channel import AlertChannel
 from pumpgrok.risk.breakers import BreakerSet
@@ -40,6 +42,7 @@ from pumpgrok.risk.engine.rules import (
     walk_steps,
 )
 from pumpgrok.risk.engine.steps import _EngineSteps
+from pumpgrok.risk.feed_health import REQUIRED_FEEDS
 from pumpgrok.risk.killswitch import SEAT_RE, FlattenOrder, KillState, KillSwitch
 from pumpgrok.risk.limits import EngineLimits
 from pumpgrok.risk.strategy_slice import SliceConfig, killed_strategies
@@ -91,7 +94,9 @@ class RiskEngine(_EngineSteps):
             env=env,
             alert_channel=alert_channel,
         )
-        self._breakers = BreakerSet(store, clock)
+        self._breakers = BreakerSet(
+            store, clock, live=(mode == "live"), required_feeds=REQUIRED_FEEDS
+        )
         self._get_reserves = get_reserves
         self._live_check = live_check
         self._observe_only = observe_only
@@ -140,8 +145,9 @@ class RiskEngine(_EngineSteps):
             initial_equity_lamports=initial,
             day_utc=utc_day(self._clock.now()),
         )
+        deposits = position_deposits_by_seq(self._store)
         for event in events:
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
         return state
 
     def attach_flatten_hook(self, hook: Callable[[], Awaitable[None]]) -> None:
@@ -286,12 +292,20 @@ class RiskEngine(_EngineSteps):
         ``already_open``, ``creator_already_open``) so a buy that raced another
         fill is refused at the fill, and a sell refuses with ``no_position`` when
         its holding has closed.
+        ``strategy_id`` is the buy's strategy: its ``max_token_fraction`` row is that strategy's own
+        slice, and a strategy kill refuses its buys (sells pass).
         """
         # RISK-004: the alert channel is polled on every check, after env and file are read.
         self._killswitch.absorb_alerts()
         order_hash = order_hash_for(order)
         cache_key = self._cache_key(
-            order, order_hash=order_hash, stage=stage, strategy_id=strategy_id
+            order,
+            order_hash=order_hash,
+            stage=stage,
+            seat=seat,
+            creator=creator,
+            exit_reason=exit_reason,
+            strategy_id=strategy_id,
         )
         cached = self._decisions.get(cache_key)
         if cached is not None:
@@ -318,7 +332,10 @@ class RiskEngine(_EngineSteps):
         *,
         order_hash: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
-        strategy_id: str | None = None,
+        seat: str | None,
+        creator: str | None,
+        exit_reason: str | None,
+        strategy_id: str | None,
     ) -> str:
         """Cache key with a gate generation: ledger head plus live gate state.
 
@@ -326,14 +343,19 @@ class RiskEngine(_EngineSteps):
         flip, or a breaker cooldown transition) changes the key, so a cached
         PASS never replays past an engaged gate and a cached REJECT never
         survives a human clear.
+        Seat, creator, exit reason, observe-only and strategy id are keyed too: each changes the
+        decision.
         """
         kill = self._killswitch.poll()
+        observe_only = seat is not None and seat in self._observe_only
         return (
             f"{stage}|{order_hash}|{order.approval_id or ''}|{strategy_id or ''}"
             f"|{self._store.count()}"
             f"|{int(kill.active)}|{kill.source}|{kill.reason}"
             f"|{','.join(sorted(self._breakers.open_breakers()))}"
             f"|{','.join(sorted(self._breakers.half_open_breakers()))}"
+            f"|{seat or ''}|{creator or ''}|{exit_reason or ''}|{int(observe_only)}"
+            f"|{strategy_id or ''}"
         )
 
     def _new_ctx(
@@ -349,7 +371,7 @@ class RiskEngine(_EngineSteps):
         state: LedgerState,
         equity: int,
         probes: ProbeView,
-        strategy_id: str | None = None,
+        strategy_id: str | None,
     ) -> _StepCtx:
         is_buy = order.side.value == "buy"
         ctx = _StepCtx(
@@ -378,6 +400,10 @@ class RiskEngine(_EngineSteps):
             strategy_id=strategy_id,
         )
         ctx.approval_id = order.approval_id or None
+        ctx.strategy_id = strategy_id
+        if is_buy and strategy_id is not None:
+            refs = load_refs(self._store)
+            ctx.strategy_tickets = frozenset(t for t, owner in refs.items() if owner == strategy_id)
         return ctx
 
     def _evaluate(
@@ -391,7 +417,7 @@ class RiskEngine(_EngineSteps):
         source: str,
         correlation_id: str,
         stage: Literal["ACCEPTED", "CONFIRMING"],
-        strategy_id: str | None = None,
+        strategy_id: str | None,
     ) -> RiskDecision:
         state = self._fold()
         self._breakers.sync_from_ledger()
@@ -593,7 +619,11 @@ class RiskEngine(_EngineSteps):
         clears on its own (R5).
         """
         by = approval.approved_by
-        if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
+        if (
+            not by.startswith("human:")
+            or not by.removeprefix("human:").strip()
+            or SEAT_RE.match(by.removeprefix("human:"))
+        ):
             raise ValueError(f"halt clear must come from a human, got {by!r}")
         if approval.kind != "halt_clear":
             raise ValueError(f"halt clear needs a halt_clear approval, got {approval.kind!r}")

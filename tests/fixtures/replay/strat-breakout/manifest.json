@@ -1,1 +1,14 @@
-{"dataset": "strat-breakout", "notes": "Hand-authored tape fixture: BreakMint rises 990bps at tick 2 (below the 1000bps test threshold) and exactly 1000bps at tick 3, firing one momentum_breakout buy. Ticks only; non-decreasing ts.", "seed_hint": 20260101, "sources": {"hand-authored": "STR-04 baseline fixture"}}
+{
+  "dataset": "strat-breakout",
+  "recorded_from_utc": "2026-01-01T00:00:00.000Z",
+  "recorded_to_utc": "2026-01-01T00:17:00.000Z",
+  "seed_hint": 20260101,
+  "provenance": "synthetic",
+  "sources": {
+    "rest": "hand-authored"
+  },
+  "sha256": {
+    "events.jsonl": "875031ed71252f7907884f5f969882aeaf546ca55334ee284c039e3a0239e4d2"
+  },
+  "notes": "Hand-authored strategy fixture for momentum_breakout (15-04). Not market evidence; PENDING OWNER APPROVAL of parameters. Prices are integer lamports carried in S."
+}

@@ -31,12 +31,16 @@ double-count retried placements. Event-time ``note_order`` calls cover the
 live path; ``sync_orders`` reconciles from the ledger with delta tracking so
 a scrape never double-counts. Unknown breaker states map to 2 (open):
 fail-closed beats fail-silent.
+
+Event mode (EVT-12, GRK-10) adds three families from ``metrics_events`` on the same
+registry, after the nine. They are registered only when ``Metrics(event_mode=True)``, so
+cadence mode exposes exactly the nine families with unchanged bytes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -46,6 +50,9 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
+
+if TYPE_CHECKING:
+    from pumpgrok.supervisor.metrics_events import EventCollectors
 
 #: Content type for the GET /metrics exposition bytes.
 EXPOSITION_CONTENT_TYPE = CONTENT_TYPE_LATEST
@@ -93,6 +100,9 @@ class Metrics:
     (mapping source -> seconds), ``breakers`` (mapping name -> state text),
     ``kill_switch`` (bool) and ``ledger_seq`` (int). Missing keys leave the
     corresponding gauge untouched.
+
+    ``event_mode=True`` also registers the event-mode families on the same registry, after
+    the nine (see ``metrics_events``). Cadence mode, the default, registers only the nine.
     """
 
     def __init__(
@@ -100,6 +110,7 @@ class Metrics:
         registry: CollectorRegistry | None = None,
         *,
         snapshot: Callable[[], Snapshot] | None = None,
+        event_mode: bool = False,
     ) -> None:
         self._registry = registry if registry is not None else build_registry()
         self._snapshot = snapshot
@@ -133,6 +144,18 @@ class Metrics:
         self._last_orders: dict[tuple[str, str], float] = {}
         self._known_sources: set[str] = set()
         self._known_breakers: set[str] = set()
+        # After the nine: the exposition lists registration order, so the nine blocks lead.
+        if event_mode:
+            from pumpgrok.supervisor.metrics_events import EventCollectors  # noqa: PLC0415 - circular import
+
+            self._events: EventCollectors | None = EventCollectors(self._registry)
+        else:
+            self._events = None
+
+    @property
+    def events(self) -> EventCollectors | None:
+        """Event-mode collectors on this registry, or None in cadence mode."""
+        return self._events
 
     @property
     def registry(self) -> CollectorRegistry:

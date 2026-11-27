@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +32,7 @@ from pumpgrok.promotion.stages import (
     Transition,
     append_stage_row,
     append_transition,
+    decision_log,
     read_stage_row,
 )
 from pumpgrok.promotion.thresholds import PromotionThresholds, load_thresholds
@@ -46,6 +47,7 @@ from pumpgrok.strategies.tape import Tape
 from pumpgrok.supervisor.intent_router import IntentRouter, Place
 from pumpgrok.supervisor.live_paper import strategy_factory
 from pumpgrok.supervisor.recovery import recover
+from pumpgrok.tools.safety.provider import paid_rpc_provider_recorded
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
@@ -81,9 +83,36 @@ class EventDesk:
     entry_checks: EntryChecks | None = None
     budget: LayeredBudget | None = None
     restored: Any = None
+    holder_blind_advisory: bool = False
 
     def handle_evidence(self, evidence: EvidenceView) -> StageRow:
-        """Event-triggered promotion evaluation (no timers, no polling)."""
+        """Event-triggered promotion evaluation (no timers, no polling).
+
+        The event id is recorded as pending in the store meta before the
+        stage row is written and cleared after, with the cursor moved past
+        it. A redelivery of the last handled event is skipped, and a
+        pending event whose transition is already recorded (a crash after
+        the stage row) resumes past instead of advancing a second stage;
+        a pending event with no transition is handled again.
+        """
+        event_id = evidence.event_id
+        if event_id and self.store.get_meta("promotion_cursor") == event_id:
+            current = read_stage_row(self.store, evidence.strategy_id)
+            if current is not None:
+                return current
+        if event_id and self.store.get_meta("promotion_pending") == event_id:
+            landed = any(
+                entry.event_id == event_id
+                for entry in decision_log(self.store, evidence.strategy_id)
+            )
+            if landed:
+                current = read_stage_row(self.store, evidence.strategy_id)
+                if current is not None:
+                    self.store.set_meta("promotion_pending", "")
+                    self.store.set_meta("promotion_cursor", event_id)
+                    return current
+        if event_id:
+            self.store.set_meta("promotion_pending", event_id)
         row = read_stage_row(self.store, evidence.strategy_id)
         previous = row.stage if row is not None else None
         next_stage = self.evaluator.next_stage(previous, evidence)
@@ -110,6 +139,9 @@ class EventDesk:
                 by="gate:promotion",
                 ts_utc=ts,
             )
+        if event_id:
+            self.store.set_meta("promotion_pending", "")
+            self.store.set_meta("promotion_cursor", event_id)
         return new_row
 
     async def _route_event(self, event: Event) -> None:
@@ -146,6 +178,12 @@ def build_event_desk(
     if mode != ExecutionMode.PAPER:
         raise EventDeskError(f"event desk needs paper mode, got {mode!r}")
     params = params or {}
+    holder_blind_advisory = not paid_rpc_provider_recorded()
+    resolved_checks = (
+        replace(entry_checks, holder_blind_advisory=holder_blind_advisory)
+        if entry_checks is not None
+        else EntryChecks(holder_blind_advisory=holder_blind_advisory)
+    )
     strategies: dict[str, Any] = {}
     for strategy_id in strategy_ids:
         strategies[strategy_id] = strategy_factory(strategy_id)(params.get(strategy_id, {}))
@@ -205,9 +243,10 @@ def build_event_desk(
         risk=risk,
         evaluator=evaluator,
         feed_health=feed_health,
-        entry_checks=entry_checks,
+        entry_checks=resolved_checks,
         budget=real_budget,
         restored=restored,
+        holder_blind_advisory=holder_blind_advisory,
     )
     holder["desk"] = desk
     return desk

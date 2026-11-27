@@ -33,6 +33,7 @@ class PositionView(BaseModel):
     price_peak: PriceDecimal = Decimal("0")
     token_units: MoneyInt = 0
     cost_basis_lamports: MoneyInt = 0
+    deposit_lamports: MoneyInt = 0
     fees_lamports: MoneyInt = 0
     opened_ts_utc: str = ""
     last_mtm_lamports: MoneyInt = 0
@@ -103,6 +104,7 @@ class LedgerState(BaseModel):
     last_mtm_ts_utc: str = ""
     unknown_events: list[str] = Field(default_factory=list)
     meta: dict[str, str] = Field(default_factory=dict)
+    strategy_kills: dict[str, str] = Field(default_factory=dict)
 
 
 def initial_state(
@@ -151,14 +153,26 @@ def _track_peak(state: LedgerState) -> LedgerState:
     return state
 
 
-def reduce(state: LedgerState, event: Mapping[str, Any]) -> LedgerState:
-    """Fold one stored row (``read()`` shape) into a new state."""
+def reduce(
+    state: LedgerState,
+    event: Mapping[str, Any],
+    deposits: Mapping[int, int] | None = None,
+) -> LedgerState:
+    """Fold one stored row (``read()`` shape) into a new state.
+
+    ``deposits`` maps a PositionOpened seq to the ATA deposit that opening paid, read from the
+    position_deposits sidecar. None or {} is legacy: zero deposit. The fold does no I/O.
+    """
     type = str(event.get("type", ""))
     payload = event.get("payload")
     row: dict[str, Any] = dict(payload) if isinstance(payload, Mapping) else {}
     seq = int(event.get("seq", 0))
     ts_utc = str(event.get("ts_utc", ""))
     correlation_id = str(event.get("correlation_id", ""))
+    if type == "PositionOpened":
+        deposit = int((deposits or {}).get(seq, 0))
+        opened = _on_position_opened(state, row, ts_utc, correlation_id, deposit)
+        return opened.model_copy(update={"seq": seq})
     handler = _HANDLERS.get(type)
     if handler is None:
         return state.model_copy(
@@ -172,7 +186,11 @@ def reduce(state: LedgerState, event: Mapping[str, Any]) -> LedgerState:
 
 
 def _on_position_opened(
-    state: LedgerState, row: dict[str, Any], ts_utc: str, correlation_id: str
+    state: LedgerState,
+    row: dict[str, Any],
+    ts_utc: str,
+    correlation_id: str,
+    deposit_lamports: int,
 ) -> LedgerState:
     mint = str(row.get("mint", ""))
     if not mint:
@@ -188,6 +206,7 @@ def _on_position_opened(
         price_peak=row.get("price_entry", "0"),
         token_units=int(row.get("token_units", 0)),
         cost_basis_lamports=int(row.get("cost_basis_lamports", 0)),
+        deposit_lamports=deposit_lamports,
         opened_ts_utc=str(row.get("opened_ts_utc", ts_utc)),
     )
     return _track_peak(state.model_copy(update={"positions": positions}))
@@ -239,7 +258,10 @@ def _on_fill(
             filled = int(row.get("filled_units", 0))
             if pos.token_units > 0 and filled > 0:
                 remaining = pos.token_units - filled
-                reduction = pos.cost_basis_lamports * filled // pos.token_units
+                # The deposit is not traded: the sold slice's cost excludes it, and it stays
+                # whole on the units still held until the full close releases it.
+                deposit = pos.deposit_lamports
+                reduction = (pos.cost_basis_lamports - deposit) * filled // pos.token_units
                 if remaining > 0:
                     # A partial exit books its own slice now; the closing fill's slice is
                     # booked by PositionClosed, so no slice is counted twice.
@@ -250,23 +272,36 @@ def _on_fill(
                             )
                         }
                     )
-                # The sale turns position value into cash: the remaining mark is its
-                # pro-rata share, capped at the last mark less the proceeds, so the sale
-                # alone does not lift equity and a fill below the mark shows as a loss.
-                # The stored venue fee shrinks pro-rata too, so a later close books only
-                # the fee of the units still held.
-                received = cash_delta + int(row.get("network_cost_lamports", 0))
-                share = pos.last_mtm_lamports * remaining // pos.token_units
-                mark = min(share, max(pos.last_mtm_lamports - received, 0))
-                venue_share = pos.last_mtm_venue_fee_lamports * remaining // pos.token_units
-                positions[mint] = pos.model_copy(
-                    update={
-                        "token_units": remaining,
-                        "cost_basis_lamports": pos.cost_basis_lamports - reduction,
-                        "last_mtm_lamports": mark,
-                        "last_mtm_venue_fee_lamports": venue_share,
-                    }
-                )
+                    # The sale turns market value into cash: the remaining market value is its
+                    # pro-rata share, capped at the last market value less the proceeds, so the
+                    # sale alone does not lift equity and a fill below the mark shows as a loss.
+                    # The stored venue fee shrinks pro-rata too, so a later close books only
+                    # the fee of the units still held.
+                    received = cash_delta + int(row.get("network_cost_lamports", 0))
+                    market = max(pos.last_mtm_lamports - deposit, 0)
+                    share = market * remaining // pos.token_units
+                    mark = min(share, max(market - received, 0)) + deposit
+                    venue_share = pos.last_mtm_venue_fee_lamports * remaining // pos.token_units
+                    positions[mint] = pos.model_copy(
+                        update={
+                            "token_units": remaining,
+                            "cost_basis_lamports": pos.cost_basis_lamports - reduction,
+                            "last_mtm_lamports": mark,
+                            "last_mtm_venue_fee_lamports": venue_share,
+                        }
+                    )
+                else:
+                    # Full close: the deposit's refund is in this fill's cash credit, so it
+                    # leaves the position with the last unit. The mark goes to zero with it.
+                    positions[mint] = pos.model_copy(
+                        update={
+                            "token_units": remaining,
+                            "cost_basis_lamports": pos.cost_basis_lamports - reduction - deposit,
+                            "deposit_lamports": 0,
+                            "last_mtm_lamports": 0,
+                            "last_mtm_venue_fee_lamports": 0,
+                        }
+                    )
     return _track_peak(
         state.model_copy(
             update={
@@ -368,6 +403,22 @@ def _on_kill_cleared(state: LedgerState, _row: dict[str, Any], _ts: str, _cid: s
     return state.model_copy(update={"kill_switch": KillSwitchView(active=False)})
 
 
+def _on_strategy_kill_set(
+    state: LedgerState, row: dict[str, Any], _ts: str, _cid: str
+) -> LedgerState:
+    kills = dict(state.strategy_kills)
+    kills[str(row.get("strategy_id", ""))] = str(row.get("reason", ""))
+    return state.model_copy(update={"strategy_kills": kills})
+
+
+def _on_strategy_kill_cleared(
+    state: LedgerState, row: dict[str, Any], _ts: str, _cid: str
+) -> LedgerState:
+    kills = dict(state.strategy_kills)
+    kills.pop(str(row.get("strategy_id", "")), None)
+    return state.model_copy(update={"strategy_kills": kills})
+
+
 def _on_breaker_tripped(
     state: LedgerState, row: dict[str, Any], ts_utc: str, _correlation_id: str
 ) -> LedgerState:
@@ -415,7 +466,6 @@ def _noop(state: LedgerState, _row: dict[str, Any], _ts: str, _cid: str) -> Ledg
 
 
 _HANDLERS = {
-    "PositionOpened": _on_position_opened,
     "PositionClosed": _on_position_closed,
     "FillRecorded": _on_fill,
     "OrderRejected": _on_rejected,
@@ -424,6 +474,8 @@ _HANDLERS = {
     "HaltCleared": _on_halt_cleared,
     "KillSwitchSet": _on_kill_set,
     "KillSwitchCleared": _on_kill_cleared,
+    "StrategyKillSet": _on_strategy_kill_set,
+    "StrategyKillCleared": _on_strategy_kill_cleared,
     "BreakerTripped": _on_breaker_tripped,
     "BreakerReset": _on_breaker_reset,
     "DailyRollover": _on_rollover,

@@ -100,7 +100,7 @@ Paper-only by default; live mode refuses to start unless every precondition in
 Paper-only by default; live mode refuses to start unless every precondition defined in
 `src/pumpgrok/execution/live/live_gate.py` is met (`_run` in `src/pumpgrok/cli/verbs_state.py` enforces it).
 
-- `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run`).
+- `run` accepts `--mode paper --once --replay <dir>` (one cycle), `--serve --replay <dir>` (loop), and `--record <dataset> --duration <seconds>` (records and seals a live-paper dataset under `var/datasets/`; needs an RPC endpoint; refused with `--replay` and in live mode). `--duration` without `--record`, and other combinations, exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run` and `_mode_refusal`).
 - `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli/verbs_state.py` (`_run`) and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli/codes.py`) when any precondition is unmet.
 - Secrets arrive only as `PUMPGROK_*` env vars per `src/pumpgrok/config/settings.py`; key-bearing endpoint values are refused at startup (see `RpcSettings` in `src/pumpgrok/config/settings.py`).
 - Paid-provider keys travel in `api_key` and are sent as a header, never embedded in endpoint URLs (see `src/pumpgrok/config/settings.py`).
@@ -111,7 +111,7 @@ Assumptions and path differences the reader must not mistake for verified fact.
 
 - Curve decoding uses the `[ASSUMED]` layout in `src/pumpgrok/tools/onchain/curve_layout.py` until a live probe confirms it (see `scripts/probe_curve_layout.py`).
 - `run --once --replay` exercises the `PaperAdapter` path via `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py`, while `run_replay` in `src/pumpgrok/replay/runner.py` writes the checkpoint verdict row first and does not run the paper adapter.
-- `run --record` is not implemented and exits `EXIT_NOT_IMPLEMENTED` (`src/pumpgrok/cli/codes.py`) from `_run` in `src/pumpgrok/cli/verbs_state.py`.
+- `run --record` and `live serve` are implemented (`_run_record` in `src/pumpgrok/cli/verbs_state.py`; `_live_serve` in `src/pumpgrok/cli/verbs_ops.py`). Their tests use fixtures and read-only doubles; no live RPC run is recorded in this repository. Phase 16 criterion 1 is deferred to deployment (16-PLANS-INDEX.md row J).
 
 ## v4 event mode
 

@@ -56,6 +56,7 @@ def run_once_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> ReplayResult:
     """AUTO-006: replay verdict, then one full recorded timeline, offline.
 
@@ -114,6 +115,7 @@ def run_once_replay(
             risk=runtime.risk,
             budget=budget,
             seat_cadences=FIXTURE_SEAT_CADENCES,
+            wake_mode=wake_mode,
         )
         before = runtime.store.count()
         ticks = asyncio.run(
@@ -150,8 +152,6 @@ async def serve_fixture_timeline(
     pace_s: float = 0.0,
     hold: bool = False,
     heartbeats: bool = True,
-    store: LedgerStore | None = None,
-    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
     resume_after: float | None = None,
     rules_reload: Callable[[], None] | None = None,
 ) -> list[dict[str, str]]:
@@ -166,22 +166,19 @@ async def serve_fixture_timeline(
     supervisor is stopped, so a serve stays up after its recording ends. ``pace_s`` real
     seconds separate steps (zero for a one-shot run), waited on the injected ``pace`` clock
     (a ``WallClock`` in serve, so production keeps real time; never ``asyncio.sleep``).
-    ``promotion_check``, when given with ``store``, runs once after each supervisor tick as
-    ``promotion_check(store, clock)``. ``rules_reload`` runs right after it, at the same
-    tick boundary. Returns each recorded tick's outcomes.
+    ``rules_reload``, when given, runs once at each tick boundary, after the tick. Returns each
+    recorded tick's outcomes.
     """
     clock = supervisor.clock
     if not isinstance(clock, FixtureClock):
         raise RuntimeError("a fixture timeline needs the fixture clock")
-    if promotion_check is not None and store is None:
-        raise ValueError("promotion_check needs the store it checks")
     ticks: list[dict[str, str]] = []
     for at in stamps:
         if at < clock.now() or (resume_after is not None and at <= resume_after):
             continue
         clock.advance_to(at)
         ticks.append(await supervisor.tick_once(heartbeats=heartbeats))
-        _tick_boundary(clock, store, promotion_check, rules_reload)
+        _tick_boundary(rules_reload)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
         if supervisor.stopped:
@@ -191,25 +188,14 @@ async def serve_fixture_timeline(
     while not supervisor.stopped:
         clock.advance_to(clock.now() + TICK_S)
         await supervisor.tick_once(heartbeats=heartbeats)
-        _tick_boundary(clock, store, promotion_check, rules_reload)
+        _tick_boundary(rules_reload)
         if pace_s > 0 and pace is not None:
             await pace.sleep(pace_s)
     return ticks
 
 
-def _tick_boundary(
-    clock: FixtureClock,
-    store: LedgerStore | None,
-    promotion_check: Callable[[LedgerStore, Clock], None] | None,
-    rules_reload: Callable[[], None] | None,
-) -> None:
-    """Between two ticks: run the promotion check, then the rule reload it may need.
-
-    The reload follows the check, so a promotion applied at this boundary is in force from
-    the next tick. Neither runs inside a tick.
-    """
-    if promotion_check is not None and store is not None:
-        promotion_check(store, clock)
+def _tick_boundary(rules_reload: Callable[[], None] | None) -> None:
+    """Between two ticks: reload the candidates so a human-applied promotion takes effect next."""
     if rules_reload is not None:
         rules_reload()
 
@@ -290,6 +276,7 @@ def _build_serve(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> _ServeParts:
     """Build the serve parts over a replayed ledger; see :func:`build_serve_replay`."""
     run_replay(
@@ -358,7 +345,7 @@ def _build_serve(
                 seq = 0
             return {"ledger_seq": seq, "kill_switch": kill_switch_engaged(store)}
 
-        metrics = Metrics(snapshot=_snapshot)
+        metrics = Metrics(snapshot=_snapshot, event_mode=wake_mode == "event")
         supervisor = Supervisor(
             store=store,
             clock=runtime.clock,
@@ -374,6 +361,7 @@ def _build_serve(
             budget=budget,
             cycle_observer=metrics.observe,
             seat_cadences=FIXTURE_SEAT_CADENCES,
+            wake_mode=wake_mode,
         )
         rules = _ServeRules(
             events=runtime.dataset.events,
@@ -405,6 +393,7 @@ def build_serve_replay(
     budget: RiskBudget | None = None,
     limits: EngineLimits | None = None,
     active_set: ParamSet | None = None,
+    wake_mode: str = "cadence",
 ) -> tuple[Supervisor, Metrics, LedgerStore]:
     """Construct the D1 serve supervisor over a replayed ledger.
 
@@ -427,6 +416,7 @@ def build_serve_replay(
         budget=budget,
         limits=limits,
         active_set=active_set,
+        wake_mode=wake_mode,
     )
     return parts.supervisor, parts.metrics, parts.store
 
@@ -476,7 +466,7 @@ async def serve_replay(
     limits: EngineLimits | None = None,
     pace_s: float = SERVE_PACE_S,
     active_set: ParamSet | None = None,
-    promotion_check: Callable[[LedgerStore, Clock], None] | None = None,
+    wake_mode: str = "cadence",
 ) -> int:
     """D1 serve path: replay a recorded dataset in a loop, serving /healthz and /metrics.
 
@@ -489,10 +479,9 @@ async def serve_replay(
     SIGINT/SIGTERM stop the loop and the server closes before the store does.
     Fixture time follows the recording (see :func:`serve_fixture_timeline`), paced
     ``pace_s`` real seconds per step; after the last recorded tick the clock keeps
-    moving at the tick cadence until stop. ``promotion_check`` runs once per tick, with the
-    serve's own store and clock. A resumed ledger continues its timeline from its last
-    recorded stamp, and a promotion applied in the loop reloads the candidates at the next
-    tick boundary.
+    moving at the tick cadence until stop. A resumed ledger continues its timeline from its last
+    recorded stamp, and a promotion a human applied reloads the candidates at the next tick
+    boundary.
     Returns 0.
     """
     parts = _build_serve(
@@ -505,6 +494,7 @@ async def serve_replay(
         budget=budget,
         limits=limits,
         active_set=active_set,
+        wake_mode=wake_mode,
     )
     supervisor, metrics, store = parts.supervisor, parts.metrics, parts.store
     server = HealthServer(
@@ -523,8 +513,6 @@ async def serve_replay(
             pace=WallClock(),
             pace_s=pace_s,
             hold=True,
-            store=store,
-            promotion_check=promotion_check,
             resume_after=parts.resumed_at,
             rules_reload=parts.rules.reload,
         )

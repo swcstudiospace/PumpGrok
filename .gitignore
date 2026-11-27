@@ -15,6 +15,5 @@ var/
 !var/.gitkeep
 prompts-assembled/*.xml.tmp
 .planning/research/.cache/
-
 .coverage
 coverage.xml

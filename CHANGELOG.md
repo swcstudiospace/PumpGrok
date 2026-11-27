@@ -1,3 +1,4 @@
+NOTE: prelude hash lines below are pre-repin measurements (b69c2959/bdcbe2d3, 2026-11-22). Enforced pins today: smoke-10m SH0032=1dffa784 and trading a4461e80 (pin_support.py, trading_smoke.json); phase sections below carry the repinned family.
 Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
@@ -6,6 +7,7 @@ Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356
 Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+
 Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 16: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
@@ -18,6 +20,36 @@ Phase 15: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
 
+## [Unreleased] - v4 Phase 17: risk hardening and promotion lifecycle
+
+### Added
+
+- Strategy exposure slice and strategy-scoped kills (RSK-01, RSK-02, RSK-08); the decision cache key holds strategy_id.
+- Entry checks and mint lists (RSK-05).
+- Promotion stages as ledger rows with fail-closed thresholds, gate reuse and demotion (PRM-01 to PRM-04, PRM-06; S-B4, S-P2).
+- Event-driven promotion evaluator with no timers and no Grok call (PRM-05), and an explicit promotion mode (S-P1).
+- Event desk composition root (RT-03) at `supervisor/` (supersedes the PR-branch `events/` path).
+- Restart recovery from the ledger (RT-04, narrowed): probation, the desk-wide watch set, exit deadlines and exit peaks. Tapes start empty.
+
+### Fixed
+
+- Feed health and loss-velocity breaker fixes (RSK-03; S-B1, S-B2). An already-active halt returns an explicit verdict.
+
+### Changed
+
+- The entry gate is wired into the paper path by an owner-approved cross-seat change in the paper factory.
+- Criterion 1 paper smoke is deferred to deployment by owner decision (D17-2).
+- Moved to Phase 18 by owner decision 2026-11-18: the live-side RSK-04 work and tape restore.
+
+### Verification
+
+- Phase 17: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 17: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before)
+- Phase 17: trading-smoke events.hash before: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 17: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404 (equal to before)
+- At the integration head this run lands on: make lint, make typecheck and ./scripts/check.sh exit 0 (orchestrator gate run 2026-11-26); full suite result recorded on the merge PR CI.
+- Criterion 1 is deferred; see Changed.
+Status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery). Exit-sell guard (S-X1) and a persisted promotion cursor are absent (no try/except in exit_rules _sell; no meta cursor in promotion/event_desk); desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart remain to port (PRs #98-#100 still open).
 
 ## [Unreleased] - v4 Phase 14: event-driven desk and Grok gateway
 
@@ -38,6 +70,93 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 14: events-soak-3d golden hash: c08ad0ddddfd44de00590c9fc2f5f80b6852aa428e3d05ec1f4d26d8a7194e70
 - Phase 14: `scripts/probe_curve_layout.py` deleted with all references removed.
 - `pumpgrok run --mode live --once` exits 3. No contracts/ file changed.
+## [Unreleased] - v4 Phase 16: backtest v2 and autonomous evaluation
+
+### Added
+
+- Metrics v2: seven metrics and round trips (plan 16-01, BT-08, BT-09; commit a3696ec).
+- Replay trim and import, the feed.jsonl recorder contract, and rebuild-ticks from the recorded feed (plan 16-04; commits 6a65c40, f776c7f, 0953087).
+- Event source and strategy-aware replay (plan 16-02; commit c00dfe3).
+- Grade evidence and segment gaps (plan 16-03; commit 338528e).
+- Autonomous scheduler and evidence provider (plan 16-05; commit ebab2df).
+- Strategy backtest verb prints Metrics v2, and a per-strategy report section (plan 16-06; commits bf74098, dca5105).
+- run --record and live serve on the paper root (plan 16-08; commit ea2a22d). Live serve is paper-only, and run --mode live --once exits 3 (owner decision 2).
+- Publication is a JournalNote with NoteKind verdict, and no event kind was added (owner decision 6). The ledger and core packages have no diff from 5fa947b to f05381d.
+
+### Fixed
+
+- Phase 16 guard regressions cleared (acea4b3); backtest lint and type errors cleared (57b2fec); cli and datafeed lint cleared without behaviour changes (fb1f6cf).
+- Deterministic record clock for the run --record tests, so they no longer depend on CPU load (6dd3912).
+
+### Changed
+
+- Criterion 1 paper smoke is deferred to deployment by owner decision (16-PLANS-INDEX.md row J). The CI receipt allowlist admits .receipts/*/16-*.json (commit 81ddc31).
+
+### Verification
+
+- Phase 16: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 16: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 16: trading-smoke events.hash before: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 16: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
+- Phase 16 before values were measured at 5fa947b, the integration head before the first Phase 16 merge (22dd90b). After values were measured at f05381d.
+- At f05381d, make lint, make typecheck, make test and ./scripts/check.sh exit 0 (coverage 91.30 percent, floor 89.9 percent). Criterion 1 is deferred; see Changed.
+## [Unreleased] - v4 Phase 15: strategy framework and multi-strategy paper
+
+### Changed
+
+- Paper fee default is fee model v2 (commits `a2b9045`, `0b843d4`), which charges ATA rent on the first buy. The trading-smoke pin was re-pinned once, by owner approval, for this change. Rows 149, 150, 151 and 155 changed; every other row is unchanged.
+- Strategy framework (plans 15-01 to 15-06): frozen Strategy protocol and static registry; paper-event overlay (6 open positions, 40 trades per day; live stays at 3 and 20); runtime with per-strategy capital slices and attribution; legacy_screening through the runtime; three baseline strategies (momentum_breakout, new_launch_sniper, mean_reversion) with fixture datasets; live-data paper root (paper only, RPC endpoint passed by the caller); intent router to exec.place, which refuses and journals below autonomous-paper and approves nothing.
+
+### Verification
+
+- Phase 15: smoke-10m events.hash before: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 15: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before; seq 146, events read 41)
+- Phase 15: trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 15: trading-smoke events.hash after (fee model v2 before the refund-era pin below; superseded): cac36d18896f6f36a7a5ab515047d309190b836a9a6370a780334a4bc9085a62
+- Phase 15: trading-smoke seq and row count before and after: 155 and 155 (events read 5 in both)
+- Phase 15 (refund era): trading-smoke events.hash before: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 15: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404 (refund era, final pin); seq 155, row count 155, events read 5
+- Phase 15 (refund era): smoke-10m events.hash unchanged: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 15 (refund era): the 24 characterization digests and the event smoke golden (tests/desk/test_event_golden_hashes.py) are re-pinned to values from a fresh run. Event smoke ledger events.hash: f6a8a6fa99dde55e304fb7caf4d3f696fb400c01f110cd16652fd8dedfef7747 before, 0c7cf490cd08b25864148df2150938b023bcc871b8db97af08389b9bbc572b28 after; seat trace unchanged at 24357f1df0521e2203e1f7e18dd473850e58517975b63ed97298b1dea1ddae02
+- Phase 15 (refund era): test_one_buy_flows_to_curve_priced_fill expected network cost is 1497440 (fee model v2: 9000 plus the first-buy rent 1488440)
+- Phase 15 starts at the Phase 14 close, where smoke-10m already measures 1dffa784 (Phase 14 entry below). The b69c29... value that the Phase 15 plan text cites is the Phase 14 before value, not a Phase 15 starting value.
+- Owner decision 1: one trading-smoke re-pin, recorded in the two trading-smoke lines above. Strategy parameters are PENDING OWNER APPROVAL (see docs/runbooks/strategies.md); they are proposals inside bounds, not final pins.
+## [Unreleased] - v4 Phase 14: replay operator grants
+
+### Changed
+
+- Replay builds its registry with the operator gate (commit `e2dca99`). The replay ledger held no operator grants, so every roster tool was denied and the replay pins measured that denial.
+- Serve no longer runs the scheduled promotion check. `cli/promotion.py` drops `make_promotion_check`, and `run --serve` no longer loads the declared space. Promotion stays human-invoked through `run_promotion_check(automatic=False)`. `serve_replay` and `serve_fixture_timeline` drop their `promotion_check` and `store` parameters; `rules_reload` still runs at each tick boundary.
+- `open_replay_runtime` seeds one replay-scoped `ConfigChanged` row per (seat, roster tool) into the replay ledger (`src/pumpgrok/replay/grants.py`). Each row is labelled `by=replay:seed`, is stamped at the fixture's first event, and carries a fixed idempotency key. `ReplayGrants` admits a (seat, tool) only when the replay ledger holds its seeded row. Seeding never reads or writes `var/operator` or the live ledger, and it writes no `human:` label.
+- Re-pinned replay hashes. The seeded rows are new ledger events, so the event hash and chain length move. The fixture events read (41 and 5) are unchanged, and every pre-existing trading row is unchanged apart from its seq.
+- Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700
+- Phase 14: smoke-10m seq before: 2, after: 146 (events read 41 in both)
+- Phase 14: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: trading-smoke events.hash after: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
+- Phase 14: trading-smoke seq and row count before: 11, after: 155 (events read 5 in both)
+## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
+
+### Added
+
+- Token-first 49-byte curve layout decoded as VERIFIED with reviewed_by human:Ove (`LAYOUT_STATUS`). The 166-byte extended layout stays ASSUMED and fails closed; no offsets were invented. Pump event decoder `EVENT_DECODE_STATUS` VERIFIED with reviewed_by human:Ove.
+- Read-only, rate-limited live feed (`datafeed/portal.py`, `datafeed/logs.py`) with a bounded watch set, mint book, resync and recovery, bridged onto the Phase 12 bus. Portal frame field names remain ASSUMED until a live probe confirms them.
+- Recorder seals self-verifying datasets with `gaps.jsonl` in the sealed manifest, recovers a torn final line on startup, and closes open gaps at seal time (REC-01, REC-02).
+- Paper factory (`execution/paper_factory.py`) is the only paper-adapter construction path. Fee model v2 is selectable with v1 still the default. Live composition takes an exact `LivePriceSource`; BUY entries remain refused.
+
+### Changed
+
+- Strict price provenance gate: `rpc_curve_price_allowed` admits only verified replay provenance. Live RPC prices never admit entry; supplied marks without provenance degrade to gaps. Owner decision (accept-degrade); no live-feed provenance was added.
+- Characterization and risk tests moved to verified replay setup. Ledger source label is now `replay` for those harnesses, forcing 26 digest re-pins. Four scenarios changed outcome from refusal to fill under verified replay; two refusal tests were retired by owner approval (refusal coverage remains in the gate tests).
+- Phase 13 replay hashes: the smoke-10m event stream is unchanged.
+
+### Verification
+
+- Full `make test`, `make lint`, `make typecheck`, `./scripts/check.sh`, the smoke replay, and `run --mode live --once` (exit 3) pass on the Phase 13 integration head.
+- Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 ## [Unreleased] - v4 Phase 12: event runtime core
 
 ### Added

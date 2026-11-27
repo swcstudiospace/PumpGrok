@@ -20,13 +20,14 @@ import io
 import json
 import logging
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from pumpgrok.logging import setup_logging
-from pumpgrok.logging.redaction import RedactionFilter, redact_text
+from pumpgrok.logging.redaction import RedactionFilter, mask, redact_text
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.notify.notifier import Notifier
 
@@ -235,3 +236,111 @@ def test_pem_block_without_end_masks_to_end_of_text() -> None:
     assert "bodyAAAsynthetic" not in out
     assert "bodyBBBsynthetic" not in out
     assert out.startswith("head ")
+
+
+# -- LOG-01 / LOG-02 / LOG-03: non-JSON extras, free-text credentials, render failures ----
+
+BEARER_SYNTHETIC = "synthetic-bearer-0123456789"  # pragma: allowlist secret
+KEY_VALUE_SYNTHETIC = "AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret
+BASIC_SYNTHETIC = "dXNlcjpwYXNzd29yZA=="  # pragma: allowlist secret
+
+
+class _Opaque:
+    """Non-JSON-native extra whose rendering carries a secret (the JSON formatter str()s it)."""
+
+    def __str__(self) -> str:
+        return f"opaque {PLANTED_XAI}"
+
+
+class _Unprintable:
+    def __str__(self) -> str:
+        raise RuntimeError("no rendering")
+
+
+def test_non_json_native_extra_is_redacted_in_its_rendered_form() -> None:
+    record = _filtered(opaque=_Opaque(), amount=Decimal("1.5"), count=3)
+    assert record.opaque == f"opaque {mask(PLANTED_XAI)}"
+    assert record.amount == "1.5"
+    assert record.count == 3
+
+
+def test_non_json_native_extra_never_reaches_json_output_unredacted(
+    root_handlers: None,
+) -> None:
+    buffer = io.StringIO()
+    setup_logging(mode="paper", profile="paper", environ={}, stream=buffer)
+    logging.getLogger("pumpgrok.test.redaction01").info("opaque extra", extra={"blob": _Opaque()})
+    assert PLANTED_XAI not in buffer.getvalue()
+    line = json.loads(buffer.getvalue().splitlines()[0])
+    assert line["data"]["blob"] == f"opaque {mask(PLANTED_XAI)}"
+
+
+def test_unrenderable_extra_is_replaced_whole_and_never_raises() -> None:
+    record = _filtered(broken=_Unprintable(), mint="MintX")
+    assert record.broken == "[redacted]"
+    assert record.mint == "MintX"
+
+
+def test_bearer_token_in_free_text_is_masked_and_scheme_kept() -> None:
+    text = f"forwarded Authorization: Bearer {BEARER_SYNTHETIC} to upstream"
+    expected = f"forwarded Authorization: Bearer {mask(BEARER_SYNTHETIC)} to upstream"
+    assert redact_text(text) == expected
+
+
+def test_bearer_token_without_key_is_masked() -> None:
+    assert redact_text(f"Bearer {BEARER_SYNTHETIC}") == f"Bearer {mask(BEARER_SYNTHETIC)}"
+
+
+def test_basic_scheme_in_authorization_header_keeps_scheme_and_masks_credential() -> None:
+    text = f"Authorization: Basic {BASIC_SYNTHETIC}"
+    assert redact_text(text) == f"Authorization: Basic {mask(BASIC_SYNTHETIC)}"
+
+
+def test_secret_key_value_in_url_query_is_masked_and_other_params_kept() -> None:
+    url = f"https://rpc.example.test/v1/balance?api_key={KEY_VALUE_SYNTHETIC}&limit=5"
+    expected = f"https://rpc.example.test/v1/balance?api_key={mask(KEY_VALUE_SYNTHETIC)}&limit=5"
+    assert redact_text(url) == expected
+
+
+def test_secret_key_value_in_free_text_is_masked() -> None:
+    text = f"login password={KEY_VALUE_SYNTHETIC} user=alice"
+    assert redact_text(text) == f"login password={mask(KEY_VALUE_SYNTHETIC)} user=alice"
+
+
+def test_json_quoted_secret_key_is_masked() -> None:
+    text = f'{{"client_secret": "{KEY_VALUE_SYNTHETIC}", "n": 2}}'
+    assert redact_text(text) == f'{{"client_secret": "{mask(KEY_VALUE_SYNTHETIC)}", "n": 2}}'
+
+
+def test_non_secret_keys_that_contain_secret_words_stay_readable() -> None:
+    text = "author=alice tokenizer=bpe-large seedling=oak limit=5"
+    assert redact_text(text) == text
+
+
+def test_already_redacted_value_is_left_alone() -> None:
+    assert redact_text("token=[redacted]") == "token=[redacted]"
+
+
+def test_bad_format_string_keeps_redacted_template_and_does_not_raise() -> None:
+    record = logging.LogRecord(
+        "test", logging.INFO, __file__, 1, f"bad %d {PLANTED_XAI}", ("not-a-number",), None
+    )
+    assert RedactionFilter().filter(record) is True
+    assert PLANTED_XAI not in record.getMessage()
+    assert record.getMessage() == f"bad %d {mask(PLANTED_XAI)}"
+
+
+def test_bad_format_args_do_not_raise_into_the_caller() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(RedactionFilter())
+    logger = logging.getLogger("pumpgrok.test.redaction.format")
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        # The test needs the bad format string: the filter must render it without raising.
+        logger.warning("count %d for %s", "not-a-number")  # noqa: PLE1206
+    finally:
+        logger.removeHandler(handler)
+        logger.propagate = True
+    assert stream.getvalue().strip() == "count %d for %s"

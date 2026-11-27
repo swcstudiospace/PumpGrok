@@ -9,7 +9,7 @@ from pumpgrok.supervisor.scheduler.wake import dispatch
 def test_wake_mode_defaults_to_cadence() -> None:
     parser = build_parser()
     args = parser.parse_args(["run", "--mode", "paper", "--once"])
-    assert args.wake_mode == "cadence"
+    assert args.wake_mode is None
 
 
 def test_wake_mode_event_selects_event() -> None:

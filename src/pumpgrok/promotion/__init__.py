@@ -11,26 +11,43 @@ from __future__ import annotations
 from pumpgrok.promotion.evaluator import EvidenceView, PromotionEvaluator, evaluate_stage
 from pumpgrok.promotion.stages import (
     Stage,
+    StageRefused,
     StageRow,
     Transition,
+    advance_stage,
     append_stage_row,
     append_transition,
+    current_stage,
     decision_log,
+    paper_record,
     read_stage_row,
 )
-from pumpgrok.promotion.thresholds import PromotionThresholds, load_thresholds
+from pumpgrok.promotion.thresholds import (
+    PaperRecord,
+    PromotionThresholdError,
+    PromotionThresholds,
+    evaluate_paper_record,
+    load_thresholds,
+)
 
 __all__ = [
     "EvidenceView",
+    "PaperRecord",
     "PromotionEvaluator",
+    "PromotionThresholdError",
     "PromotionThresholds",
     "Stage",
+    "StageRefused",
     "StageRow",
     "Transition",
+    "advance_stage",
     "append_stage_row",
     "append_transition",
+    "current_stage",
     "decision_log",
+    "evaluate_paper_record",
     "evaluate_stage",
     "load_thresholds",
+    "paper_record",
     "read_stage_row",
 ]

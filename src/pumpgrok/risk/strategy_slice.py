@@ -11,6 +11,11 @@ with a human approval record (T-17-02). Money is integer lamports only.
 Enforcement maps onto the existing ``max_token_fraction`` R34 row (capped or
 rejected with the reason on that row, G-01) and a kill rejects buys on the
 existing ``kill_switch`` row; no new step and no risk_json key is added.
+
+For a buy attributed to a strategy the cap is that fraction of equity less only
+the cost basis the strategy itself holds in the mint: a position opened by
+another strategy's ticket is not charged to this one. The desk-wide row (no
+strategy id) is unchanged and stays in the engine step.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.ledger.reducer import PositionView
 from pumpgrok.strategies.base import STRATEGY_IDS
 
 if TYPE_CHECKING:
@@ -35,6 +42,8 @@ __all__ = [
     "load_slice_config",
     "record_strategy_kill",
     "spent_from_ledger",
+    "strategy_cap",
+    "strategy_held_basis",
 ]
 
 DEFAULT_SLICE_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "strategy_slices.toml"
@@ -235,3 +244,15 @@ def clear_strategy_kill(
             "refs": [],
         },
     )
+
+
+def strategy_held_basis(position: PositionView | None, strategy_tickets: frozenset[str]) -> int:
+    """Cost basis this strategy holds in the mint; zero when another strategy opened it."""
+    if position is None or position.ticket_id not in strategy_tickets:
+        return 0
+    return int(position.cost_basis_lamports)
+
+
+def strategy_cap(budget: RiskBudget, equity: int, strategy_basis: int) -> int:
+    """Lamports this strategy may still add in the mint: its slice of equity less its own basis."""
+    return int(budget.max_token_fraction * equity) - strategy_basis

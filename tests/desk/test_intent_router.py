@@ -1,7 +1,7 @@
 """SC 11: Intents reach exec.place only through the router (RT-02, D-06).
 
 Below the autonomous-paper level the router journals refusals and approves
-nothing — and this suite skips nothing.
+nothing -- and this suite skips nothing.
 """
 
 from __future__ import annotations

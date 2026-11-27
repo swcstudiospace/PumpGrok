@@ -94,11 +94,11 @@ def test_mark_flushes_after_debounce_and_superseded_mark_does_not_deliver() -> N
 
 def test_smoke_10m_fixture_compat_hash_parity() -> None:
     """Phase 14 (EVT-08): DeterministicBus under fixture_compat reproduces the
-    legacy smoke-10m hash b69c... with zero skipped tests. Exact equality,
+    current smoke-10m hash 1dffa... with zero skipped tests. Exact equality,
     no tolerance band."""
     run = verify_fixture("smoke-10m")
     assert (
-        SMOKE_10M_EVENTS_HASH == "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"
+        SMOKE_10M_EVENTS_HASH == "1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700"
     )
     assert run.events_hash == SMOKE_10M_EVENTS_HASH
 

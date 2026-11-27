@@ -1,28 +1,43 @@
-"""EVENT_DECODE_STATUS stays ASSUMED without a human reviewed_by (MKT-10)."""
+"""Event review status is independent from decoding and curve review."""
 
 from __future__ import annotations
 
-from pumpgrok.tools.onchain.curve_layout import LAYOUT_STATUS, rpc_curve_price_allowed
-from pumpgrok.tools.onchain.pump_events import (
-    EVENT_DECODE_REVIEWED_BY,
-    EVENT_DECODE_STATUS,
-    decode_status,
-)
+import base64
+import struct
+
+import pytest
+
+from pumpgrok.tools.onchain import curve_layout, pump_events
+
+# CompleteEvent: three public keys and an i64 timestamp, with its Anchor discriminator.
+_COMPLETE_EVENT = bytes.fromhex("5f72619cd42e9808") + bytes(96) + struct.pack("<q", 123)
 
 
-def test_shipped_literals_assumed() -> None:
-    assert EVENT_DECODE_STATUS == "ASSUMED"
-    assert EVENT_DECODE_REVIEWED_BY is None
-    assert LAYOUT_STATUS == "ASSUMED"
+def test_successful_decode_does_not_promote_assumed_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "VERIFIED")
+    assert pump_events.EVENT_DECODE_STATUS == "ASSUMED"
+
+    event = pump_events.decode_event(_COMPLETE_EVENT)
+    program_event = pump_events.decode_program_data(base64.b64encode(_COMPLETE_EVENT).decode())
+
+    assert event.timestamp == 123
+    assert program_event == event
+    assert pump_events.EVENT_DECODE_STATUS == "ASSUMED"
+    assert curve_layout.LAYOUT_STATUS == "VERIFIED"
 
 
-def test_no_reviewer_stays_assumed() -> None:
-    assert decode_status(reviewed_by=None) == "ASSUMED"
-    assert decode_status(reviewed_by="") == "ASSUMED"
-    assert rpc_curve_price_allowed(curve_source="rpc") is False
+def test_simulated_reviewed_status_remains_independent_of_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(curve_layout, "LAYOUT_STATUS", "ASSUMED")
+    event = pump_events.decode_event(_COMPLETE_EVENT)
+    assert event.timestamp == 123
+    assert pump_events.EVENT_DECODE_STATUS == "ASSUMED"
 
-
-def test_human_reviewer_flips_only_in_double() -> None:
-    assert decode_status(reviewed_by="human:alice 2026-11-21") == "VERIFIED"
-    # The shipped literal never follows the double.
-    assert EVENT_DECODE_STATUS == "ASSUMED"
+    # Simulate an independently approved status; this is not a human approval.
+    monkeypatch.setattr(pump_events, "EVENT_DECODE_STATUS", "VERIFIED")
+    assert pump_events.decode_event(_COMPLETE_EVENT) == event
+    assert pump_events.EVENT_DECODE_STATUS == "VERIFIED"
+    assert curve_layout.LAYOUT_STATUS == "ASSUMED"

@@ -266,7 +266,7 @@ the single nine-item precondition list of R21 against the effective execution mo
 (1) effective mode `live`; (2) env `PUMPGROK_LIVE_ENABLE=1`; (3) `live.min_paper_days`
 >= 14 elapsed on ledger events with `source=paper` only; (4) `closed_trades >= 50`,
 `profit_factor >= 1.2`, `max_drawdown <= drawdown_halt_fraction` on the same events;
-(5) non-empty `live.wallet_allowlist` (public addresses only); (6) `0 <
+(5) non-empty `wallet.allowlist` (public addresses only); (6) `0 <
 live.notional_cap_lamports <= 1_000_000_000` (integer lamports; 1 SOL = 1_000_000_000 lamports); (7) `live.confirmation_record` HMAC-signed by
 `pumpgrok live confirm` with an operator secret no seat or tool can read, bound to the
 config hash; (8) `live.adapter` named and registered (never true); (9) no active kill
@@ -731,7 +731,8 @@ tools:
 Differences from the programming-desk file that the port must carry: `name` is the dotted
 registry id and `backend` repeats it (the gateway is a thin wrapper over the in-process
 `ToolRegistry`, D2 `services/desk-gateway/`; the ported G-7 `TOOL_NAME_RE` accepts dots,
-R19); `packs_allowed: false` for every pumpgrok seat (no tool-packs in D2); `approval_id`
+R19); `packs_allowed: false` for every pumpgrok seat (`contracts/tool-packs/` is required by
+G-7 but holds no pack in D2); `approval_id`
 pattern `apr-<16 hex>` is the `ApprovalRecord.id` format in `docs/design/interfaces.md`
 section 9; `decision_id`, `order_id` and `correlation_id` are ULIDs from
 `src/pumpgrok/core/ids.py` (R29; child spans `<ulid>.<n>`); money fields are integers in

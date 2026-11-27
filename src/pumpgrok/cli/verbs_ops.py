@@ -1,4 +1,4 @@
-"""Read and human-gated verbs: doctor, live, report, verify."""
+"""Read and human-gated verbs: doctor, live, replay, report, verify."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import sys
-import threading
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -18,7 +17,6 @@ from typing import Any
 
 from pumpgrok.cli.codes import EXIT_CONFIG, EXIT_OK
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
-from pumpgrok.cli.serve_feed import FeedServer, health_probe
 from pumpgrok.cli.validators import (
     _human_by,
     _jsonable,
@@ -27,16 +25,24 @@ from pumpgrok.cli.validators import (
     _utc_now,
 )
 from pumpgrok.cli.verbs_state import operator_active_set
-from pumpgrok.cli.wake_mode import event_mode_refusal as _event_mode_refusal
 from pumpgrok.cli.wiring import _repo_root
+from pumpgrok.config.sections.v4 import resolve_wake_mode
 from pumpgrok.config.settings import ConfigError, Settings
 from pumpgrok.core.errors import DataStale, ReplayMissingRecord
 from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.core.units import sol_to_lamports
-from pumpgrok.doctor import doctor_report
+from pumpgrok.datafeed import transport as datafeed_transport
+from pumpgrok.doctor import (
+    doctor_report,
+    event_mode_problems,
+    failing_inputs,
+    input_inventory,
+    installed_job_findings,
+    inventory_json,
+)
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.onboarding.doctor_report import doctor_records, failing_records
+from pumpgrok.replay.clock import WallClock
 from pumpgrok.reporting.daily import DailyReport
 from pumpgrok.reporting.render import render_daily, render_weekly
 from pumpgrok.reporting.weekly import WeeklyReport
@@ -47,37 +53,39 @@ log = logging.getLogger("pumpgrok.cli")
 
 
 def _doctor_verb(args: argparse.Namespace, settings: Settings) -> int:
-    if getattr(args, "json", False):
-        return _doctor_json_verb(settings)
-    if getattr(args, "wake_mode", "cadence") == "event":
-        refusals = _event_mode_refusal("event", Path("hermes/cron/jobs.yaml"))
-        if refusals:
-            _say(sys.stdout, "wake_mode=event refused: " + "; ".join(refusals))
-            return 1
-    _say(sys.stdout, *doctor_report(settings, wake_mode=getattr(args, "wake_mode", "cadence")))
-    return EXIT_OK
+    wake_mode = resolve_wake_mode(getattr(args, "wake_mode", None), settings.events.wake_mode)
+    if wake_mode == "event":
+        problems = event_mode_problems(installed_job_findings())
+        if problems:
+            raise ConfigError(problems)
+    if not args.json:
+        _say(sys.stdout, *doctor_report(settings, wake_mode=wake_mode))
+        return EXIT_OK
+    records = input_inventory(settings, settings.effective_mode)
+    _say(sys.stdout, inventory_json(records))
+    return EXIT_CONFIG if failing_inputs(records) else EXIT_OK
 
 
-def _doctor_json_verb(settings: Settings) -> int:
-    """Print one readiness record per operator input; exit 1 on failure cases."""
-    mode = settings.effective_mode
-    env = os.environ
-    records = doctor_records(env, mode)
-    _say(
-        sys.stdout,
-        json.dumps(
-            [
-                {
-                    "name": record.name,
-                    "required_for_mode": record.required_for_mode,
-                    "status": record.status,
-                    "source": record.source,
-                }
-                for record in records
-            ]
-        ),
+def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
+    """Serve the live-data paper root. --mode live never reaches this handler."""
+    # Deferred so importing the CLI does not load the event bus.
+    from pumpgrok.datafeed import feed_loop  # noqa: PLC0415
+
+    endpoint = args.rpc
+    try:
+        transport = datafeed_transport.make_read_transport(endpoint)
+    except ValueError as exc:
+        raise UsageError("live serve --rpc endpoint is invalid") from exc
+    return feed_loop.serve_once(
+        endpoint=endpoint,
+        transport=transport,
+        clock=WallClock(),
+        data_dir=Path("var") / "live-serve",
+        budget=settings.risk,
+        limits=settings.limits,
+        once=bool(args.once),
+        rng_seed=settings.replay.seed,
     )
-    return 1 if failing_records(records) else 0
 
 
 def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
@@ -86,24 +94,6 @@ def _live_verb(args: argparse.Namespace, settings: Settings) -> int:
     if args.cmd == "serve":
         return _live_serve(args, settings)
     return _not_implemented(f"live {args.cmd}")
-
-
-def _live_serve(args: argparse.Namespace, settings: Settings) -> int:
-    """`live serve`: expose the read-only feed endpoint for a dataset."""
-
-    server = FeedServer(Path(str(args.dataset)), int(args.port))
-    server.start()
-    try:
-        probe = health_probe(server.port)
-        _say(
-            sys.stdout,
-            f"serving {probe['dataset']} on port {server.port}: {probe['ticks']} ticks",
-        )
-        if not args.once:
-            threading.Event().wait()
-    finally:
-        server.stop()
-    return 0
 
 
 def _live_confirm(args: argparse.Namespace, settings: Settings) -> int:

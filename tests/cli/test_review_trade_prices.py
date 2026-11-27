@@ -18,7 +18,9 @@ import pytest
 from pumpgrok.cli import main
 from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.ids import IdFactory
+from pumpgrok.core.manifests import roster_tool_names
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.replay.clock import WallClock, format_ts_utc
@@ -58,6 +60,23 @@ def _seed_approved_trade(tmp_path: Path, side: str) -> tuple[str, str]:
     return ticket_id, approval_id
 
 
+def _grant_roster(seat: str) -> None:
+    """Record an authenticated operator allow for every roster tool of ``seat``.
+
+    Grants are ConfigChanged rows in the paper ledger, so they are written before the ledger
+    snapshot the test compares against. The operator key is created in the working directory.
+    """
+    oc.init_key(Path("var") / "operator")
+    store = LedgerStore(str(Path("var") / "ledger.sqlite"))
+    try:
+        for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+            oc.record_tool_choice(
+                store, seat=seat, tool=tool, decision="allow", now=datetime.now(UTC)
+            )
+    finally:
+        store.close()
+
+
 def _ledger_events(tmp_path: Path) -> list[dict[str, object]]:
     store = LedgerStore(str(tmp_path / "var" / "ledger.sqlite"))
     try:
@@ -75,6 +94,7 @@ def test_approved_paper_trade_refused_unavailable_before_any_write(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     ticket_id, approval_id = _seed_approved_trade(tmp_path, side)
+    _grant_roster(_SIDE_SEAT[side])
     before = _ledger_events(tmp_path)
 
     argv = [

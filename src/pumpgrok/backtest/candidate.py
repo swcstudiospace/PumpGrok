@@ -1,11 +1,11 @@
 """Candidate parameter overrides: the leaf home of CandidateParams (UPG-01, BT-07).
 
-This module validates filter, exits and strategy overrides,
-builds the effective FilterSettings and ExitsSettings, and hashes the
+CandidateParams validates filter, exits and strategy override mappings, builds the
+effective FilterSettings and ExitsSettings, and hashes the
 normalized overrides. Strategy overrides are bounded, not settings models:
 their [strategy.<ID>.<PARAM>] sections in upgrade_bounds.toml are the
-contract, enforced by the upgrade bounds check.
-It lives in this module, not in the evaluator, so the upgrade
+contract, enforced by the upgrade bounds check. It lives in this module,
+not in the evaluator, so the upgrade
 parameter sets and the ledger active-set reader can import it without
 reaching the scheduler: the evaluator imports the scheduler, and the
 scheduler's replay runtime reads the active set. The imports here are
@@ -90,32 +90,22 @@ def _normalized_mapping(mapping: Mapping[str, Any] | None) -> dict[str, Any]:
     return {key: _normalized_leaf(value) for key, value in mapping.items()}
 
 
-def _normalized_strategy(
-    mapping: dict[str, dict[str, Any]] | None,
-) -> dict[str, dict[str, Any]]:
-    """Normalize the strategy overrides: None and {} both mean no overrides.
-
-    Each strategy id maps to its parameter overrides; every parameter leaf
-    normalizes through the same scalar rule filter and exits use. Anything
-    deeper than one level below the strategy id fails closed here so the
-    hash input cannot smuggle an opaque blob.
-    """
+def _normalized_strategy(mapping: Mapping[str, Mapping[str, Any]] | None) -> dict[str, Any]:
+    """Normalize the strategy section; a strategy with no overrides is omitted."""
     if not mapping:
         return {}
-    normalized: dict[str, dict[str, Any]] = {}
-    for strategy_id, params in mapping.items():
-        if not isinstance(strategy_id, str) or not strategy_id:
-            raise TypeError("strategy override keys must be non-empty str")
-        if not isinstance(params, dict):
-            raise TypeError(f"strategy {strategy_id!r} params must be a mapping")
-        normalized[strategy_id] = {key: _normalized_leaf(value) for key, value in params.items()}
-    return normalized
+    return {
+        strategy_id: _normalized_mapping(overrides)
+        for strategy_id, overrides in mapping.items()
+        if overrides
+    }
 
 
 class CandidateParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     """One candidate parameter set: filter, exits and strategy overrides.
 
-    All three mappings are optional; absent means desk defaults. Each provided
+    Every mapping is optional; absent means desk defaults. Each provided
     mapping is validated by constructing the real FilterSettings or
     ExitsSettings model, so unknown fields fail. Any other top-level key,
     including scoring weights, fails through extra forbidden. Scoring knobs
@@ -130,8 +120,6 @@ class CandidateParams(BaseModel):
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
     strategy: dict[str, dict[str, Any]] | None = None
-
-    model_config = ConfigDict(extra="forbid")
 
     @field_validator("filter")
     @classmethod
@@ -158,21 +146,18 @@ class CandidateParams(BaseModel):
     def _check_strategy(
         cls, value: dict[str, dict[str, Any]] | None
     ) -> dict[str, dict[str, Any]] | None:
-        """Reject scoring knobs and non-scalar leaves; bounds enforce ranges."""
+        """Refuse scoring knobs and non-scalar leaves; names are gated by upgrade bounds."""
         if value is None:
             return None
-        for strategy_id, params in value.items():
-            if not isinstance(strategy_id, str) or not strategy_id:
-                raise ScoringKnobError("strategy override keys must be str")
-            if not isinstance(params, dict):
-                raise ScoringKnobError(f"strategy {strategy_id!r} params must be a mapping")
-            _reject_scoring_knobs(f"strategy.{strategy_id}", params)
-            for key, leaf in params.items():
-                if not isinstance(key, str) or not key:
-                    raise ScoringKnobError(f"strategy {strategy_id!r} param keys must be str")
+        for strategy_id, overrides in value.items():
+            if not strategy_id:
+                raise ValueError("strategy id must be a non-empty string")
+            _reject_scoring_knobs(f"strategy.{strategy_id}", overrides)
+            for key, leaf in overrides.items():
                 if not isinstance(leaf, (bool, int, float, str, Decimal)):
-                    raise ScoringKnobError(
-                        f"strategy {strategy_id!r} param {key!r} must be a scalar leaf"
+                    raise ValueError(
+                        f"strategy {strategy_id!r} parameter {key!r} must be a scalar, "
+                        f"not {type(leaf).__name__}"
                     )
         return value
 
@@ -204,9 +189,9 @@ class CandidateParams(BaseModel):
             "exits": _normalized_mapping(self.exits),
             "filter": _normalized_mapping(self.filter),
         }
-        normalized_strategy = _normalized_strategy(self.strategy)
-        if normalized_strategy:
-            payload["strategy"] = normalized_strategy
+        strategy = _normalized_strategy(self.strategy)
+        if strategy:
+            payload["strategy"] = strategy
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 

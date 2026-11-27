@@ -105,6 +105,7 @@ class _StepCtx:
     caps: dict[str, int] = field(default_factory=dict)
     capped: bool = False
     probe: bool = False
+    strategy_tickets: frozenset[str] = frozenset()
 
     def mark(self, step: str, status: str = "pass") -> None:
         """Record a step outcome (call args keep password-wording lints quiet)."""

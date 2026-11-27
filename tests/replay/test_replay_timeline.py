@@ -16,7 +16,10 @@ from typing import Any
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import FilterSettings
+from pumpgrok.config.settings import FilterSettings, load_settings
+from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.ledger import operator_choices as oc
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
 from pumpgrok.replay.fixtures import load_dataset
@@ -25,6 +28,7 @@ from pumpgrok.supervisor.scheduler import (
     run_once_replay,
     serve_fixture_timeline,
 )
+from pumpgrok.tools import ensure_paper_genesis
 
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "tests" / "fixtures" / "replay" / "smoke"
@@ -33,6 +37,33 @@ MINT_B = "SmokeMintBBBB2222222222222222222222222222222"
 MINT_C = "SmokeMintCCCC3333333333333333333333333333333"
 T_UNITS = 121_500_000_000_000
 FULL_B = 9_900_000_000  # mint B reserves at its 3.0 s entry tick
+
+
+AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+def _record_complete_authority() -> None:
+    """Real operator authority for every seat, as the onboarding verbs record it.
+
+    The paper genesis is written first, then the operator key and an HMAC-authenticated
+    allow per roster tool, so the paper startup gate reads complete authority inputs.
+    """
+    oc.init_key(oc.OPERATOR_DIR)
+    store = LedgerStore(PAPER_LEDGER_PATH)
+    try:
+        ensure_paper_genesis(store, load_settings(mode="paper").risk)
+        for seat in EXPECTED_SEAT_IDS:
+            for tool in sorted(roster_tool_names(oc.DEFAULT_CONTRACTS_DIR, seat)):
+                oc.record_tool_choice(
+                    store,
+                    seat=seat,
+                    tool=tool,
+                    decision="allow",
+                    now=AUTHORITY_AT,
+                    operator_dir=oc.OPERATOR_DIR,
+                )
+    finally:
+        store.close()
 
 
 def _iso(offset: float) -> str:
@@ -151,6 +182,7 @@ def test_operator_risk_setting_blocks_the_smoke_buy(
     """Finding 7: risk.max_open_positions = 0 from the operator's settings blocks the buy."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PUMPGROK_RISK__MAX_OPEN_POSITIONS", "0")
+    _record_complete_authority()
     assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
     rows = _rows(tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite")
     buys = [r for r in rows if r["type"] == "FillRecorded" and r["payload"]["side"] == "buy"]

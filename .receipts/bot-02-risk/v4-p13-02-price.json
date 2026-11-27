@@ -1,0 +1,28 @@
+{
+  "task_id": "v4-p13-02-price",
+  "bot": "bot-02-risk",
+  "branch": "bot-02-risk/phase-13-price-source",
+  "phase": "13-curve-truth-live-market-data-and-recorder",
+  "plan": "13-02 live paper price and graduation slice, stacked on the 13-01 tracer",
+  "status": "Focused offline checks recorded; independent receipt approval and integration pending.",
+  "red_evidence": "Local untracked JUnit SHA-256: initial 952d2c7196d44af61970e738c49b62777c027b64c807df12d2326ba0abae0bf0, protective sell 1e7629ad19174629fbf6f35570c4d77831d0e6d5276f5108b181fd268f5236a1, stale recovery a86d071940f23da49281da3e0cddf6a9c98002f5d2ccf96b0e4f54147bdae3cf. Each received RED_EVIDENCE_OK; corresponding classifier records remain local.",
+  "commands": [
+    {"cmd": "uv run pytest -q tests/datafeed/test_price_source.py tests/datafeed/test_graduation.py tests/execution/test_curve_source_gate.py tests/events/test_sources.py --junitxml=price-safety-final.xml", "exit_code": 0, "output_tail": "JUnit: 58 tests, 0 failures, 0 errors, 0 skipped."},
+    {"cmd": "uv run ruff check src/pumpgrok/datafeed/price.py src/pumpgrok/datafeed/graduation.py src/pumpgrok/events/sources.py tests/datafeed/test_price_source.py tests/datafeed/test_graduation.py", "exit_code": 0, "output_tail": "No issues found."},
+    {"cmd": "uv run ruff format --check src/pumpgrok/datafeed/price.py src/pumpgrok/datafeed/graduation.py src/pumpgrok/events/sources.py tests/datafeed/test_price_source.py tests/datafeed/test_graduation.py", "exit_code": 0, "output_tail": "5 files already formatted."},
+    {"cmd": "uv run mypy src/pumpgrok/datafeed/price.py src/pumpgrok/datafeed/graduation.py src/pumpgrok/events/sources.py", "exit_code": 0, "output_tail": "No issues found."}
+  ],
+  "claims": [
+    {"claim": "Focused paper price, protective exit, graduation, stale-source and source supervisor tests passed offline.", "evidence_command_index": 0},
+    {"claim": "Changed runtime and test files passed focused lint and format checks.", "evidence_command_index": 1},
+    {"claim": "Changed runtime files passed focused type checking.", "evidence_command_index": 3}
+  ],
+  "unverified": [
+    "Independent receipt approval is absent; no seat self-approval.",
+    "This is an unwired slice: feed integration, held-position marks, the full phase and canonical gates remain unverified.",
+    "Fixture provenance remains spoofable by an injected non-replay source; composition-bound trust is not implemented.",
+    "Live-provider compatibility and the note_frame explicit timestamp arrival-time contract have not been established.",
+    "Layout status remains ASSUMED; no human status review or live trading was performed."
+  ],
+  "rollback_plan": "Revert the price-source branch commits with git revert in a reviewed pull request. Recovery takes under five minutes; remove the new source changes while retaining existing ledger and operator data."
+}

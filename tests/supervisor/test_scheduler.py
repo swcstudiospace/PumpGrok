@@ -13,9 +13,12 @@ def test_cadence_scheduler_has_no_wake_dependency() -> None:
 
 
 def test_wake_flag_defaults_to_cadence() -> None:
+    # The flag itself carries no default (None): an absent flag lets
+    # events.wake_mode (default "cadence") decide, so env/TOML can select
+    # event mode. See tests/cli/test_wake_mode.py.
     source = pathlib.Path("src/pumpgrok/cli/parsing.py").read_text(encoding="utf-8")
     assert "--wake-mode" in source
-    assert 'default="cadence"' in source
+    assert "default=None" in source
 
 
 def test_cadence_output_byte_identical() -> None:

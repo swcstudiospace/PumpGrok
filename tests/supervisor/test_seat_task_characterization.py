@@ -519,7 +519,7 @@ async def test_tail_relay_failures_never_raise(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _append(store, clock, "HaltSet", _halt_payload("d"), "h1")
-        assert await relay_tail(store, _Notifier(fail=True), clock, 0) == 1
+        assert await relay_tail(store, _Notifier(fail=True), clock, 0) == 0
     finally:
         store.close()
 

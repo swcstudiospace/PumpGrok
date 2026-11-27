@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.ids import Clock
+from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.export import export_ledger
 from pumpgrok.ledger.reducer import dump_state, initial_state, reduce
 from pumpgrok.replay.clock import format_ts_utc
@@ -153,9 +154,10 @@ async def shutdown(
                 initial_equity_lamports=_shutdown_initial_equity(store),
                 day_utc="",
             )
+        deposits = position_deposits_by_seq(store)
         state = genesis
         for event in head:
-            state = reduce(state, event)
+            state = reduce(state, event, deposits)
         body = dump_state(state)
         body["meta"] = {"status": "stopped", "ts_utc": ts_utc}
         last_seq = int(head[-1]["seq"]) if head else 0

@@ -283,6 +283,8 @@ ownership:
     owner: bot-00-chief
   - pattern: "src/pumpgrok/supervisor/**"
     owner: bot-00-chief
+  - pattern: "src/pumpgrok/events/event_desk.py"
+    owner: bot-00-chief # 17-05 event desk root; outside the supervisor package the events-not-wired guard protects
   - pattern: "src/pumpgrok/tools/**"
     owner: bot-02-risk
   - pattern: "src/pumpgrok/tools/market/**"
@@ -493,6 +495,8 @@ contract_consumers:
     - bot-07-shill
     - bot-08-signal
     - bot-09-journal
+  "contracts/tool-packs/**":
+    - bot-02-risk
   "openapi.yaml":
     - bot-00-chief
     - bot-09-journal

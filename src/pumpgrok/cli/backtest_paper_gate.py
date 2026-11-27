@@ -16,16 +16,12 @@ from typing import Any
 from pumpgrok.backtest.divergence import DivergenceVerdict, breach_line, check, enforce
 from pumpgrok.backtest.metrics import MetricsReport
 from pumpgrok.backtest.results import SharedResult
-from pumpgrok.cli.backtest_holdout import (
-    _fills_from_rows,
-    _read_window_ledger,
-    _row_stamp,
-    _window_metrics,
-)
+from pumpgrok.cli.backtest_holdout import _read_window_ledger
 from pumpgrok.cli.codes import EXIT_OK
 from pumpgrok.cli.errors import UsageError, _say
 from pumpgrok.config.settings import ConfigError
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
+from pumpgrok.upgrade.window_metrics import fills_from_rows, row_stamp, summarize_window
 
 
 @dataclass(frozen=True)
@@ -45,6 +41,7 @@ def _paper_window(
     cutoff: float,
     window_end: float,
     initial: int,
+    deposits: Mapping[int, int] | None = None,
 ) -> tuple[LedgerState, list[Mapping[str, Any]]]:
     """Fold paper rows before the window into its opening state; keep the window rows.
 
@@ -56,9 +53,9 @@ def _paper_window(
     opening = initial_state(source="backtest", initial_equity_lamports=initial, day_utc="")
     window_rows: list[Mapping[str, Any]] = []
     for row in rows:
-        stamp = _row_stamp(row)
+        stamp = row_stamp(row)
         if stamp < cutoff:
-            opening = reduce(opening, row)
+            opening = reduce(opening, row, deposits)
         elif stamp < window_end:
             window_rows.append(row)
     return (opening, window_rows)
@@ -75,14 +72,22 @@ def _paper_evidence(
     initial_fallback: int,
 ) -> tuple[MetricsReport, SharedResult]:
     """Verify the paper ledger hash chain, then summarize its rows over the holdout window."""
-    paper_rows, paper_meta = _read_window_ledger(paper_file, verify=True)
+    paper_rows, paper_meta, paper_deposits = _read_window_ledger(paper_file, verify=True)
     paper_initial = int(paper_meta) if paper_meta is not None else initial_fallback
     opening, window_rows = _paper_window(
-        paper_rows, cutoff=cutoff, window_end=window_end, initial=paper_initial
+        paper_rows,
+        cutoff=cutoff,
+        window_end=window_end,
+        initial=paper_initial,
+        deposits=paper_deposits,
     )
-    paper_fills, _ = _fills_from_rows(window_rows)
-    paper_metrics = _window_metrics(
-        paper_fills, genesis=opening, rows=window_rows, elapsed_days=elapsed_days
+    paper_fills, _ = fills_from_rows(window_rows)
+    paper_metrics = summarize_window(
+        paper_fills,
+        genesis=opening,
+        rows=window_rows,
+        elapsed_days=elapsed_days,
+        deposits=paper_deposits,
     )
     paper_result = SharedResult.from_ledger_rows(
         run_id=run_id,

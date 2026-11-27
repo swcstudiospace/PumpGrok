@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pumpgrok.cli.errors import _Parser
 from pumpgrok.cli.validators import _approval_id, _mint, _size_sol, _slippage_bps, _ticket
+from pumpgrok.config.sections.v4 import WAKE_MODES
 
 log = logging.getLogger("pumpgrok.cli")
 
@@ -50,6 +51,16 @@ def _add_paper_trade_flags(parser: argparse.ArgumentParser) -> None:
     _add_seat(parser)
 
 
+def _add_wake_mode(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--wake-mode",
+        choices=WAKE_MODES,
+        default=None,
+        dest="wake_mode",
+        help="supervisor wake: cadence (default) or event; overrides events.wake_mode",
+    )
+
+
 def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
     run = verbs.add_parser("run", parents=[mode_option], help="run the desk")
     run.add_argument("--once", action="store_true", help="run a single cycle and exit")
@@ -60,37 +71,24 @@ def _add_run(verbs: _VerbsAction, mode_option: _Parser) -> None:
         help="replay a recorded dataset in a loop, serving /healthz and /metrics",
     )
     run.add_argument(
-        "--record", metavar="DATASET", default=None, help="record a dataset (not yet implemented)"
+        "--record", metavar="DATASET", default=None, help="record a live-paper dataset"
     )
     run.add_argument(
-        "--duration", metavar="SECONDS", default=None, type=int, help="record duration (R40)"
+        "--duration", metavar="SECONDS", default=None, type=int, help="record duration in seconds"
     )
     run.add_argument(
-        "--wake-mode",
-        choices=["cadence", "event"],
-        default="cadence",
-        help="how seats wake: cadence polls (default) or event dispatch",
+        "--mints",
+        default=None,
+        metavar="LIST",
+        help="comma-separated mints to record; other mints are not admitted",
     )
-    run.add_argument(
-        "--live-paper",
-        action="store_true",
-        help="run the live-data paper composition root (paper only, HOST-16)",
-    )
+    _add_wake_mode(run)
 
 
 def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
-    doctor_parser = verbs.add_parser(
-        "doctor", parents=[mode_option], help="report subsystem health"
-    )
-    doctor_parser.add_argument(
-        "--json", action="store_true", help="print readiness records as JSON"
-    )
-    doctor_parser.add_argument(
-        "--wake-mode",
-        choices=["cadence", "event"],
-        default="cadence",
-        help="doctor wake mode (event refuses on enabled superseded jobs)",
-    )
+    doctor = verbs.add_parser("doctor", parents=[mode_option], help="report subsystem health")
+    doctor.add_argument("--json", action="store_true", help="one record per operator input")
+    _add_wake_mode(doctor)
     verbs.add_parser("audit", parents=[mode_option], help="audit the ledger (not yet implemented)")
     verify = verbs.add_parser("verify", parents=[mode_option], help="verify a fixture or ledger")
     verify.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to verify")
@@ -105,16 +103,16 @@ def _add_simple(verbs: _VerbsAction, mode_option: _Parser) -> None:
     backtest.add_argument("--fixture", required=True, metavar="DATASET", help="dataset to backtest")
     backtest.add_argument("--params", default=None, metavar="PATH", help="parameter-set JSON file")
     backtest.add_argument(
-        "--strategy",
-        default=None,
-        metavar="ID",
-        help="run one strategy over the dataset through the replay runtime",
-    )
-    backtest.add_argument(
         "--paper-ledger",
         default=None,
         metavar="PATH",
         help="paper ledger sqlite for the same-window comparison",
+    )
+    backtest.add_argument(
+        "--strategy",
+        default=None,
+        metavar="ID",
+        help="registered strategy id; one strategy, no search",
     )
 
 
@@ -192,11 +190,46 @@ def _add_events(verbs: _VerbsAction, mode_option: _Parser) -> None:
     purge.add_argument("name", help="dlq row name")
 
 
+def _add_seat_tool(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--seat", required=True, help="roster seat id, e.g. bot-04-sniper")
+    parser.add_argument("--tool", required=True, help="a tool named in that seat's roster")
+
+
+def _add_onboarding(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    onboarding = verbs.add_parser(
+        "onboarding",
+        parents=[mode_option],
+        help="operator choices: seat tool access and the RPC endpoint",
+    )
+    onboarding_cmd = onboarding.add_subparsers(dest="cmd", required=True, metavar="ONBOARDING")
+    onboarding_cmd.add_parser(
+        "init-key", help="create the operator key (interactive terminal, operator account)"
+    )
+    onboarding_cmd.add_parser("list", help="roster-derived tool choices and the RPC choice")
+    access = onboarding_cmd.add_parser("access", help="explicitly allow or deny a seat tool")
+    _add_seat_tool(access)
+    decision = access.add_mutually_exclusive_group(required=True)
+    decision.add_argument("--allow", dest="decision", action="store_const", const="allow")
+    decision.add_argument("--deny", dest="decision", action="store_const", const="deny")
+    revoke = onboarding_cmd.add_parser("revoke", help="revoke a seat tool grant")
+    _add_seat_tool(revoke)
+    rpc = onboarding_cmd.add_parser("rpc", help="show, or choose, a configured RPC endpoint")
+    rpc.add_argument(
+        "--endpoint",
+        default=None,
+        help="a configured endpoint URL; only its scheme, host and port are recorded",
+    )
+
+
 def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     killswitch = verbs.add_parser("killswitch", parents=[mode_option], help="killswitch verbs")
     killswitch_cmd = killswitch.add_subparsers(dest="cmd", required=True, metavar="KILLSWITCH")
     killswitch_set = killswitch_cmd.add_parser("set", help="engage the killswitch")
     killswitch_set.add_argument("--reason", required=True, help="why the killswitch is set")
+    killswitch_set.add_argument(
+        "--strategy", default=None, help="engage a strategy kill for this strategy id"
+    )
+    killswitch_set.add_argument("--by", default=None, help="human engaging a strategy kill")
     killswitch_flatten = killswitch_cmd.add_parser(
         "flatten", help="request flatten of every open paper position"
     )
@@ -206,6 +239,9 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     )
     killswitch_clear.add_argument("--by", required=True, help="human releasing the killswitch")
     killswitch_clear.add_argument("--reason", required=True, help="why the killswitch clears")
+    killswitch_clear.add_argument(
+        "--strategy", default=None, help="clear only the kill of this strategy id"
+    )
     killswitch_cmd.add_parser("status", help="report killswitch state")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")
@@ -215,14 +251,41 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
     _add_paper_trade_flags(paper_sell)
     live = verbs.add_parser("live", parents=[mode_option], help="live verbs")
     live_cmd = live.add_subparsers(dest="cmd", required=True, metavar="LIVE")
+    live_serve = live_cmd.add_parser("serve", help="serve the live-data paper root")
+    live_serve.add_argument(
+        "--mode",
+        choices=("paper", "live"),
+        default=argparse.SUPPRESS,
+        help="execution mode; live is refused",
+    )
+    live_serve.add_argument(
+        "--rpc",
+        required=True,
+        help="read-only RPC endpoint; required, no default",
+    )
+    live_serve.add_argument(
+        "--once",
+        action="store_true",
+        help="run exactly one paper cycle and exit",
+    )
     live_confirm = live_cmd.add_parser("confirm", help="record a human live-gate confirmation")
     live_confirm.add_argument("--by", required=True, help="confirming human (human:<name>)")
     live_confirm.add_argument("--notional-cap", required=True, help="cap SOL, 0 < cap <= 1")
     live_confirm.add_argument("--expires", required=True, help="confirmation expiry UTC (ISO-8601)")
-    live_serve = live_cmd.add_parser("serve", help="serve the read-only feed endpoint")
-    live_serve.add_argument("--dataset", required=True, help="dataset directory to serve")
-    live_serve.add_argument("--port", type=int, default=8765, help="port to bind")
-    live_serve.add_argument("--once", action="store_true", help="serve one request, then exit")
+    _add_replay(verbs, mode_option)
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {text!r}")
+    return value
+
+
+def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
     replay_trim = replay_cmd.add_parser("trim", help="trim a replay dataset")
@@ -287,4 +350,5 @@ def build_parser() -> argparse.ArgumentParser:
     _add_ledger(verbs, mode_option)
     _add_promotion(verbs, mode_option)
     _add_tail(verbs, mode_option)
+    _add_onboarding(verbs, mode_option)
     return parser

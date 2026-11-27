@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install PumpGrok cron jobs into isolated Hermes profiles.
 # Refuses to attach jobs to sniper or exit.
+# Jobs with enabled: false in hermes/cron/jobs.yaml are created paused, never active.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -66,6 +67,29 @@ ${body}
 EOF
 }
 
+# Print "<job id>\t<true|false>" for the jobs.yaml entry whose name matches.
+# Exits non-zero unless exactly one entry matches and its enabled flag is a boolean.
+job_state() {
+  local name="$1"
+  python3 - "${ROOT}/hermes/cron/jobs.yaml" "${name}" <<'PY'
+import sys
+
+import yaml
+
+path, name = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    jobs = (yaml.safe_load(fh) or {}).get("jobs") or []
+hits = [job for job in jobs if job.get("name") == name]
+if len(hits) != 1:
+    sys.exit(f"expected one jobs.yaml entry named {name!r}, found {len(hits)}")
+job = hits[0]
+enabled = job.get("enabled")
+if not isinstance(enabled, bool):
+    sys.exit(f"jobs.yaml entry {job.get('id')!r} has no boolean enabled flag")
+print(f"{job['id']}\t{'true' if enabled else 'false'}")
+PY
+}
+
 install_job() {
   local owner="$1"
   local schedule="$2"
@@ -92,7 +116,14 @@ install_job() {
     echo "REFUSED: unreadable or empty cron prompt ${prompt_file}; no cron job created for ${owner}" >&2
     return 1
   fi
-  echo "JOB owner=${owner} name=${name} schedule=${schedule} deliver=${deliver}"
+  local state
+  if ! state="$(job_state "${name}")"; then
+    echo "REFUSED: no readable enabled flag for ${name} in jobs.yaml; no cron job created for ${owner}" >&2
+    return 1
+  fi
+  local job_id="${state%%$'\t'*}"
+  local enabled="${state#*$'\t'}"
+  echo "JOB owner=${owner} id=${job_id} name=${name} schedule=${schedule} deliver=${deliver} enabled=${enabled}"
   if [[ ${DRY_RUN} -eq 1 ]]; then
     echo "--- prompt ${prompt_file} ---"
     echo "${prompt}" | sed -n '1,14p'
@@ -106,6 +137,13 @@ install_job() {
     skill_flags+=(--skill "${s}")
   done
 
+  # enabled: false jobs are created paused in one write, so no run can fire before they
+  # are disabled. --paused records the reason for audit.
+  local pause_flags=()
+  if [[ "${enabled}" == "false" ]]; then
+    pause_flags=(--paused --paused-reason "enabled: false in hermes/cron/jobs.yaml (${job_id})")
+  fi
+
   # hermes -p OWNER switches HERMES_HOME for create. Combined with
   # --profile OWNER so a multiplexed default gateway still pins the run.
   hermes -p "${owner}" cron create "${schedule}" "${prompt}" \
@@ -113,7 +151,7 @@ install_job() {
     --deliver "${deliver}" \
     --profile "${owner}" \
     --workdir "${DESK}" \
-    "${skill_flags[@]}"
+    "${skill_flags[@]}" ${pause_flags[@]+"${pause_flags[@]}"}
 }
 
 if [[ ${REMOVE} -eq 1 ]]; then
@@ -136,6 +174,16 @@ for prompt_name in scout-discover.md scout-pipeline.md risk-audit.md chief-picku
   fi
   if ! read_prompt "${prompt_name}" >/dev/null; then
     echo "REFUSED: unreadable or empty cron prompt ${prompt_name}; no jobs installed" >&2
+    exit 1
+  fi
+done
+
+# Refuse before creating any job if a job's enabled flag cannot be read from jobs.yaml:
+# an unknown state must never be installed active.
+for job_name in "[bot:scout] discover" "[bot:scout] pipeline" "[bot:risk] audit-open-leads" \
+  "[bot:chief] pickup" "[bot:rug] watch-paper" "[bot:chief] journal-rollup"; do
+  if ! job_state "${job_name}" >/dev/null; then
+    echo "REFUSED: no readable enabled flag for ${job_name} in jobs.yaml; no jobs installed" >&2
     exit 1
   fi
 done

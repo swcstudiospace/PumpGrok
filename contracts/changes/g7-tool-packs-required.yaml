@@ -1,0 +1,29 @@
+change_id: g7-tool-packs-required
+proposed_by: bot-02-risk
+surface: contracts/tool-packs/**
+surfaces:
+- contracts/events/promotion_stage_set.schema.json
+- contracts/events/strategy_kill_cleared.schema.json
+- contracts/events/strategy_kill_set.schema.json
+breaking: false
+version: "1.1.0"
+previous_version: "1.0.0"
+summary: >-
+  G-7 now requires contracts/tool-packs/ to exist. Before this change an absent
+  directory printed a NOTE and passed; now it fails the gate. The directory is
+  added with a .gitkeep and holds no pack in D2, so no tool is added or removed
+  and no seat's effective roster changes.
+reversibility: two-way
+files:
+- contracts/tool-packs/.gitkeep
+- contracts/events/promotion_stage_set.schema.json
+- contracts/events/strategy_kill_cleared.schema.json
+- contracts/events/strategy_kill_set.schema.json
+rationale: >-
+  Owner decision (T11): contracts/tool-packs/ and grokbot/templates/ are required.
+  The surface is new and empty, so there is no prior content to break. The only
+  consumer declared for contracts/tool-packs/** in ownership.yaml contract_consumers is
+  bot-02-risk, which is also the proposer. So no acknowledgement is needed.
+semantic_changes: []
+migration_note: ""
+acknowledgements: []

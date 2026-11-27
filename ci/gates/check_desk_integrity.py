@@ -32,7 +32,8 @@ ROSTERS_DIR = "contracts/tool-rosters"
 PACKS_DIR = "contracts/tool-packs"
 PROMPTS_DIR = "prompts"
 ASSEMBLED_DIR = "prompts-assembled"
-TEMPLATES_DIR = "grokbot/templates"
+# Agent templates: scripts/generate-templates.py writes agents/<seat>.md.
+TEMPLATES_DIR = "agents"
 
 CORE_ROSTER = "_core.yaml"
 
@@ -381,13 +382,18 @@ def check_template(path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _yaml_files(directory: Path) -> list[Path]:
+    """Every YAML file in a directory, under either extension (.yaml or .yml)."""
+    return sorted({*directory.glob("*.yaml"), *directory.glob("*.yml")})
+
+
 def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) -> list[str]:
     problems = []
     if not rosters_dir.is_dir():
         return [f"{_rel(rosters_dir, repo)}: roster directory not found"]
     core_tools, core_problems = load_core_tools(rosters_dir)
     problems.extend(f"{_rel(rosters_dir / CORE_ROSTER, repo)}: {p}" for p in core_problems)
-    for path in sorted(rosters_dir.glob("*.yaml")):
+    for path in _yaml_files(rosters_dir):
         if path.name == CORE_ROSTER:
             continue
         counts["rosters"] += 1
@@ -397,12 +403,11 @@ def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) ->
 
 def _check_packs_dir(repo: Path, packs_dir: Path, counts: dict[str, int]) -> list[str]:
     problems = []
-    if packs_dir.is_dir():
-        for path in sorted(packs_dir.glob("*.yaml")):
-            counts["packs"] += 1
-            problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
-    else:
-        print(f"  NOTE: {_rel(packs_dir, repo)}/ not found — pack check skipped")
+    if not packs_dir.is_dir():
+        return [f"{_rel(packs_dir, repo)}: pack directory not found"]
+    for path in _yaml_files(packs_dir):
+        counts["packs"] += 1
+        problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
     return problems
 
 
@@ -412,9 +417,9 @@ def _check_prompt_dirs(
     problems = []
     sources, assembled = prompt_files(prompts_dir, assembled_dir)
     if not prompts_dir.is_dir():
-        print(f"  NOTE: {_rel(prompts_dir, repo)}/ not found — prompt source check skipped")
+        problems.append(f"{_rel(prompts_dir, repo)}: prompt directory not found")
     if not assembled_dir.is_dir():
-        print(f"  NOTE: {_rel(assembled_dir, repo)}/ not found — assembled prompt check skipped")
+        problems.append(f"{_rel(assembled_dir, repo)}: assembled prompt directory not found")
     for path in sources:
         counts["prompts"] += 1
         problems.extend(f"{_rel(path, repo)}: {p}" for p in check_prompt_source(path))
@@ -425,13 +430,12 @@ def _check_prompt_dirs(
 
 
 def _check_templates_dir(repo: Path, templates_dir: Path, counts: dict[str, int]) -> list[str]:
+    if not templates_dir.is_dir():
+        return [f"{_rel(templates_dir, repo)}: template directory not found"]
     problems = []
-    if templates_dir.is_dir():
-        for path in sorted(templates_dir.glob("*.md")):
-            counts["templates"] += 1
-            problems.extend(f"{_rel(path, repo)}: {p}" for p in check_template(path))
-    else:
-        print(f"  NOTE: {_rel(templates_dir, repo)}/ not found — template check skipped")
+    for path in sorted(templates_dir.glob("*.md")):
+        counts["templates"] += 1
+        problems.extend(f"{_rel(path, repo)}: {p}" for p in check_template(path))
     return problems
 
 

@@ -6,16 +6,19 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc, parse_ts_utc
@@ -96,6 +99,23 @@ def _adapter(
         rng=make_rng(7),
         budget=RiskBudget(),
         price_source=_ScriptedCurves([_snap(), _snap()]),
+        p_drop=0.0,
+    )
+
+
+def _replay_adapter(
+    tmp_path: Path, store: LedgerStore, clock: FixtureClock, engine: RiskEngine, ids: IdFactory
+) -> PaperAdapter:
+    replay = replay_authority(tmp_path, clock, [tick(START, MINT_A, S0, T0)])
+    return build_paper_adapter(
+        SimpleNamespace(risk=RiskBudget()),
+        store=store,
+        risk=engine,
+        ids=ids,
+        clock=clock,
+        rng=make_rng(7),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
 
@@ -188,11 +208,12 @@ async def test_in_flight_order_rejected_at_confirming(tmp_path: Path) -> None:
     """INV-R-01: an ACCEPTED order is rejected, never filled, when the file lands mid-flight."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
+    store.set_meta("source", "replay")
     try:
         ids = IdFactory(clock, make_rng(7))
         kill_file = tmp_path / "KILLSWITCH"
         engine = _engine(store, clock, killswitch_path=kill_file)
-        adapter = _adapter(store, clock, engine, ids)
+        adapter = _replay_adapter(tmp_path, store, clock, engine, ids)
         task = asyncio.create_task(adapter.place(_buy(clock, ids), seat="bot-04-sniper"))
         for _ in range(400):
             if task.done():
@@ -260,7 +281,7 @@ async def test_kill_flatten_closes_every_position(tmp_path: Path) -> None:
 
 
 def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> None:
-    """INV-R-03: clear is CLI-only and human-only; refused while any source persists."""
+    """INV-R-03: clear is CLI-only and human-only; refused while env or alert is still set."""
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     try:
@@ -274,14 +295,16 @@ def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> N
         with pytest.raises(ValidationError):
             _clear_approval(clock, ids, "bot-02-risk")
         with pytest.raises(ClearRefused):
-            switch.request_clear(
+            KillSwitch(
+                clock, store=store, killswitch_path=kill_file, env={"PUMPGROK_KILLSWITCH": "1"}
+            ).request_clear(
                 _clear_approval(clock, ids, "human:alice"),
-                "human clear while set",
+                "human clear while env set",
                 ts_utc=format_ts_utc(clock.now()),
                 source="paper",
                 correlation_id="test",
             )
-        kill_file.unlink()
+        # The clear removes the latch file it finds; the file alone no longer refuses.
         switch.request_clear(
             _clear_approval(clock, ids, "human:alice"),
             "all clear",
@@ -289,6 +312,7 @@ def test_kill_switch_clear_requires_human_and_clear_sources(tmp_path: Path) -> N
             source="paper",
             correlation_id="test",
         )
+        assert not kill_file.exists()
         cleared = store.read(types=["KillSwitchCleared"], limit=None)
         assert len(cleared) == 1
         recorded = store.read(types=["ApprovalRecorded"], limit=None)

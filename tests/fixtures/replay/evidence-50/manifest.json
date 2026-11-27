@@ -5,7 +5,8 @@
   "recorded_to_utc": "2026-01-01T00:05:19.000000Z",
   "seed_hint": 20260101,
   "sha256": {
-    "events.jsonl": "edc91b0ce0811ce3459812f9aa6deb0adec6f3e5448f7b4c3de7ffdc5d05e3c6"
+    "events.jsonl": "edc91b0ce0811ce3459812f9aa6deb0adec6f3e5448f7b4c3de7ffdc5d05e3c6",
+    "llm.jsonl": "ce12e3d56af05e7101fb5f000af7d1266ec9887e3811ea68afb98701f2a40eb0"
   },
   "sources": {
     "pumpportal": "synthesised",

@@ -121,7 +121,7 @@ class WeeklyReport:
             for item in gate.evaluate(now=now if now is not None else day)
         )
 
-        return ReportModel(
+        model = ReportModel(
             period="weekly",
             day=_WEEK_RANGE_TEMPLATE.format(first=days[0], last=days[-1]),
             mode=base.mode,
@@ -151,4 +151,6 @@ class WeeklyReport:
             live_gate=gate_lines,
             unverified=base.unverified,
             per_day=tuple(per_day),
+            strategy_section=base.strategy_section,
         )
+        return model

@@ -63,11 +63,9 @@ max = 604800.0
 min = 1.0
 max = 3600.0
 
-# Strategy parameter bounds (STR-01, D-02). One [strategy.<ID>.<PARAM>]
-# table per bounded baseline parameter; the declared BOUNDS in each
-# strategy module must equal these sections exactly (asserted by test).
-# legacy_screening takes filter/exits overrides only and has no section
-# here, so any strategy override naming it fails with no bound.
+# Strategy bounds are PROPOSALS pending owner approval (Phase 15).
+# Each [strategy.ID.PARAM] entry names one strategy parameter with an inclusive
+# min and max. Strategy ids and parameter keys with no entry are refused.
 
 [strategy.momentum_breakout.breakout_bps]
 min = 0

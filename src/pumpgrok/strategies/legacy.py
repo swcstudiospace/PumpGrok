@@ -5,6 +5,10 @@ The adapter is a thin wrapper over
 dataset, filter config, seed, and ledger-path semantics as a direct call.
 It holds no independent behavior and writes no attribution refs: a call
 is a call, and parity with the direct path is proven in tests.
+
+REPLAY-ONLY EXCEPTION: this module places orders directly as part of the
+replay path. See docs/strategies-replay-exception.md for the decision and
+its containment rules.
 """
 
 from __future__ import annotations

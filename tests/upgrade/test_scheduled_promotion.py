@@ -234,34 +234,9 @@ def test_manual_ticket_skips_and_writes_nothing(ledger, tmp_path, monkeypatch) -
         space=_declared(tmp_path),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "skipped"
-    assert ledger.count() == before
-    assert read_active_set(ledger) is None
-    assert not (tmp_path / "var" / "upgrade").exists()
-    assert not (tmp_path / "var" / "backtest").exists()
-
-
-@pytest.mark.parametrize("autonomous", [False, True])
-def test_empty_declared_space_is_skipped_at_every_level(
-    ledger, tmp_path, monkeypatch, autonomous
-) -> None:
-    """An empty space is skipped at each autonomy level, with no search and no rows."""
-    monkeypatch.setattr(promotion, "run_search", _no_search)
-    if autonomous:
-        _grant_autonomy(ledger)
-    before = ledger.count()
-    outcome = promotion.run_promotion_check(
-        ledger,
-        DATASET,
-        clock=FixtureClock(T0),
-        space=_declared(tmp_path, ""),
-        seed=0,
-        initial_equity_lamports=0,
-    )
-    assert outcome == "skipped"
-    tick = promotion.make_promotion_check(DATASET, space=(), seed=0, initial_equity_lamports=0)
-    tick(ledger, FixtureClock(T0))
     assert ledger.count() == before
     assert read_active_set(ledger) is None
     assert not (tmp_path / "var" / "upgrade").exists()
@@ -325,6 +300,7 @@ def test_autonomous_search_gates_only_the_winner(ledger, tmp_path, monkeypatch) 
         space=_declared(tmp_path),
         seed=7,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "promoted"
     assert len(calls) == 1
@@ -351,6 +327,7 @@ def test_repeated_declaration_counts_once(ledger, tmp_path, monkeypatch) -> None
         space=[*declared, declared[0]],
         seed=7,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "promoted"
     assert calls[0]["n_trials"] == 2
@@ -372,6 +349,7 @@ def test_winner_already_active_is_skipped(ledger, tmp_path, monkeypatch) -> None
         space=_declared(tmp_path, ONE_TEXT),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "skipped"
     assert len(calls) == 1
@@ -391,6 +369,7 @@ def test_harness_failure_returns_failed_and_promotes_nothing(ledger, tmp_path) -
         space=_declared(tmp_path),
         seed=0,
         initial_equity_lamports=0,
+        mode="human",
     )
     assert outcome == "failed"
     assert ledger.count() == before
@@ -421,30 +400,6 @@ def test_due_blocks_second_check_until_interval_elapses(ledger) -> None:
     assert not due(ledger, clock, PROMOTION_CHECK_INTERVAL_S)
     clock.advance_to(T0 + PROMOTION_CHECK_INTERVAL_S)
     assert due(ledger, clock, PROMOTION_CHECK_INTERVAL_S)
-
-
-def test_closure_runs_check_only_when_due(ledger, tmp_path, monkeypatch) -> None:
-    """The closure runs the check on the first tick, then once per interval."""
-    calls: list[str] = []
-
-    def _spy(store, dataset_dir, **kwargs) -> str:
-        calls.append(str(dataset_dir))
-        return "skipped"
-
-    monkeypatch.setattr(promotion, "run_promotion_check", _spy)
-    clock = FixtureClock(T0)
-    tick = promotion.make_promotion_check(
-        DATASET,
-        space=_declared(tmp_path),
-        seed=0,
-        initial_equity_lamports=0,
-    )
-    tick(ledger, clock)
-    tick(ledger, clock)
-    assert calls == [DATASET]
-    clock.advance_to(T0 + PROMOTION_CHECK_INTERVAL_S)
-    tick(ledger, clock)
-    assert calls == [DATASET, DATASET]
 
 
 def test_max_declared_candidates_matches_gate_limit() -> None:

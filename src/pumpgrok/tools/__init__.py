@@ -7,6 +7,9 @@ checker (the PaperAdapter enforces approvals itself through its RiskEngine),
 and one ``RateLimiter`` per ``rate_limit_key`` held inside the
 registry. ``build_operator_registry()`` composes the full 37-tool Phase 4
 catalog over the same root for operator verbs (TOOL-011).
+The operator gate (ONB-04) is opt-in on both builders. ``build_production_operator_registry()``
+is the production entry: it passes ``OperatorGrants().allows``, so every roster tool needs an
+authenticated operator grant.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import logging
 import random
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -27,8 +30,10 @@ from pumpgrok.core.ids import Clock, IdFactory
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import GrantAudit, ToolRegistry
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.datafeed.price import ReservesCache
 from pumpgrok.engine.reputation import ReputationBook
 from pumpgrok.ledger.autonomy import read_autonomy
+from pumpgrok.ledger.operator_choices import OperatorGrants
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import WallClock
 from pumpgrok.replay.rng import make_rng
@@ -79,13 +84,18 @@ from pumpgrok.tools.risk.kill_switch import ClosePosition, build_kill_switch_too
 from pumpgrok.tools.safety.score_report import build_score_report_tool
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pumpgrok.config.settings import SafetyThresholds, Settings
     from pumpgrok.core.bot import BotManifest
+    from pumpgrok.datafeed.price import LivePriceSource
+    from pumpgrok.execution import VerifiedReplay
     from pumpgrok.execution.paper_adapter import CurveSnapshot, PriceSource
 
 
 __all__ = [
     "build_operator_registry",
+    "build_production_operator_registry",
     "build_registry",
     "ensure_paper_genesis",
     "register_read_tools",
@@ -130,11 +140,16 @@ async def _permit_exec(request: OrderRequest, bot_id: str) -> bool:
 def build_registry(
     clock: Clock | None = None,
     rng: random.Random | None = None,
+    *,
+    operator_gate: Callable[[str, str], bool] | None = None,
 ) -> tuple[ToolRegistry, list[GrantAudit]]:
     """Build an empty registry with replay-safe defaults.
 
     Returns the registry plus the audit list backing its sink, so tests and
     the gateway can assert one row per resolution attempt (I4).
+
+    ``operator_gate`` is opt-in: ``None`` skips the operator grant check, as replay and the
+    test harness require. Production composition uses ``build_production_operator_registry``.
     """
     audits: list[GrantAudit] = []
     registry = ToolRegistry(
@@ -142,6 +157,7 @@ def build_registry(
         audit_sink=audits.append,
         limits_checker=_permit_exec,
         rng=rng,
+        operator_gate=operator_gate,
     )
     return registry, audits
 
@@ -244,7 +260,7 @@ def _register_desk(
         alert_file=data_dir / "alerts.jsonl",
     )
     reg.register(build_alert_tool(notifier, clock))
-    reg.register(build_brief_tool(store, bank, clock, None, "paper"))
+    reg.register(build_brief_tool(store, bank, clock, killswitch_file(data_dir), "paper"))
     reg.register(build_docs_search_tool(repo_root, clock))
     reg.register(build_memory_retain_tool(bank, clock))
     reg.register(build_memory_recall_tool(bank, clock))
@@ -255,20 +271,25 @@ def _register_desk(
     reg.register(build_doctor_tool(settings, data_dir / "bindings", binding_key, clock))
 
 
+# Bound on distinct mints whose latest reserves the shared cache holds. Least recently
+# stored entries are evicted, so a long session cannot grow it without limit.
+RESERVES_CACHE_CAPACITY = 4096
+
+
 class _CachingPriceSource:
     """Price source that records every observed curve for the sync risk check.
 
     The PaperAdapter reads curves asynchronously, but RiskEngine's
     liquidity-floor step needs a synchronous ``(sol, units)`` lookup. This
-    wrapper delegates to the injected source and caches the latest snapshot
-    per mint; ``last.get`` feeds ``RiskEngine(get_reserves=...)``. The cache
-    warms on any adapter read (the CLI paper flow simulates before placing),
-    and a cold mint fails closed with ``no curve reserves``.
+    wrapper delegates to the injected source and stores each observed reserves
+    pair in the shared bounded ``ReservesCache``, which feeds
+    ``RiskEngine(get_reserves=...)``. A cold mint fails closed with
+    ``no curve reserves``.
     """
 
-    def __init__(self, inner: PriceSource | None) -> None:
+    def __init__(self, inner: PriceSource | None, cache: ReservesCache) -> None:
         self._inner = inner
-        self.last: dict[str, tuple[int, int]] = {}
+        self._cache = cache
 
     async def curve(self, mint: str) -> CurveSnapshot | None:
         """Delegate the read and cache the observed reserves."""
@@ -276,7 +297,7 @@ class _CachingPriceSource:
             return None
         snapshot = await self._inner.curve(mint)
         if snapshot is not None:
-            self.last[mint] = (snapshot.s_lamports, snapshot.t_units)
+            self._cache.store(mint, snapshot.s_lamports, snapshot.t_units)
         return snapshot
 
 
@@ -311,8 +332,11 @@ def build_operator_registry(
     clock: Clock | None = None,
     ledger_path: Path | None = None,
     price_source: PriceSource | None = None,
+    replay: VerifiedReplay | None = None,
+    live_source: LivePriceSource | None = None,
     p_drop: float = 0.0,  # CLI default: deterministic confirms; replay passes seeded curves
     seed: int | None = None,  # composition-root seed (INT-05); defaults to settings.replay.seed
+    operator_gate: Callable[[str, str], bool] | None = None,  # ONB-04 gate; opt-in
 ) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
     """Compose the full 37-tool operator registry (TOOL-011, R63).
 
@@ -321,8 +345,12 @@ def build_operator_registry(
     paper adapter (TOOL-004, R64), so the CLI resolves
     through ``registry.find`` and I1 holds on every verb. ``ledger_path``
     overrides the store location: the CLI passes the canonical paper ledger.
-    ``price_source`` injects curve reads (tests pass scripted curves;
-    production paper trading binds the RPC curve reader in Phase 4).
+    ``replay`` (from ``verify_replay``) is the entry authority: with it, every curve
+    read comes from its verified source and ``price_source`` must be None. Without
+    it, ``price_source`` serves sells and exits, and every BUY is refused.
+    ``live_source`` (the exact :class:`LivePriceSource`) takes the place of
+    ``price_source``; its returned reserves populate the same shared cache that
+    ``RiskEngine`` reads.
     ``p_drop`` fixes the confirmation-drop rate with a seeded stream
     (the CLI default ``0.0`` gives deterministic confirms; replay passes
     seeded curves with an explicit rate). ``seed`` is the explicit composition-root
@@ -330,13 +358,17 @@ def build_operator_registry(
     from the replay-module default seed.
     Returns the registry,
     the ten seat manifests, and the HTTP client the caller must close.
+    ``operator_gate`` is opt-in: ``None`` skips the operator grant check, as replay and the
+    test harness require. Production callers use :func:`build_production_operator_registry`.
     """
     active_clock = clock if clock is not None else WallClock()
     active_seed = seed if seed is not None else settings.replay.seed
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     repo_root = Path(repo_root)
-    reg, _audits = build_registry(clock=active_clock, rng=make_rng(active_seed))
+    reg, _audits = build_registry(
+        clock=active_clock, rng=make_rng(active_seed), operator_gate=operator_gate
+    )
     client = httpx.AsyncClient()
     rpc = RpcClient(
         list(settings.rpc.endpoints),
@@ -347,7 +379,13 @@ def build_operator_registry(
     )
     store = LedgerStore(ledger_path if ledger_path is not None else data_dir / "ledger.sqlite")
     live = settings.effective_mode == "live"
-    curves = _CachingPriceSource(price_source)
+    if replay is not None and price_source is not None:
+        raise ValueError("pass a verified replay or a price source, not both")
+    if live_source is not None and (replay is not None or price_source is not None):
+        raise ValueError("live composition takes the live source alone")
+    reserves_cache = ReservesCache(capacity=RESERVES_CACHE_CAPACITY)
+    curves = _CachingPriceSource(price_source, reserves_cache)
+    reserves = replay.curves.reserves if replay is not None else reserves_cache.get
     budget = settings.risk
     ensure_paper_genesis(store, budget)
     engine = RiskEngine(
@@ -364,7 +402,7 @@ def build_operator_registry(
             allowlist=settings.notify.allowlist,
             state_dir=data_dir,
         ),
-        get_reserves=curves.last.get,
+        get_reserves=reserves,
     )
     # R62: a missing file is an empty healthy book; a corrupt file quarantines
     # to a degraded book, which refuses buys with reputation_degraded. The degraded marker
@@ -382,7 +420,11 @@ def build_operator_registry(
         ids=IdFactory(active_clock, make_rng(active_seed)),
         clock=active_clock,
         rng=make_rng(active_seed),
-        price_source=curves,
+        price_source=None if replay is not None or live_source is not None else curves,
+        replay=replay,
+        live_source=live_source,
+        reserves_observer=reserves_cache.observe if live_source is not None else None,
+        source="replay" if replay is not None else "paper",
         p_drop=p_drop,
     )
     engine.attach_flatten_hook(
@@ -421,3 +463,15 @@ def build_operator_registry(
     )
     manifests = load_bot_manifests(repo_root / "contracts" / "tool-rosters")
     return reg, manifests, client
+
+
+def build_production_operator_registry(
+    **kwargs: Any,
+) -> tuple[ToolRegistry, dict[str, BotManifest], httpx.AsyncClient]:
+    """Build the operator registry with the production operator gate (ONB-04).
+
+    Every roster tool resolves only after an authenticated operator ``allow`` for that
+    seat and tool. ``OperatorGrants`` reads the decision at each check, so a revoke takes
+    effect at once. Takes the keyword arguments of :func:`build_operator_registry`.
+    """
+    return build_operator_registry(operator_gate=OperatorGrants().allows, **kwargs)

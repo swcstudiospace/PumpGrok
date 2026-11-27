@@ -6,6 +6,7 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -15,12 +16,14 @@ from pumpgrok.core.approvals import parse_human_phrase, record_human_approval
 from pumpgrok.core.errors import OrderRejectedError, OrderUnknownError
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.limits import EngineLimits
+
+from .replay_support import replay_authority, tick
 
 START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
 EQUITY = 10_000_000_000
@@ -36,18 +39,8 @@ def _store(tmp_path: Path) -> LedgerStore:
     recreate_ledger_db(path)
     store = LedgerStore(str(path))
     store.set_meta("initial_equity_lamports", str(EQUITY))
-    store.set_meta("source", "paper")
+    store.set_meta("source", "replay")
     return store
-
-
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
 
 
 async def test_unknown_result_never_retried(tmp_path: Path) -> None:
@@ -65,16 +58,16 @@ async def test_unknown_result_never_retried(tmp_path: Path) -> None:
             get_reserves=lambda _mint: (S0, T0),
             env={},
         )
-        snap = CurveSnapshot(mint=MINT, s_lamports=S0, t_units=T0)
-        adapter = PaperAdapter(
+        replay = replay_authority(tmp_path, clock, [tick(START, MINT, S0, T0)])
+        adapter = build_paper_adapter(
+            SimpleNamespace(limits=EngineLimits(confirm_timeout_s=0.001)),
             store=store,
             risk=engine,
             ids=ids,
             clock=clock,
             rng=make_rng(7),
-            budget=RiskBudget(),
-            limits=EngineLimits(confirm_timeout_s=0.001),
-            price_source=_ScriptedCurves([snap, snap]),
+            replay=replay,
+            source="replay",
             p_drop=0.0,
         )
         approval_id = f"apr-{ids.ulid()}"
@@ -86,7 +79,7 @@ async def test_unknown_result_never_retried(tmp_path: Path) -> None:
             at=datetime.fromtimestamp(clock.now(), UTC),
         )
         record_human_approval(
-            store, record, ts_utc=format_ts_utc(clock.now()), source="paper", correlation_id="test"
+            store, record, ts_utc=format_ts_utc(clock.now()), source="replay", correlation_id="test"
         )
 
         def order(decision_id: str, approval: str = approval_id) -> OrderRequest:

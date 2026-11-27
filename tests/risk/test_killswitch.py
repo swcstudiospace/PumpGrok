@@ -236,20 +236,14 @@ def test_clear_refused_while_live_then_accepted(tmp_path: Path) -> None:
         assert ks.poll().active is True
         with pytest.raises(ClearRefused):
             ks.request_clear(
-                _human_approval(clock, ids, "killswitch_clear"),
-                "all clear",
-                ts_utc=format_ts_utc(START),
-            )
-        with pytest.raises(ClearRefused):
-            ks.request_clear(
                 _human_approval(clock, ids, "halt_clear"), "wrong kind", ts_utc=format_ts_utc(START)
             )
-        killswitch.unlink()
         ks.request_clear(
             _human_approval(clock, ids, "killswitch_clear"),
             "all clear",
             ts_utc=format_ts_utc(START),
         )
+        assert not killswitch.exists()
         assert ks.poll().active is False
         assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 1
         approvals = store.read(types=["ApprovalRecorded"], limit=None)
@@ -268,16 +262,17 @@ def test_clear_refused_for_seat_signature(tmp_path: Path) -> None:
     store = _store(tmp_path)
     ids = IdFactory(clock, random.Random(7))
     try:
-        ks = KillSwitch(clock, store=store, env={})
-        seat_approval = ApprovalRecord(
-            id=f"apr-{ids.ulid()}",
-            kind="killswitch_clear",
-            approved_by="human:bot-04-sniper",
-            raw_message="forged",
-            at=datetime.fromtimestamp(clock.now(), UTC),
-        )
-        with pytest.raises(ClearRefused):
-            ks.request_clear(seat_approval, "x", ts_utc=format_ts_utc(START))
+        KillSwitch(clock, store=store, env={})
+        # A seat-signed approval never constructs: the model refuses it before
+        # any clear path can read it.
+        with pytest.raises(ValidationError):
+            ApprovalRecord(
+                id=f"apr-{ids.ulid()}",
+                kind="killswitch_clear",
+                approved_by="human:bot-04-sniper",
+                raw_message="forged",
+                at=datetime.fromtimestamp(clock.now(), UTC),
+            )
     finally:
         store.close()
 
@@ -330,16 +325,16 @@ def test_halt_latches_and_clears_only_via_human(tmp_path: Path) -> None:
         )
         engine = _engine(store, clock)
         assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "daily_loss_halt"
-        # seat-signed approvals refuse: human prefix forged with a seat id
-        seat = ApprovalRecord(
-            id=f"apr-{ids.ulid()}",
-            kind="halt_clear",
-            approved_by="human:bot-02-risk",
-            raw_message="forged",
-            at=datetime.fromtimestamp(clock.now(), UTC),
-        )
-        with pytest.raises(ValueError):
-            engine.request_halt_clear(seat, "x")
+        # seat-signed approvals never construct: the human prefix forged with a
+        # seat id is refused by the approval model itself.
+        with pytest.raises(ValidationError):
+            ApprovalRecord(
+                id=f"apr-{ids.ulid()}",
+                kind="halt_clear",
+                approved_by="human:bot-02-risk",
+                raw_message="forged",
+                at=datetime.fromtimestamp(clock.now(), UTC),
+            )
         clock.advance_to(START + 86400.0)
         assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "halted"
         engine.request_halt_clear(_human_approval(clock, ids, "halt_clear"), "reviewed")
@@ -492,14 +487,12 @@ def test_halt_clear_twice_same_day_with_distinct_approvals(tmp_path: Path) -> No
         store.close()
 
 
-def test_kill_clear_same_reason_after_reengage_refuses(tmp_path: Path) -> None:
-    """CR-04: a second clear for the same reason/day refuses, never false-succeeds.
+def test_kill_clear_same_reason_after_reengage_succeeds(tmp_path: Path) -> None:
+    """CR-04: a same-reason clear after a re-engage is its own clear, never a false success.
 
-    A prior clear for the same reason today plus a re-engaged switch used to
-    swallow the duplicate ``KillSwitchCleared`` write, burn the approval, and
-    still report ``{"ok": true}``. Now the duplicate clear key is an explicit
-    ``ClearRefused``, the approval stays unconsumed, and a distinct reason
-    still clears.
+    A prior clear for the same reason today plus a re-engaged switch used to swallow the
+    duplicate ``KillSwitchCleared`` write and still report success. The clear epoch keys the
+    second clear as its own row, so it writes that row, consumes its approval and clears.
     """
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
@@ -518,13 +511,10 @@ def test_kill_clear_same_reason_after_reengage_refuses(tmp_path: Path) -> None:
         killswitch.unlink()
         assert ks.poll().active is True
         second = _human_approval(clock, ids, "killswitch_clear")
-        with pytest.raises(ClearRefused, match="already cleared"):
-            ks.request_clear(second, "all clear", ts_utc=format_ts_utc(START))
-        assert ks.poll().active is True
-        assert store.by_key(f"consumed|{second.id}") is None
-        assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 1
-        ks.request_clear(second, "all clear take two", ts_utc=format_ts_utc(START))
+        ks.request_clear(second, "all clear", ts_utc=format_ts_utc(START))
         assert ks.poll().active is False
+        assert store.by_key(f"consumed|{second.id}") is not None
+        assert len(store.read(types=["KillSwitchCleared"], limit=None)) == 2
     finally:
         store.close()
 

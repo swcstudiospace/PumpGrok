@@ -70,6 +70,7 @@ def _human_by(value: str | None, verb: str) -> str:
     if (
         value is None
         or not value.startswith("human:")
+        or not value.removeprefix("human:").strip()
         or SEAT_RE.match(value.removeprefix("human:"))
     ):
         raise UsageError(f"bad --by {value!r} for `{verb}`: want human:<name>")

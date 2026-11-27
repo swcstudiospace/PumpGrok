@@ -30,7 +30,15 @@ from pumpgrok.risk.engine.constants import (
     SYSTEM_EXIT_REASONS,
 )
 from pumpgrok.risk.engine.model import _Fail, _StepCtx, _suppress_integrity, halt_key
-from pumpgrok.risk.strategy_slice import SliceConfig, spent_from_ledger
+from pumpgrok.risk.strategy_slice import (
+    SliceConfig,
+    spent_from_ledger,
+    strategy_cap,
+    strategy_held_basis,
+)
+
+# Verdict of ``evaluate_halts`` when a halt is already latched; never a breach reason.
+HALT_ALREADY_ACTIVE = "already_active"
 
 
 class _EngineSteps:
@@ -87,18 +95,17 @@ class _EngineSteps:
     def evaluate_halts(self, *, source: str = "paper", correlation_id: str = "desk") -> str | None:
         """Detect fresh daily-loss and drawdown breaches and append ``HaltSet``.
 
-        Returns the breach reason (``daily_loss`` or ``drawdown``) or ``None``.
-        Raises ``CorruptState`` when day-start equity is not positive.
+        Returns the breach reason (``daily_loss`` or ``drawdown``), ``HALT_ALREADY_ACTIVE``
+        when a halt is already latched, or ``None`` when no breach is found.
+        Raises ``LedgerInconsistent`` on a corrupt ledger and ``CorruptState`` when
+        day-start equity is not positive.
         Never clears: UTC rollover and the passage of time leave halts latched
         until the human halt-clear path appends ``HaltCleared`` (R5).
         """
-        try:
-            self._store.verify()
-        except LedgerInconsistent:
-            return None
+        self._store.verify()
         state = self._fold()
         if state.halt.active:
-            return None
+            return HALT_ALREADY_ACTIVE
         equity = self._equity_for_halts(state)
         return self._detect_breach(
             state, equity, ts_utc=self._now_ts(), source=source, correlation_id=correlation_id
@@ -106,7 +113,11 @@ class _EngineSteps:
 
     def _equity_for_halts(self, state: LedgerState) -> int:
         if self._limits.daily_loss_basis == "realized":
-            return int(state.cash_lamports) + int(state.counters.realized_today_lamports)
+            # Realized basis: day-start total equity moves only by PnL booked today. The
+            # baseline (day_start_equity_lamports) is on this same basis: no PnL is realized
+            # before the rollover that records it, so the two compare like with like.
+            realized_equity = int(state.day_start_equity_lamports)
+            return realized_equity + int(state.counters.realized_today_lamports)
         return int(equity_lamports(state))
 
     def _cleared_today(self, today: str) -> bool:
@@ -198,6 +209,9 @@ class _EngineSteps:
         ctx.mark("kill_switch")
         if ctx.kill is not None:
             raise _Fail("kill_switch", f"source={ctx.kill[0]}")
+        killed = ctx.strategy_id is not None and ctx.strategy_id in ctx.state.strategy_kills
+        if ctx.is_buy and killed:
+            raise _Fail("kill_switch", f"strategy_kill:{ctx.strategy_id}")
 
     def _step_halted(self, ctx: _StepCtx) -> None:
         ctx.mark("halted")
@@ -347,8 +361,15 @@ class _EngineSteps:
             return
         assert ctx.final_size is not None
         pos = ctx.state.positions.get(ctx.order.mint)
-        basis = int(pos.cost_basis_lamports) if pos is not None else 0
-        cap = int(self._budget.max_token_fraction * ctx.equity) - basis
+        if ctx.strategy_id is None:
+            basis = int(pos.cost_basis_lamports) if pos is not None else 0
+            cap = int(self._budget.max_token_fraction * ctx.equity) - basis
+        else:
+            # TODO(owner): the full fraction applies to each strategy; whether the cap divides
+            # across strategies is open (index Finding 7).
+            cap = strategy_cap(
+                self._budget, ctx.equity, strategy_held_basis(pos, ctx.strategy_tickets)
+            )
         if ctx.final_size > cap:
             if cap < int(self._limits.min_trade_lamports):
                 raise _Fail("max_token_fraction", f"cap={cap} below minimum")

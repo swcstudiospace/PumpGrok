@@ -35,6 +35,7 @@ ALL_GATE_SCRIPTS = [
     "check_contracts.py",
     "check_rollback.py",
     "check_desk_integrity.py",
+    "check_idle_grok.py",
     "run_all.py",
 ]
 
@@ -260,7 +261,7 @@ class TestG2Receipts:
 
     def test_live_flag_and_risk_flag_are_in_the_bypass_list(self, receipt_gate):
         patterns = [p for p, _ in receipt_gate.BYPASS_PATTERNS]
-        assert r"PUMPGROK_LIVE_ENABLE=(?:1|true)" in patterns
+        assert r"PUMPGROK_LIVE_ENABLE=(?i:1|true)" in patterns
         assert r"--i-understand-the-risk" in patterns
 
     @pytest.mark.parametrize(
@@ -908,9 +909,48 @@ class TestG7DeskIntegrity:
             packs_dir=tmp_path / "contracts/tool-packs",
             prompts_dir=tmp_path / "prompts",
             assembled_dir=tmp_path / "prompts-assembled",
-            templates_dir=tmp_path / "grokbot/templates",
+            templates_dir=tmp_path / "agents",
         )
         assert any("roster directory not found" in p for p in problems)
+
+    def _run_desk(self, integrity_gate, tmp_path, present):
+        rosters = tmp_path / "contracts" / "tool-rosters"
+        core = {"tools": [_tool(f"desk.core_{i}") for i in range(8)]}
+        _write_roster(rosters, "_core.yaml", core)
+        (tmp_path / "contracts/tool-packs").mkdir(parents=True)
+        for name in present:
+            (tmp_path / name).mkdir()
+        return integrity_gate.run(
+            tmp_path,
+            rosters,
+            packs_dir=tmp_path / "contracts/tool-packs",
+            prompts_dir=tmp_path / "prompts",
+            assembled_dir=tmp_path / "prompts-assembled",
+            templates_dir=tmp_path / "agents",
+        )
+
+    @pytest.mark.parametrize("missing", ["prompts", "prompts-assembled", "agents"])
+    def test_missing_prompt_or_template_directory_fails_the_run(
+        self, integrity_gate, tmp_path, missing
+    ):
+        present = [d for d in ("prompts", "prompts-assembled", "agents") if d != missing]
+        problems, _ = self._run_desk(integrity_gate, tmp_path, present)
+        assert len(problems) == 1
+        assert problems[0].startswith(f"{missing}: ")
+
+    def test_all_desk_directories_present_passes_the_run(self, integrity_gate, tmp_path):
+        problems, _ = self._run_desk(
+            integrity_gate, tmp_path, ["prompts", "prompts-assembled", "agents"]
+        )
+        assert problems == []
+
+    @pytest.mark.parametrize(
+        "attr", ["ROSTERS_DIR", "PROMPTS_DIR", "ASSEMBLED_DIR", "TEMPLATES_DIR"]
+    )
+    def test_default_desk_directories_exist_in_this_checkout(self, integrity_gate, attr):
+        # G-7 fails closed on a missing directory, so each default it checks must exist here.
+        repo = Path(__file__).resolve().parents[2]
+        assert (repo / getattr(integrity_gate, attr)).is_dir()
 
     def test_valid_roster_directory_passes_the_run(self, integrity_gate, tmp_path):
         rosters = tmp_path / "contracts" / "tool-rosters"
@@ -934,13 +974,17 @@ class TestG7DeskIntegrity:
                 ],
             },
         )
+        for directory in ("prompts", "prompts-assembled", "agents"):
+            (tmp_path / directory).mkdir()
+        (tmp_path / "contracts" / "tool-packs").mkdir(parents=True)
+        (tmp_path / "grokbot" / "templates").mkdir(parents=True)
         problems, counts = integrity_gate.run(
             tmp_path,
             rosters,
             packs_dir=tmp_path / "contracts/tool-packs",
             prompts_dir=tmp_path / "prompts",
             assembled_dir=tmp_path / "prompts-assembled",
-            templates_dir=tmp_path / "grokbot/templates",
+            templates_dir=tmp_path / "agents",
         )
         assert problems == []
         assert counts["rosters"] == 1
@@ -982,7 +1026,7 @@ def _fixture_path(tmp_path: Path, doc: dict) -> Path:
 
 
 class TestEveryGateIsWired:
-    def test_run_all_runs_g1_to_g7_in_order(self, monkeypatch):
+    def test_run_all_runs_g1_to_g8_in_order(self, monkeypatch):
         run_all = _load("run_all")
         calls: list[tuple[str, list[str]]] = []
 
@@ -995,15 +1039,15 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         assert run_all.main() == 0
-        # Trusted-overlay semantics: gate-self-test overlays ci/gates/ from base
-        # main, so a branch-introduced gate (idle-grok) and its run_all
-        # registration are absent under the overlay. Derive the expectation from
-        # the overlaid run_all rather than hardcoding idle-grok: post-merge
-        # (no overlay) run_all registers it and it is asserted last.
-        expected = ["G-1", "G-2", "G-3", "G-4", "G-5/G-6", "G-7"]
-        if "idle-grok" in (GATES / "run_all.py").read_text():
-            expected.append("idle-grok")
-        assert [name.split()[0] for name, _ in calls] == expected
+        assert [name.split()[0] for name, _ in calls] == [
+            "G-1",
+            "G-2",
+            "G-3",
+            "G-4",
+            "G-5/G-6",
+            "G-7",
+            "G-8",
+        ]
 
     def test_g7_takes_no_bot_argument(self, monkeypatch):
         run_all = _load("run_all")
@@ -1015,9 +1059,12 @@ class TestEveryGateIsWired:
             sys, "argv", ["run_all.py", "--bot", "bot-04-sniper", "--receipt", "r.json"]
         )
         run_all.main()
-        g7_argv = calls[5][1]
+        argv_by_gate = {name.split()[0]: argv for name, argv in calls}
+        g7_argv = argv_by_gate["G-7"]
         assert "--bot" not in g7_argv
         assert "--repo" in g7_argv
+        # G-8 reads no arguments (check_idle_grok.py has no argparse): its argv is the script alone.
+        assert argv_by_gate["G-8"] == [str(GATES / "check_idle_grok.py")]
 
     @pytest.mark.parametrize("script", ALL_GATE_SCRIPTS)
     def test_gate_imports_stay_in_stdlib_and_pyyaml(self, script):

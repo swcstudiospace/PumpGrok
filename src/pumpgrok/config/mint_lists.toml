@@ -1,8 +1,13 @@
 # Version-controlled mint allowlist and blocklist (Phase 17, RSK-05).
 #
+# Mint lists consulted at entry by pumpgrok.risk.entry_checks (D17-6).
 # The entry-gate hook reads this file only. A missing or unparsable file
 # fails closed: every mint is refused until the file parses again.
+#
+# deny: a mint listed here is rejected at entry.
+# warn: a mint listed here is entered with a warning only.
+#
+# Both lists ship empty. Add a mint only with a recorded decision.
 
-allowlist = []
-
-blocklist = []
+deny = []
+warn = []

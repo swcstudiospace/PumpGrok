@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 import tomllib
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
-from pumpgrok.strategies.base import bounds_for, strategy_version_id
+import pytest
+
+from pumpgrok.strategies.base import (
+    Intent,
+    bounds_for,
+    code_digest,
+    source_digest,
+    strategy_version_id,
+    version_id,
+)
 from pumpgrok.upgrade.bounds import load_bounds
 
 BOUNDS_PATH = (
@@ -58,3 +71,80 @@ def test_version_id_changes_with_code() -> None:
 def test_version_id_is_stable_for_same_inputs() -> None:
     version = strategy_version_id("mean_reversion", {"deviation_bps": 50}, code="c")
     assert version == strategy_version_id("mean_reversion", {"deviation_bps": 50}, code="c")
+
+
+def test_bounds_for_legacy_declares_none_and_unknown_fails_loudly() -> None:
+    assert bounds_for("legacy_screening") == {}
+    try:
+        bounds_for("no_such_strategy")
+    except ValueError as exc:
+        assert "no_such_strategy" in str(exc)
+    else:
+        raise AssertionError("unknown strategy id accepted")
+
+
+def test_code_digest_unknown_id_and_real_modules() -> None:
+
+    assert code_digest("legacy_screening") == ""
+    first = code_digest("momentum_breakout")
+    assert len(first) == 64
+    assert first == code_digest("momentum_breakout")
+    assert first != code_digest("mean_reversion")
+
+
+def test_intent_rejects_bad_shape() -> None:
+    valid = Intent(strategy_id="momentum_breakout", side="buy", mint="MintAAA", size_lamports=1_000)
+    assert valid.reason == ""
+    for kwargs in (
+        {"strategy_id": "momentum_breakout", "side": "hold", "mint": "M", "size_lamports": 1},
+        {"strategy_id": "nope", "side": "buy", "mint": "M", "size_lamports": 1},
+        {"strategy_id": "momentum_breakout", "side": "buy", "mint": "", "size_lamports": 1},
+        {"strategy_id": "momentum_breakout", "side": "buy", "mint": "M", "size_lamports": True},
+        {"strategy_id": "momentum_breakout", "side": "buy", "mint": "M", "size_lamports": 1.5},
+    ):
+        try:
+            Intent(**kwargs)  # type: ignore[arg-type]
+        except ValueError:
+            continue
+        raise AssertionError(f"bad intent accepted: {kwargs}")
+
+
+def test_source_digest_and_version_id_of_a_strategy_class() -> None:
+    class DummyStrategy:
+        strategy_id = "momentum_breakout"
+
+    digest = source_digest(DummyStrategy)  # type: ignore[arg-type]
+    assert len(digest) == 64
+    assert digest == source_digest(DummyStrategy)  # type: ignore[arg-type]
+    version = version_id(DummyStrategy, {"breakout_bps": 100})  # type: ignore[arg-type]
+    assert len(version) == 64
+    assert version != version_id(DummyStrategy, {"breakout_bps": 101})  # type: ignore[arg-type]
+
+
+def test_code_digest_empty_when_module_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(name: str) -> Any:
+        raise ImportError("no such module")
+
+    monkeypatch.setattr(importlib, "import_module", _boom)
+    assert code_digest("momentum_breakout") == ""
+
+
+def test_source_digest_refuses_a_module_without_a_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    fake = ModuleType("fake_strategy_mod")
+    monkeypatch.setitem(sys.modules, "fake_strategy_mod", fake)
+
+    class NoFileStrategy:
+        strategy_id = "momentum_breakout"
+        __module__ = "fake_strategy_mod"
+
+    try:
+        source_digest(NoFileStrategy)  # type: ignore[arg-type]
+    except ValueError as exc:
+        assert "no source file" in str(exc)
+    else:
+        raise AssertionError("module without a source file accepted")

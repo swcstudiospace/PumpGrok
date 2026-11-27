@@ -24,7 +24,7 @@ from typing import Protocol, runtime_checkable
 
 from pumpgrok.config.settings import ExitsSettings
 from pumpgrok.engine.exits import apply_price
-from pumpgrok.engine.models import ExitPosition
+from pumpgrok.engine.models import PRICE_SCALE, ExitPosition
 from pumpgrok.replay.clock import Clock
 
 log = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class PositionWatcher:
 
     Price and sale arrive as callbacks from the outside: no RPC and no
     executor are pulled in here, so this is testable without a network.
+    ``price_fn`` returns the ``PRICE_SCALE`` price, or None for no quote.
     """
 
     # How much the peak must grow before it is written to disk. No point
@@ -66,7 +67,7 @@ class PositionWatcher:
     def __init__(
         self,
         book: PositionBook,
-        price_fn: Callable[[str], Awaitable[int]],
+        price_fn: Callable[[str], Awaitable[int | None]],
         sell_fn: Callable[[ExitPosition, int, str], Awaitable[None]],
         clock: Clock,
     ) -> None:
@@ -87,44 +88,66 @@ class PositionWatcher:
         ]
 
     async def check_once(self, now: float) -> list[str]:
-        """One pass over open positions. Returns closed mints."""
+        """One pass over open positions. Returns closed mints.
+
+        Each position is isolated: a failed fetch, rule check or sell is
+        logged and the pass moves on, so one bad position cannot starve the
+        others. Peaks and sales persist in the ``finally``, so work done
+        before a failure is not lost.
+        """
         triggered: list[str] = []
         peak_grew = False
         sold = False
 
-        for position in list(self.book.positions.values()):
-            try:
-                price = await self.price_fn(position.mint)
-            except Exception as exc:
-                log.warning("no price for %s: %s", position.mint, exc)
-                price = 0
-            if price <= 0:
-                self._miss(position.mint)
-                continue
-            self.price_failures.pop(position.mint, None)
+        try:
+            for position in list(self.book.positions.values()):
+                try:
+                    price = await self._quote(position.mint)
+                    if price is None or price < 0:
+                        self._miss(position.mint)
+                        continue
+                    self.price_failures.pop(position.mint, None)
 
-            old_peak = position.peak_price
-            signal = apply_price(position, price, self.book.exit_config, now)
-            if price > old_peak:
-                peak_grew = peak_grew or (price >= old_peak * self.PEAK_PERSIST_STEP)
-            if signal is None:
-                continue
+                    old_peak = position.peak_price
+                    signal = apply_price(position, price, self.book.exit_config, now)
+                    if price > old_peak:
+                        peak_grew = peak_grew or (price >= old_peak * self.PEAK_PERSIST_STEP)
+                    if signal is None:
+                        continue
 
-            log.info(
-                "exiting %s on %s (%s): entry %.12f, now %.12f",
-                position.mint[:8],
-                signal.reason,
-                signal.detail,
-                position.entry_price,
-                price,
-            )
-            await self.sell_fn(position, price, signal.reason)
-            triggered.append(position.mint)
-            sold = True
-
-        if peak_grew or sold:
-            self.book.persist()
+                    log.info(
+                        "exiting %s on %s (%s): entry %.12f, now %.12f (lamports per token)",
+                        position.mint[:8],
+                        signal.reason,
+                        signal.detail,
+                        position.entry_price / PRICE_SCALE,
+                        price / PRICE_SCALE,
+                    )
+                    await self.sell_fn(position, price, signal.reason)
+                    triggered.append(position.mint)
+                    sold = True
+                except Exception as exc:
+                    log.exception(
+                        "position %s: exit check failed, other positions still run: %s",
+                        position.mint[:8],
+                        exc,
+                    )
+        finally:
+            if peak_grew or sold:
+                self.book.persist()
         return triggered
+
+    async def _quote(self, mint: str) -> int | None:
+        """The feed's price, or None when it gives none: a miss.
+
+        A real zero is a quote (a full loss) and is passed on as is. A
+        negative value is not a price, so it is treated as no quote.
+        """
+        try:
+            return await self.price_fn(mint)
+        except Exception as exc:
+            log.warning("no price for %s: %s", mint, exc)
+            return None
 
     def _miss(self, mint: str) -> None:
         """Count a pass without a quote, and say so when it is too many."""

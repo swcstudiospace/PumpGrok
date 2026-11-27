@@ -1,29 +1,406 @@
-"""Live recorder (REC-01, REC-02, T-13-01b/c).
-
-Writes ticks plus gaps into a dataset directory; ``seal`` writes
-``manifest.json`` with the sha256 of every listed file so the sealed
-dataset passes :func:`pumpgrok.replay.fixtures.load_dataset` unchanged.
-Ticks land in ``events.jsonl`` (the name ``load_dataset`` requires);
-gaps land in ``gaps.jsonl``. Non-decreasing ``ts_utc`` is enforced at
-write time; a torn trailing line is truncated on startup and recorded.
-No back-fill, no interpolation, no external history. Never opens
-``var/ledger.sqlite``. Writes go through tmp plus ``os.replace``.
-"""
-
-from __future__ import annotations
+"""Durably record curve observations in the existing replay dataset format."""
 
 import hashlib
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import IO
 
-from pumpgrok.datafeed.events import CurveTick, GapEvent
-from pumpgrok.replay.clock import format_ts_utc, parse_ts_utc
-from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, FixtureManifest
+from pumpgrok.core.errors import PumpgrokError
+from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.resync import Gap, GapLedger
+from pumpgrok.replay.clock import Clock, parse_ts_utc
+from pumpgrok.replay.fixtures import (
+    EVENTS_NAME,
+    MANIFEST_NAME,
+    CorruptFixture,
+    FixtureManifest,
+    load_dataset,
+)
 
+# Closed feed gaps. The file exists only once a gap has closed.
 GAPS_NAME = "gaps.jsonl"
+# Raw feed frames, one line per frame, appended by record_frame before their observation.
+FEED_NAME = "feed.jsonl"
+# Stream names a feed.jsonl frame carries. The live wrapper writes them; replay routes on them.
+# PORTAL_STREAM and LOGS_STREAM hold the raw inbound frames of the two feeds. TRANSACTION_STREAM
+# holds one getTransaction response, keyed by signature, for each truncated notification.
+# CONFIG_STREAM holds exactly one frame per dataset: the WatchSet capacity that decided admission.
+PORTAL_STREAM = "pumpportal"
+LOGS_STREAM = "logs"
+TRANSACTION_STREAM = "transaction"
+CONFIG_STREAM = "config"
+# The only data files a live dataset may hold. Any other *.jsonl is refused at seal time.
+_DATA_FILES = (EVENTS_NAME, GAPS_NAME, FEED_NAME)
+
+
+class DatasetConflict(PumpgrokError):
+    """The dataset directory already holds entries, so no fresh dataset can start there."""
+
+    code = "dataset_conflict"
+
+
+def _sync_directory(path: Path) -> None:
+    """Persist directory entries before acknowledging their creation."""
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _ensure_directory(path: Path) -> None:
+    """Create each missing ancestor and persist its entry in its parent."""
+    if path.is_dir():
+        return
+    _ensure_directory(path.parent)
+    try:
+        path.mkdir()
+    except FileExistsError:
+        if not path.is_dir():
+            raise
+    else:
+        _sync_directory(path.parent)
+
+
+def _require_fresh_dataset(path: Path) -> None:
+    """Refuse any entry that is not one of the recorder's own data files, before the first write."""
+    if not path.exists():
+        return
+    if not path.is_dir():
+        raise DatasetConflict("dataset path is not a directory", dataset=path.name)
+    entries = sorted(entry.name for entry in path.iterdir())
+    if any(name not in _DATA_FILES for name in entries):
+        raise DatasetConflict(
+            "dataset directory holds foreign entries", dataset=path.name, entries=entries
+        )
+
+
+def _write_durably(stream: IO[bytes], data: bytes) -> None:
+    if stream.write(data) != len(data):
+        raise OSError("incomplete observation write")
+    stream.flush()
+    os.fsync(stream.fileno())
+
+
+def _append_record(path: Path, data: bytes) -> None:
+    """Append one durable record. A new file's bytes are durable before its name is synced.
+
+    The first observation is published only after this returns, so a crash cannot leave a
+    published tick whose file name or bytes are not yet durable.
+    """
+    if path.exists():
+        with path.open("ab") as stream:
+            _write_durably(stream, data)
+        return
+    with path.open("xb") as stream:
+        _write_durably(stream, data)
+    _sync_directory(path.parent)
+
+
+def _digest_data_files(dataset_dir: Path) -> dict[str, str]:
+    """Digest every permitted data file. Any other *.jsonl is refused, never omitted."""
+    if any(path.name not in _DATA_FILES for path in dataset_dir.glob("*.jsonl")):
+        raise ValueError("dataset contains an unlisted JSONL file")
+    return {
+        name: hashlib.sha256((dataset_dir / name).read_bytes()).hexdigest()
+        for name in _DATA_FILES
+        if (dataset_dir / name).exists()
+    }
+
+
+def _is_resumable(path: Path) -> bool:
+    """An unsealed recording: a directory holding only the recorder's own data files."""
+    return path.is_dir() and all(entry.name in _DATA_FILES for entry in path.iterdir())
+
+
+def _refuse_constant(name: str) -> None:
+    raise ValueError(f"non-finite JSON constant {name}")
+
+
+def _is_record(line: bytes) -> bool:
+    """True when the line is one complete JSON object, the only shape a data file holds."""
+    try:
+        value = json.loads(line.decode("utf-8"), parse_constant=_refuse_constant)
+    except ValueError:
+        return False
+    return isinstance(value, dict)
+
+
+def _intact_length(name: str, data: bytes) -> int:
+    """Length of the prefix of whole records. Only the file's final line may be torn."""
+    complete = data.rfind(b"\n") + 1
+    # An unterminated tail is always the torn final line. A terminated last line may be one too.
+    last_may_be_torn = complete == len(data)
+    kept = position = number = 0
+    while position < complete:
+        newline = data.index(b"\n", position)
+        number += 1
+        if _is_record(data[position:newline]):
+            kept = newline + 1
+        elif last_may_be_torn and newline + 1 == complete:
+            break
+        else:
+            raise CorruptFixture("line is not valid JSON", file=name, line=number)
+        position = newline + 1
+    return kept
+
+
+def _recover_torn_tail(path: Path) -> int:
+    """Truncate a torn final line durably. Returns the bytes dropped; 0 when the file is intact."""
+    data = path.read_bytes()
+    kept = _intact_length(path.name, data)
+    if kept == len(data):
+        return 0
+    with path.open("r+b") as stream:
+        stream.truncate(kept)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return len(data) - kept
+
+
+def seal_directory(
+    dataset_dir: Path,
+    *,
+    recorded_from_utc: str,
+    recorded_to_utc: str,
+    sources: dict[str, str],
+    notes: str,
+    seed_hint: int = 0,
+    dataset_name: str | None = None,
+) -> None:
+    """Write the manifest for a directory of data files, then accept it with the replay loader.
+
+    The one sealing path: LiveRecorder.seal and the replay maintenance verbs both call it. The
+    manifest is linked into place only after its bytes are durable; a dataset the loader refuses
+    has its manifest removed again.
+    """
+    linked = False
+    try:
+        manifest = FixtureManifest(
+            dataset=dataset_name or dataset_dir.name,
+            recorded_from_utc=recorded_from_utc,
+            recorded_to_utc=recorded_to_utc,
+            seed_hint=seed_hint,
+            sources=sources,
+            sha256=_digest_data_files(dataset_dir),
+            notes=notes,
+        )
+        encoded = (manifest.model_dump_json(indent=2) + "\n").encode("utf-8")
+        with tempfile.NamedTemporaryFile(dir=dataset_dir, delete=False) as stream:
+            temporary = Path(stream.name)
+            try:
+                if stream.write(encoded) != len(encoded):
+                    raise OSError("incomplete manifest write")
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.link(temporary, dataset_dir / MANIFEST_NAME)
+                linked = True
+            finally:
+                temporary.unlink(missing_ok=True)
+        # The replay loader is the acceptance test: a dataset it refuses is never sealed.
+        load_dataset(dataset_dir)
+        _sync_directory(dataset_dir)
+    except BaseException:
+        if linked:
+            try:
+                (dataset_dir / MANIFEST_NAME).unlink()
+                _sync_directory(dataset_dir)
+            except BaseException as cleanup_error:
+                raise RuntimeError(
+                    "manifest rollback durability is indeterminate"
+                ) from cleanup_error
+        raise
+
+
+class LiveRecorder:
+    """Append ticks before publication and seal their exact bytes with a manifest."""
+
+    def __init__(self, dataset_dir: Path, *, clock: Clock, dataset_name: str | None = None) -> None:
+        self.dataset_dir = dataset_dir
+        self.dataset_name = dataset_name
+        self.clock = clock
+        self._first_utc: str | None = None
+        self._last_utc: str | None = None
+        self._last_epoch: float | None = None
+        self._sources: dict[str, str] = {}
+        self._failed = False
+        self._sealed = False
+        self._claimed = False
+        self.recovered_tails: dict[str, int] = {}
+        if _is_resumable(dataset_dir):
+            self._resume()
+
+    def _resume(self) -> None:
+        """Startup recovery: drop each data file's torn final line, then re-derive its span."""
+        for name in _DATA_FILES:
+            path = self.dataset_dir / name
+            if path.is_file():
+                dropped = _recover_torn_tail(path)
+                if dropped:
+                    self.recovered_tails[name] = dropped
+        self._restore_state()
+
+    def _restore_state(self) -> None:
+        """Re-derive the span and sources of a resumed events.jsonl so the manifest stays exact."""
+        path = self.dataset_dir / EVENTS_NAME
+        if not path.is_file():
+            return
+        for number, line in enumerate(path.read_bytes().splitlines(), 1):
+            try:
+                record = json.loads(line)
+                stamp, source = record["ts_utc"], record["source"]
+                epoch = parse_ts_utc(stamp)
+                if not isinstance(source, str):
+                    raise TypeError("source is not a string")
+            except (KeyError, TypeError, ValueError):
+                raise CorruptFixture(
+                    "event record cannot be resumed", file=EVENTS_NAME, line=number
+                ) from None
+            if self._first_utc is None:
+                self._first_utc = stamp
+            self._last_utc = stamp
+            self._last_epoch = epoch
+            self._sources[source] = source
+
+    def record(self, observation: CurveObservation) -> None:
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        epoch = observation.validate()
+        if self._last_epoch is not None and epoch < self._last_epoch:
+            raise ValueError("observation timestamps must not go backwards")
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
+        data = (json.dumps(observation.replay_tick(), separators=(",", ":")) + "\n").encode("utf-8")
+        self._persist(EVENTS_NAME, data)
+        if self._first_utc is None:
+            self._first_utc = observation.ts_utc
+        self._last_utc = observation.ts_utc
+        self._last_epoch = epoch
+        self._sources[observation.source] = observation.source
+
+    def record_gap(self, gap: Gap) -> None:
+        """Durably append one closed feed gap to gaps.jsonl. An open gap has no end to record."""
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if gap.end_ts_utc is None:
+            raise ValueError("only closed gaps are recorded")
+        if parse_ts_utc(gap.end_ts_utc) < parse_ts_utc(gap.start_ts_utc):
+            raise ValueError("gap ends before it starts")
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
+        line = {
+            "start_ts_utc": gap.start_ts_utc,
+            "end_ts_utc": gap.end_ts_utc,
+            "reason": gap.reason,
+        }
+        data = (json.dumps(line, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+        self._persist(GAPS_NAME, data)
+
+    def record_frame(self, raw: dict[str, object]) -> None:
+        """Durably append one raw feed frame to feed.jsonl, stamped with the recorder's clock.
+
+        ``raw`` holds exactly ``stream`` (the nonempty name of the feed that received the frame)
+        and ``payload`` (the decoded JSON object as received). Ordering contract: the frame is
+        durable before the observation it produces is appended to events.jsonl, so the caller
+        records the frame before the frame reaches the bridge. A rebuild stamps each observation
+        with the ts of the frame that produced it, so the live wrapper must stamp them the same way.
+        """
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if set(raw) != {"stream", "payload"}:
+            raise ValueError("a frame holds exactly stream and payload")
+        stream, payload = raw["stream"], raw["payload"]
+        if not isinstance(stream, str) or not stream.strip():
+            raise ValueError("stream must be a nonempty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a JSON object")
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
+        line = {"ts": self.clock.now(), "stream": stream, "payload": payload}
+        data = (
+            json.dumps(line, separators=(",", ":"), sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+        self._persist(FEED_NAME, data)
+
+    def _claim_dataset(self) -> None:
+        """Refuse a directory holding foreign entries before this recorder's first write."""
+        if not self._claimed:
+            # Refused before anything is written, so a conflicting directory stays untouched.
+            _require_fresh_dataset(self.dataset_dir)
+            self._claimed = True
+
+    def _persist(self, name: str, data: bytes) -> None:
+        """Durably append to one data file. Any OSError fails the recorder for good."""
+        self._claim_dataset()
+        try:
+            _ensure_directory(self.dataset_dir)
+            if (self.dataset_dir / MANIFEST_NAME).exists():
+                raise FileExistsError("dataset is already sealed")
+            _append_record(self.dataset_dir / name, data)
+        except OSError:
+            self._failed = True
+            raise
+
+    def seal(self, *ledgers: GapLedger) -> None:
+        """Close each given ledger's open gap at this instant, then seal. No open gap is dropped."""
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        if self._first_utc is None or self._last_utc is None:
+            raise ValueError("cannot seal a dataset without observations")
+        try:
+            for ledger in ledgers:
+                ledger.close()
+            seal_directory(
+                self.dataset_dir,
+                recorded_from_utc=self._first_utc,
+                recorded_to_utc=self._last_utc,
+                sources=self._sources,
+                notes="Read-only curve observations",
+            )
+        except BaseException:
+            self._failed = True
+            raise
+
+    def record_tick(self, tick: object) -> None:
+        """Append one CurveTick's dump to events.jsonl, stamped by the tick itself.
+
+        REC-03 surface: trim/seal keep the original event timestamps so a
+        re-sealed window reproduces the source bytes exactly.
+        """
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        dumped = tick.model_dump(mode="json")  # type: ignore[attr-defined]
+        stamp = str(dumped["ts_utc"])
+        epoch = float(parse_ts_utc(stamp))
+        if self._last_epoch is not None and epoch < self._last_epoch:
+            raise ValueError("tick timestamps must be non-decreasing")
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
+        data = (json.dumps(dumped, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+        self._persist(EVENTS_NAME, data)
+        if self._first_utc is None:
+            self._first_utc = stamp
+        self._last_utc = stamp
+        self._last_epoch = epoch
+        self._sources[str(dumped.get("source", "rest"))] = str(dumped.get("source", "rest"))
+
+    def seal_dataset(self, dataset_name: str, *, seed_hint: int = 0) -> "Path":
+        """REC-03 seal: named dataset manifest; return the dataset directory."""
+        validate_dataset_name(dataset_name)
+        if self._first_utc is None or self._last_utc is None:
+            raise ValueError("cannot seal a dataset without observations")
+        seal_directory(
+            self.dataset_dir,
+            recorded_from_utc=self._first_utc,
+            recorded_to_utc=self._last_utc,
+            sources=dict(self._sources),
+            notes="",
+            seed_hint=seed_hint,
+            dataset_name=dataset_name,
+        )
+        self._sealed = True
+        return self.dataset_dir
+
+
 _NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
 
@@ -32,106 +409,3 @@ def validate_dataset_name(name: str) -> str:
     if not _NAME_RE.fullmatch(name) or ".." in name:
         raise ValueError("dataset must be a plain name without separators or '..'")
     return name
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _atomic_write(path: Path, data: bytes) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
-
-
-class LiveRecorder:
-    """Append ticks/gaps; seal into a self-verifying dataset."""
-
-    def __init__(self, dataset_dir: Path) -> None:
-        self._dir = Path(dataset_dir)
-        self._dir.mkdir(parents=True, exist_ok=True)
-        self._notes: list[str] = []
-        self._recover(EVENTS_NAME)
-        self._recover(GAPS_NAME)
-        self._last_ts: float | None = None
-        self._seed_last_ts()
-
-    @property
-    def notes(self) -> tuple[str, ...]:
-        return tuple(self._notes)
-
-    def _recover(self, name: str) -> None:
-        """Truncate a torn trailing line to the last complete line; record it."""
-        path = self._dir / name
-        if not path.is_file():
-            return
-        data = path.read_bytes()
-        if not data or data.endswith(b"\n"):
-            return
-        last_newline = data.rfind(b"\n")
-        kept = data[: last_newline + 1] if last_newline >= 0 else b""
-        removed = len(data) - len(kept)
-        _atomic_write(path, kept)
-        self._notes.append(f"recovered {name}: truncated {removed} torn bytes")
-
-    def _seed_last_ts(self) -> None:
-        path = self._dir / EVENTS_NAME
-        if not path.is_file():
-            return
-        for line in path.read_text(encoding="utf-8").splitlines():
-            try:
-                record = json.loads(line)
-                self._last_ts = parse_ts_utc(str(record["ts_utc"]))
-            except (ValueError, KeyError):
-                continue
-
-    def _append(self, name: str, record: dict[str, Any]) -> None:
-        path = self._dir / name
-        line = json.dumps(record, sort_keys=True).encode() + b"\n"
-        existing = path.read_bytes() if path.is_file() else b""
-        _atomic_write(path, existing + line)
-
-    def record_tick(self, tick: CurveTick) -> None:
-        stamp = parse_ts_utc(tick.ts_utc)
-        if self._last_ts is not None and stamp < self._last_ts:
-            raise ValueError("tick timestamps must be non-decreasing")
-        record = tick.model_dump(mode="json")
-        self._append(EVENTS_NAME, record)
-        self._last_ts = stamp
-
-    def record_gap(self, gap: GapEvent) -> None:
-        self._append(GAPS_NAME, gap.model_dump(mode="json"))
-
-    def seal(self, dataset_name: str, *, seed_hint: int = 0) -> Path:
-        """Write manifest.json listing every data file; return the dataset dir."""
-        validate_dataset_name(dataset_name)
-        sha: dict[str, str] = {}
-        ticks_path = self._dir / EVENTS_NAME
-        if ticks_path.is_file():
-            sha[EVENTS_NAME] = _sha256(ticks_path.read_bytes())
-        gaps_path = self._dir / GAPS_NAME
-        if gaps_path.is_file():
-            sha[GAPS_NAME] = _sha256(gaps_path.read_bytes())
-        if not sha:
-            raise ValueError("nothing recorded; seal refuses an empty dataset")
-        first = last = ""
-        if ticks_path.is_file():
-            lines = ticks_path.read_text(encoding="utf-8").splitlines()
-            if lines:
-                first = str(json.loads(lines[0])["ts_utc"])
-                last = str(json.loads(lines[-1])["ts_utc"])
-        if not first:
-            stamp = format_ts_utc(0.0)
-            first = last = stamp
-        manifest = FixtureManifest(
-            dataset=dataset_name,
-            recorded_from_utc=first,
-            recorded_to_utc=last,
-            seed_hint=seed_hint,
-            sources={"recorder": "live_recorder"},
-            sha256=sha,
-            notes="; ".join(self._notes),
-        )
-        payload = json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True).encode()
-        _atomic_write(self._dir / MANIFEST_NAME, payload)
-        return self._dir
