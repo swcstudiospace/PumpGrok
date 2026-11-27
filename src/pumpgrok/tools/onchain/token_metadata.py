@@ -17,7 +17,7 @@ from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.core.tool import Tool, ToolInput, ToolOutput, ToolSpec, tool
 from pumpgrok.tools._common import J5, SOLANA_RPC_SOURCE, MintStr, meta_now
 from pumpgrok.tools.onchain.authorities import check_mint
-from pumpgrok.tools.onchain.rpc import RpcClient
+from pumpgrok.tools.onchain.rpc import RpcClient, RpcError
 
 
 class TokenMetadataIn(ToolInput):
@@ -59,6 +59,37 @@ TOKEN_METADATA_SPEC = ToolSpec(
 )
 
 
+TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"  # noqa: S105  # public SPL program id, not a credential
+TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"  # noqa: S105  # public Token-2022 program id, not a credential
+_PROGRAM_BY_OWNER: dict[str, Literal["spl-token", "token-2022"]] = {
+    TOKEN_PROGRAM_ID: "spl-token",
+    TOKEN_2022_PROGRAM_ID: "token-2022",
+}
+
+
+def _extension_name(entry: object) -> str:
+    """Extension name from a jsonParsed entry ``{"extension": name, "state": {...}}``."""
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        name = entry.get("extension")
+        if isinstance(name, str):
+            return name
+    raise ValueError("unrecognised token-2022 extension entry")
+
+
+async def _program(mint: str, rpc: RpcClient) -> Literal["spl-token", "token-2022"]:
+    """Token program from the mint account owner; extension presence does not decide it."""
+    try:
+        account = await rpc.call("getAccountInfo", [mint, {"encoding": "jsonParsed"}])
+        program = _PROGRAM_BY_OWNER.get(account["value"]["owner"])
+    except (RpcError, DataStale, KeyError, TypeError) as exc:
+        raise DataStale(f"onchain.token_metadata owner failed mint={mint}") from exc
+    if program is None:
+        raise DataStale(f"onchain.token_metadata owner is not a token program mint={mint}")
+    return program
+
+
 async def run_token_metadata(inp: TokenMetadataIn, rpc: RpcClient) -> dict[str, Any]:
     """Wrap the ported mint check and return a validated typed payload."""
     result = await check_mint(inp.mint, rpc)
@@ -68,14 +99,15 @@ async def run_token_metadata(inp: TokenMetadataIn, rpc: RpcClient) -> dict[str, 
         decimals = int(result["decimals"])
         supply = str(result["supply"])
         initialized = bool(result["isInitialized"])
-        extensions = [str(e) for e in (result.get("extensions") or [])]
+        extensions = [_extension_name(e) for e in (result.get("extensions") or [])]
     except (KeyError, ValueError, TypeError) as exc:
         raise DataStale(f"onchain.token_metadata malformed mint={inp.mint}") from exc
+    program = await _program(inp.mint, rpc)
     out = {
         "decimals": decimals,
         "supply": supply,
         "is_initialized": initialized,
-        "program": "token-2022" if extensions else "spl-token",
+        "program": program,
         "extensions": extensions,
         "name": None,
         "symbol": None,

@@ -28,6 +28,7 @@ from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools import build_registry
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.rpc import RpcClient
+from pumpgrok.tools.safety.checks import CheckResult
 from pumpgrok.tools.safety.score_report import SCORE_SPEC, ScoreReportIn, build_score_report_tool
 
 START = 1469918176.385
@@ -63,6 +64,7 @@ def _handler(*, freeze_live: bool, supply: str, holders_ok: bool):
                 result = {
                     "context": {"slot": 11},
                     "value": {
+                        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                         "data": {
                             "parsed": {
                                 "info": {
@@ -74,7 +76,7 @@ def _handler(*, freeze_live: bool, supply: str, holders_ok: bool):
                                     "extensions": [],
                                 }
                             }
-                        }
+                        },
                     },
                 }
             else:
@@ -274,3 +276,9 @@ def test_score_spec_contract() -> None:
 def test_score_input_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         ScoreReportIn(mint=MINT, curve_account=CURVE, venue_noise=1)  # type: ignore[call-arg]
+
+
+def test_published_check_rows_carry_no_unused_weight() -> None:
+    """Weight never fed the score, so a published check row does not carry one."""
+    row = CheckResult(id="mint_authority", status="pass", reason="mint authority revoked")
+    assert "weight" not in row.model_dump()

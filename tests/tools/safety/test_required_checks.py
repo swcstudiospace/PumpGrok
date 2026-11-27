@@ -57,6 +57,7 @@ def _clean_handler(request: httpx.Request) -> httpx.Response:
             result = {
                 "context": {"slot": 11},
                 "value": {
+                    "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                     "data": {
                         "parsed": {
                             "info": {
@@ -68,7 +69,7 @@ def _clean_handler(request: httpx.Request) -> httpx.Response:
                                 "extensions": [],
                             }
                         }
-                    }
+                    },
                 },
             }
         else:

@@ -129,6 +129,20 @@ def _sol_delta_at(meta: dict[str, Any], index: int) -> int:
         return 0
 
 
+def _owner_index(meta: dict[str, Any], keys: list[str], token_index: int) -> int | None:
+    """Key index of the wallet owning token account ``token_index``, when it is listed."""
+    for side in ("preTokenBalances", "postTokenBalances"):
+        balances = meta.get(side, [])
+        if not isinstance(balances, list):
+            continue
+        for entry in balances:
+            if isinstance(entry, dict) and entry.get("accountIndex") == token_index:
+                owner = entry.get("owner")
+                if isinstance(owner, str) and owner in keys:
+                    return keys.index(owner)
+    return None
+
+
 def _transfer_kind(
     decrease_units: int, increase_units: int, from_sol_delta: int
 ) -> Literal["sell", "transfer", "unknown"]:
@@ -168,7 +182,9 @@ def parse_transfer_tx(
     to_key = keys[increase_idx] if 0 <= increase_idx < len(keys) else ""
     if not from_key or not to_key:
         return None
-    kind = _transfer_kind(deltas[decrease_idx], amount, _sol_delta_at(meta, decrease_idx))
+    owner_idx = _owner_index(meta, keys, decrease_idx)
+    from_sol = _sol_delta_at(meta, owner_idx) if owner_idx is not None else 0
+    kind = _transfer_kind(deltas[decrease_idx], amount, from_sol)
     ts = tx.get("blockTime")
     return Transfer.model_validate(
         {
@@ -200,8 +216,8 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
     for wallet in wallets[: inp.limit]:
         try:
             sigs = await rpc.call("getSignaturesForAddress", [wallet, {"limit": _SIGS_PER_WALLET}])
-        except RpcError:
-            continue
+        except RpcError as exc:
+            raise DataStale(f"onchain.large_transfers signatures failed mint={inp.mint}") from exc
         if not isinstance(sigs, list):
             continue
         for entry in sigs:
@@ -219,8 +235,10 @@ async def run_large_transfers(inp: LargeTransfersIn, rpc: RpcClient) -> dict[str
                         {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
                     ],
                 )
-            except RpcError:
-                continue
+            except RpcError as exc:
+                raise DataStale(
+                    f"onchain.large_transfers transaction failed mint={inp.mint}"
+                ) from exc
             transfer = parse_transfer_tx(
                 inp.mint,
                 entry["signature"],

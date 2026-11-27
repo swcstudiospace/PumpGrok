@@ -16,6 +16,7 @@ import sys
 import time
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -33,11 +34,11 @@ from pumpgrok.tools import build_registry, register_read_tools
 from pumpgrok.tools.onchain.authorities_tool import AuthoritiesIn
 from pumpgrok.tools.onchain.curve_layout import CURVE_ACCOUNT_SIZE, encode_curve_fixture
 from pumpgrok.tools.onchain.deployer_history import DeployerHistoryIn
-from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn
+from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn, parse_transfer_tx
 from pumpgrok.tools.onchain.lp_status import LpStatusIn
 from pumpgrok.tools.onchain.priority_fee_tool import PriorityFeeIn
 from pumpgrok.tools.onchain.rpc import RpcClient
-from pumpgrok.tools.onchain.token_metadata import TokenMetadataIn
+from pumpgrok.tools.onchain.token_metadata import TokenMetadataIn, run_token_metadata
 from pumpgrok.tools.onchain.top_holders import TopHoldersIn
 
 START = 1469918176.385
@@ -47,6 +48,10 @@ CREATOR = "9" * 44
 WALLET = "7" * 44
 R1 = "6" * 44
 FREEZE = "F" * 44
+SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+SELLER_ATA = "4" * 44
+BUYER_ATA = "3" * 44
 
 SUPPLY = 100_000_000
 
@@ -88,11 +93,26 @@ _TRANSFER_TX = {
         "preBalances": [1000, 0],
         "postBalances": [1010, 0],
         "preTokenBalances": [
-            {"accountIndex": 0, "mint": MINT, "uiTokenAmount": {"amount": "1000000"}},
+            {
+                "accountIndex": 0,
+                "mint": MINT,
+                "owner": WALLET,
+                "uiTokenAmount": {"amount": "1000000"},
+            },
         ],
         "postTokenBalances": [
-            {"accountIndex": 0, "mint": MINT, "uiTokenAmount": {"amount": "0"}},
-            {"accountIndex": 1, "mint": MINT, "uiTokenAmount": {"amount": "1000000"}},
+            {
+                "accountIndex": 0,
+                "mint": MINT,
+                "owner": WALLET,
+                "uiTokenAmount": {"amount": "0"},
+            },
+            {
+                "accountIndex": 1,
+                "mint": MINT,
+                "owner": R1,
+                "uiTokenAmount": {"amount": "1000000"},
+            },
         ],
     },
     "transaction": {"message": {"accountKeys": [{"pubkey": WALLET}, {"pubkey": R1}]}},
@@ -110,6 +130,7 @@ def _rpc() -> RpcClient:
                 result = {
                     "context": {"slot": 11},
                     "value": {
+                        "owner": SPL_TOKEN,
                         "data": {
                             "parsed": {
                                 "info": {
@@ -121,7 +142,7 @@ def _rpc() -> RpcClient:
                                     "extensions": [],
                                 }
                             }
-                        }
+                        },
                     },
                 }
             else:
@@ -331,3 +352,84 @@ async def test_onchain_upstream_failure_is_typed() -> None:
         resolved = reg.find("onchain.authorities", max_side_effect=SideEffect.READ, bot=_bot())
         with pytest.raises(DataStale):
             await resolved(AuthoritiesIn(mint=MINT))
+
+
+def _mint_rpc(owner: str, extensions: list[Any]) -> RpcClient:
+    """Every getAccountInfo call returns one parsed mint owned by ``owner``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        result = {
+            "context": {"slot": 11},
+            "value": {
+                "owner": owner,
+                "data": {
+                    "parsed": {
+                        "info": {
+                            "mintAuthority": None,
+                            "freezeAuthority": None,
+                            "decimals": 6,
+                            "supply": str(SUPPLY),
+                            "isInitialized": True,
+                            "extensions": extensions,
+                        }
+                    }
+                },
+            },
+        }
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return RpcClient(
+        ["https://rpc.invalid"], client, FixtureClock(start=START), rng=random.Random(6)
+    )
+
+
+async def test_token_metadata_program_follows_owner_not_extensions() -> None:
+    out = await run_token_metadata(TokenMetadataIn(mint=MINT), _mint_rpc(TOKEN_2022, []))
+    assert out["program"] == "token-2022"
+
+
+async def test_token_metadata_lists_extension_names_not_reprs() -> None:
+    extensions = [{"extension": "transferHook", "state": {"programId": "H" * 44}}]
+    out = await run_token_metadata(TokenMetadataIn(mint=MINT), _mint_rpc(TOKEN_2022, extensions))
+    assert out["extensions"] == ["transferHook"]
+
+
+def test_sell_is_labelled_by_owner_sol_gain_not_token_account() -> None:
+    """The drained token account keeps its lamports; the owning wallet is the one paid SOL."""
+    tx = {
+        "blockTime": _NOW - 50,
+        "meta": {
+            "err": None,
+            "preBalances": [2_000_000, 1_000_000, 2_039_280],
+            "postBalances": [2_000_000, 1_500_000, 2_039_280],
+            "preTokenBalances": [
+                {
+                    "accountIndex": 0,
+                    "mint": MINT,
+                    "owner": WALLET,
+                    "uiTokenAmount": {"amount": "5000"},
+                },
+            ],
+            "postTokenBalances": [
+                {
+                    "accountIndex": 0,
+                    "mint": MINT,
+                    "owner": WALLET,
+                    "uiTokenAmount": {"amount": "0"},
+                },
+                {
+                    "accountIndex": 2,
+                    "mint": MINT,
+                    "owner": R1,
+                    "uiTokenAmount": {"amount": "5000"},
+                },
+            ],
+        },
+        "transaction": {"message": {"accountKeys": [SELLER_ATA, WALLET, BUYER_ATA]}},
+    }
+    transfer = parse_transfer_tx(
+        MINT, "sig-sell", WALLET, tx, supply_units=10_000, min_share=Decimal("0.005")
+    )
+    assert transfer is not None
+    assert transfer.kind == "sell"

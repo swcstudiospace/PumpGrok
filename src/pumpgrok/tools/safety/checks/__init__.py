@@ -8,7 +8,6 @@ verdict when blind; ``ADVISORY_IDS`` are blind by construction in Phase 3
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -69,5 +68,4 @@ class CheckResult(BaseModel):
     status: Literal["pass", "warn", "fail", "blind"]
     value: str | float | bool | None = None
     threshold: str | float | None = None
-    weight: Decimal = Field(ge=0, le=1)
     reason: str = Field(min_length=1)
