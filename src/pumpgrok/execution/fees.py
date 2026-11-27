@@ -15,8 +15,8 @@ sent) records nothing.
 FEE-01 (fee model v2, :class:`FeeModelV2`) is the paper default. The ATA rent on the
 first buy of each mint is a refundable deposit: the cash leaves on that buy and the
 deposit is held as an asset in the position's mark until the position closes in full, when
-it is refunded to cash and kept out of realized P&L. It also adds a PumpPortal term that
-applies only when the PumpPortal builder is selected, and a cap on the priority price. The ATA
+it is refunded to cash and kept out of realized P&L. It also adds a cap on the
+priority price. The ATA
 rent is read at runtime from RPC by :func:`read_ata_rent`. The pinned value is an
 offline replay fallback; it records its epoch and source and is never the stale
 2039280. :class:`FeeModel` (v1) stays selectable through :func:`fee_model_for`.
@@ -107,15 +107,14 @@ class FeeModel:
 
 @dataclass(frozen=True)
 class FeeModelV2(FeeModel):
-    """Fee model v2 (FEE-01): v1 plus ATA rent, a PumpPortal term and a priority cap.
+    """Fee model v2 (FEE-01): v1 plus ATA rent and a priority cap.
 
     ``ata_rent_lamports`` is charged on each (re-)entry while the mint is flat
     (the caller passes ``first_buy=True`` when the ledger holds no open
     position for the mint), matching on-chain ATA recreation
     (charge_on_reentry): a close refunds the deposit, and the next entry pays
     it again. The default is the offline pin, and ``ata_rent_source`` says
-    so. ``pumpportal_fee_bps`` applies only to fills routed through the
-    PumpPortal builder (``pumpportal_builder=True``). The priority price is
+    so. The priority price is
     clamped to ``priority_cap_micro_lamports_per_cu`` before the v1 formula.
     All values are integer lamports.
     """
@@ -123,7 +122,6 @@ class FeeModelV2(FeeModel):
     ata_rent_lamports: int = ATA_RENT_OFFLINE_LAMPORTS
     ata_rent_epoch: int | None = ATA_RENT_OFFLINE_EPOCH
     ata_rent_source: str = ATA_RENT_OFFLINE_SOURCE
-    pumpportal_fee_bps: int = 0
     priority_cap_micro_lamports_per_cu: int = 20_000
 
     def priority_fee(self) -> int:
@@ -143,25 +141,9 @@ class FeeModelV2(FeeModel):
         """Refundable ATA deposit held as an asset: the rent on a first buy, else zero."""
         return self.ata_rent_term(first_buy)
 
-    def pumpportal_fee(self, filled_lamports: int, *, pumpportal_builder: bool) -> int:
-        """PumpPortal builder term: zero unless the builder is selected."""
-        if not pumpportal_builder:
-            return 0
-        return filled_lamports * self.pumpportal_fee_bps // 10_000
-
     def buy_network_cost(self, *, first_buy: bool) -> int:
         """Base plus priority, plus the ATA rent on a (re-)entry of a flat mint."""
         return self.network_cost() + self.ata_rent_term(first_buy)
-
-    def buy_debit_v2(
-        self, filled_lamports: int, first_buy: bool, pumpportal_builder: bool = False
-    ) -> int:
-        """Cash debited for a buy fill under v2."""
-        return (
-            filled_lamports
-            + self.buy_network_cost(first_buy=first_buy)
-            + self.pumpportal_fee(filled_lamports, pumpportal_builder=pumpportal_builder)
-        )
 
 
 #: The paper default (FEE-01). Backtest and paper both select it through fee_model_for.

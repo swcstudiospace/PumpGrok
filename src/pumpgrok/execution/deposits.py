@@ -17,7 +17,7 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from pumpgrok.ledger.deposit_reader import position_deposits_by_seq
+from pumpgrok.ledger.deposit_reader import _table_exists, position_deposits_by_seq
 
 if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore, SidecarWriter
@@ -39,6 +39,10 @@ def opening_deposit_writer(mint: str, deposit_lamports: int) -> SidecarWriter:
     Records ``deposit_lamports`` against every PositionOpened row in the batch, inside the
     batch's own transaction, so the deposit commits or rolls back with its opening.
     """
+    if not isinstance(mint, str) or not mint:
+        raise ValueError("mint must be a non-empty string")
+    if type(deposit_lamports) is not int or deposit_lamports < 0:
+        raise ValueError("deposit_lamports must be a non-negative int")
 
     def write(db: sqlite3.Connection, stored: Sequence[Mapping[str, Any]]) -> None:
         openings = [row for row in stored if row["type"] == "PositionOpened"]
@@ -53,13 +57,6 @@ def opening_deposit_writer(mint: str, deposit_lamports: int) -> SidecarWriter:
             )
 
     return write
-
-
-def _table_exists(db: sqlite3.Connection) -> bool:
-    row = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;", (_TABLE,)
-    ).fetchone()
-    return row is not None
 
 
 def open_deposits(store: LedgerStore) -> dict[str, int]:
