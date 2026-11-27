@@ -123,10 +123,11 @@ def test_unknown_events_only_append_to_unknown_events(steps: list[int], kinds: l
     expected = [f"{row['seq']}:FutureThing" for row in rows if row["type"] == "FutureThing"]
     state = _fold(rows)
     assert state.unknown_events == expected
+    assert state.unknown_count == len(expected)
     known_only = [row for row in rows if row["type"] != "FutureThing"]
     observed = dump_state(state)
     baseline = dump_state(_fold(known_only))
-    for name in ("unknown_events", "seq"):
+    for name in ("unknown_events", "unknown_count", "seq"):
         observed.pop(name)
         baseline.pop(name)
     assert observed == baseline

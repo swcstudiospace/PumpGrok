@@ -62,9 +62,8 @@ class StrategyRuntime:
             strategy.strategy_id: version_id(type(strategy), dict(type(strategy).DEFAULTS))
             for strategy in strategies
         }
-        self._tapes = {
-            strategy.strategy_id: Tape(capacity=tape_capacity) for strategy in strategies
-        }
+        # EXEC-EX-42: one shared tape (per-mint series), not one copy per strategy.
+        self._tape = Tape(capacity=tape_capacity)
 
     async def run(
         self,
@@ -95,12 +94,11 @@ class StrategyRuntime:
         for strategy in self._strategies:
             strategy_id = strategy.strategy_id
             version = self._versions[strategy_id]
-            tape = self._tapes[strategy_id]
             context = StrategyContext(
                 now=self._clock.now(),
                 version_id=version,
                 tick=tick,
-                tape=tape.points(tick.mint),
+                tape=self._tape.points(tick.mint),
             )
             for intent in strategy.on_tick(context):
                 if intent.strategy_id != strategy_id or intent.version_id != version:
@@ -108,5 +106,5 @@ class StrategyRuntime:
                         f"intent from {strategy_id} names another strategy or version"
                     )
                 collected.append(intent)
-            tape.record(tick.mint, TapePoint(ts=tick.ts, price_lamports=tick.price_lamports))
+        self._tape.record(tick.mint, TapePoint(ts=tick.ts, price_lamports=tick.price_lamports))
         return tuple(collected)

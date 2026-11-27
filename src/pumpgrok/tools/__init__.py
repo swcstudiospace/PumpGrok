@@ -14,11 +14,13 @@ authenticated operator grant.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import random
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -218,6 +220,7 @@ def _register_ledger_and_risk(
     *,
     close_position: ClosePosition,
     barrier: InflightBarrier,
+    mode: Literal["paper", "live"] = "paper",
 ) -> None:
     """Ledger, portfolio, risk, journal and report tools over the one ledger store."""
     kill_switch_file = killswitch_file(data_dir)
@@ -227,7 +230,7 @@ def _register_ledger_and_risk(
     reg.register(build_pnl_tool(store, clock, budget=budget))
     reg.register(build_check_limits_tool(store, budget, clock))
     reg.register(build_drawdown_tool(store, budget, clock))
-    reg.register(build_halt_status_tool(store, kill_switch_file, clock, "paper"))
+    reg.register(build_halt_status_tool(store, kill_switch_file, clock, mode))
     reg.register(
         build_kill_switch_tool(
             store,
@@ -251,6 +254,7 @@ def _register_desk(
     data_dir: Path,
     repo_root: Path,
     client: httpx.AsyncClient,
+    mode: Literal["paper", "live"] = "paper",
 ) -> None:
     """Alert, brief, docs, memory, ownership, receipt, event and doctor tools."""
     _install_telegram_path_filter()
@@ -262,7 +266,7 @@ def _register_desk(
         alert_file=data_dir / "alerts.jsonl",
     )
     reg.register(build_alert_tool(notifier, clock))
-    reg.register(build_brief_tool(store, bank, clock, killswitch_file(data_dir), "paper"))
+    reg.register(build_brief_tool(store, bank, clock, killswitch_file(data_dir), mode))
     reg.register(build_docs_search_tool(repo_root, clock))
     reg.register(build_memory_retain_tool(bank, clock))
     reg.register(build_memory_recall_tool(bank, clock))
@@ -372,6 +376,50 @@ def build_operator_registry(
         clock=active_clock, rng=make_rng(active_seed), operator_gate=operator_gate
     )
     client = httpx.AsyncClient()
+    try:
+        return _build_operator_registry_body(
+            reg=reg,
+            client=client,
+            data_dir=data_dir,
+            ledger_path=ledger_path,
+            repo_root=repo_root,
+            settings=settings,
+            active_clock=active_clock,
+            active_seed=active_seed,
+            replay=replay,
+            price_source=price_source,
+            live_source=live_source,
+            p_drop=p_drop,
+        )
+    except BaseException:
+        # DESK-R-51: close the client when a later step raises (e.g. ensure_paper_genesis
+        # raising CorruptState) so no connection leaks out of a failed build.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            with contextlib.suppress(RuntimeError):
+                asyncio.run(client.aclose())
+        else:
+            asyncio.get_running_loop().create_task(client.aclose())
+        raise
+
+
+def _build_operator_registry_body(
+    *,
+    reg: ToolRegistry,
+    client: httpx.AsyncClient,
+    data_dir: Path,
+    ledger_path: Path | None,
+    repo_root: Path,
+    settings: Settings,
+    active_clock: Clock,
+    active_seed: int,
+    replay: Any,
+    price_source: Any,
+    live_source: Any,
+    p_drop: float,
+) -> tuple[ToolRegistry, dict[str, Any], httpx.AsyncClient]:
+    """Everything after client creation in build_operator_registry (DESK-R-51 seam)."""
     rpc = RpcClient(
         list(settings.rpc.endpoints),
         client,
@@ -454,6 +502,7 @@ def build_operator_registry(
         budget,
         close_position=adapter.close_position,
         barrier=adapter.inflight_barrier,
+        mode="live" if live else "paper",
     )
     _register_desk(
         reg,
@@ -464,6 +513,7 @@ def build_operator_registry(
         data_dir=data_dir,
         repo_root=repo_root,
         client=client,
+        mode="live" if live else "paper",
     )
     manifests = load_bot_manifests(repo_root / "contracts" / "tool-rosters")
     return reg, manifests, client

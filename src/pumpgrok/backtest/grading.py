@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from pumpgrok.core.errors import PumpgrokError
 from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.replay.fixtures import EVENTS_NAME, MANIFEST_NAME, load_dataset
 
@@ -32,9 +33,11 @@ _REASONS = (
     "fixture",
     "gap",
     "hand_authored",
+    "performance",
     "short",
     "synthetic",
     "traded_only",
+    "unreadable",
     "unsealed",
 )
 
@@ -83,10 +86,19 @@ class Grade:
     reasons: tuple[str, ...]
 
 
-def grade(dataset: str | Path, canary_result: CanaryResult, thresholds: Thresholds) -> Grade:
-    """Grade one dataset. Promotion requires every condition; otherwise research_only."""
+def grade(
+    dataset: str | Path,
+    canary_result: CanaryResult,
+    thresholds: Thresholds,
+    *,
+    performance_net_lamports: int | None = None,
+) -> Grade:
+    """Grade one dataset plus realized performance. Promotion requires every condition."""
     path = Path(dataset)
     reasons = _collect_reasons(path, canary_result, thresholds)
+    # EXEC-EX-15 / EXEC-D-15: performance-graded — a losing run never promotes.
+    if performance_net_lamports is not None and performance_net_lamports < 0:
+        reasons.add("performance")
     unknown = reasons - set(_REASONS)
     if unknown:
         raise RuntimeError(f"unknown grade reasons: {sorted(unknown)}")
@@ -119,6 +131,7 @@ def _provenance_reasons(
     reasons: set[str] = set()
     if not sealed:
         reasons.add("unsealed")
+        reasons.add("unreadable")
     if _is_fixture(path, manifest):
         reasons.add("fixture")
     if _is_hand_authored(manifest):
@@ -135,7 +148,8 @@ def _load(
 ) -> tuple[dict[str, Any] | None, tuple[dict[str, Any], ...], bool]:
     try:
         dataset = load_dataset(path)
-    except Exception:
+    except (OSError, ValueError, PumpgrokError):
+        # EXEC-EX-38: narrow to the expected load errors; provenance stays unsealed.
         return _loose_manifest(path), _loose_events(path), False
     manifest = dataset.manifest.model_dump()
     return manifest, dataset.events, True

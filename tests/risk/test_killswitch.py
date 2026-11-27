@@ -349,7 +349,21 @@ def test_kill_verdict_blocks_mint_for_all_seats(tmp_path: Path) -> None:
     ids = IdFactory(clock, random.Random(7))
     try:
         engine = _engine(store, clock)
-        engine.record_kill_verdict(MINT_A, "rug evidence")
+        # RISK-R-12: record_kill_verdict deleted; the verdict note is the JournalNote.
+        store.append(
+            ts_utc=format_ts_utc(clock.now()),
+            source="paper",
+            correlation_id="t",
+            idempotency_key=f"kill-verdict|{MINT_A}|{format_ts_utc(clock.now())[:10]}",
+            type="JournalNote",
+            payload={
+                "source": "paper",
+                "seat": "bot-02-risk",
+                "note_kind": "verdict",
+                "text": f"RISK verdict=KILL mint={MINT_A} reason=rug evidence",
+                "refs": [],
+            },
+        )
         decision = engine.check(_buy(clock, ids), seat="bot-04-sniper")
         assert decision.passed is False
         assert decision.reason == "breaker_open"

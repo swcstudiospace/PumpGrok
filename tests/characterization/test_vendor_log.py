@@ -196,7 +196,9 @@ def test_close_line_computes_vendor_fields(tmp_path: Path) -> None:
     assert line["mint"] == MINT
     assert Decimal(line["exit_price"]) * 1000 == Decimal("6.2e-5")
     assert Decimal(line["pnl_sol"]) * 1_000_000_000 == 25_000_000
-    assert line["pnl_pct"] == float("12.5")
+    # R-24: pnl_pct is a Decimal string, not a float.
+    assert isinstance(line["pnl_pct"], str)
+    assert line["pnl_pct"] == "12.5"
     assert line["hold_seconds"] == 300
     assert line["reason"] == "take_profit"
     assert line["tx_hash"] == "dry_run"
@@ -210,7 +212,9 @@ def test_close_loss_carries_negative_pnl(tmp_path: Path) -> None:
     row = _envelope("PositionClosed", payload, "close-key-0002", "2026-01-01T00:00:03.000001Z")
     (line,) = _export(tmp_path, [row])
     assert Decimal(line["pnl_sol"]) * 1_000_000_000 == -120_000_000
-    assert line["pnl_pct"] == float("-30.0")
+    # R-24: pnl_pct is a Decimal string, not a float.
+    assert isinstance(line["pnl_pct"], str)
+    assert line["pnl_pct"] == "-30.0"
     assert line["reason"] == "stop_loss"
 
 

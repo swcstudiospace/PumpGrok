@@ -199,19 +199,19 @@ def _apply_positions(
 ) -> tuple[tuple[GapFlag, ...], tuple[str, ...]]:
     open_positions: dict[str, dict[str, int]] = {}
     flags: list[GapFlag] = []
-    consumed: set[str] = set()
     ordered = sorted(events, key=lambda event: _event_ts(event) or 0.0)
     gap_at = 0
     for event in ordered:
         stamp = _event_ts(event)
         if stamp is None:
             continue
-        while gap_at < len(intervals) and intervals[gap_at][0] <= stamp:
+        # EXEC-EX-11: flatten only once the event is strictly past the gap start,
+        # so an event stamped at the gap start applies before the flatten.
+        while gap_at < len(intervals) and intervals[gap_at][0] < stamp:
             gap_start, gap_end = intervals[gap_at]
             flags.extend(
                 _close_open(
                     open_positions,
-                    consumed,
                     gap_start=gap_start,
                     gap_end=gap_end,
                     haircut_bps=haircut_bps,
@@ -219,13 +219,12 @@ def _apply_positions(
                 )
             )
             gap_at += 1
-        _apply_event(open_positions, event, consumed)
+        _apply_event(open_positions, event)
     while gap_at < len(intervals):
         gap_start, gap_end = intervals[gap_at]
         flags.extend(
             _close_open(
                 open_positions,
-                consumed,
                 gap_start=gap_start,
                 gap_end=gap_end,
                 haircut_bps=haircut_bps,
@@ -238,13 +237,15 @@ def _apply_positions(
 
 def _close_open(
     open_positions: dict[str, dict[str, int]],
-    consumed: set[str],
     *,
     gap_start: float,
     gap_end: float,
     haircut_bps: int,
     exclude: bool,
 ) -> list[GapFlag]:
+    # EXEC-EX-12: consumed is scoped to this call only, so a reopened mint's
+    # later events are never invisible.
+    consumed: set[str] = set()
     flags: list[GapFlag] = []
     for mint in sorted(open_positions):
         if mint in consumed:
@@ -292,11 +293,10 @@ def _close_open(
 def _apply_event(
     open_positions: dict[str, dict[str, int]],
     event: dict[str, Any],
-    consumed: set[str],
 ) -> None:
     kind = event.get("kind")
     mint = event.get("mint")
-    if not isinstance(mint, str) or mint in consumed:
+    if not isinstance(mint, str):
         return
     if kind == "open":
         mark = _lamports(event.get("mark_lamports"), "mark")
@@ -320,14 +320,21 @@ def _lamports(value: object, label: str) -> int:
 def _read_events(path: Path) -> tuple[dict[str, Any], ...]:
     if not path.is_file():
         return ()
+    data = path.read_bytes()
     rows: list[dict[str, Any]] = []
-    for line in path.read_bytes().splitlines():
+    lines = data.splitlines()
+    for index, line in enumerate(lines):
         if not line.strip():
             continue
         try:
             raw = json.loads(line)
-        except ValueError:
-            continue
+        except ValueError as err:
+            # EXEC-EX-13: tolerate only an unterminated final fragment; anything
+            # else is corruption that would hide a real gap, so refuse.
+            is_final = index == len(lines) - 1 and not data.endswith(b"\n")
+            if is_final:
+                continue
+            raise ValueError(f"malformed event line {index + 1} in {path}") from err
         if isinstance(raw, dict):
             rows.append(raw)
     return tuple(rows)
@@ -346,8 +353,16 @@ def _read_gap_file(gaps_jsonl: str | Path | None) -> tuple[tuple[tuple[float, fl
 def _drop_torn_tail(data: bytes) -> tuple[bytes, bool]:
     if not data or data.endswith(b"\n"):
         return data, False
-    trimmed = data[: data.rfind(b"\n") + 1] if b"\n" in data else b""
-    return trimmed, True
+    # EXEC-EX-14: a valid row missing only its newline is kept, not dropped.
+    last_newline = data.rfind(b"\n")
+    tail = data[last_newline + 1 :] if last_newline >= 0 else data
+    if tail.strip():
+        try:
+            json.loads(tail)
+        except ValueError:
+            trimmed = data[: last_newline + 1] if last_newline >= 0 else b""
+            return trimmed, True
+    return data + b"\n", False
 
 
 def _gap_rows(data: bytes, torn: bool) -> tuple[tuple[tuple[float, float], ...], bool]:

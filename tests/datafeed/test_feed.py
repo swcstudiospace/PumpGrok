@@ -14,9 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pumpgrok.datafeed.bridge import ObservationBridge
+from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.datafeed.logs import PUMP_PROGRAM_ID, LogsFeed
 from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.datafeed.portal import PORTAL_SUBSCRIPTIONS, PortalFeed
+from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary
 from pumpgrok.datafeed.resync import DedupWindow, RollingWindowLimiter, TransportError
 from pumpgrok.datafeed.watchset import WatchSet
@@ -683,10 +685,6 @@ async def test_portal_timeout_disconnects_and_reseeds_subscriptions(tmp_path: Pa
 
 
 def test_price_overflow_counts_drop_and_does_not_raise(tmp_path: Path) -> None:
-    from pumpgrok.datafeed.events import CurveObservation
-    from pumpgrok.datafeed.price import LivePriceSource
-    from pumpgrok.events.sources import SourceSupervisor
-
     clock = FixtureClock(start=1_000.0)
     supervisor = SourceSupervisor(clock, random.Random(0), path=tmp_path / "p.sqlite")
     supervisor.note_frame(at=1_000.0)
@@ -716,8 +714,6 @@ def test_price_overflow_counts_drop_and_does_not_raise(tmp_path: Path) -> None:
 
 
 def test_stale_gap_ends_healthy_span(tmp_path: Path) -> None:
-    from pumpgrok.events.sources import SourceSupervisor
-
     clock = FixtureClock(start=0.0)
     supervisor = SourceSupervisor(clock, random.Random(0), path=tmp_path / "src.sqlite")
     supervisor.note_frame(at=0.0)
@@ -729,9 +725,6 @@ def test_stale_gap_ends_healthy_span(tmp_path: Path) -> None:
 
 
 async def test_recovery_recovers_transport_but_not_programming_error(tmp_path: Path) -> None:
-    from pumpgrok.datafeed.resync import Recovery
-
-    clock = StepClock(start=0.0)
     transport = Transport()
     watch = WatchSet(max_watched_mints=4)
     frames = ScriptedFrames([TransportError("socket down")])

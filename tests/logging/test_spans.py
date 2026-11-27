@@ -198,9 +198,8 @@ async def test_registry_tool_call_emits_one_span(clock: FixtureClock) -> None:
 def test_span_exception_path_resets_context(clock: FixtureClock) -> None:
     records: list[logging.LogRecord] = []
     with _captured(records), bind_clock(clock):
-        with pytest.raises(RuntimeError, match="boom"):
-            with span("probe", x="y"):
-                raise RuntimeError("boom")
+        with pytest.raises(RuntimeError, match="boom"), span("probe", x="y"):
+            raise RuntimeError("boom")
         with span("after"):
             pass
     assert records[-1].parent is None

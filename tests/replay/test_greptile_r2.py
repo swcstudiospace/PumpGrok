@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from pumpgrok.cli import main
-from pumpgrok.config.settings import ExitsSettings, FilterSettings, load_settings
+from pumpgrok.config.settings import ConfigError, ExitsSettings, FilterSettings, load_settings
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
 from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
@@ -129,18 +129,52 @@ def _record_complete_authority() -> None:
         store.close()
 
 
-# Finding 2: a valid zero daily-loss fraction halts the replay; the run still succeeds.
+# RISK-R-15: halt fractions are gt=0 (a zero fraction would latch a halt on
+# any non-positive loss and is refused at load, risk_budget.py), so the
+# Finding 2 halt path is exercised with a positive fraction instead of 0.
+# Derivation: day-start equity is the default paper equity, 10 SOL =
+# 10_000_000_000 lamports (paper_equity_sol x 1e9). _detect_breach
+# (risk/engine/steps.py) compares in integers: loss_lamports *
+# limit.denominator >= day_start * limit.numerator, with limit =
+# Fraction(str(fraction)). The smoke replay is profitable (mint B to 2.5x,
+# take-profit) and the bot-02-risk cadence (5s) only runs at 0s and 30s,
+# so it never samples the ~0.24M fee-only loss between the 2.5s buy and
+# the 30s exit -- no positive fraction trips there. A loss dataset is
+# built instead: first tick S=50B (curve 0.59 > 0.40, SKIP), second tick
+# S=9.8B (curve 0.11, BUY 10M lamports), third tick S=1B (crash). The
+# first buy debits 11,497,440 lamports (10M filled + 9,000 network +
+# 1,488,440 ATA) at entry reserves S0=9.8B, T=121.5T, so x_net=9.9M
+# buys ~122.7B units. At the crash (S=1B) gross = sell_out ~= 1,008,800,
+# venue ~= 10,088, MTM = gross - venue + deposit ~= 2,487,152, loss =
+# 11,497,440 - 2,487,152 ~= 9,010,288 lamports. At 0.0005 (1/2000) the
+# threshold is 5,000,000 lamports: 9,010,288 * 2000 = 18,020,576,000 >=
+# 10,000,000,000, so daily_loss trips. At 0.001 (1/1000) the threshold
+# is 10M and the ~9M crash loss would not trip. The 10s spacing keeps
+# bot-02-risk due at each tick (cadence 5s), and risk runs before exit
+# at the crash tick, so the loss is seen before any sell.
 def test_zero_daily_loss_fraction_halts_and_the_run_exits_0(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PUMPGROK_RISK__DAILY_LOSS_HALT_FRACTION", "0")
+    with pytest.raises(ConfigError):
+        load_settings(mode="paper")
+    monkeypatch.setenv("PUMPGROK_RISK__DAILY_LOSS_HALT_FRACTION", "0.0005")
     _record_complete_authority()
-    assert main(["run", "--mode", "paper", "--once", "--replay", str(SMOKE)]) == 0
-    ledger = tmp_path / "var" / "replay" / "smoke" / "ledger.sqlite"
+    dataset = _dataset(
+        tmp_path,
+        "loss",
+        [
+            _tick(0, MINT_B, 50_000_000_000, evidence=True),
+            _tick(10, MINT_B, 9_800_000_000, evidence=True),
+            _tick(20, MINT_B, 1_000_000_000, evidence=True),
+        ],
+    )
+    assert main(["run", "--mode", "paper", "--once", "--replay", str(dataset)]) == 0
+    ledger = tmp_path / "var" / "replay" / "loss" / "ledger.sqlite"
     halts = [r for r in _rows(ledger) if r["type"] == "HaltSet"]
     assert [h["payload"]["reason"] for h in halts] == ["daily_loss"]
-    assert main(["verify", "--fixture", "smoke"]) == 0
+    assert main(["verify", "--fixture", str(dataset)]) == 0
 
 
 # Finding 3: a healthy seat that is not stale at the take-profit tick stays healthy.

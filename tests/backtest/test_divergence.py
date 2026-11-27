@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from decimal import Decimal
 
 from pumpgrok.backtest.divergence import (
@@ -12,7 +13,7 @@ from pumpgrok.backtest.divergence import (
     enforce,
 )
 from pumpgrok.backtest.metrics import MetricsReport
-from pumpgrok.backtest.report import BacktestReport, render, with_divergence
+from pumpgrok.backtest.report import BacktestReport, render
 
 
 def _metrics(total_return: str, sharpe: str) -> MetricsReport:
@@ -81,13 +82,18 @@ def test_gaps_inside_defaults_pass_without_blocking() -> None:
 
 def test_breach_sets_flag_line_and_exit() -> None:
     verdict = check(_metrics("0.10", "1.0"), _metrics("0.08", "1.0"))
-    blocked = with_divergence(_report(), verdict)
+    # EXEC-EX-48: with_divergence deleted; the blocking flag is the caller's
+    # replace on promotion_eligible while the line/exit halves stay here.
+    blocked = dataclasses.replace(
+        _report(), promotion_eligible=False, divergence_reasons=verdict.reasons
+    )
     assert blocked.promotion_eligible is False
     assert "DIVERGENCE BREACH" in (breach_line(verdict) or "")
     assert enforce(verdict) == 1
     assert render(blocked).count("promotion_eligible: false") == 1
 
 
-def test_clean_verdict_leaves_report_unchanged() -> None:
+def test_clean_verdict_does_not_block() -> None:
     verdict = check(_metrics("0.10", "1.0"), _metrics("0.10", "1.0"))
-    assert with_divergence(_report(), verdict).promotion_eligible is True
+    assert verdict.blocks_promotion is False
+    assert verdict.reasons == ()

@@ -141,10 +141,19 @@ KILL_SWITCH_SPEC = ToolSpec(
 )
 
 
-def kill_switch_key(action: str, reason: str, clock: Clock) -> str:
-    """Minute-derived idempotency key: d(tool, action, reason, UTC minute)."""
+def kill_switch_key(action: str, reason: str, clock: Clock, *, epoch: int = 0) -> str:
+    """Minute-derived idempotency key: d(tool, action, reason, UTC minute[, epoch]).
+
+    ``epoch`` is the count of ``KillSwitchCleared`` rows already in the ledger,
+    mirroring the engine key (risk/killswitch.py): a re-engagement after an
+    approved clear must not collide with the set row that was cleared, even
+    within the same minute (DESK-R-46).
+    """
     minute = datetime.fromtimestamp(clock.now(), UTC).strftime("%Y-%m-%dT%H:%M")
-    digest = hashlib.sha256(f"{action}\n{reason}\n{minute}".encode()).hexdigest()
+    body = f"{action}\n{reason}\n{minute}"
+    if epoch:
+        body += f"\nepoch={epoch}"
+    digest = hashlib.sha256(body.encode()).hexdigest()
     return digest[:32]
 
 
@@ -269,7 +278,8 @@ async def run_kill_switch(
     ambient = ambient_correlation()
     correlation = inp.correlation_id or (str(ambient) if ambient else "none")
     ts_utc = datetime.fromtimestamp(clock.now(), UTC).isoformat()
-    key = kill_switch_key(inp.action, inp.reason, clock)
+    epoch = len(store.read(types=["KillSwitchCleared"], limit=None))
+    key = kill_switch_key(inp.action, inp.reason, clock, epoch=epoch)
     flatten = inp.action == "flatten_request"
     # A FLATTEN-led reason is refused here, before the ledger row below is written.
     text = kill_file_text(inp.reason, flatten)

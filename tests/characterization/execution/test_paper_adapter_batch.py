@@ -209,16 +209,23 @@ async def scn_consumed_approval_collision(root: Path) -> dict[str, Any]:
 
     def collide(rows: Any) -> Any:
         # Another order consumed this approval first: the consume key already exists.
+        # Insert through the captured pre-patch append_batch: LedgerStore.append
+        # now delegates to append_batch, so routing the pre-insert through the
+        # patched append_batch would recurse.
         for row in rows:
             key = str(row["idempotency_key"])
             if key.startswith("consume|"):
-                h.store.append(
-                    ts_utc=str(row["ts_utc"]),
-                    source=str(row["source"]),
-                    correlation_id=str(row["correlation_id"]),
-                    idempotency_key=key,
-                    type=str(row["type"]),
-                    payload=dict(row["payload"]),
+                original(
+                    [
+                        {
+                            "ts_utc": str(row["ts_utc"]),
+                            "source": str(row["source"]),
+                            "correlation_id": str(row["correlation_id"]),
+                            "idempotency_key": key,
+                            "type": str(row["type"]),
+                            "payload": dict(row["payload"]),
+                        }
+                    ]
                 )
         return original(rows)
 

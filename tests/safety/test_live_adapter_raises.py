@@ -52,7 +52,7 @@ async def test_live_adapter_place_raises_and_audits(tmp_path: Path) -> None:
         pass
     else:
         raise AssertionError("place did not raise LiveGateError")
-    rows = ledger.read()
+    rows = ledger.read(limit=None)
     assert [row["type"] for row in rows] == ["LiveWriteAttempted"]
     assert rows[0]["payload"]["method"] == "place"
 
@@ -66,7 +66,7 @@ async def test_live_adapter_cancel_raises_and_audits(tmp_path: Path) -> None:
         pass
     else:
         raise AssertionError("cancel did not raise LiveGateError")
-    rows = ledger.read()
+    rows = ledger.read(limit=None)
     assert [row["type"] for row in rows] == ["LiveWriteAttempted"]
     assert rows[0]["payload"]["method"] == "cancel"
 

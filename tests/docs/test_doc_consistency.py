@@ -100,7 +100,9 @@ def test_vendor_pin_carries_pin_and_retirement() -> None:
         "docs/VENDOR_PIN.md no longer carries the historical provenance pin"
     )
     # TEST-T37: word-boundary — "retir" as a substring must not satisfy this.
-    assert re.search(r"\bretir\w+", text.lower()), "docs/VENDOR_PIN.md carries no retirement statement"
+    assert re.search(r"\bretir\w+", text.lower()), (
+        "docs/VENDOR_PIN.md carries no retirement statement"
+    )
 
 
 def _help_text(argv: list[str]) -> str:
@@ -128,9 +130,7 @@ def test_documented_verbs_exist_in_cli_help() -> None:
     verbs = _documented_verbs()
     assert verbs, "no pumpgrok VERB commands found in the four docs"
     # TEST-T37: word-boundary — verb `rep` must not pass on `report` appearing.
-    missing = sorted(
-        verb for verb in verbs if not re.search(rf"\b{re.escape(verb)}\b", combined)
-    )
+    missing = sorted(verb for verb in verbs if not re.search(rf"\b{re.escape(verb)}\b", combined))
     assert not missing, f"docs name verbs missing from CLI help: {missing}"
 
 

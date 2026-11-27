@@ -34,7 +34,7 @@ async def test_escalation_body_cannot_override_bound_seat(tmp_path: Path) -> Non
             )
         )
 
-    stored = store.read()[out.seq - 1]
+    stored = store.read(limit=None)[out.seq - 1]
     assert stored["payload"]["seat"] == "bot-01-scout"
     assert stored["payload"]["detail"] == "stop"
     store.close()
@@ -53,7 +53,7 @@ async def test_escalation_body_cannot_replace_source(tmp_path: Path) -> None:
             )
         )
 
-    stored = store.read()[out.seq - 1]
+    stored = store.read(limit=None)[out.seq - 1]
     assert stored["payload"]["source"] == "paper"
     store.close()
 
@@ -78,7 +78,7 @@ async def test_event_emit_body_cannot_override_bound_seat_or_source(tmp_path: Pa
             )
         )
 
-    stored = store.read()[out.seq - 1]
+    stored = store.read(limit=None)[out.seq - 1]
     assert stored["payload"]["seat"] == "bot-01-scout"
     assert stored["payload"]["source"] == "paper"
     assert stored["payload"]["detail"] == "y"

@@ -10,7 +10,7 @@ reserves and never authorize a price. Price capacity overflow is counted inside
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Any, Protocol
 
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.events.bus import Dlq, EventBus, Handler
@@ -32,10 +32,23 @@ class ObservationBridge:
         bus: EventBus,
         recorder: LiveRecorder,
         price: PriceObserver | None = None,
+        store: Any = None,
     ) -> None:
         self.bus = bus
         self.recorder = recorder
         self.price = price
+        self.store = store
+
+    async def start(self) -> None:
+        """Start the bus and recover pending rows (EVT-SW-02/03)."""
+        await self.bus.start()
+
+    async def recover(self) -> None:
+        await self.bus.recover()
+
+    async def close(self) -> None:
+        """Bounded shutdown of the bus (EVT-SW-02/03)."""
+        await self.bus.shutdown()
 
     async def publish(self, observation: CurveObservation) -> None:
         observation.validate()
@@ -85,11 +98,14 @@ def build_observation_bridge(
     dlq: Dlq,
     recorder: LiveRecorder,
     price: PriceObserver | None = None,
+    store: Any = None,
 ) -> ObservationBridge:
     """Build an :class:`ObservationBridge` over a new :class:`EventBus`.
 
     The bus is constructed here so composition roots that must not import the bus
     module can still obtain a bridge. The bridge behaves exactly as one built directly.
+    ``store`` wires the durable sidecar path (EVT-SW-03); without it the bus is
+    in-memory only and ``recover`` is a no-op.
     """
-    bus = EventBus(clock=clock, handler=handler, dlq=dlq)
-    return ObservationBridge(bus=bus, recorder=recorder, price=price)
+    bus = EventBus(clock=clock, handler=handler, dlq=dlq, store=store)
+    return ObservationBridge(bus=bus, recorder=recorder, price=price, store=store)
