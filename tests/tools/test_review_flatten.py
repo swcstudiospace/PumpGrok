@@ -19,7 +19,7 @@ from execution.replay_support import replay_authority, tick
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.execution import build_paper_adapter
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -47,13 +47,6 @@ T0 = 764_000_000_000_000
 @pytest.fixture(autouse=True)
 def _no_env_killswitch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PUMPGROK_KILLSWITCH", raising=False)
-
-
-class _ScriptedCurves:
-    """Serve the same live curve for every mint read."""
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        return CurveSnapshot(mint=mint, s_lamports=S0, t_units=T0)
 
 
 def _store(tmp_path: Path) -> LedgerStore:
