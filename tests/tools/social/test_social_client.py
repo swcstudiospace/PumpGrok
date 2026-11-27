@@ -104,6 +104,16 @@ async def test_venue_errors_become_typed() -> None:
         await fetch_top_holders(_client(shape_error), MINT)
 
 
+@pytest.mark.parametrize("fetch", [fetch_recent_trades, fetch_top_holders])
+@pytest.mark.parametrize("content", [b'"oops"', b"5", b"null"])
+async def test_non_object_bodies_become_typed(fetch, content: bytes) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=content)
+
+    with pytest.raises(DataStale):
+        await fetch(_client(handler), MINT)
+
+
 def test_client_module_uses_get_only() -> None:
     path = (
         Path(__file__).resolve().parents[3] / "src" / "pumpgrok" / "tools" / "social" / "client.py"
