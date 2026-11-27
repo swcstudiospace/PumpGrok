@@ -13,16 +13,19 @@ import random
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.adapter import OrderRequest
 from pumpgrok.core.approvals import ApprovalRecord
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
+from pumpgrok.execution import build_paper_adapter
+from pumpgrok.execution.paper_adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
 from pumpgrok.replay.rng import make_rng
@@ -116,26 +119,21 @@ def _buy(clock: FixtureClock, ids: IdFactory) -> OrderRequest:
     )
 
 
-class _ScriptedCurves:
-    def __init__(self, reads: list[CurveSnapshot]) -> None:
-        self._reads = list(reads)
-
-    async def curve(self, mint: str) -> CurveSnapshot | None:
-        if len(self._reads) > 1:
-            return self._reads.pop(0)
-        return self._reads[0]
 
 
-def _adapter(store: LedgerStore, clock: FixtureClock, engine: RiskEngine, ids: IdFactory) -> Any:
-    snap = CurveSnapshot(mint=MINT_A, s_lamports=S0, t_units=T0)
-    return PaperAdapter(
+def _adapter(
+    store: LedgerStore, clock: FixtureClock, engine: RiskEngine, ids: IdFactory, tmp_path: Path
+) -> PaperAdapter:
+    replay = replay_authority(tmp_path, clock, [tick(clock.now(), MINT_A, S0, T0)])
+    return build_paper_adapter(
+        SimpleNamespace(risk=RiskBudget()),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(7),
-        budget=RiskBudget(),
-        price_source=_ScriptedCurves([snap, snap]),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
 
@@ -315,12 +313,13 @@ def test_restart_does_not_reengage_a_consumed_kill(tmp_path: Path) -> None:
 
 
 def _flatten_engine(
-    store: LedgerStore, clock: FixtureClock, ids: IdFactory, fake: FakeTelegram, desk: Path
+    store: LedgerStore, clock: FixtureClock, ids: IdFactory, fake: FakeTelegram, desk: Path,
+    tmp_path: Path,
 ) -> tuple[RiskEngine, Any]:
     engine = _engine(
         store, clock, killswitch_path=killswitch_file(desk), alert_channel=_channel(fake, desk)
     )
-    adapter = _adapter(store, clock, engine, ids)
+    adapter = _adapter(store, clock, engine, ids, tmp_path)
     engine.attach_flatten_hook(
         flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
     )
@@ -336,7 +335,7 @@ def test_plain_kill_then_flatten_escalates_and_closes(tmp_path: Path) -> None:
     fake = FakeTelegram([_update(7, 111, "KILL operator stop")])
     try:
         _position(store, clock, 3_000_000)
-        engine, _adapter_unused = _flatten_engine(store, clock, ids, fake, desk)
+        engine, _adapter_unused = _flatten_engine(store, clock, ids, fake, desk, tmp_path)
         asyncio.run(engine.poll_kill_sources())
         assert store.read(types=["PositionClosed"], limit=None) == []
         fake.updates.append(_update(8, 111, "KILL FLATTEN close all"))
@@ -360,7 +359,7 @@ def test_flatten_on_alert_channel_closes_position_without_orders(tmp_path: Path)
     fake = FakeTelegram([_update(7, 111, "KILL FLATTEN close all")])
     try:
         _position(store, clock, 3_000_000)
-        engine, _adapter_unused = _flatten_engine(store, clock, ids, fake, desk)
+        engine, _adapter_unused = _flatten_engine(store, clock, ids, fake, desk, tmp_path)
         asyncio.run(engine.poll_kill_sources())
         closed = store.read(types=["PositionClosed"], limit=None)
         assert [row["payload"]["reason"] for row in closed] == ["kill_flatten"]
@@ -399,7 +398,7 @@ def test_flatten_consumed_under_env_survives_restart(tmp_path: Path) -> None:
             alert_channel=_channel(FakeTelegram([]), desk),
             env=env,
         )
-        adapter = _adapter(store, clock, restarted, ids)
+        adapter = _adapter(store, clock, restarted, ids, tmp_path)
         restarted.attach_flatten_hook(
             flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
         )

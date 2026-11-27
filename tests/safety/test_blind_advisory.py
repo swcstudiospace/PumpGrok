@@ -82,7 +82,8 @@ def _handler(
                                     "extensions": [],
                                 }
                             }
-                        }
+                        },
+                        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                     },
                 }
             else:
