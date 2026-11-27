@@ -17,6 +17,7 @@ Divergences from the oracle (deliberate):
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -195,3 +196,85 @@ def test_record_defaults_are_harmless() -> None:
     record = CreatorRecord(creator="C")
     assert not record.is_known_bad
     assert MAX_CREATORS > 0
+
+
+# --- sweep regressions (MISC-REP-01/03/04, MISC-TEST-03, MISC-D-05) ---------------
+
+
+def _timed_book() -> tuple[ReputationBook, FixtureClock]:
+    clock = FixtureClock()
+    book = ReputationBook()
+    book._clock = clock
+    return book, clock
+
+
+def test_new_creator_stays_in_book_when_it_fills_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REP-01: the address just inserted is never its own eviction victim."""
+    monkeypatch.setattr(reputation_module, "MAX_CREATORS", 3)
+    book, clock = _timed_book()
+    for i in range(3):
+        clock.advance_to(float(i + 1))
+        book.observe(f"clean{i}")
+    clock.advance_to(4.0)
+    rug(book, "bad")
+    assert "bad" in book.creators
+    assert book.creators["bad"].rugs == 1
+    assert len(book.creators) == 3
+
+
+def test_rug_from_new_creator_blocks_next_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TEST-03: a rug recorded into a full book still blocks that address at ingress."""
+    monkeypatch.setattr(reputation_module, "MAX_CREATORS", 3)
+    book, clock = _timed_book()
+    for i in range(3):
+        clock.advance_to(float(i + 1))
+        book.observe(f"clean{i}")
+    clock.advance_to(4.0)
+    rug(book, "bad")
+    verdict = book.verdict("bad", block_after_rugs=1)
+    assert verdict is not None and "creator_rugged" in verdict
+
+
+def test_eviction_never_sorts_the_whole_book(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REP-03: an insert over the cap selects its victim without sorting every record."""
+    monkeypatch.setattr(reputation_module, "MAX_CREATORS", 3)
+
+    def no_full_sort(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("eviction sorted every record in the book")
+
+    monkeypatch.setattr(reputation_module, "sorted", no_full_sort, raising=False)
+    book, _ = _timed_book()
+    for i in range(5):
+        book.observe(f"c{i}")
+    assert len(book.creators) == 3
+
+
+def test_creator_record_declares_its_config_once() -> None:
+    """REP-04: the record's ``extra="forbid"`` config is declared once, not twice."""
+    assert inspect.getsource(CreatorRecord).count("model_config = ConfigDict(") == 1
+
+
+def test_unreadable_book_degrades_in_place_without_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REP-02 / MISC-D-05: an I/O fault on a present book degrades it, without moving it aside."""
+    path = tmp_path / "creators.json"
+    fresh = ReputationBook()
+    fresh._clock = FixtureClock()
+    rug(fresh)
+    fresh.save(path)
+
+    def denied(self: Path, *_args: object, **_kwargs: object) -> None:
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "read_text", denied)
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    book = ReputationBook.load(path)
+    monkeypatch.undo()
+
+    assert book.degraded
+    assert path.exists()
+    assert not [p for p in tmp_path.iterdir() if ".corrupt-" in p.name]
+    marker = json.loads((tmp_path / "creators.degraded.json").read_text(encoding="utf-8"))
+    assert marker["quarantine"] is None
+    assert marker["cause"] == "PermissionError"
