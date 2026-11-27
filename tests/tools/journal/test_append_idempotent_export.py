@@ -6,13 +6,18 @@ no second JSONL line, so JSONL replays and report folds count the entry once.
 
 from __future__ import annotations
 
+import asyncio
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
+import pytest
+
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
+from pumpgrok.tools.journal import append as append_module
 from pumpgrok.tools.journal.append import JournalAppendIn, build_journal_append_tool
 
 START = 1469918176.385
@@ -71,3 +76,23 @@ async def test_repeat_on_later_day_exports_nothing(tmp_path: Path) -> None:
     assert _jsonl_names(journal_dir) == names_before
     assert len(_read_text(Path(first.journal_path)).splitlines()) == 1
     store.close()
+
+
+async def test_export_line_is_flushed_and_fsynced_before_return(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    journal_dir = tmp_path / "journal"
+    tool = build_journal_append_tool(store, FixtureClock(start=START), journal_dir)
+    real_fsync = os.fsync
+    bytes_at_fsync: list[int] = []
+
+    def recording_fsync(fd: int) -> None:
+        bytes_at_fsync.append(os.fstat(fd).st_size)
+        real_fsync(fd)
+
+    monkeypatch.setattr(append_module.os, "fsync", recording_fsync)
+    out = await tool(_payload())
+    store.close()
+    written = await asyncio.to_thread(Path(out.journal_path).read_bytes)
+    assert bytes_at_fsync == [len(written)]
