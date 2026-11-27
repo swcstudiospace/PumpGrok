@@ -246,6 +246,7 @@ class Supervisor:
     def _timer_due(self, seat: str, now: float) -> bool:
         """Timer start: any seat in cadence mode; only EVENT_TIMERS seats in event mode."""
         from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
         if self._event_mode and seat not in _EVT:
             return False
         return self.tasks[seat].is_due(now)
