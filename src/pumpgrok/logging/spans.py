@@ -85,25 +85,28 @@ class _Span:
         return self
 
     def _exit(self) -> None:
-        assert self._tokens is not None
-        elapsed_s = max(0.0, current_clock().now() - self._start)
-        cid = ambient_correlation()
-        log.info(
-            "span",
-            extra={
-                "event": "span",
-                "duration_ms": round(elapsed_s * 1000.0, 3),
-                "span": self._name,
-                "parent": self._parent,
-                "depth": _DEPTH.get(),
-                "correlation_id": None if cid is None else str(cid),
-                **self._fields,
-            },
-        )
-        parent_token, depth_token = self._tokens
-        _DEPTH.reset(depth_token)
-        _PARENT.reset(parent_token)
-        self._tokens = None
+        if self._tokens is None:
+            raise RuntimeError("span exited without entering")
+        try:
+            elapsed_s = max(0.0, current_clock().now() - self._start)
+            cid = ambient_correlation()
+            log.info(
+                "span",
+                extra={
+                    "event": "span",
+                    "duration_ms": round(elapsed_s * 1000.0, 3),
+                    "span": self._name,
+                    "parent": self._parent,
+                    "depth": _DEPTH.get(),
+                    "correlation_id": None if cid is None else str(cid),
+                    "fields": dict(self._fields),
+                },
+            )
+        finally:
+            parent_token, depth_token = self._tokens
+            _DEPTH.reset(depth_token)
+            _PARENT.reset(parent_token)
+            self._tokens = None
 
     def __enter__(self) -> _Span:
         return self._enter()

@@ -118,7 +118,7 @@ def test_span_fields_pass_through_redaction_filter(
     assert len(lines) == 1
     body = json.loads(lines[0])
     assert body["event"] == "span"
-    assert body["data"]["api_key"] == "[redacted]"
+    assert body["data"]["fields"]["api_key"] == "[redacted]"
 
 
 class _In(ToolInput):
@@ -193,3 +193,24 @@ async def test_registry_tool_call_emits_one_span(clock: FixtureClock) -> None:
     assert spans[0].span == "market.price"
     assert spans[0].duration_ms == pytest.approx(250.0)
     assert getattr(spans[0], "correlation_id", "").endswith(".1")
+
+
+def test_span_exception_path_resets_context(clock: FixtureClock) -> None:
+    records: list[logging.LogRecord] = []
+    with _captured(records), bind_clock(clock):
+        with pytest.raises(RuntimeError, match="boom"):
+            with span("probe", x="y"):
+                raise RuntimeError("boom")
+        with span("after"):
+            pass
+    assert records[-1].parent is None
+    assert records[-1].depth == 1
+
+
+def test_span_field_collision_is_namespaced(clock: FixtureClock) -> None:
+    records: list[logging.LogRecord] = []
+    with _captured(records), bind_clock(clock), span("x", module="y", span="evil"):
+        pass
+    record = records[-1]
+    assert record.span == "x"
+    assert record.fields == {"module": "y", "span": "evil"}

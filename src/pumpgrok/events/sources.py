@@ -116,6 +116,7 @@ class SourceSupervisor:
             raise ValueError("frame timestamp must be finite and nondecreasing")
         if self._last_frame_at is not None and ts - self._last_frame_at > STALE_AFTER_S:
             self._connection_generation += 1
+            self._healthy_since = ts
         self._last_frame_at = ts
         if self._healthy_since is None:
             self._healthy_since = ts

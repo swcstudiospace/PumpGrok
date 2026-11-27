@@ -71,7 +71,12 @@ class RedactingTextFormatter(logging.Formatter):
 
 
 class JsonFormatter(logging.Formatter):
-    """Render one record as a canonical single-line JSON object (FOUNDATION_STACK 5.1)."""
+    """Render one record as a canonical single-line JSON object (FOUNDATION_STACK 5.1).
+
+    The log timestamp is the one wall-clock exception (MISC-D-04): it comes
+    from ``record.created`` instead of the bound clock so lines can be
+    ordered across processes.
+    """
 
     def __init__(self, *, mode: str, profile: str) -> None:
         super().__init__()

@@ -18,7 +18,7 @@ from pumpgrok.datafeed.logs import PUMP_PROGRAM_ID, LogsFeed
 from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.datafeed.portal import PORTAL_SUBSCRIPTIONS, PortalFeed
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary
-from pumpgrok.datafeed.resync import DedupWindow, RollingWindowLimiter
+from pumpgrok.datafeed.resync import DedupWindow, RollingWindowLimiter, TransportError
 from pumpgrok.datafeed.watchset import WatchSet
 from pumpgrok.events.models import EventKind
 from pumpgrok.events.sources import SourceStatus, SourceSupervisor
@@ -680,3 +680,78 @@ async def test_portal_timeout_disconnects_and_reseeds_subscriptions(tmp_path: Pa
     assert len(feed.gaps.gaps) == 1
     assert feed.gaps.open_gap is False
     supervisor.close()
+
+
+def test_price_overflow_counts_drop_and_does_not_raise(tmp_path: Path) -> None:
+    from pumpgrok.datafeed.events import CurveObservation
+    from pumpgrok.datafeed.price import LivePriceSource
+    from pumpgrok.events.sources import SourceSupervisor
+
+    clock = FixtureClock(start=1_000.0)
+    supervisor = SourceSupervisor(clock, random.Random(0), path=tmp_path / "p.sqlite")
+    supervisor.note_frame(at=1_000.0)
+    price = LivePriceSource(clock=clock, health=supervisor, max_age_s=60.0, max_observations=1)
+    price.observe(
+        CurveObservation(
+            mint="A",
+            ts_utc="1970-01-01T00:16:40Z",
+            s_lamports=1_000_000_000,
+            t_units=1_000,
+            complete=False,
+            source="rpc",
+        )
+    )
+    price.observe(
+        CurveObservation(
+            mint="B",
+            ts_utc="1970-01-01T00:16:40Z",
+            s_lamports=1_000_000_000,
+            t_units=1_000,
+            complete=False,
+            source="rpc",
+        )
+    )
+    assert price.observer_failures == 1
+    supervisor.close()
+
+
+def test_stale_gap_ends_healthy_span(tmp_path: Path) -> None:
+    from pumpgrok.events.sources import SourceSupervisor
+
+    clock = FixtureClock(start=0.0)
+    supervisor = SourceSupervisor(clock, random.Random(0), path=tmp_path / "src.sqlite")
+    supervisor.note_frame(at=0.0)
+    supervisor.note_frame(at=200.0)
+    clock.advance_to(201.0)
+    supervisor.note_failure()
+    assert supervisor._step == 1
+    supervisor.close()
+
+
+async def test_recovery_recovers_transport_but_not_programming_error(tmp_path: Path) -> None:
+    from pumpgrok.datafeed.resync import Recovery
+
+    clock = StepClock(start=0.0)
+    transport = Transport()
+    watch = WatchSet(max_watched_mints=4)
+    frames = ScriptedFrames([TransportError("socket down")])
+    feed, _clock, supervisor, _, _ = _portal(
+        tmp_path, transport=transport, watch=watch, frames=frames
+    )
+    await feed.subscribe()
+    await feed.pump_once()
+    assert frames.reconnects == 1
+
+    frames2 = ScriptedFrames([RuntimeError("programming error")])
+    feed2, _clock2, supervisor2, _, _ = _portal(
+        tmp_path / "b", transport=Transport(), watch=WatchSet(max_watched_mints=4), frames=frames2
+    )
+    try:
+        await feed2.pump_once()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("RuntimeError must propagate, not recover")
+    assert frames2.reconnects == 0
+    supervisor.close()
+    supervisor2.close()

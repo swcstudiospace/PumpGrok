@@ -103,6 +103,7 @@ class LedgerState(BaseModel):
     counters: CountersView = Field(default_factory=CountersView)
     last_mtm_ts_utc: str = ""
     unknown_events: list[str] = Field(default_factory=list)
+    unknown_count: int = 0
     meta: dict[str, str] = Field(default_factory=dict)
     strategy_kills: dict[str, str] = Field(default_factory=dict)
 
@@ -178,7 +179,8 @@ def reduce(
         return state.model_copy(
             update={
                 "seq": seq,
-                "unknown_events": [*state.unknown_events, f"{seq}:{type}"],
+                "unknown_events": ([*state.unknown_events, f"{seq}:{type}"][-50:]),
+                "unknown_count": state.unknown_count + 1,
             }
         )
     updated = handler(state, row, ts_utc, correlation_id)

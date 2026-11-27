@@ -61,6 +61,10 @@ class AlertChannel(Protocol):
         """Persist the consumed offset once the lines of this poll are handled. Never raises."""
         ...
 
+    def close(self) -> None:
+        """Release the underlying HTTP client. The composition root calls this on shutdown."""
+        ...
+
 
 class EmptyAlertChannel:
     """The unconfigured channel: polls nothing, changes nothing."""
@@ -69,6 +73,9 @@ class EmptyAlertChannel:
         return []
 
     def commit(self) -> None:
+        return None
+
+    def close(self) -> None:
         return None
 
 
@@ -151,6 +158,9 @@ class TelegramAlertChannel:
             return
         self._committed = self._next
         self._offset = self._next
+
+    def close(self) -> None:
+        self._client.close()
 
     def _accept(self, updates: list[Any]) -> list[str]:
         lines: list[str] = []

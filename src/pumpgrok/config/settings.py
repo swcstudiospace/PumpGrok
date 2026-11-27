@@ -409,12 +409,15 @@ def allowed_env_names() -> set[str]:
 
 
 def refuse_forbidden_env(environ: Mapping[str, str]) -> list[str]:
-    """Report env names (never values) carrying forbidden substrings."""
+    """Report PUMPGROK_* env names (never values) carrying forbidden substrings."""
     bad: list[str] = []
     for name in environ:
-        if name.upper() in EXEMPT_ENV_NAMES:
+        upper = name.upper()
+        if not upper.startswith("PUMPGROK_"):
             continue
-        if any(fragment in name.upper() for fragment in FORBIDDEN_SUBSTRINGS):
+        if upper in EXEMPT_ENV_NAMES:
+            continue
+        if any(fragment in upper for fragment in FORBIDDEN_SUBSTRINGS):
             bad.append(f"forbidden environment variable name: {name}")
     return bad
 

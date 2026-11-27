@@ -18,7 +18,7 @@ from pumpgrok.datafeed.bridge import ObservationBridge
 from pumpgrok.datafeed.events import CurveObservation
 from pumpgrok.datafeed.readonly import ReadOnlyBoundary
 from pumpgrok.datafeed.resync import (
-    TRANSPORT_FAILURES,
+    TRANSPORT_RETRY_FAILURES,
     DedupWindow,
     FeedStats,
     FrameSource,
@@ -171,7 +171,7 @@ class LogsFeed:
                     },
                 ],
             )
-        except TRANSPORT_FAILURES:
+        except TRANSPORT_RETRY_FAILURES:
             self._gaps.record_loss("logs_truncated_unrecovered")
             return None
         result = response.get("result") if isinstance(response, dict) else None
@@ -219,6 +219,7 @@ class LogsFeed:
                 "signature": signature,
                 "position": position,
                 "user": event.user,
+                # EVT-D-05: no change until the pump IDL confirms PostCompleteBuy is a buy.
                 "is_buy": isinstance(event, TradeEvent) and event.is_buy,
             },
             lamports=event.sol_amount,

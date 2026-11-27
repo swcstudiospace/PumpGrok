@@ -15,7 +15,6 @@ The key is never written into the repository; the data dir is runtime state.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import stat
 import tempfile
@@ -64,9 +63,12 @@ def _create_key(path: Path) -> None:
             fh.write(draw_key_material(_KEY_BYTES).hex() + "\n")
             fh.flush()
             os.fsync(fh.fileno())
-        with contextlib.suppress(FileExistsError):
-            # A concurrent first boot may have won the race; its key is the one to read.
+        try:
             os.link(tmp, path)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise BindingKeyError(f"cannot install binding key {path}: {exc.strerror}") from exc
     finally:
         tmp.unlink(missing_ok=True)
 

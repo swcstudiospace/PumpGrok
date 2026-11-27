@@ -71,11 +71,15 @@ class EventStore:
         candidate.parent.mkdir(parents=True, exist_ok=True)
         self.path = candidate
         self._db = sqlite3.connect(str(candidate), isolation_level=None)
-        self._db.execute("PRAGMA journal_mode = WAL;")
-        self._db.execute("PRAGMA synchronous = FULL;")
-        self._db.execute("PRAGMA busy_timeout = 5000;")
-        self._db.executescript(_SCHEMA)
-        self._db.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');")
+        try:
+            self._db.execute("PRAGMA journal_mode = WAL;")
+            self._db.execute("PRAGMA synchronous = FULL;")
+            self._db.execute("PRAGMA busy_timeout = 5000;")
+            self._db.executescript(_SCHEMA)
+            self._db.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');")
+        except BaseException:
+            self._db.close()
+            raise
 
     def close(self) -> None:
         self._db.close()
@@ -147,6 +151,11 @@ class EventStore:
             ).fetchone()
             if row is None:
                 return None
+            existing = db.execute(
+                "SELECT seq FROM pending WHERE event_id = ?;", (event_id,)
+            ).fetchone()
+            if existing is not None:
+                return None
             body = str(row[0])
             seq_row = db.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM pending;").fetchone()
             seq = int(seq_row[0]) if seq_row is not None else 1
@@ -166,8 +175,22 @@ class EventStore:
                 _upsert_pending(db, event)
 
     def load_pending(self) -> list[Event]:
-        rows = self._db.execute("SELECT body FROM pending ORDER BY seq;").fetchall()
-        return [_load(str(row[0])) for row in rows]
+        rows = self._db.execute("SELECT body, event_id FROM pending ORDER BY seq;").fetchall()
+        events: list[Event] = []
+        for body, event_id in rows:
+            try:
+                events.append(_load(str(body)))
+            except Exception:
+                self._quarantine_corrupt(str(event_id), str(body))
+        return events
+
+    def _quarantine_corrupt(self, event_id: str, body: str) -> None:
+        with self._transaction() as db:
+            db.execute("DELETE FROM pending WHERE event_id = ?;", (event_id,))
+            db.execute(
+                "INSERT OR REPLACE INTO dlq (event_id, reason, body) VALUES (?, ?, ?);",
+                (event_id, "corrupt_body", body),
+            )
 
     def delete_pending(self, event_id: str) -> None:
         self._db.execute("DELETE FROM pending WHERE event_id = ?;", (event_id,))

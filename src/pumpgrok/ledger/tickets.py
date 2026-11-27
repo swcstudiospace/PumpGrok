@@ -88,7 +88,9 @@ def allocate_ticket(
         }
         try:
             store.append_batch([row])
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as exc:
+            if f"ticket:{ticket_id}" not in str(exc):
+                raise
             continue
         return ticket_id
     raise TicketAllocationFailed(f"could not allocate a ticket for {compact_day}")

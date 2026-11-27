@@ -18,9 +18,18 @@ from typing import Protocol
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay.clock import Clock
 
+
+class TransportError(RuntimeError):
+    """A feed socket failed; Recovery may reconnect with a recorded gap."""
+
+
 # Transport failures a feed recovers from. Anything else is a programming error and
-# propagates. ReadOnlyBoundary wraps transport exceptions as RuntimeError.
-TRANSPORT_FAILURES = (TimeoutError, OSError, RuntimeError)
+# propagates. Direct transports raise TransportError; the read-only boundary wraps
+# transport exceptions as a bare RuntimeError, so transport-only retry loops also
+# catch RuntimeError (TRANSPORT_RETRY_FAILURES). Recovery.receive stays on
+# TRANSPORT_FAILURES so a programming error from a frame source still propagates.
+TRANSPORT_FAILURES = (TimeoutError, OSError, TransportError)
+TRANSPORT_RETRY_FAILURES = (*TRANSPORT_FAILURES, RuntimeError)
 
 
 class FrameSource(Protocol):
@@ -199,7 +208,7 @@ class Recovery:
                 await self._frames.reconnect()
                 self._supervisor.resync(list(self._held()))
                 await self._subscribe()
-            except TRANSPORT_FAILURES:
+            except TRANSPORT_RETRY_FAILURES:
                 self._supervisor.note_failure()
                 continue
             self._gaps.close()
