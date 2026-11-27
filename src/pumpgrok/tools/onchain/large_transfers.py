@@ -188,7 +188,7 @@ def parse_transfer_tx(
     if not from_key or not to_key:
         return None
     owner_idx = _owner_index(meta, keys, decrease_idx)
-    from_sol = _sol_delta_at(meta, owner_idx) if owner_idx is not None else 0
+    from_sol = _sol_delta_at(meta, owner_idx if owner_idx is not None else decrease_idx)
     kind = _transfer_kind(deltas[decrease_idx], amount, from_sol)
     ts = tx.get("blockTime")
     return Transfer.model_validate(

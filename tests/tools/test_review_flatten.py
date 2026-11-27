@@ -10,12 +10,15 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from execution.replay_support import replay_authority, tick
 from pumpgrok.core.ids import IdFactory
 from pumpgrok.core.risk_budget import RiskBudget
+from pumpgrok.execution import build_paper_adapter
 from pumpgrok.execution.paper_adapter import CurveSnapshot, PaperAdapter
 from pumpgrok.ledger.store import LedgerStore, recreate_ledger_db
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
@@ -84,7 +87,7 @@ def _open(store: LedgerStore, clock: FixtureClock, mint: str, units: int) -> Non
     )
 
 
-def _adapter(store: LedgerStore, clock: FixtureClock) -> PaperAdapter:
+def _adapter(store: LedgerStore, clock: FixtureClock, tmp_path: Path) -> PaperAdapter:
     ids = IdFactory(clock, random.Random(7))
     engine = RiskEngine(
         store=store,
@@ -95,14 +98,18 @@ def _adapter(store: LedgerStore, clock: FixtureClock) -> PaperAdapter:
         get_reserves=lambda _mint: (S0, T0),
         env={},
     )
-    return PaperAdapter(
+    replay = replay_authority(
+        tmp_path, clock, [tick(START, MINT_A, S0, T0), tick(START + 60, MINT_A, S0, T0)]
+    )
+    return build_paper_adapter(
+        SimpleNamespace(risk=RiskBudget()),
         store=store,
         risk=engine,
         ids=ids,
         clock=clock,
         rng=make_rng(7),
-        budget=RiskBudget(),
-        price_source=_ScriptedCurves(),
+        replay=replay,
+        source="replay",
         p_drop=0.0,
     )
 
@@ -115,7 +122,7 @@ async def test_flatten_request_closes_the_open_position(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
     _open(store, clock, MINT_A, 100)
-    adapter = _adapter(store, clock)
+    adapter = _adapter(store, clock, tmp_path)
     tool = build_kill_switch_tool(
         store,
         clock,
@@ -138,7 +145,7 @@ async def test_flatten_request_closes_the_open_position(tmp_path: Path) -> None:
 async def test_flatten_request_with_no_positions_closes_nothing(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
-    adapter = _adapter(store, clock)
+    adapter = _adapter(store, clock, tmp_path)
     tool = build_kill_switch_tool(
         store,
         clock,
