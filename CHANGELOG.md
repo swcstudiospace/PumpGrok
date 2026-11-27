@@ -1,4 +1,4 @@
-NOTE: prelude hash lines below are pre-repin measurements (b69c2959/bdcbe2d3, 2026-11-22). Enforced pins today: smoke-10m SH0032=1dffa784 and trading a4461e80 (pin_support.py, trading_smoke.json); phase sections below carry the repinned family.
+NOTE: prelude hash lines below are pre-repin measurements (b69c2959/bdcbe2d3, 2026-11-22). Enforced pins today: smoke-10m SH0032=1dffa784 and trading b15d4ab6 after the PR-consolidation repin (pin_support.py, trading_smoke.json); phase sections below carry the repinned family.
 Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 Phase 19: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54

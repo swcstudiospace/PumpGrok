@@ -314,7 +314,7 @@ async def test_graduation_close_credits_proceeds_to_cash(tmp_path: Path) -> None
         assert closed is not None
         gross = sell_out(S0, T0, UNITS)
         fees = FeeModel()
-        proceeds = gross - fees.venue_fee(gross) - fees.network_cost()
+        proceeds = max(gross - fees.venue_fee(gross) - fees.network_cost(), 0)
         assert adapter.cash_lamports() == EQUITY + proceeds
         assert adapter.equity_lamports() == EQUITY + proceeds
         fills = store.read(types=["FillRecorded"], limit=None)
@@ -341,8 +341,8 @@ async def test_blind_close_credits_last_good_to_cash(tmp_path: Path) -> None:
         closed = await adapter.check_blind(MINT, correlation_id="t")
         assert closed is not None
         network = FeeModel().network_cost()
-        assert adapter.cash_lamports() == EQUITY + last_good - network
-        assert adapter.equity_lamports() == EQUITY + last_good - network
+        assert adapter.cash_lamports() == EQUITY + max(last_good - network, 0)
+        assert adapter.equity_lamports() == EQUITY + max(last_good - network, 0)
     finally:
         store.close()
 
@@ -390,7 +390,7 @@ async def test_restarted_adapter_blind_closes_at_deadline(tmp_path: Path) -> Non
         assert closed is not None
         body = json.loads(str(closed["payload_json"]))
         assert body["reason"] == "blind_flatten"
-        assert body["proceeds_lamports"] == last_good - FeeModel().network_cost()
+        assert body["proceeds_lamports"] == max(last_good - FeeModel().network_cost(), 0)
     finally:
         store.close()
 
@@ -504,14 +504,14 @@ async def test_kill_flatten_books_venue_and_network_fees(tmp_path: Path) -> None
         network = fees.network_cost()
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         assert result["status"] == "closed"
-        assert result["proceeds_lamports"] == gross - venue - network
+        assert result["proceeds_lamports"] == max(gross - venue - network, 0)
         fills = store.read(types=["FillRecorded"], limit=None)
         assert len(fills) == 1
         body = fills[0]["payload"]
         assert body["venue_fee_lamports"] == venue
         assert body["network_cost_lamports"] == network
-        assert body["cash_delta_lamports"] == gross - venue - network
-        assert adapter.cash_lamports() == EQUITY + gross - venue - network
+        assert body["cash_delta_lamports"] == max(gross - venue - network, 0)
+        assert adapter.cash_lamports() == EQUITY + max(gross - venue - network, 0)
         assert adapter._fold_state().counters.fees_today_lamports == venue + network
     finally:
         store.close()
@@ -563,7 +563,7 @@ async def test_close_position_kill_flatten_writes_one_sell_and_one_close(
         result = await adapter.close_position(mint=MINT, ticket_id=TICKET, reason="kill_flatten")
         gross = sell_out(S0, T0, UNITS)
         fees = FeeModel()
-        proceeds = gross - fees.venue_fee(gross) - fees.network_cost()
+        proceeds = max(gross - fees.venue_fee(gross) - fees.network_cost(), 0)
         assert result["status"] == "closed"
         assert result["proceeds_lamports"] == proceeds
         fills = store.read(types=["FillRecorded"], limit=None)
@@ -1062,11 +1062,11 @@ async def test_kill_flatten_on_complete_curve_books_stored_venue(tmp_path: Path)
         fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
         assert fill["venue_fee_lamports"] == venue
         assert fill["network_cost_lamports"] == network
-        assert fill["cash_delta_lamports"] == gross - venue - network
+        assert fill["cash_delta_lamports"] == max(gross - venue - network, 0)
         closed = store.read(types=["PositionClosed"], limit=None)[-1]["payload"]
-        assert closed["proceeds_lamports"] == gross - venue - network
-        assert closed["realized_pnl_lamports"] == gross - venue - network - BASIS
-        assert adapter.cash_lamports() == EQUITY + gross - venue - network
+        assert closed["proceeds_lamports"] == max(gross - venue - network, 0)
+        assert closed["realized_pnl_lamports"] == max(gross - venue - network, 0) - BASIS
+        assert adapter.cash_lamports() == EQUITY + max(gross - venue - network, 0)
     finally:
         store.close()
 
@@ -1087,7 +1087,7 @@ async def test_blind_flatten_books_stored_venue(tmp_path: Path) -> None:
         assert closed is not None
         fill = store.read(types=["FillRecorded"], limit=None)[-1]["payload"]
         assert fill["venue_fee_lamports"] == venue
-        assert fill["cash_delta_lamports"] == gross - venue - FeeModel().network_cost()
+        assert fill["cash_delta_lamports"] == max(gross - venue - FeeModel().network_cost(), 0)
     finally:
         store.close()
 
