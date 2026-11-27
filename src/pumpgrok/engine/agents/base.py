@@ -94,6 +94,9 @@ class GrokAgent:
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        bound = _AGENT_TYPES.get(cls.name)
+        if bound is not None and bound is not cls:
+            raise ValueError(f"agent name {cls.name!r} is already bound to {bound.__qualname__}")
         _AGENT_TYPES[cls.name] = cls
 
     @property
