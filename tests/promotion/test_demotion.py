@@ -68,6 +68,7 @@ def _seed(store: LedgerStore, clock: FixtureClock, stage: Stage) -> None:
 def test_hash_change_resets_to_backtest(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
+    _seed(store, clock, Stage.PAPER)
     reset = demotion_reset_on_hash_change(
         store, STRATEGY, "b" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now())
     )
@@ -83,6 +84,7 @@ def test_hash_change_resets_to_backtest(tmp_path: Path) -> None:
 def test_same_hash_does_not_reset(tmp_path: Path) -> None:
     clock = FixtureClock(start=START)
     store = _store(tmp_path)
+    _seed(store, clock, Stage.PAPER)
     row = demotion_reset_on_hash_change(
         store, STRATEGY, "a" * 64, by="gate:promotion", ts_utc=format_ts_utc(clock.now())
     )

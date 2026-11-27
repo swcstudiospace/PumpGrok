@@ -136,7 +136,7 @@ def _account_value(owner: str, disc_hex: str) -> dict:
         (
             "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
             "0000000000000000",
-            "invalid bonding curve discriminator; layout stays ASSUMED",
+            "discriminator does not match the ASSUMED layout; layout stays ASSUMED",
         ),
     ],
 )

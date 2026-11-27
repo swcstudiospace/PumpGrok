@@ -917,6 +917,7 @@ class TestG7DeskIntegrity:
         rosters = tmp_path / "contracts" / "tool-rosters"
         core = {"tools": [_tool(f"desk.core_{i}") for i in range(8)]}
         _write_roster(rosters, "_core.yaml", core)
+        (tmp_path / "contracts/tool-packs").mkdir(parents=True)
         for name in present:
             (tmp_path / name).mkdir()
         return integrity_gate.run(

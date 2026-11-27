@@ -30,7 +30,6 @@ from pumpgrok.supervisor.health import (
     write_health_json,
 )
 from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
-from pumpgrok.supervisor.scheduler.wake import EVENT_TIMERS, wake_order
 from pumpgrok.supervisor.seat_relay import relay_tail
 from pumpgrok.supervisor.seat_restart import ObserveOnly
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
@@ -91,11 +90,13 @@ def _seat_timing(
     period, which is also its heartbeat grace. An event-only seat has no timer, so it is never
     stale by time; its cadence only sizes the cycle timeout.
     """
+    from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
     overrides = seat_cadences or {}
     if not event_mode:
         return overrides.get(seat, SEAT_CADENCES[seat]), SEAT_CADENCES[seat]
-    if seat in EVENT_TIMERS:
-        return overrides.get(seat, EVENT_TIMERS[seat]), EVENT_TIMERS[seat]
+    if seat in _EVT:
+        return overrides.get(seat, _EVT[seat]), _EVT[seat]
     return overrides.get(seat, SEAT_CADENCES[seat]), math.inf
 
 
@@ -244,14 +245,17 @@ class Supervisor:
 
     def _timer_due(self, seat: str, now: float) -> bool:
         """Timer start: any seat in cadence mode; only EVENT_TIMERS seats in event mode."""
-        if self._event_mode and seat not in EVENT_TIMERS:
+        from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+        if self._event_mode and seat not in _EVT:
             return False
         return self.tasks[seat].is_due(now)
 
     def _timed_seats(self) -> tuple[str, ...]:
         """Seats with a heartbeat: the roster in cadence mode, EVENT_TIMERS in event mode."""
+        from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
         if self._event_mode:
-            return tuple(seat for seat in ROSTER if seat in EVENT_TIMERS)
+            return tuple(seat for seat in ROSTER if seat in _EVT)
         return ROSTER
 
     def _spawn_cycle(self, seat: str, event: Event | None = None) -> asyncio.Task[str]:
@@ -353,7 +357,9 @@ class Supervisor:
             raise RuntimeError("event dispatch requires wake_mode='event'")
         self._emit_rollover(self._clock.now())
         outcomes: dict[str, str] = {}
-        for seat in wake_order(event.kind):
+        from pumpgrok.supervisor.scheduler import wake_order as _wake_order  # noqa: PLC0415
+
+        for seat in _wake_order(event.kind):
             outcomes[seat] = await self._await_cycle(seat, event)
         await self._end_of_tick(heartbeats=False)
         return outcomes

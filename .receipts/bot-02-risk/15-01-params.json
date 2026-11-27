@@ -1,0 +1,49 @@
+{
+  "plan": "15-01",
+  "phase": "15-strategy-framework-and-multi-strategy-paper",
+  "requirement": "STR-06",
+  "criteria": [2],
+  "seat": "bot-02-risk",
+  "branch": "bot-00-chief/v4-phase-14",
+  "base": {
+    "commit": "0052468",
+    "tag_v4_base_points_to": "09f83beb592742ba3322e752d508bec69bb10cca",
+    "note": "git diff 0052468 HEAD -- src tests ci contracts was empty before any edit, so golden values captured at HEAD c54c665 equal base 0052468"
+  },
+  "commits": [
+    {"sha": "1be0b26f9fec2b9235874438d9c1fd9e8c73be72", "author": "bot-02-risk <bot-02-risk@local>", "subject": "feat(15-01): strategy params enter ParamSet and trial identity", "files": ["src/pumpgrok/backtest/candidate.py", "src/pumpgrok/upgrade/params.py", "tests/backtest/test_harness_strategy_identity.py", "tests/upgrade/test_paramset_hash_stable.py"]},
+    {"sha": "718dd842e103f43c917870c96862c4ef022dd341", "author": "bot-02-risk <bot-02-risk@local>", "subject": "feat(15-01): strategy bounds sections, refused fail closed", "files": ["src/pumpgrok/upgrade/bounds.py", "src/pumpgrok/config/upgrade_bounds.toml", "tests/upgrade/test_paramset_strategy.py"]}
+  ],
+  "golden_legacy_hashes_at_base": {
+    "EMPTY": "d6c9cd2aa6bebb78a249d6fe42fc519d46ac85bcf4af10f96438b054a2990c93",
+    "FILTER_ONLY": "ef3835ba6ca1497a508b2035481cd5fb76d156e38a7d2be766dc2dabc558e235",
+    "EXITS_ONLY": "32bb517276aecd5b381c6da5323ce59c88c5345ad61233d284d876af3de38a10",
+    "BOTH": "227442d800a844e37d9afa06502a9bc6c12d553d7ba8e11a473321eaf55969dc"
+  },
+  "red_evidence": {
+    "run": "uv run python -m pytest -q on the three new test files, once, before any src edit",
+    "result": "14 collected: 3 passed, 11 failed",
+    "failure_reasons": {
+      "tests/upgrade/test_paramset_hash_stable.py": "ParamSet(strategy=...) raised pydantic extra_forbidden (2 tests)",
+      "tests/upgrade/test_paramset_strategy.py": "load_bounds() result had no attribute strategy (7 tests; filter/exits unchanged test passed)",
+      "tests/backtest/test_harness_strategy_identity.py": "2 tests failed; reason not captured in the log, expected CandidateParams extra_forbidden on strategy"
+    }
+  },
+  "green_runs": [
+    {"command": "uv run python -m pytest -v -p no:cacheprovider tests/upgrade tests/backtest/test_harness_strategy_identity.py", "exit": 0, "result": "91 passed, 0 failed, 0 skipped", "log": "/tmp/15-01-green.log"},
+    {"command": "uv run python -m pytest -o addopts= -v tests/upgrade/test_paramset_hash_stable.py tests/upgrade/test_paramset_strategy.py tests/backtest/test_harness_strategy_identity.py", "exit": 0, "result": "14 passed (hash_stable 4, strategy 8 counted in one run, harness 2)", "log": "/tmp/15-01-perfile.log"},
+    {"command": "uv run python -m pytest -o addopts= -v tests/upgrade/test_paramset_strategy.py (after import wrap)", "exit": 0, "result": "8 passed", "log": "/tmp/15-01-strategy-final.log"},
+    {"command": "uv run python -c tomllib.load(src/pumpgrok/config/upgrade_bounds.toml)", "exit": 0, "result": "strategy tables: mean_reversion, momentum_breakout, new_launch_sniper; 12 entries"}
+  ],
+  "legacy_pins": "unchanged: golden constants in tests/upgrade/test_paramset_hash_stable.py were written before any src edit and never edited afterwards",
+  "contracts": "git diff --name-only v4-base -- contracts: 0 files",
+  "not_run": ["make", "full gates", "lint", "formatters", "push"],
+  "deviations": [
+    "src/pumpgrok/upgrade/gate.py and src/pumpgrok/backtest/harness.py not edited: ParamSet.candidate() and CandidateParams.content_hash already carry the strategy section, and validate_against_bounds checks it, so no second gate or hash was needed.",
+    "Strategy out-of-bound and unbounded-key errors name the key and range without echoing the value, as the test spec requires. Filter and exits messages are unchanged and still echo the value.",
+    "ParamSet serialization omits the strategy key when absent or empty, so canonical stored JSON for legacy sets is unchanged as well as the hash.",
+    "Strategy parameters affect identity and bounds only. No replay or strategy code consumes them yet (evaluate_window reads filter and exits only), so a search over strategy values records distinct trials that score identically until plans 15-03 and 15-04 wire them in.",
+    ".planning/phases/15-.../15-01-SUMMARY.md not created: .planning/** is owned by bot-00-chief in ownership.yaml, outside this seat's commit authority.",
+    "Bare pytest -q output in this environment prints a bogus 'Pytest: No tests collected' line; authoritative counts come from -v runs redirected to files."
+  ]
+}

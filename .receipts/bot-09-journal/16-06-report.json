@@ -1,0 +1,30 @@
+{
+  "plan": "16-06",
+  "seat": "bot-09-journal",
+  "requirement": "OBS-07",
+  "criteria": [9],
+  "commands": [
+    {
+      "command": "PYTHONPATH=src /root/src/repos/pumpgrok/.venv/bin/python -m pytest -o addopts= -q -p no:cacheprovider tests/reporting/test_strategy_section.py",
+      "exit_code": 0,
+      "result": "8 passed"
+    }
+  ],
+  "diff_stat": {
+    "tracked": "src/pumpgrok/reporting/daily.py | 62 +\\n src/pumpgrok/reporting/weekly.py | 5 +++-\\n 2 files changed, 65 insertions(+), 2 deletions(-)",
+    "new_files": {
+      "src/pumpgrok/reporting/strategy_section.py": 291,
+      "tests/reporting/test_strategy_section.py": 313
+    },
+    "note": "Measured before this receipt was written. No command output bodies are stored."
+  },
+  "files": [
+    "src/pumpgrok/reporting/strategy_section.py",
+    "src/pumpgrok/reporting/daily.py",
+    "src/pumpgrok/reporting/weekly.py",
+    "tests/reporting/test_strategy_section.py",
+    ".receipts/bot-09-journal/16-06-report.json"
+  ],
+  "output_bodies": false,
+  "push": false
+}

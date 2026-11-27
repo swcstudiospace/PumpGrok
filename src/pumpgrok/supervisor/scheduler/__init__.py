@@ -55,16 +55,19 @@ from pumpgrok.supervisor.scheduler.supervisor import (
 )
 from pumpgrok.supervisor.scheduler.wake import (
     ALLOWED_TIMERS,
+    EVENT_TIMERS,
     SEAT_WAKES,
     UnknownTimerError,
     assert_allowed_timers,
     dispatch,
+    wake_order,
     wakes_for,
 )
 
 __all__ = [
     "ALLOWED_TIMERS",
     "DEFAULT_ROSTER_DIR",
+    "EVENT_TIMERS",
     "EXIT_SEAT",
     "FIXTURE_SEAT_CADENCES",
     "LEDGER_BUFFER_CAP",
@@ -97,5 +100,6 @@ __all__ = [
     "run_once_replay",
     "serve_fixture_timeline",
     "serve_replay",
+    "wake_order",
     "wakes_for",
 ]

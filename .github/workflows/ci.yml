@@ -52,15 +52,10 @@ jobs:
           git checkout "origin/$BASE_REF" -- pyproject.toml Makefile
           echo "Trusted pyproject.toml and Makefile overlay from origin/$BASE_REF"
 
-      - name: Lint, typecheck, test and audit
-        run: make lint typecheck test audit
-
-      - name: Drift and instruction checks
+      - name: Lint, typecheck, test, audit and drift checks
         run: |
-          ASSEMBLE_UV='uv' bash scripts/assemble-prompts.sh --check
-          uv run python scripts/generate-templates.py --check
-          uv run python scripts/generate-event-schemas.py --check
-          ./scripts/check.sh
+          # Canonical suite: make lint typecheck test audit (Makefile check's prerequisites above).
+          make check
 
       - name: idle-grok
         run: uv run python ci/gates/check_idle_grok.py

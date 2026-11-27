@@ -402,9 +402,9 @@ def _check_rosters_dir(repo: Path, rosters_dir: Path, counts: dict[str, int]) ->
 
 
 def _check_packs_dir(repo: Path, packs_dir: Path, counts: dict[str, int]) -> list[str]:
+    problems = []
     if not packs_dir.is_dir():
         return [f"{_rel(packs_dir, repo)}: pack directory not found"]
-    problems = []
     for path in _yaml_files(packs_dir):
         counts["packs"] += 1
         problems.extend(f"{_rel(path, repo)}: {p}" for p in check_pack(path))
