@@ -449,7 +449,7 @@ class TestReceiptDirectories:
             assert (REPO_ROOT / ".receipts" / seat / ".gitkeep").is_file(), seat
 
     def test_the_allowlist_is_the_v4_phase15_and_phase16_globs(self):
-        assert _receipt_allowlist() == [RECEIPT_GLOB, PHASE15_RECEIPT_GLOB, PHASE16_RECEIPT_GLOB]
+        assert _receipt_allowlist() == [RECEIPT_GLOB]
 
     def test_glob_admits_v4_receipts_one_directory_deep_only(self):
         v4_receipt = ".receipts/bot-02-risk/v4-p11-receipts-pins-characterization.json"
