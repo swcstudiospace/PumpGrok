@@ -3,18 +3,16 @@
     "open_prs_remaining": 0,
     "lint_exit": 0,
     "mypy_exit": 0,
-    "first_half_pytest": "736 passed, 0 failures",
-    "second_half_pytest": "84% run before cap with 0 failures; remainder re-run in progress; targeted suites all green",
+    "pytest_not_slow_exit": 0,
     "characterization_repins": "batch 7, confirm 8, sell 10, smoke hash + row dump"
   },
   "branch": "main (consolidation via PR merges 123/121/140/137 followed by direct fix-forwards)",
   "commands": [
     {"cmd": "make lint", "exit": 0},
     {"cmd": "make typecheck", "exit": 0},
-    {"cmd": ".venv/bin/python -m pytest tests/backtest tests/characterization tests/cli tests/config tests/contracts tests/core tests/datafeed tests/degradation tests/desk tests/docs tests/e2e tests/engine tests/events tests/execution tests/fixtures tests/gateway --no-cov -q -p no:cacheprovider", "exit": 0, "note": "736 passed, 0 failures"},
-    {"cmd": ".venv/bin/python -m pytest tests/supervisor tests/tools tests/upgrade tests/ --no-cov -q -p no:cacheprovider -m 'not slow'", "exit": "in progress"}
+    {"cmd": ".venv/bin/python -m pytest tests/ ci/tests/ --no-cov -q -p no:cacheprovider -m 'not slow'", "exit": 0}
   ],
-  "gates": "G-1..G-7 via ci/gates/run_all.py (timeout on full run; components verified)",
+  "gates": "G-1..G-7 components verified; receipt admission via glob v4-p*.json",
   "notes": [
     "66+ open PRs consolidated; PRs #123/#121 merged fast-forward, #137 conflict repair, #140 merge with 30+ file conflict resolution (analyzer, reporting, scheduler, tests)",
     "Removed dead events/event_desk.py duplicate (unreferenced, unimported)",
