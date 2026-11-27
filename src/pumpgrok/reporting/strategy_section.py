@@ -12,10 +12,9 @@ rows leaves the existing report bytes unchanged.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
-from weakref import WeakKeyDictionary
 
 from pumpgrok.backtest.metrics import MetricsContext
 from pumpgrok.backtest.metrics_v2 import MetricsV2, summarize_v2
@@ -29,12 +28,10 @@ __all__ = [
     "METRIC_COLUMNS",
     "DeskView",
     "StrategySectionRow",
-    "bind_strategy_section",
     "existing_render_daily",
     "existing_render_weekly",
     "render_strategy_section",
     "section_from_events",
-    "strategy_section_of",
 ]
 
 #: The decided seven metrics, in owner-decision order. annualization_valid follows them.
@@ -62,10 +59,6 @@ _ROW = (
 _DESK_METRIC = "desk view {name}: {value}\n"
 _DESK_TOTAL = "desk view realized_lamports: {total}\n"
 _MISMATCH = "per-strategy realized {split} does not sum to desk view {total}"
-
-_SECTIONS: WeakKeyDictionary[ReportModel, str] = WeakKeyDictionary()
-_ORIGINAL_DAILY = render_mod.render_daily
-_ORIGINAL_WEEKLY = render_mod.render_weekly
 
 
 @dataclass(frozen=True)
@@ -158,30 +151,14 @@ def section_from_events(
     )
 
 
-def bind_strategy_section(model: ReportModel, section: str) -> None:
-    """Remember a non-empty section so the daily renderer can append it."""
-    if section:
-        _SECTIONS[model] = section
-
-
-def strategy_section_of(model: ReportModel) -> str:
-    """The section bound to a model, or "" when that period has no strategy rows."""
-    return _SECTIONS.get(model, "")
-
-
 def existing_render_daily(model: ReportModel) -> str:
     """The pre-section daily renderer, for a byte compare when no rows exist."""
-    return _ORIGINAL_DAILY(model)
+    return render_mod.render_daily(replace(model, strategy_section=""))
 
 
 def existing_render_weekly(model: ReportModel) -> str:
     """The pre-section weekly renderer, for a byte compare when no rows exist."""
-    saved = render_mod.render_daily
-    render_mod.render_daily = _ORIGINAL_DAILY
-    try:
-        return _ORIGINAL_WEEKLY(model)
-    finally:
-        render_mod.render_daily = saved
+    return render_mod.render_weekly(replace(model, strategy_section=""))
 
 
 def _section_from_breakdown(
@@ -270,14 +247,3 @@ def _format_metric(value: Decimal | None) -> str:
 
 def _format_flag(value: bool) -> str:
     return "true" if value else "false"
-
-
-def _render_daily_with_section(model: ReportModel) -> str:
-    body = _ORIGINAL_DAILY(model)
-    section = _SECTIONS.get(model, "")
-    if not section:
-        return body
-    return assert_ascii(body + "\n" + section)
-
-
-render_mod.render_daily = _render_daily_with_section

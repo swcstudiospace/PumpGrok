@@ -6,11 +6,18 @@ ASCII-only; templates use str.format only (no jinja2).
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.reporting.daily import DailyReport
-from pumpgrok.reporting.render import field_names, render_daily, render_weekly
+from pumpgrok.reporting.render import (
+    ReportModel,
+    TradeRow,
+    field_names,
+    render_daily,
+    render_weekly,
+)
 from pumpgrok.reporting.weekly import WeeklyReport
 
 DAY = "2026-10-20"
@@ -186,3 +193,52 @@ def test_empty_ledger_renders_without_creating_files(tmp_path: Path) -> None:
     assert "## Summary" in body
     assert not missing.exists()
     assert not (tmp_path / "var").exists()
+
+
+def test_strategy_section_is_part_of_the_report_value() -> None:
+    base = ReportModel(day="2026-10-20")
+    section = "## Strategies\nstrategy | total_return\n"
+    with_section = replace(base, strategy_section=section)
+    assert with_section != base
+    assert render_daily(base) != render_daily(with_section)
+    assert render_daily(with_section) == render_daily(base) + "\n" + section
+
+
+def test_free_text_stays_inside_its_table_cell() -> None:
+    row = TradeRow(
+        ticket="T|1",
+        mint="M|2",
+        size_lamports=1,
+        reason="a\nb",
+        pnl_lamports=0,
+        pnl_pct="+0.00",
+        fees_lamports=None,
+        correlation_id="cid",
+    )
+    body = render_daily(ReportModel(trade_rows=(row,)))
+    assert "T\\|1 | M\\|2 | 0.000000001 | a b | 0.000000000 | +0.00 | not tracked | cid\n" in body
+
+
+def test_approvals_have_their_own_heading() -> None:
+    approval = "ApprovalRecorded kind=live_gate by=operator"
+    body = render_daily(ReportModel(approvals_cleared=(approval,)))
+    assert "## Approvals\n- " + approval + "\n" in body
+    risk = body.split("## Risk events\n", 1)[1].split("\n## ", 1)[0]
+    assert approval not in risk
+
+
+def test_untracked_figures_render_not_tracked_not_zero() -> None:
+    body = render_daily(ReportModel())
+    assert "fees: venue 0.000000000 SOL + network not tracked\n" in body
+    assert "## Bot health\nnot tracked\n" in body
+    assert "network 0.000000000" not in body
+
+
+def test_equity_percent_is_exact_for_large_amounts() -> None:
+    start = 10**20
+    model = ReportModel(
+        equity_start_lamports=start,
+        equity_end_lamports=start + 125_000_000_000_000_001,
+    )
+    # 125000000000000001 / 10**20 = 0.125000000000000001, which rounds up to 0.13
+    assert "(+0.13 since start)" in render_daily(model)
