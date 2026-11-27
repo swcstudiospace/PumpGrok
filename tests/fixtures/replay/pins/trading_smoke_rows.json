@@ -1,1242 +1,1242 @@
 [
- {
-  "idempotency_key": "ab51bbdc86dc16bebe9a072ea0701301",
-  "payload_sha256": "d0017d783186b9c36dbfe23e75bfb1684ceeac7971fc693f953f17fcbd6af5e4",
-  "seq": 1,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.000000Z",
-  "type": "JournalNote"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.brief",
-  "payload_sha256": "10da70c170431ddcd738f0d563aa87f15a561b52ddd97c02c65bd42bd9040d9a",
-  "seq": 2,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.docs_search",
-  "payload_sha256": "fba2825dcc8e35469086cb0bb1d5073ad5615fe0a1be494b0170a811e34a025e",
-  "seq": 3,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.doctor",
-  "payload_sha256": "cb6fd3a6aa34f3cb783e4dbe339a5e48524dac24c6cf897be170b48aacd9a324",
-  "seq": 4,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.event_emit",
-  "payload_sha256": "ff93ce6d5bc9953470978edcd3e32192c143e52ce8b2ea3192169d6301e6b280",
-  "seq": 5,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.memory_recall",
-  "payload_sha256": "2e5a1584ce88fba31b072e2c6d38fb0a8a21887b410021aac8b31111479f28ea",
-  "seq": 6,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.memory_retain",
-  "payload_sha256": "e94468d43bc8e68210c8665151ec939689699f35d8c20bc829db8d87f357c5d7",
-  "seq": 7,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.ownership_resolve",
-  "payload_sha256": "9c764c99ef9e1c9111d0e5693852da65b20c0307eaed2533ddb81b8c835d1788",
-  "seq": 8,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|desk.receipt_check",
-  "payload_sha256": "3e05b454b143f3418f563f8e0d591fa29ee2102329199d73eab88a101a41fb92",
-  "seq": 9,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|exec.positions",
-  "payload_sha256": "9373956760af736aac5a698c5ebe8a6038e57a059c60bb56c641b55ed763ddee",
-  "seq": 10,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|journal.append",
-  "payload_sha256": "9d47f77bf8ab7587110a52f132325d92ff10e344ba439a7c3ff91d78e1d9f228",
-  "seq": 11,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|notify.alert",
-  "payload_sha256": "9dae252cb916f9f7757e1cc953390207243388ae66556a1e23ae86c79bc8bbe5",
-  "seq": 12,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|portfolio.exposure",
-  "payload_sha256": "d34ffc91720363442a8c8a7d2cf5e5e2b25d549fc118d715ef8460269e7785cd",
-  "seq": 13,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|portfolio.pnl",
-  "payload_sha256": "95be19b3b7a6a6ff7ab90a6b86392e330aee453484a4057e607ad55756f594c0",
-  "seq": 14,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|risk.check_limits",
-  "payload_sha256": "9e341a10546a5085f182cfc6f56023b1a0ccdb978d04b2111cf30949e17a0a8d",
-  "seq": 15,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-00-chief|risk.halt_status",
-  "payload_sha256": "9fce26b9531a8af484081a1f11283d33847c5fc4f0f8f67f6aa68d910e54e36a",
-  "seq": 16,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.brief",
-  "payload_sha256": "9c538a447eb40f79222fe43d1d394be0c35f10b31e2faa5401941a4f5bf93ed5",
-  "seq": 17,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.docs_search",
-  "payload_sha256": "0373eeda878becad0d9be513b2fdb386678da74f4b2eff21f2967e6aefa16fdf",
-  "seq": 18,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.doctor",
-  "payload_sha256": "ded2f28e2dc24cda7429554a414b3c2d0ad75afd54bbef6d7fd728d1cdc60704",
-  "seq": 19,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.event_emit",
-  "payload_sha256": "3cf12d743c2438ee2da661b0d21288b6bc44802aa77cfc80029f002a7f7bbe3f",
-  "seq": 20,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.memory_recall",
-  "payload_sha256": "19e2398f44f574a946996931e587424903f1aeae6dabc3ecea57eef5f3b266fc",
-  "seq": 21,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.memory_retain",
-  "payload_sha256": "25f182ca33733daa82a6bec57fc13f6f3a01d58a7b8694943353118893f6f5c3",
-  "seq": 22,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.ownership_resolve",
-  "payload_sha256": "933db03f05ac7710337fc74610f980fe225d6f89a76457bd958fc7f570a7b6cf",
-  "seq": 23,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|desk.receipt_check",
-  "payload_sha256": "16927155a265ee8820ed7a152638b32eeef3b27d0307988c51b7e01556fc66f7",
-  "seq": 24,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|journal.append",
-  "payload_sha256": "37e3a8c4c354946a63de6ddb89e7cce205af18230fcced095f1c582efdac6d49",
-  "seq": 25,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|market.holders_snapshot",
-  "payload_sha256": "dc0993d2ea7c38fea62f2e3c4118921dc5ad981777c1a65d5268ee3338e85d02",
-  "seq": 26,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|market.liquidity",
-  "payload_sha256": "491e2c0c016aafcf8b3d48628cf339ff59c5ca4986323980403f5ceda037ec81",
-  "seq": 27,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|market.price",
-  "payload_sha256": "ab15a17fa741cd97843faf61d440da21d22e1bf30708c7775773cb900a347ec5",
-  "seq": 28,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|market.trades",
-  "payload_sha256": "1ce0f917b76419f2c9363e67fd4c41342a753fbda28f120f259a0699c7da5baf",
-  "seq": 29,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|onchain.authorities",
-  "payload_sha256": "3cd4a76d228679dcac74cdc70ad28cb0f3bf0fd0507662b020cfff51592ab460",
-  "seq": 30,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-01-scout|onchain.token_metadata",
-  "payload_sha256": "ffcd3758802ae729b0795f29835be17033d42a68b3ba4d1216c7a95fbdd72050",
-  "seq": 31,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.brief",
-  "payload_sha256": "f754cdec985cffaadbb6c84e7d0be20cc8930719dcfa46b10947562f680d69e3",
-  "seq": 32,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.docs_search",
-  "payload_sha256": "3274a40b111adf1a2b0d0e766b9b94393162bd00b8aba81b7ac022da9061e00a",
-  "seq": 33,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.doctor",
-  "payload_sha256": "3b41ccd77cebf17f4f73b3139d747e57ad3757cd644f436004ce958bce41e07b",
-  "seq": 34,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.event_emit",
-  "payload_sha256": "4d5d2d8cd82a1e8619d443d1d62d7f4db0eb58428d4d223513ce4938d158d707",
-  "seq": 35,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.memory_recall",
-  "payload_sha256": "d39cf8f16d9e0d8241989274e609365f3430852139e3d9a3c607667cdbb00eea",
-  "seq": 36,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.memory_retain",
-  "payload_sha256": "2d40f164e311f976b6dd7afc9816f65b263618aae6b9fbbef060fb1f82a542bc",
-  "seq": 37,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.ownership_resolve",
-  "payload_sha256": "cba65749b699877b554ca591ccf536c7d35d6387f37e6388185d35e6522c8da1",
-  "seq": 38,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|desk.receipt_check",
-  "payload_sha256": "aac2be30fb4c906f84bacf5b87f97d0d887e4e3f4b1b3c409aafc34da3fa7b9d",
-  "seq": 39,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|portfolio.exposure",
-  "payload_sha256": "d019fef49ef3ffc204cc07efb1b5912c0e6827055593d4036ca6521395bcb942",
-  "seq": 40,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|portfolio.ledger_read",
-  "payload_sha256": "315a7b6a7fa7c8d1ae338a03db7359cdecdad933b0ebb6c5b9365c7ee83f7319",
-  "seq": 41,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|portfolio.pnl",
-  "payload_sha256": "5f81c6e461c036808eeed09dcac0dade47b8c32f34bd67befc41abcad8d95a74",
-  "seq": 42,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|risk.check_limits",
-  "payload_sha256": "19e72bf22b6e30d2f1c6601d9f16af3a2e3512f5fe1565e25f3c418bc092e12a",
-  "seq": 43,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|risk.drawdown",
-  "payload_sha256": "1b684bbb3debd3bb69a76a002a1cdc7263667536d6e23f4c677db0628f21f080",
-  "seq": 44,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|risk.halt_status",
-  "payload_sha256": "10d1c3c76397071bf47e40931dc44d680fdbe97ac20208439f5e0115f7d45496",
-  "seq": 45,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-02-risk|risk.kill_switch",
-  "payload_sha256": "b1b78bbbc42969fb8069e4962e6f1c2b322c7ca71a3df8e5aa8ce1a0b4e769bf",
-  "seq": 46,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.brief",
-  "payload_sha256": "01211737a32eb2c3b6f80b5f28931c72f785166f28e6baa8fcbc59a2a457ff75",
-  "seq": 47,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.docs_search",
-  "payload_sha256": "b6aee289061842d1ad705215f80c10ea8427eda57d988e694fab0aa096e1e6a5",
-  "seq": 48,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.doctor",
-  "payload_sha256": "467a8035337ac525e56f45bec4e818fd77412c012b91c61d4560abd9e125b152",
-  "seq": 49,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.event_emit",
-  "payload_sha256": "cd80657042c814076d20bf411219940eaaa95376fe6221d1634674f07dbbf7df",
-  "seq": 50,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.memory_recall",
-  "payload_sha256": "a5e4a37c1f62037a9b0feb54ca5ba5cda4ce2a0a10f5ec5720f09242b2cdc41b",
-  "seq": 51,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.memory_retain",
-  "payload_sha256": "ae89724975c992a9a07adc25e12192f5eda719b702f9980bc13e2d92231ec35b",
-  "seq": 52,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.ownership_resolve",
-  "payload_sha256": "74c1a6dc9233525f4bafb5b11a6255eb64776c0ba0380d458239530d1e329de7",
-  "seq": 53,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|desk.receipt_check",
-  "payload_sha256": "42c57b4b2b69414f0f54d882dfc6af9775da5d6b0464a2b5ff9d9e85c47e7fe9",
-  "seq": 54,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|journal.append",
-  "payload_sha256": "450548405c3d977d9071b570028ccf2c16bc422a63e2587d2bab5b718cc3c937",
-  "seq": 55,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|market.holders_snapshot",
-  "payload_sha256": "365180027f57d8a66d6bb8da1569c5e00a14dc327e8acfce66b0881d43b07338",
-  "seq": 56,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|market.trades",
-  "payload_sha256": "ef0460daaa31ef2be2339236d8999508d814a1855a8992c8b474e7a8ad7e2d0f",
-  "seq": 57,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|onchain.deployer_history",
-  "payload_sha256": "6e72e0a66f386afb5ad8295216a0f08517dd377dd2b2e4726c72955994fe78bf",
-  "seq": 58,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|onchain.large_transfers",
-  "payload_sha256": "32771aa0e2946b1e0c7d2f8cdd5e81c78b59905bed734cad0c92d403115356c4",
-  "seq": 59,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-03-whale|onchain.top_holders",
-  "payload_sha256": "17d86f71dbed9f53c3f6caab97f5b7a253d9403e572c334697633562cd71f8b9",
-  "seq": 60,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.brief",
-  "payload_sha256": "e04a45d92fb07cf08f465157d01be8056fea841b575eb1d1cc272897a809a282",
-  "seq": 61,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.docs_search",
-  "payload_sha256": "6263640ba3ac8298e0b53b8a3ef38bdbd9f464bba58b535a3ad59039986c3263",
-  "seq": 62,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.doctor",
-  "payload_sha256": "d2550761e16525f188620efb95256dc7890ca34ac810070bad7dd02e2d009cb0",
-  "seq": 63,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.event_emit",
-  "payload_sha256": "3cac47cf8993a75d886bb552a9653d492cac76caeda257a9f60ab3c59954855b",
-  "seq": 64,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.memory_recall",
-  "payload_sha256": "511ac2bd56148c45cd3516040b1aff3c403417fc49a87b17a17bf663b7fbaed8",
-  "seq": 65,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.memory_retain",
-  "payload_sha256": "99ac2103a868b88cff2fb90523a71d9c71b0d5e447b4c24c9d3ddc28e00323b1",
-  "seq": 66,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.ownership_resolve",
-  "payload_sha256": "cf252e3315034f890d12f551f3207da20688998cb57c701d056d00527e790938",
-  "seq": 67,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|desk.receipt_check",
-  "payload_sha256": "d5e99ccdbed25f4eea12946e30b9f0d78b2a320721d8746265361c452a577939",
-  "seq": 68,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|exec.cancel",
-  "payload_sha256": "6e0465a393406776ce64723fae4be8c32e0c86e31daf721008b6d56f404c445c",
-  "seq": 69,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|exec.place",
-  "payload_sha256": "42303019aa1628aa21525f8a52d2149acdc7550fed24ea8602719399b5e187ef",
-  "seq": 70,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|exec.positions",
-  "payload_sha256": "677ab71934f9ab2b3ea35da9f049d9f25e687641891b088c2dfeefe6623b8b49",
-  "seq": 71,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|exec.quote",
-  "payload_sha256": "3d84f4c0853a556d0785ad14b2ca7aa594fe1e2f59f00b03dcfb01865e682bbd",
-  "seq": 72,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|exec.simulate",
-  "payload_sha256": "f7852e24a0f817673bf4209a0f20eb748eac61f213ce41dd3fe9019d0e72744a",
-  "seq": 73,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|market.price",
-  "payload_sha256": "69a0062c3d7f33f7ca942c02ddb357bd62dfa99fb377fd68a202da26753a12b2",
-  "seq": 74,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-04-sniper|onchain.priority_fee",
-  "payload_sha256": "e354886f093e393637d50d5dcd0c088960a3954ce65a8ed15eff4c20851f529d",
-  "seq": 75,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.brief",
-  "payload_sha256": "bacd2c43815bdba917ff865da4e070beab7882d8b2436fef93586704cc804b03",
-  "seq": 76,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.docs_search",
-  "payload_sha256": "cbf0abbea211f2758633302b28a7913eb0cb1675ed65dadb871c9dad0049eb09",
-  "seq": 77,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.doctor",
-  "payload_sha256": "f78051ee79902b9a6cd27b470d562eb92aa01f417e520b24ca2bca17e1f4e164",
-  "seq": 78,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.event_emit",
-  "payload_sha256": "c9036fe02a1b7990f56447724ebaaca7ed78567de333d9989d857da819a0a886",
-  "seq": 79,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.memory_recall",
-  "payload_sha256": "815c87a8475324de329d90c8774007294403fa5f33d977617292b1337946cdf9",
-  "seq": 80,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.memory_retain",
-  "payload_sha256": "a81de80cd9dd6d9fb2eb77d0444ea76fc8d6c5b976875705264c582a372e2c7b",
-  "seq": 81,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.ownership_resolve",
-  "payload_sha256": "d85c6704212842615029db86234b796cfb8dbcc94387746a7ff962e31ec8d8e2",
-  "seq": 82,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|desk.receipt_check",
-  "payload_sha256": "19f569a0845de2d9c561ff0a7a630b7f89f2db243045a069d7d0e45aad2b07c3",
-  "seq": 83,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|market.liquidity",
-  "payload_sha256": "c8b79cbe70450af9cf93f2ec49d4e53be694d218dd65257d1f6f6142fc27ca3d",
-  "seq": 84,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|market.price",
-  "payload_sha256": "163f92928d8863f0d343d70aa27ff11fb19950eef12d6a7347a09064e5c205bc",
-  "seq": 85,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|onchain.authorities",
-  "payload_sha256": "12a56ec80374cd5c7ee61b9eda3b297fbe97a925453637839373fe29265fd584",
-  "seq": 86,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|onchain.lp_status",
-  "payload_sha256": "7d543afe6191be41a6a0568ac3df4dfb3d6159bf41684472f23c90bba6a141c1",
-  "seq": 87,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|onchain.token_metadata",
-  "payload_sha256": "0878fcd51c661f2c4962b65c635010975d9e46068ae3b4e226a7ed251df6522c",
-  "seq": 88,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|onchain.top_holders",
-  "payload_sha256": "3a1f900510ed8933a3f6b705b3d7b584aa190dcd15443cf29b4e82c18b531304",
-  "seq": 89,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-05-rug|safety.score_report",
-  "payload_sha256": "f7f0cd435d50c34271b0fcd95d5d6492b3e1780521e03cb4a7103d538d87a787",
-  "seq": 90,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.brief",
-  "payload_sha256": "ce6169243e20a3c0f14b560a0ee6c02bd9f69a8945970db4b75bd56f4485b6c0",
-  "seq": 91,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.docs_search",
-  "payload_sha256": "d0332dd48f5428a38417dc067eaf722dc358ea354a6a4ce2f3b43455ff38affa",
-  "seq": 92,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.doctor",
-  "payload_sha256": "7313e1dc2aa7c6a6db02060f59962d0e1d806cb7cdd295101fe498a0de32aadb",
-  "seq": 93,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.event_emit",
-  "payload_sha256": "699a0db7a43323b64556b346ef640d40845e0c8b439a91833c47c63f74f24ea7",
-  "seq": 94,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.memory_recall",
-  "payload_sha256": "a825baf3a077e0661356504e5d79fa4e864a6482200973d94e119217a4aad9c4",
-  "seq": 95,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.memory_retain",
-  "payload_sha256": "cdeeaf0b4e266a65ffe92742f49eb8dc8fe81eb822d893a4153be976635cb395",
-  "seq": 96,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.ownership_resolve",
-  "payload_sha256": "8fd1ed0ac77b704d1fefe4e99a01ac1bead35f7ab01ddc13457155f84908ae87",
-  "seq": 97,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|desk.receipt_check",
-  "payload_sha256": "94d9a419ecc49f9e53119d68803f72e965b3767e8fd46348cdceb1e909df583c",
-  "seq": 98,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|exec.cancel",
-  "payload_sha256": "43a6c99053b187b491555cbd41abe8537c01db53dd338d2efbc27083ca25118f",
-  "seq": 99,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|exec.place",
-  "payload_sha256": "a9bf61df70ecbf46a6b934a53b0a32a0ec6fd20239f5c88092a5525f58f13701",
-  "seq": 100,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|exec.positions",
-  "payload_sha256": "59cfca78045066ef8e60ab3a1a40fe297f28057959c9d91bf8b7caafe304b079",
-  "seq": 101,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|exec.quote",
-  "payload_sha256": "6f6f55468d589b52c5b26af3e32fb8d27b3780fa332bf073e8336a20dc6d5cc3",
-  "seq": 102,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|exec.simulate",
-  "payload_sha256": "654ef4ecdd492d40053983f9c1007636aa7da14ad4fdb87b2d2fbde8c75ce883",
-  "seq": 103,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|market.price",
-  "payload_sha256": "893233e566359c1724ea764fa003ad2dd041fcdf0d9f12dcc4da4da8deb5b1a5",
-  "seq": 104,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-06-exit|onchain.priority_fee",
-  "payload_sha256": "d55b82bb9787f5f12e58d23cb02df5e7a74f22490c0656124767f60b189451f7",
-  "seq": 105,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.brief",
-  "payload_sha256": "cd186c2d48b280f9b984136137790d70d4f472e159643c278f0ba8b5a1fb1105",
-  "seq": 106,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.docs_search",
-  "payload_sha256": "c8ae628d6203bde4dfbf1cc0c6775f03206d26ae44183abca9ecfd7e833330b3",
-  "seq": 107,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.doctor",
-  "payload_sha256": "fdea175f8417d4e74c803ed2976eadc236553502da57a661de8f429c6cde7bd8",
-  "seq": 108,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.event_emit",
-  "payload_sha256": "ae6034d03c5e3ecb742a93a0b81011758925bd9840d8ae30dfb2ed80db31800f",
-  "seq": 109,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.memory_recall",
-  "payload_sha256": "37b54f76a8130b6f3d3889bb3c8a2e862161d9223925d5b19bd34c8751f778b1",
-  "seq": 110,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.memory_retain",
-  "payload_sha256": "8caf6be086169780ba5ce34023c0fa5ecdbe0875aabf0b60b76b40d2c1270c6a",
-  "seq": 111,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.ownership_resolve",
-  "payload_sha256": "3e93a6e837fd5456a28543e1961d066cf35c0a5d9c2a3a672d6999db62d66c7f",
-  "seq": 112,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|desk.receipt_check",
-  "payload_sha256": "72033b27227b9beddf151a8be85a57d3a34343d429b7c3916685330b0a1a7217",
-  "seq": 113,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|journal.append",
-  "payload_sha256": "c3afd8f460b5a3b469f69cfd069b1a0b35bb29ff655b4a534db4d2b4c337ac95",
-  "seq": 114,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|market.trades",
-  "payload_sha256": "795fed8a7a85d5c098b533671bedd1bf6c1d223fe8c5aef57095d2ac6ca13e8a",
-  "seq": 115,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-07-shill|onchain.token_metadata",
-  "payload_sha256": "d50c219c44e721cf18f1eec293b6bb837d0a333a8321896d7375f2b58e6ee481",
-  "seq": 116,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.brief",
-  "payload_sha256": "617708dad8741d09a3dc05ba30c52461c5aca38226a2ed43041525107f1aeec3",
-  "seq": 117,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.docs_search",
-  "payload_sha256": "356e4fbd47504a8a127b0be32b2d29e816d4761b1c33ea5ad1aa4f2b244a344c",
-  "seq": 118,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.doctor",
-  "payload_sha256": "00beb9ff321227962e522d71e52c929636a213007ca8c8bb659f4514b69ce465",
-  "seq": 119,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.event_emit",
-  "payload_sha256": "8584b7989f65fb1dfe81e3651d262adcc517835e1a3cb49bfce50d6996564521",
-  "seq": 120,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.memory_recall",
-  "payload_sha256": "720d9f0bc62252c7e49ccf6a70fc2b35d8c6e6eb4d8d9cd4a3dea1dafd292a71",
-  "seq": 121,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.memory_retain",
-  "payload_sha256": "fe0e6e5c5b8ad7c827de3915bb0eddaceb557d9c5d6c24e920574d0d17bac91d",
-  "seq": 122,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.ownership_resolve",
-  "payload_sha256": "3dd5c58048afe79d0a0b95cdce0281f422a8052b49e50fcca29ab7661a34b2b8",
-  "seq": 123,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|desk.receipt_check",
-  "payload_sha256": "cf3f06cce44436ba8875aeed0262efeb991f681b68a6b6f17e376836426a12a4",
-  "seq": 124,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|journal.append",
-  "payload_sha256": "9876a1c2fe88a13f258418d79ee5c53f5a05febf75777f739d16ff7548524f58",
-  "seq": 125,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|market.holders_snapshot",
-  "payload_sha256": "7d36e978c1c3a5f7ea38704a9fefaf11d3afe4df35956fb514e3e94fa7120b2f",
-  "seq": 126,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|market.liquidity",
-  "payload_sha256": "942b29da18075d1b5e4dcdae497e097767261859f460af293ad5652be370a904",
-  "seq": 127,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|market.ohlcv",
-  "payload_sha256": "f0d43237e74888d9303e9be26572c17a4848b33d8264df2300b80240ace18527",
-  "seq": 128,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|market.price",
-  "payload_sha256": "17332fddd173f9a66aa11d74c7e27b5596a84b702eb46e1d8e0a0eb07fbcf2e9",
-  "seq": 129,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-08-signal|market.trades",
-  "payload_sha256": "cc4e5e955272e72dc69260791d5c79f0dcf1b10816a69e1e9c677b039e721cb4",
-  "seq": 130,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.brief",
-  "payload_sha256": "b21b6a093622156cdcb4333b3a67d8953f9e78d9ccdbd910a3bdf26518a2cd51",
-  "seq": 131,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.docs_search",
-  "payload_sha256": "f92425c2efcbce08cdec4b642f7f68aa55535cd7b651c916b64ef9fd9d2809d6",
-  "seq": 132,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.doctor",
-  "payload_sha256": "4679c3b2ee24f5fede5e3542e368dd41f8e6a4ac2af41facb544fa3497370612",
-  "seq": 133,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.event_emit",
-  "payload_sha256": "58cae7ae5bb6072186b8c3003158e5fac82b6f596b362117a42cdaa9ae110a37",
-  "seq": 134,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.memory_recall",
-  "payload_sha256": "fd483b3f560bf2607e762034f8c128b3ba885ec1886db56a4efb4e40183129a8",
-  "seq": 135,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.memory_retain",
-  "payload_sha256": "4e18e22ea73460df91525af36354d86d5efa719bbecceef783c1a82a9cc8bf8b",
-  "seq": 136,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.ownership_resolve",
-  "payload_sha256": "c6966c094b8a85e6530998339835dcee01dd2c08032a5b5cdc1d3b592f0a5b63",
-  "seq": 137,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|desk.receipt_check",
-  "payload_sha256": "d9bed71d6d7aa0745eac0564804237a2d10947a599685346358f7f0b820c201d",
-  "seq": 138,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|exec.positions",
-  "payload_sha256": "e56f7800f33d749798a2d945d519ab0abd6e96e7edb8203143ca4bd405f6d09d",
-  "seq": 139,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|journal.append",
-  "payload_sha256": "a99ba34b22da15663086ef48c8c2a0456044f40c7d56934abbe4679201e184de",
-  "seq": 140,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|journal.render_report",
-  "payload_sha256": "ccab3a82f40e0ca616411b9b359361c8dac5d09e6aa6db63482d7eec15c7f403",
-  "seq": 141,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|notify.alert",
-  "payload_sha256": "dc03a11e1a05d51dbc3c9965b066013dc08b9538c6c60f3e9002622aea960676",
-  "seq": 142,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|portfolio.exposure",
-  "payload_sha256": "edfa543c8765a1103132f891aff8377909f791c46da53af43f9d8eff734af427",
-  "seq": 143,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|portfolio.ledger_read",
-  "payload_sha256": "2383a31b4677a1358fdc9ad35b27855dc60a0c351d989e1281f8fd4380c2b0ec",
-  "seq": 144,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "replay-grant|bot-09-journal|portfolio.pnl",
-  "payload_sha256": "2351a0360abfc748e49a100ad7c28b2c643c8e5e32276d7fd3d460cbecf88f47",
-  "seq": 145,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00Z",
-  "type": "ConfigChanged"
- },
- {
-  "idempotency_key": "005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725",
-  "payload_sha256": "a921c9d7dfc2112323fd3476a217db941a999dc847507b1007ef89561c8af4d1",
-  "seq": 146,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:00.000000Z",
-  "type": "DailyRollover"
- },
- {
-  "idempotency_key": "reject|SOL-20260101-001|buy|01KDVDNCE43AJG3A63YQTGAZZE|ACCEPTED|post_graduation_no_reserves",
-  "payload_sha256": "f7e928051ff78c3cdd723515dfb39adf737a13d7ca44b6159374fec11a65d6c2",
-  "seq": 147,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:02.750000Z",
-  "type": "OrderRejected"
- },
- {
-  "idempotency_key": "6c0fdfec1710eb2320480c72c7df30bb",
-  "payload_sha256": "e41e030ddff194067982761a6d4e4b034109edfb48e3c26f2508114142ce1319",
-  "seq": 148,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:03.250000Z",
-  "type": "OrderPlaced"
- },
- {
-  "idempotency_key": "fill|01KDVDND5JAPXD42TJSZCAN8FP",
-  "payload_sha256": "227078c5ea79e8f6662f514fecb9465e43475ed1a532424738ea94e3888b63e4",
-  "seq": 149,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:04.000000Z",
-  "type": "FillRecorded"
- },
- {
-  "idempotency_key": "position|01KDVDND5JAPXD42TJSZCAN8FP",
-  "payload_sha256": "7d56c37333592e8eaa3f217dff6a563c57638e8441a7a0a122d3ea902ebb5a04",
-  "seq": 150,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:04.000000Z",
-  "type": "PositionOpened"
- },
- {
-  "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":11497440},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":25942033,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
-  "payload_sha256": "9e38067e21f6249be71b72d0154aeb8fc70ceb6ac494cb0c0def0b892b299493",
-  "seq": 151,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.000000Z",
-  "type": "MarkToMarket"
- },
- {
-  "idempotency_key": "consume|apr-01KDVDP7HAQ09T9J82FMQPRWQS",
-  "payload_sha256": "ae93cad283d89214841ed73a32375a18d763f521faae016159a7ce51bd18d41b",
-  "seq": 152,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.250000Z",
-  "type": "ApprovalRecorded"
- },
- {
-  "idempotency_key": "aea68c17eeaeb0972d242754d9ced5de",
-  "payload_sha256": "573cb32bef37ea86d61f2342e3f0c890a69ce0a0384924608cf9c24255f63bc3",
-  "seq": 153,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.250000Z",
-  "type": "OrderPlaced"
- },
- {
-  "idempotency_key": "fill|01KDVDP7HAZ59CGEATNNFTR3DT",
-  "payload_sha256": "2c2bcf87a665417917241c73ba523429e63f30559f213673359a5637fe5509b0",
-  "seq": 154,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.750000Z",
-  "type": "FillRecorded"
- },
- {
-  "idempotency_key": "close|01KDVDP7HAZ59CGEATNNFTR3DT",
-  "payload_sha256": "7cc05074c32b11e3d5534b790d6e4ed9be7b3a054235dc9c129427b332ca823a",
-  "seq": 155,
-  "source": "replay",
-  "ts": "2026-01-01T00:00:30.750000Z",
-  "type": "PositionClosed"
- }
+  {
+    "idempotency_key": "ab51bbdc86dc16bebe9a072ea0701301",
+    "payload_sha256": "d0017d783186b9c36dbfe23e75bfb1684ceeac7971fc693f953f17fcbd6af5e4",
+    "seq": 1,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.000000Z",
+    "type": "JournalNote"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.brief",
+    "payload_sha256": "10da70c170431ddcd738f0d563aa87f15a561b52ddd97c02c65bd42bd9040d9a",
+    "seq": 2,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.docs_search",
+    "payload_sha256": "fba2825dcc8e35469086cb0bb1d5073ad5615fe0a1be494b0170a811e34a025e",
+    "seq": 3,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.doctor",
+    "payload_sha256": "cb6fd3a6aa34f3cb783e4dbe339a5e48524dac24c6cf897be170b48aacd9a324",
+    "seq": 4,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.event_emit",
+    "payload_sha256": "ff93ce6d5bc9953470978edcd3e32192c143e52ce8b2ea3192169d6301e6b280",
+    "seq": 5,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.memory_recall",
+    "payload_sha256": "2e5a1584ce88fba31b072e2c6d38fb0a8a21887b410021aac8b31111479f28ea",
+    "seq": 6,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.memory_retain",
+    "payload_sha256": "e94468d43bc8e68210c8665151ec939689699f35d8c20bc829db8d87f357c5d7",
+    "seq": 7,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.ownership_resolve",
+    "payload_sha256": "9c764c99ef9e1c9111d0e5693852da65b20c0307eaed2533ddb81b8c835d1788",
+    "seq": 8,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|desk.receipt_check",
+    "payload_sha256": "3e05b454b143f3418f563f8e0d591fa29ee2102329199d73eab88a101a41fb92",
+    "seq": 9,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|exec.positions",
+    "payload_sha256": "9373956760af736aac5a698c5ebe8a6038e57a059c60bb56c641b55ed763ddee",
+    "seq": 10,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|journal.append",
+    "payload_sha256": "9d47f77bf8ab7587110a52f132325d92ff10e344ba439a7c3ff91d78e1d9f228",
+    "seq": 11,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|notify.alert",
+    "payload_sha256": "9dae252cb916f9f7757e1cc953390207243388ae66556a1e23ae86c79bc8bbe5",
+    "seq": 12,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|portfolio.exposure",
+    "payload_sha256": "d34ffc91720363442a8c8a7d2cf5e5e2b25d549fc118d715ef8460269e7785cd",
+    "seq": 13,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|portfolio.pnl",
+    "payload_sha256": "95be19b3b7a6a6ff7ab90a6b86392e330aee453484a4057e607ad55756f594c0",
+    "seq": 14,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|risk.check_limits",
+    "payload_sha256": "9e341a10546a5085f182cfc6f56023b1a0ccdb978d04b2111cf30949e17a0a8d",
+    "seq": 15,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-00-chief|risk.halt_status",
+    "payload_sha256": "9fce26b9531a8af484081a1f11283d33847c5fc4f0f8f67f6aa68d910e54e36a",
+    "seq": 16,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.brief",
+    "payload_sha256": "9c538a447eb40f79222fe43d1d394be0c35f10b31e2faa5401941a4f5bf93ed5",
+    "seq": 17,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.docs_search",
+    "payload_sha256": "0373eeda878becad0d9be513b2fdb386678da74f4b2eff21f2967e6aefa16fdf",
+    "seq": 18,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.doctor",
+    "payload_sha256": "ded2f28e2dc24cda7429554a414b3c2d0ad75afd54bbef6d7fd728d1cdc60704",
+    "seq": 19,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.event_emit",
+    "payload_sha256": "3cf12d743c2438ee2da661b0d21288b6bc44802aa77cfc80029f002a7f7bbe3f",
+    "seq": 20,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.memory_recall",
+    "payload_sha256": "19e2398f44f574a946996931e587424903f1aeae6dabc3ecea57eef5f3b266fc",
+    "seq": 21,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.memory_retain",
+    "payload_sha256": "25f182ca33733daa82a6bec57fc13f6f3a01d58a7b8694943353118893f6f5c3",
+    "seq": 22,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.ownership_resolve",
+    "payload_sha256": "933db03f05ac7710337fc74610f980fe225d6f89a76457bd958fc7f570a7b6cf",
+    "seq": 23,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|desk.receipt_check",
+    "payload_sha256": "16927155a265ee8820ed7a152638b32eeef3b27d0307988c51b7e01556fc66f7",
+    "seq": 24,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|journal.append",
+    "payload_sha256": "37e3a8c4c354946a63de6ddb89e7cce205af18230fcced095f1c582efdac6d49",
+    "seq": 25,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|market.holders_snapshot",
+    "payload_sha256": "dc0993d2ea7c38fea62f2e3c4118921dc5ad981777c1a65d5268ee3338e85d02",
+    "seq": 26,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|market.liquidity",
+    "payload_sha256": "491e2c0c016aafcf8b3d48628cf339ff59c5ca4986323980403f5ceda037ec81",
+    "seq": 27,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|market.price",
+    "payload_sha256": "ab15a17fa741cd97843faf61d440da21d22e1bf30708c7775773cb900a347ec5",
+    "seq": 28,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|market.trades",
+    "payload_sha256": "1ce0f917b76419f2c9363e67fd4c41342a753fbda28f120f259a0699c7da5baf",
+    "seq": 29,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|onchain.authorities",
+    "payload_sha256": "3cd4a76d228679dcac74cdc70ad28cb0f3bf0fd0507662b020cfff51592ab460",
+    "seq": 30,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-01-scout|onchain.token_metadata",
+    "payload_sha256": "ffcd3758802ae729b0795f29835be17033d42a68b3ba4d1216c7a95fbdd72050",
+    "seq": 31,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.brief",
+    "payload_sha256": "f754cdec985cffaadbb6c84e7d0be20cc8930719dcfa46b10947562f680d69e3",
+    "seq": 32,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.docs_search",
+    "payload_sha256": "3274a40b111adf1a2b0d0e766b9b94393162bd00b8aba81b7ac022da9061e00a",
+    "seq": 33,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.doctor",
+    "payload_sha256": "3b41ccd77cebf17f4f73b3139d747e57ad3757cd644f436004ce958bce41e07b",
+    "seq": 34,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.event_emit",
+    "payload_sha256": "4d5d2d8cd82a1e8619d443d1d62d7f4db0eb58428d4d223513ce4938d158d707",
+    "seq": 35,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.memory_recall",
+    "payload_sha256": "d39cf8f16d9e0d8241989274e609365f3430852139e3d9a3c607667cdbb00eea",
+    "seq": 36,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.memory_retain",
+    "payload_sha256": "2d40f164e311f976b6dd7afc9816f65b263618aae6b9fbbef060fb1f82a542bc",
+    "seq": 37,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.ownership_resolve",
+    "payload_sha256": "cba65749b699877b554ca591ccf536c7d35d6387f37e6388185d35e6522c8da1",
+    "seq": 38,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|desk.receipt_check",
+    "payload_sha256": "aac2be30fb4c906f84bacf5b87f97d0d887e4e3f4b1b3c409aafc34da3fa7b9d",
+    "seq": 39,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|portfolio.exposure",
+    "payload_sha256": "d019fef49ef3ffc204cc07efb1b5912c0e6827055593d4036ca6521395bcb942",
+    "seq": 40,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|portfolio.ledger_read",
+    "payload_sha256": "315a7b6a7fa7c8d1ae338a03db7359cdecdad933b0ebb6c5b9365c7ee83f7319",
+    "seq": 41,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|portfolio.pnl",
+    "payload_sha256": "5f81c6e461c036808eeed09dcac0dade47b8c32f34bd67befc41abcad8d95a74",
+    "seq": 42,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|risk.check_limits",
+    "payload_sha256": "19e72bf22b6e30d2f1c6601d9f16af3a2e3512f5fe1565e25f3c418bc092e12a",
+    "seq": 43,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|risk.drawdown",
+    "payload_sha256": "1b684bbb3debd3bb69a76a002a1cdc7263667536d6e23f4c677db0628f21f080",
+    "seq": 44,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|risk.halt_status",
+    "payload_sha256": "10d1c3c76397071bf47e40931dc44d680fdbe97ac20208439f5e0115f7d45496",
+    "seq": 45,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-02-risk|risk.kill_switch",
+    "payload_sha256": "b1b78bbbc42969fb8069e4962e6f1c2b322c7ca71a3df8e5aa8ce1a0b4e769bf",
+    "seq": 46,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.brief",
+    "payload_sha256": "01211737a32eb2c3b6f80b5f28931c72f785166f28e6baa8fcbc59a2a457ff75",
+    "seq": 47,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.docs_search",
+    "payload_sha256": "b6aee289061842d1ad705215f80c10ea8427eda57d988e694fab0aa096e1e6a5",
+    "seq": 48,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.doctor",
+    "payload_sha256": "467a8035337ac525e56f45bec4e818fd77412c012b91c61d4560abd9e125b152",
+    "seq": 49,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.event_emit",
+    "payload_sha256": "cd80657042c814076d20bf411219940eaaa95376fe6221d1634674f07dbbf7df",
+    "seq": 50,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.memory_recall",
+    "payload_sha256": "a5e4a37c1f62037a9b0feb54ca5ba5cda4ce2a0a10f5ec5720f09242b2cdc41b",
+    "seq": 51,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.memory_retain",
+    "payload_sha256": "ae89724975c992a9a07adc25e12192f5eda719b702f9980bc13e2d92231ec35b",
+    "seq": 52,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.ownership_resolve",
+    "payload_sha256": "74c1a6dc9233525f4bafb5b11a6255eb64776c0ba0380d458239530d1e329de7",
+    "seq": 53,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|desk.receipt_check",
+    "payload_sha256": "42c57b4b2b69414f0f54d882dfc6af9775da5d6b0464a2b5ff9d9e85c47e7fe9",
+    "seq": 54,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|journal.append",
+    "payload_sha256": "450548405c3d977d9071b570028ccf2c16bc422a63e2587d2bab5b718cc3c937",
+    "seq": 55,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|market.holders_snapshot",
+    "payload_sha256": "365180027f57d8a66d6bb8da1569c5e00a14dc327e8acfce66b0881d43b07338",
+    "seq": 56,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|market.trades",
+    "payload_sha256": "ef0460daaa31ef2be2339236d8999508d814a1855a8992c8b474e7a8ad7e2d0f",
+    "seq": 57,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|onchain.deployer_history",
+    "payload_sha256": "6e72e0a66f386afb5ad8295216a0f08517dd377dd2b2e4726c72955994fe78bf",
+    "seq": 58,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|onchain.large_transfers",
+    "payload_sha256": "32771aa0e2946b1e0c7d2f8cdd5e81c78b59905bed734cad0c92d403115356c4",
+    "seq": 59,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-03-whale|onchain.top_holders",
+    "payload_sha256": "17d86f71dbed9f53c3f6caab97f5b7a253d9403e572c334697633562cd71f8b9",
+    "seq": 60,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.brief",
+    "payload_sha256": "e04a45d92fb07cf08f465157d01be8056fea841b575eb1d1cc272897a809a282",
+    "seq": 61,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.docs_search",
+    "payload_sha256": "6263640ba3ac8298e0b53b8a3ef38bdbd9f464bba58b535a3ad59039986c3263",
+    "seq": 62,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.doctor",
+    "payload_sha256": "d2550761e16525f188620efb95256dc7890ca34ac810070bad7dd02e2d009cb0",
+    "seq": 63,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.event_emit",
+    "payload_sha256": "3cac47cf8993a75d886bb552a9653d492cac76caeda257a9f60ab3c59954855b",
+    "seq": 64,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.memory_recall",
+    "payload_sha256": "511ac2bd56148c45cd3516040b1aff3c403417fc49a87b17a17bf663b7fbaed8",
+    "seq": 65,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.memory_retain",
+    "payload_sha256": "99ac2103a868b88cff2fb90523a71d9c71b0d5e447b4c24c9d3ddc28e00323b1",
+    "seq": 66,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.ownership_resolve",
+    "payload_sha256": "cf252e3315034f890d12f551f3207da20688998cb57c701d056d00527e790938",
+    "seq": 67,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|desk.receipt_check",
+    "payload_sha256": "d5e99ccdbed25f4eea12946e30b9f0d78b2a320721d8746265361c452a577939",
+    "seq": 68,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|exec.cancel",
+    "payload_sha256": "6e0465a393406776ce64723fae4be8c32e0c86e31daf721008b6d56f404c445c",
+    "seq": 69,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|exec.place",
+    "payload_sha256": "42303019aa1628aa21525f8a52d2149acdc7550fed24ea8602719399b5e187ef",
+    "seq": 70,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|exec.positions",
+    "payload_sha256": "677ab71934f9ab2b3ea35da9f049d9f25e687641891b088c2dfeefe6623b8b49",
+    "seq": 71,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|exec.quote",
+    "payload_sha256": "3d84f4c0853a556d0785ad14b2ca7aa594fe1e2f59f00b03dcfb01865e682bbd",
+    "seq": 72,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|exec.simulate",
+    "payload_sha256": "f7852e24a0f817673bf4209a0f20eb748eac61f213ce41dd3fe9019d0e72744a",
+    "seq": 73,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|market.price",
+    "payload_sha256": "69a0062c3d7f33f7ca942c02ddb357bd62dfa99fb377fd68a202da26753a12b2",
+    "seq": 74,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-04-sniper|onchain.priority_fee",
+    "payload_sha256": "e354886f093e393637d50d5dcd0c088960a3954ce65a8ed15eff4c20851f529d",
+    "seq": 75,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.brief",
+    "payload_sha256": "bacd2c43815bdba917ff865da4e070beab7882d8b2436fef93586704cc804b03",
+    "seq": 76,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.docs_search",
+    "payload_sha256": "cbf0abbea211f2758633302b28a7913eb0cb1675ed65dadb871c9dad0049eb09",
+    "seq": 77,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.doctor",
+    "payload_sha256": "f78051ee79902b9a6cd27b470d562eb92aa01f417e520b24ca2bca17e1f4e164",
+    "seq": 78,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.event_emit",
+    "payload_sha256": "c9036fe02a1b7990f56447724ebaaca7ed78567de333d9989d857da819a0a886",
+    "seq": 79,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.memory_recall",
+    "payload_sha256": "815c87a8475324de329d90c8774007294403fa5f33d977617292b1337946cdf9",
+    "seq": 80,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.memory_retain",
+    "payload_sha256": "a81de80cd9dd6d9fb2eb77d0444ea76fc8d6c5b976875705264c582a372e2c7b",
+    "seq": 81,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.ownership_resolve",
+    "payload_sha256": "d85c6704212842615029db86234b796cfb8dbcc94387746a7ff962e31ec8d8e2",
+    "seq": 82,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|desk.receipt_check",
+    "payload_sha256": "19f569a0845de2d9c561ff0a7a630b7f89f2db243045a069d7d0e45aad2b07c3",
+    "seq": 83,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|market.liquidity",
+    "payload_sha256": "c8b79cbe70450af9cf93f2ec49d4e53be694d218dd65257d1f6f6142fc27ca3d",
+    "seq": 84,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|market.price",
+    "payload_sha256": "163f92928d8863f0d343d70aa27ff11fb19950eef12d6a7347a09064e5c205bc",
+    "seq": 85,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|onchain.authorities",
+    "payload_sha256": "12a56ec80374cd5c7ee61b9eda3b297fbe97a925453637839373fe29265fd584",
+    "seq": 86,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|onchain.lp_status",
+    "payload_sha256": "7d543afe6191be41a6a0568ac3df4dfb3d6159bf41684472f23c90bba6a141c1",
+    "seq": 87,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|onchain.token_metadata",
+    "payload_sha256": "0878fcd51c661f2c4962b65c635010975d9e46068ae3b4e226a7ed251df6522c",
+    "seq": 88,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|onchain.top_holders",
+    "payload_sha256": "3a1f900510ed8933a3f6b705b3d7b584aa190dcd15443cf29b4e82c18b531304",
+    "seq": 89,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-05-rug|safety.score_report",
+    "payload_sha256": "f7f0cd435d50c34271b0fcd95d5d6492b3e1780521e03cb4a7103d538d87a787",
+    "seq": 90,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.brief",
+    "payload_sha256": "ce6169243e20a3c0f14b560a0ee6c02bd9f69a8945970db4b75bd56f4485b6c0",
+    "seq": 91,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.docs_search",
+    "payload_sha256": "d0332dd48f5428a38417dc067eaf722dc358ea354a6a4ce2f3b43455ff38affa",
+    "seq": 92,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.doctor",
+    "payload_sha256": "7313e1dc2aa7c6a6db02060f59962d0e1d806cb7cdd295101fe498a0de32aadb",
+    "seq": 93,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.event_emit",
+    "payload_sha256": "699a0db7a43323b64556b346ef640d40845e0c8b439a91833c47c63f74f24ea7",
+    "seq": 94,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.memory_recall",
+    "payload_sha256": "a825baf3a077e0661356504e5d79fa4e864a6482200973d94e119217a4aad9c4",
+    "seq": 95,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.memory_retain",
+    "payload_sha256": "cdeeaf0b4e266a65ffe92742f49eb8dc8fe81eb822d893a4153be976635cb395",
+    "seq": 96,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.ownership_resolve",
+    "payload_sha256": "8fd1ed0ac77b704d1fefe4e99a01ac1bead35f7ab01ddc13457155f84908ae87",
+    "seq": 97,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|desk.receipt_check",
+    "payload_sha256": "94d9a419ecc49f9e53119d68803f72e965b3767e8fd46348cdceb1e909df583c",
+    "seq": 98,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|exec.cancel",
+    "payload_sha256": "43a6c99053b187b491555cbd41abe8537c01db53dd338d2efbc27083ca25118f",
+    "seq": 99,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|exec.place",
+    "payload_sha256": "a9bf61df70ecbf46a6b934a53b0a32a0ec6fd20239f5c88092a5525f58f13701",
+    "seq": 100,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|exec.positions",
+    "payload_sha256": "59cfca78045066ef8e60ab3a1a40fe297f28057959c9d91bf8b7caafe304b079",
+    "seq": 101,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|exec.quote",
+    "payload_sha256": "6f6f55468d589b52c5b26af3e32fb8d27b3780fa332bf073e8336a20dc6d5cc3",
+    "seq": 102,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|exec.simulate",
+    "payload_sha256": "654ef4ecdd492d40053983f9c1007636aa7da14ad4fdb87b2d2fbde8c75ce883",
+    "seq": 103,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|market.price",
+    "payload_sha256": "893233e566359c1724ea764fa003ad2dd041fcdf0d9f12dcc4da4da8deb5b1a5",
+    "seq": 104,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-06-exit|onchain.priority_fee",
+    "payload_sha256": "d55b82bb9787f5f12e58d23cb02df5e7a74f22490c0656124767f60b189451f7",
+    "seq": 105,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.brief",
+    "payload_sha256": "cd186c2d48b280f9b984136137790d70d4f472e159643c278f0ba8b5a1fb1105",
+    "seq": 106,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.docs_search",
+    "payload_sha256": "c8ae628d6203bde4dfbf1cc0c6775f03206d26ae44183abca9ecfd7e833330b3",
+    "seq": 107,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.doctor",
+    "payload_sha256": "fdea175f8417d4e74c803ed2976eadc236553502da57a661de8f429c6cde7bd8",
+    "seq": 108,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.event_emit",
+    "payload_sha256": "ae6034d03c5e3ecb742a93a0b81011758925bd9840d8ae30dfb2ed80db31800f",
+    "seq": 109,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.memory_recall",
+    "payload_sha256": "37b54f76a8130b6f3d3889bb3c8a2e862161d9223925d5b19bd34c8751f778b1",
+    "seq": 110,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.memory_retain",
+    "payload_sha256": "8caf6be086169780ba5ce34023c0fa5ecdbe0875aabf0b60b76b40d2c1270c6a",
+    "seq": 111,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.ownership_resolve",
+    "payload_sha256": "3e93a6e837fd5456a28543e1961d066cf35c0a5d9c2a3a672d6999db62d66c7f",
+    "seq": 112,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|desk.receipt_check",
+    "payload_sha256": "72033b27227b9beddf151a8be85a57d3a34343d429b7c3916685330b0a1a7217",
+    "seq": 113,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|journal.append",
+    "payload_sha256": "c3afd8f460b5a3b469f69cfd069b1a0b35bb29ff655b4a534db4d2b4c337ac95",
+    "seq": 114,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|market.trades",
+    "payload_sha256": "795fed8a7a85d5c098b533671bedd1bf6c1d223fe8c5aef57095d2ac6ca13e8a",
+    "seq": 115,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-07-shill|onchain.token_metadata",
+    "payload_sha256": "d50c219c44e721cf18f1eec293b6bb837d0a333a8321896d7375f2b58e6ee481",
+    "seq": 116,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.brief",
+    "payload_sha256": "617708dad8741d09a3dc05ba30c52461c5aca38226a2ed43041525107f1aeec3",
+    "seq": 117,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.docs_search",
+    "payload_sha256": "356e4fbd47504a8a127b0be32b2d29e816d4761b1c33ea5ad1aa4f2b244a344c",
+    "seq": 118,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.doctor",
+    "payload_sha256": "00beb9ff321227962e522d71e52c929636a213007ca8c8bb659f4514b69ce465",
+    "seq": 119,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.event_emit",
+    "payload_sha256": "8584b7989f65fb1dfe81e3651d262adcc517835e1a3cb49bfce50d6996564521",
+    "seq": 120,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.memory_recall",
+    "payload_sha256": "720d9f0bc62252c7e49ccf6a70fc2b35d8c6e6eb4d8d9cd4a3dea1dafd292a71",
+    "seq": 121,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.memory_retain",
+    "payload_sha256": "fe0e6e5c5b8ad7c827de3915bb0eddaceb557d9c5d6c24e920574d0d17bac91d",
+    "seq": 122,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.ownership_resolve",
+    "payload_sha256": "3dd5c58048afe79d0a0b95cdce0281f422a8052b49e50fcca29ab7661a34b2b8",
+    "seq": 123,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|desk.receipt_check",
+    "payload_sha256": "cf3f06cce44436ba8875aeed0262efeb991f681b68a6b6f17e376836426a12a4",
+    "seq": 124,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|journal.append",
+    "payload_sha256": "9876a1c2fe88a13f258418d79ee5c53f5a05febf75777f739d16ff7548524f58",
+    "seq": 125,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|market.holders_snapshot",
+    "payload_sha256": "7d36e978c1c3a5f7ea38704a9fefaf11d3afe4df35956fb514e3e94fa7120b2f",
+    "seq": 126,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|market.liquidity",
+    "payload_sha256": "942b29da18075d1b5e4dcdae497e097767261859f460af293ad5652be370a904",
+    "seq": 127,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|market.ohlcv",
+    "payload_sha256": "f0d43237e74888d9303e9be26572c17a4848b33d8264df2300b80240ace18527",
+    "seq": 128,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|market.price",
+    "payload_sha256": "17332fddd173f9a66aa11d74c7e27b5596a84b702eb46e1d8e0a0eb07fbcf2e9",
+    "seq": 129,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-08-signal|market.trades",
+    "payload_sha256": "cc4e5e955272e72dc69260791d5c79f0dcf1b10816a69e1e9c677b039e721cb4",
+    "seq": 130,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.brief",
+    "payload_sha256": "b21b6a093622156cdcb4333b3a67d8953f9e78d9ccdbd910a3bdf26518a2cd51",
+    "seq": 131,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.docs_search",
+    "payload_sha256": "f92425c2efcbce08cdec4b642f7f68aa55535cd7b651c916b64ef9fd9d2809d6",
+    "seq": 132,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.doctor",
+    "payload_sha256": "4679c3b2ee24f5fede5e3542e368dd41f8e6a4ac2af41facb544fa3497370612",
+    "seq": 133,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.event_emit",
+    "payload_sha256": "58cae7ae5bb6072186b8c3003158e5fac82b6f596b362117a42cdaa9ae110a37",
+    "seq": 134,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.memory_recall",
+    "payload_sha256": "fd483b3f560bf2607e762034f8c128b3ba885ec1886db56a4efb4e40183129a8",
+    "seq": 135,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.memory_retain",
+    "payload_sha256": "4e18e22ea73460df91525af36354d86d5efa719bbecceef783c1a82a9cc8bf8b",
+    "seq": 136,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.ownership_resolve",
+    "payload_sha256": "c6966c094b8a85e6530998339835dcee01dd2c08032a5b5cdc1d3b592f0a5b63",
+    "seq": 137,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|desk.receipt_check",
+    "payload_sha256": "d9bed71d6d7aa0745eac0564804237a2d10947a599685346358f7f0b820c201d",
+    "seq": 138,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|exec.positions",
+    "payload_sha256": "e56f7800f33d749798a2d945d519ab0abd6e96e7edb8203143ca4bd405f6d09d",
+    "seq": 139,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|journal.append",
+    "payload_sha256": "a99ba34b22da15663086ef48c8c2a0456044f40c7d56934abbe4679201e184de",
+    "seq": 140,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|journal.render_report",
+    "payload_sha256": "ccab3a82f40e0ca616411b9b359361c8dac5d09e6aa6db63482d7eec15c7f403",
+    "seq": 141,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|notify.alert",
+    "payload_sha256": "dc03a11e1a05d51dbc3c9965b066013dc08b9538c6c60f3e9002622aea960676",
+    "seq": 142,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|portfolio.exposure",
+    "payload_sha256": "edfa543c8765a1103132f891aff8377909f791c46da53af43f9d8eff734af427",
+    "seq": 143,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|portfolio.ledger_read",
+    "payload_sha256": "2383a31b4677a1358fdc9ad35b27855dc60a0c351d989e1281f8fd4380c2b0ec",
+    "seq": 144,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "replay-grant|bot-09-journal|portfolio.pnl",
+    "payload_sha256": "2351a0360abfc748e49a100ad7c28b2c643c8e5e32276d7fd3d460cbecf88f47",
+    "seq": 145,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00Z",
+    "type": "ConfigChanged"
+  },
+  {
+    "idempotency_key": "005df7d8547d9b3d7e56608e43542ef457b64018633a6dba55cc4c849ed64725",
+    "payload_sha256": "a921c9d7dfc2112323fd3476a217db941a999dc847507b1007ef89561c8af4d1",
+    "seq": 146,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:00.000000Z",
+    "type": "DailyRollover"
+  },
+  {
+    "idempotency_key": "reject|SOL-20260101-001|buy|01KDVDNCE43AJG3A63YQTGAZZE|ACCEPTED|post_graduation_no_reserves",
+    "payload_sha256": "f7e928051ff78c3cdd723515dfb39adf737a13d7ca44b6159374fec11a65d6c2",
+    "seq": 147,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:02.750000Z",
+    "type": "OrderRejected"
+  },
+  {
+    "idempotency_key": "6c0fdfec1710eb2320480c72c7df30bb",
+    "payload_sha256": "e41e030ddff194067982761a6d4e4b034109edfb48e3c26f2508114142ce1319",
+    "seq": 148,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:03.250000Z",
+    "type": "OrderPlaced"
+  },
+  {
+    "idempotency_key": "fill|01KDVDND5JAPXD42TJSZCAN8FP",
+    "payload_sha256": "227078c5ea79e8f6662f514fecb9465e43475ed1a532424738ea94e3888b63e4",
+    "seq": 149,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:04.000000Z",
+    "type": "FillRecorded"
+  },
+  {
+    "idempotency_key": "position|01KDVDND5JAPXD42TJSZCAN8FP",
+    "payload_sha256": "7d56c37333592e8eaa3f217dff6a563c57638e8441a7a0a122d3ea902ebb5a04",
+    "seq": 150,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:04.000000Z",
+    "type": "PositionOpened"
+  },
+  {
+    "idempotency_key": "mtm|{\"at\":\"2026-01-01T00:00:30.000000Z\",\"basis\":{\"SmokeMintBBBB2222222222222222222222222222222\":11497440},\"prices\":{\"SmokeMintBBBB2222222222222222222222222222222\":{\"mtm_lamports\":25942033,\"source\":\"curve\",\"spot\":\"0.0002037037037037037037037037037\",\"ts_utc\":\"2026-01-01T00:00:30.000000Z\",\"venue_fee_lamports\":247005}}}",
+    "payload_sha256": "9e38067e21f6249be71b72d0154aeb8fc70ceb6ac494cb0c0def0b892b299493",
+    "seq": 151,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.000000Z",
+    "type": "MarkToMarket"
+  },
+  {
+    "idempotency_key": "consume|apr-01KDVDP7HAQ09T9J82FMQPRWQS",
+    "payload_sha256": "ae93cad283d89214841ed73a32375a18d763f521faae016159a7ce51bd18d41b",
+    "seq": 152,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.250000Z",
+    "type": "ApprovalRecorded"
+  },
+  {
+    "idempotency_key": "aea68c17eeaeb0972d242754d9ced5de",
+    "payload_sha256": "573cb32bef37ea86d61f2342e3f0c890a69ce0a0384924608cf9c24255f63bc3",
+    "seq": 153,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.250000Z",
+    "type": "OrderPlaced"
+  },
+  {
+    "idempotency_key": "fill|01KDVDP7HAZ59CGEATNNFTR3DT",
+    "payload_sha256": "2c2bcf87a665417917241c73ba523429e63f30559f213673359a5637fe5509b0",
+    "seq": 154,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.750000Z",
+    "type": "FillRecorded"
+  },
+  {
+    "idempotency_key": "close|01KDVDP7HAZ59CGEATNNFTR3DT",
+    "payload_sha256": "7cc05074c32b11e3d5534b790d6e4ed9be7b3a054235dc9c129427b332ca823a",
+    "seq": 155,
+    "source": "replay",
+    "ts": "2026-01-01T00:00:30.750000Z",
+    "type": "PositionClosed"
+  }
 ]

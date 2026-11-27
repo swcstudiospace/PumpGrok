@@ -41,8 +41,8 @@ _REPORT_SHAPES = tuple(
     re.compile(shape)
     for shape in (
         r"info  mode=\S+ profile=\S+",
-        r"info  bus depth=\d+ lanes=\S+ sidecar=\S+ enabled=(True|False)",
-        r"info  source \S+ status=(ok|unknown)",
+        r"info  bus depth=\d+ lanes=.+ sidecar=\S+ enabled=(True|False)",
+        r"info  source \S+ status=(live|stale|resyncing|disconnected|unknown)",
         r"info  time-sync: read-only probe, offset not adjusted",
         r"info  clock-sync \((not NTP-synchronized; wall clock may drift"
         r"|unknown: timedatectl unavailable)\)",
