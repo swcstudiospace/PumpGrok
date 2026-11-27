@@ -44,7 +44,7 @@ class HoldersSnapshotOut(ToolOutput):
     holder_count: int = Field(ge=0)
     holders: list[HolderShare]
     top5_share: Decimal = Field(ge=0, le=1)
-    creator_share: Decimal = Field(ge=0, le=1)
+    creator_share: Decimal | None = Field(default=None, ge=0, le=1)
     creator: str | None = None
 
 
@@ -85,7 +85,7 @@ async def run_holders_snapshot(inp: HoldersSnapshotIn, rpc: RpcClient) -> dict[s
         "holder_count": len(holders),
         "holders": [h.model_dump() for h in holders],
         "top5_share": min(Decimal(1), top5),
-        "creator_share": Decimal(0),
+        "creator_share": None,
         "creator": None,
         "meta": meta_now(
             SOLANA_RPC_SOURCE,
