@@ -49,10 +49,11 @@ def test_49_byte_round_trip_token_first() -> None:
     assert state.real_token_reserves_units == RTOK
     assert state.real_sol_reserves_lamports == RSOL
     assert state.total_supply_units == SUPPLY
-    assert state.token_mint == ""
 
 
-def test_166_byte_round_trip_with_mint() -> None:
+def test_166_byte_fixture_stays_assumed_fail_closed() -> None:
+    # Even a structurally well-formed 166-byte account is refused: the
+    # extended layout is ASSUMED (unreviewed) and decode fails closed.
     mint = bytes(range(32))
     raw = encode_curve_fixture(
         virtual_sol_reserves_lamports=VSOL,
@@ -65,9 +66,8 @@ def test_166_byte_round_trip_with_mint() -> None:
         token_mint=mint,
     )
     assert len(raw) == 166
-    state = decode_curve_account(raw)
-    assert state.token_mint == mint.hex()
-    assert state.complete is True
+    with pytest.raises(CurveDecodeError, match="166-byte extended curve layout is ASSUMED"):
+        decode_curve_account(raw)
 
 
 def test_bad_discriminator_rejected() -> None:

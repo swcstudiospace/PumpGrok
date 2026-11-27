@@ -71,7 +71,16 @@ def test_ci_check_job_runs_the_idle_gate() -> None:
 
 
 def test_makefile_idle_grok_target_runs_the_gate() -> None:
-    text = MAKEFILE.read_text(encoding="utf-8")
+    # Read the committed Makefile, not the working tree: in CI the check job
+    # first overlays the base copy of the Makefile, so the working tree here
+    # is the trusted base, not the PR head this test verifies.
+    text = subprocess.run(
+        ["git", "show", "HEAD:Makefile"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
     assert "\nidle-grok:" in text
     assert "ci/gates/check_idle_grok.py" in text
     assert "idle-grok" in text.splitlines()[0].split()

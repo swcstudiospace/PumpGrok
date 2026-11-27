@@ -24,12 +24,10 @@ the process environment instead).
 from __future__ import annotations
 
 import os
-import re
 import tomllib
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, get_args
-from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError
 from pydantic_settings import (
@@ -43,6 +41,8 @@ from pydantic_settings import (
 )
 
 from pumpgrok.config.sections.core import (
+    KEY_BEARING_VALUE_RE,
+    ConfigError,
     DataSettings,
     ExecutionSettings,
     GrokSettings,
@@ -79,7 +79,9 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.risk.limits import EngineLimits
 
 __all__ = [
+    "KEY_BEARING_VALUE_RE",
     "BacktestV2Settings",
+    "ConfigError",
     "DataSettings",
     "DatafeedSettings",
     "EventsSettings",
@@ -133,56 +135,6 @@ EXEMPT_ENV_NAMES = frozenset({"PUMPGROK_REPLAY__SEED"})
 # Declared setting paths that must never be set via env: mode flows only
 # through init kwargs (CLI --mode), top-level PUMPGROK_MODE, or TOML.
 REFUSED_ENV_NAMES = frozenset({"PUMPGROK_EXECUTION", "PUMPGROK_EXECUTION__MODE"})
-
-# A value shaped like a URL or argument carrying a secret: api-key=, api_key=,
-# apikey=, secret=, password=, token=, or a bare key= parameter. The bare key=
-# alternative requires a non-identifier char before it so that innocent words
-# containing "key" (e.g. monkey=) do not match.
-KEY_BEARING_VALUE_RE = re.compile(
-    r"(?i)(?:api[-_]?key=|secret=|password=|token=|(?<![A-Za-z_-])key=)"
-)
-
-
-class ConfigError(RuntimeError):
-    """Settings are not fit to start. The list of problems is the argument."""
-
-    def __init__(self, problems: list[str]) -> None:
-        self.problems = list(problems)
-        super().__init__(
-            "settings are not fit to start:\n"
-            + "\n".join(f"- {problem}" for problem in self.problems)
-        )
-
-
-# Query parameter or path-style names that carry a credential: api-key, apikey, token, secret,
-# key, password and suffixed forms (x-api-key, access_token, client_secret). A separator must
-# precede the name, so innocent words such as monkey or tokenizer do not match.
-_CREDENTIAL_PARAM_RE = re.compile(
-    r"(?i)(?:^|[-_])(?:api[-_]?key|apikey|token|secret|key|password|passwd|pwd|auth)$"
-)
-# A long opaque token: 24+ URL-safe characters holding both a letter and a digit. Provider keys
-# ride in path segments or parameter values; plain words and short version segments do not match.
-_OPAQUE_TOKEN_RE = re.compile(r"(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}")
-
-
-def _refuse_credential_url(url: str, setting: str) -> None:
-    """Refuse a URL that carries a credential: userinfo, a key parameter or an opaque token.
-
-    Raises ConfigError naming ``setting`` only. It is a ConfigError rather than ValueError so
-    pydantic does not copy the rejected URL into its ValidationError text.
-    """
-    parts = urlsplit(url)
-    params = parse_qsl(parts.query, keep_blank_values=True)
-    tokens = [unquote(segment) for segment in parts.path.split("/")]
-    tokens.extend(value for _, value in params)
-    credential = (
-        "@" in parts.netloc
-        or KEY_BEARING_VALUE_RE.search(url) is not None
-        or any(_CREDENTIAL_PARAM_RE.search(name) for name, _ in params)
-        or any(_OPAQUE_TOKEN_RE.fullmatch(token) for token in tokens)
-    )
-    if credential:
-        raise ConfigError([f"{setting}: URL carries a credential (userinfo, key or opaque token)"])
 
 
 def mask(secret: str) -> str:

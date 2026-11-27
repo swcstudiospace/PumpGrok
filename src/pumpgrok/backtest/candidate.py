@@ -146,16 +146,19 @@ class CandidateParams(BaseModel):
     def _check_strategy(
         cls, value: dict[str, dict[str, Any]] | None
     ) -> dict[str, dict[str, Any]] | None:
-        """Refuse non-scalar leaves; strategy names are gated by the upgrade bounds."""
+        """Refuse scoring knobs and non-scalar leaves; names are gated by upgrade bounds."""
         if value is None:
             return None
         for strategy_id, overrides in value.items():
             if not strategy_id:
                 raise ValueError("strategy id must be a non-empty string")
-            try:
-                _normalized_mapping(overrides)
-            except TypeError as err:
-                raise ValueError(f"strategy {strategy_id!r}: {err}") from err
+            _reject_scoring_knobs(f"strategy.{strategy_id}", overrides)
+            for key, leaf in overrides.items():
+                if not isinstance(leaf, (bool, int, float, str, Decimal)):
+                    raise ValueError(
+                        f"strategy {strategy_id!r} parameter {key!r} must be a scalar, "
+                        f"not {type(leaf).__name__}"
+                    )
         return value
 
     def filter_settings(self) -> FilterSettings:

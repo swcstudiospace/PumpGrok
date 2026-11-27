@@ -53,9 +53,8 @@ jobs:
           echo "Trusted pyproject.toml and Makefile overlay from origin/$BASE_REF"
 
       - name: Lint, typecheck, test, audit and drift checks
-        run: |
-          # Canonical suite: make lint typecheck test audit (Makefile check's prerequisites above).
-          make check
+        # Canonical suite: make lint typecheck test audit (Makefile check's prerequisites above).
+        run: make check
 
       - name: idle-grok
         run: uv run python ci/gates/check_idle_grok.py

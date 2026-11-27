@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from pumpgrok.config.settings import LiveSettings, PlatformSettings, WalletSettings
 
 # A real Ed25519 public key (RFC 8032 TEST 1) in base58; not a small-order point.
-VALID_KEY = "11111111111111111111111111111111"
+VALID_KEY = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
 # 88 leading '1' characters decode to 88 zero bytes, never 32: must be rejected.
 EIGHTY_EIGHT_ONES = "1" * 88
 

@@ -24,12 +24,13 @@ from pumpgrok.datafeed.events import (
     TokenCreated,
     TradeSeen,
 )
-from pumpgrok.events.bus import Dlq, EventBus, Handler
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.replay.clock import Clock
 
 if TYPE_CHECKING:
+    from pumpgrok.events.bus import Dlq, EventBus, Handler
     from pumpgrok.replay.live_recorder import LiveRecorder
+
 
 Publisher = Callable[[Event], None]
 
@@ -143,5 +144,7 @@ def build_observation_bridge(
     The bus is constructed here so composition roots that must not import the bus
     module can still obtain a bridge. The bridge behaves exactly as one built directly.
     """
+    from pumpgrok.events.bus import EventBus  # noqa: PLC0415
+
     bus = EventBus(clock=clock, handler=handler, dlq=dlq)
     return ObservationBridge(bus=bus, recorder=recorder, price=price)
