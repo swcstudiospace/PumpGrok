@@ -133,7 +133,12 @@ class _BatchMixin(_BatchStagesMixin):
         return err
 
     def _repeat_outcome(self, request: OrderRequest) -> Fill | OrderRejectedError | None:
-        """First outcome for a repeated decision, or None on first attempt."""
+        """First outcome for a repeated decision, or None on first attempt.
+
+        The fill branch is an indexed lookup on the fill idempotency key
+        (``fill|<order_id>``), not a whole-ledger scan; only the rejection
+        branch reads the stored refusals.
+        """
         key = exec_place_key(request.ticket_id, request.side.value, request.decision_id)
         placed = self._store.by_key(key)
         if placed is None:
@@ -142,13 +147,10 @@ class _BatchMixin(_BatchStagesMixin):
         if not isinstance(payload, dict):
             return None
         order_id = str(payload.get("order_id", ""))
-        for event in self._store.read(limit=None):
-            if event.get("type") not in ("FillRecorded", "OrderRejected"):
-                continue
-            body = event.get("payload", {})
-            if not isinstance(body, dict) or str(body.get("order_id", "")) != order_id:
-                continue
-            if event["type"] == "FillRecorded":
+        fill_event = self._store.by_key(f"fill|{order_id}")
+        if fill_event is not None:
+            body = fill_event.get("payload", {})
+            if isinstance(body, dict):
                 return Fill(
                     order_id=order_id,
                     decision_id=str(body.get("decision_id", "")),
@@ -166,8 +168,12 @@ class _BatchMixin(_BatchStagesMixin):
                     venue_fee_lamports=int(body.get("venue_fee_lamports", 0)),
                     network_cost_lamports=int(body.get("network_cost_lamports", 0)),
                     route=str(body.get("route", "curve")),
-                    ledger_seq=int(event.get("seq", 0)),
+                    ledger_seq=int(fill_event.get("seq", 0)),
                 )
+        for event in self._store.read(types=["OrderRejected"], limit=None):
+            body = event.get("payload", {})
+            if not isinstance(body, dict) or str(body.get("order_id", "")) != order_id:
+                continue
             reason = str(body.get("reason", ""))
             if reason == "confirmation_timeout":
                 return OrderUnknownError(

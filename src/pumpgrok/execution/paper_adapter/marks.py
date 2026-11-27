@@ -143,8 +143,13 @@ class _MarksMixin:
         pos = state.positions.get(mint)
         if pos is None or pos.token_units <= 0 or pos.mtm_frozen:
             return None
+        read_from = self._price
         curve = await self._read_curve(mint)
-        if curve is None or curve.complete:
+        if (
+            curve is None
+            or not self._admitted_curve(mint, curve, self._provenance(read_from, curve))
+            or not self._admitted_timestamp(mint, pos, curve, self._clock.now())
+        ):
             return None
         gross = sell_out(curve.s_lamports, curve.t_units, pos.token_units)
         venue = self._fees.venue_fee(gross)
@@ -331,7 +336,13 @@ class _MarksMixin:
         values: dict[str, int] = {}
         for mint, pos in held.items():
             read_from = self._price
-            curve = await self._read_curve(mint)
+            try:
+                curve = await self._read_curve(mint)
+            except Exception:
+                # One mint's read failure keeps its last mark; it must not
+                # abort the whole mark batch (EX-20).
+                values[mint] = position_value_lamports(pos)
+                continue
             if curve is None or not self._admitted_curve(
                 mint, curve, self._provenance(read_from, curve)
             ):
@@ -452,28 +463,34 @@ class _MarksMixin:
     def _curve_exit(self, mint: str, s_lamports: int, t_units: int, units: int) -> _ExitValue:
         """Exit value for selling ``units`` on this curve, as a normal sell books it.
 
-        Proceeds are gross less venue fee less network cost. The open account's ATA deposit is
-        not sale value: it is refunded to cash beside the proceeds.
+        Proceeds are gross less venue fee less network cost, floored at zero:
+        a dust exit whose fees exceed its gross books zero proceeds (never a
+        negative credit). The shortfall is the excess of venue plus network
+        over gross, visible in the recorded fee terms against zero proceeds.
+        The open account's ATA deposit is not sale value: it is refunded to
+        cash beside the proceeds.
         """
         gross = sell_out(s_lamports, t_units, units)
         venue = self._fees.venue_fee(gross)
         network = self._fees.network_cost()
         refund = self._open_deposits().get(mint, 0)
-        return _ExitValue(gross - venue - network, venue, network, refund)
+        proceeds = max(gross - venue - network, 0)
+        return _ExitValue(proceeds, venue, network, refund)
 
     def _last_good_value(self, mint: str, pos: PositionView) -> _ExitValue | None:
         """Last ledger mark, else the last-good reserves; never reads a live price.
 
         A ledger mark is market value and already holds the open account's ATA deposit, so
-        its proceeds are the mark less the network cost: the deposit returns to cash inside
-        them, once, with no separate refund. Marks written before the venue key existed
+        its proceeds are the mark less the network cost, floored at zero: the deposit returns
+        to cash inside them, once, with no separate refund. Marks written before the
+        venue key existed
         report a venue fee of 0 (disclosed); their cash is unaffected. The reserves path
         refunds the deposit beside its proceeds instead.
         """
         if pos.last_mtm_lamports > 0:
             network = self._fees.network_cost()
             return _ExitValue(
-                int(pos.last_mtm_lamports) - network,
+                max(int(pos.last_mtm_lamports) - network, 0),
                 int(pos.last_mtm_venue_fee_lamports),
                 network,
                 0,
@@ -486,8 +503,17 @@ class _MarksMixin:
     def _live_value(
         self, mint: str, pos: PositionView, curve: CurveSnapshot | None
     ) -> _ExitValue | None:
-        """Value of a full exit: the live curve when usable, else the last-good value."""
-        if curve is not None and not curve.complete:
+        """Value of a full exit: the live curve when usable, else the last-good value.
+
+        The live curve passes the same admission gate (provenance, reserves,
+        timestamp) as marks; a refused curve falls back to the last-good
+        value rather than being priced as if trusted (EX-02).
+        """
+        if (
+            curve is not None
+            and self._admitted_curve(mint, curve, self._provenance(self._price, curve))
+            and self._admitted_timestamp(mint, pos, curve, self._clock.now())
+        ):
             return self._curve_exit(mint, curve.s_lamports, curve.t_units, pos.token_units)
         return self._last_good_value(mint, pos)
 
