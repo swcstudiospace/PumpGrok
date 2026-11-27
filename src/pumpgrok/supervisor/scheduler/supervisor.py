@@ -19,8 +19,8 @@ from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
-from pumpgrok.ledger.reducer import initial_state, reduce
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import utc_day
@@ -29,7 +29,12 @@ from pumpgrok.supervisor.health import (
     build_status,
     write_health_json,
 )
-from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
+from pumpgrok.supervisor.scheduler.degraded import (
+    DegradedState,
+    LedgerLatches,
+    fold_latches,
+    kill_switch_engaged,
+)
 from pumpgrok.supervisor.seat_relay import relay_tail
 from pumpgrok.supervisor.seat_restart import ObserveOnly
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask

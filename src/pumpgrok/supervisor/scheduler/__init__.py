@@ -20,6 +20,7 @@ from pumpgrok.supervisor.scheduler.degraded import (
     LEDGER_BUFFER_CAP,
     DegradedState,
     LedgerUnavailable,
+    assert_no_skew,
     fold_latches,
     kill_switch_engaged,
 )
@@ -92,6 +93,7 @@ __all__ = [
     "dataset_events_start",
     "dataset_stamps",
     "dispatch",
+    "fold_latches",
     "kill_switch_engaged",
     "open_replay_runtime",
     "rollover_key",

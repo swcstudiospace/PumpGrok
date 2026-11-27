@@ -36,7 +36,6 @@ from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
-from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 
 log = logging.getLogger(__name__)
 
@@ -260,12 +259,7 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
             token.market_cap_sol = _to_lamports(info["market_cap"])
     if info.get("virtual_sol_reserves") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            # Provider reserves are SOL (owner-confirmed 2026-11-19): scale to lamports before
-            # deriving curve progress against the lamport completion threshold.
-            token.sol_in_curve = _to_int_units(
-                info["virtual_sol_reserves"], per_unit=LAMPORTS_PER_SOL
-            )
-            token.curve_progress = min(1.0, token.sol_in_curve / CURVE_COMPLETION_LAMPORTS)
+            token.sol_in_curve = _to_base_units(info["virtual_sol_reserves"])
     return token
 
 

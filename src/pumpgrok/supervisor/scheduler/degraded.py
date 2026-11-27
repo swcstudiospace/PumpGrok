@@ -9,8 +9,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from pumpgrok.core.ids import Clock
 from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.risk.killswitch import env_engaged
+from pumpgrok.supervisor.seat_relay import CLOCK_SKEW_S, ClockSkew
 
 log = logging.getLogger("pumpgrok.supervisor.scheduler")
 
@@ -157,3 +160,19 @@ class DegradedState:
             count += 1
         self.persistence_raised = False
         return count
+
+    # -- clock skew (paper-engine.md 6.7 row: skew) -------------------------
+    @staticmethod
+    def skew_detected(now: float, head_ts: float) -> bool:
+        """True when the clock trails the ledger head beyond 5 s."""
+        return now < head_ts - CLOCK_SKEW_S
+
+
+def assert_no_skew(store: LedgerStore, clock: Clock) -> None:
+    """Refuse appends when the clock trails the ledger head beyond 5 s."""
+    events = store.read(limit=None)
+    if not events:
+        return
+    head_ts = parse_ts_utc(str(events[-1].get("ts_utc", "")))
+    if DegradedState.skew_detected(clock.now(), head_ts):
+        raise ClockSkew(f"clock trails ledger head by over {CLOCK_SKEW_S:.0f}s")
