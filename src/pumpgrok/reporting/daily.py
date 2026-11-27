@@ -60,6 +60,7 @@ def _valid_timestamp(value: object) -> bool:
         return False
     return True
 
+
 def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     """Read every tracked event without creating files.
 
@@ -81,9 +82,7 @@ def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for seq, ts_utc, source, cid, key, type, payload_json, prev_hash, hash_ in rows:
         if not _valid_timestamp(ts_utc):
-            raise CorruptState(
-                f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc"
-            )
+            raise CorruptState(f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc")
         try:
             payload = json.loads(payload_json)
         except ValueError:
@@ -133,6 +132,7 @@ def _has_table(db: sqlite3.Connection, table: str) -> bool:
     ).fetchone()
     return row is not None
 
+
 def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
     """Read the position_deposits sidecar (PositionOpened seq -> deposit) without writing.
 
@@ -146,9 +146,7 @@ def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
     try:
         if not _has_table(db, "position_deposits"):
             return {}
-        rows = db.execute(
-            "SELECT opened_seq, deposit_lamports FROM position_deposits"
-        ).fetchall()
+        rows = db.execute("SELECT opened_seq, deposit_lamports FROM position_deposits").fetchall()
     finally:
         db.close()
     return {int(seq): int(lamports) for seq, lamports in rows}
@@ -167,9 +165,7 @@ def read_ticket_refs_readonly(ledger_path: Path) -> dict[str, str]:
     try:
         if not _has_table(db, "strategy_ticket_refs"):
             return {}
-        rows = db.execute(
-            "SELECT ticket_id, strategy_id FROM strategy_ticket_refs"
-        ).fetchall()
+        rows = db.execute("SELECT ticket_id, strategy_id FROM strategy_ticket_refs").fetchall()
     finally:
         db.close()
     return {str(ticket): str(strategy) for ticket, strategy in rows}
@@ -261,6 +257,7 @@ def _ledger_money(event: dict[str, Any], key: str) -> int:
             f"ledger event seq {event['seq']} ({event['type']}) has a non-integer {key}"
         )
     return value
+
 
 def _closed_trade_rows(window: list[dict[str, Any]]) -> list[TradeRow]:
     rows: list[TradeRow] = []
@@ -392,6 +389,7 @@ def _loss_pct(start: int, end: int) -> str:
     loss = max(start - end, 0)
     return _PCT_TEMPLATE.format(value=Decimal(loss) * 100 / Decimal(start))
 
+
 def _read_events_once(db: sqlite3.Connection, _ledger_path: Path) -> list[dict[str, Any]]:
     """Every tracked event off the snapshot connection, with ts validation."""
     rows = db.execute(
@@ -401,9 +399,7 @@ def _read_events_once(db: sqlite3.Connection, _ledger_path: Path) -> list[dict[s
     events: list[dict[str, Any]] = []
     for seq, ts_utc, source, cid, key, type, payload_json, prev_hash, hash_ in rows:
         if not _valid_timestamp(ts_utc):
-            raise CorruptState(
-                f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc"
-            )
+            raise CorruptState(f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc")
         try:
             payload = json.loads(payload_json)
         except ValueError:
@@ -428,9 +424,7 @@ def _read_deposits_once(db: sqlite3.Connection, _ledger_path: Path) -> dict[int,
     """PositionOpened seq -> deposit; {} for a legacy ledger without the table."""
     if not _has_table(db, "position_deposits"):
         return {}
-    rows = db.execute(
-        "SELECT opened_seq, deposit_lamports FROM position_deposits"
-    ).fetchall()
+    rows = db.execute("SELECT opened_seq, deposit_lamports FROM position_deposits").fetchall()
     return {int(seq): int(lamports) for seq, lamports in rows}
 
 
@@ -448,10 +442,9 @@ def _read_refs_once(db: sqlite3.Connection, _ledger_path: Path) -> dict[str, str
     """Ticket-to-strategy refs; {} when the sidecar table is missing."""
     if not _has_table(db, "strategy_ticket_refs"):
         return {}
-    rows = db.execute(
-        "SELECT ticket_id, strategy_id FROM strategy_ticket_refs"
-    ).fetchall()
+    rows = db.execute("SELECT ticket_id, strategy_id FROM strategy_ticket_refs").fetchall()
     return {str(ticket): str(strategy) for ticket, strategy in rows}
+
 
 @dataclass(frozen=True)
 class LedgerSnapshot:
@@ -482,6 +475,7 @@ def read_snapshot(ledger_path: Path) -> LedgerSnapshot:
     finally:
         db.close()
     return LedgerSnapshot(events, deposits, initial_equity_lamports, ticket_refs)
+
 
 class DailyReport:
     """Builds the ``ReportModel`` for UTC days ``day`` through ``last_day`` (inclusive)."""
@@ -537,12 +531,8 @@ class DailyReport:
             fees_venue_lamports=fees_lamports(visible, since_ts=start, until_ts=end),
             fees_network_lamports=None,
             max_drawdown_pct=_PCT_TEMPLATE.format(value=dd * 100),
-            daily_loss_pct=_loss_pct(
-                equity_lamports(start_state), equity_lamports(state)
-            ),
-            halt_limit_pct=_PCT_TEMPLATE.format(
-                value=RiskBudget().daily_loss_halt_fraction * 100
-            ),
+            daily_loss_pct=_loss_pct(equity_lamports(start_state), equity_lamports(state)),
+            halt_limit_pct=_PCT_TEMPLATE.format(value=RiskBudget().daily_loss_halt_fraction * 100),
             trade_rows=tuple(_closed_trade_rows(window)),
             position_rows=position_rows,
             rejected=tuple(sorted(_rejected_counts(window).items())),

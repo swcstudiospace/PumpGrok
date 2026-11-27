@@ -115,8 +115,12 @@ class WeeklyReport:
             )
 
         base = DailyReport.build(
-            ledger_path, monday, mode=mode, autonomy=autonomy,
-            last_day=days[-1], snapshot=snapshot,
+            ledger_path,
+            monday,
+            mode=mode,
+            autonomy=autonomy,
+            last_day=days[-1],
+            snapshot=snapshot,
         )
         gate = LiveGate(
             mode="live",

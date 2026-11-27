@@ -134,6 +134,7 @@ class _QuoteMixin:
             rejection_reason=None,
             latency_ms_estimate=1200,
         )
+
     def _sim_reject(self, reason: str, reserve: int, size: int) -> SimulationResult:
         return SimulationResult(
             would_fill=False,

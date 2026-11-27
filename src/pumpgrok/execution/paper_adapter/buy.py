@@ -489,8 +489,12 @@ class _BuyMixin:
         out1 = buy_out(curve1.s_lamports, curve1.t_units, priced.x_net)
         if out1 <= 0:
             await self._buy_zero_output(
-                request, order_id=order_id, out1=out1, priced=priced,
-                ledger_source=ledger_source, correlation_id=correlation_id,
+                request,
+                order_id=order_id,
+                out1=out1,
+                priced=priced,
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
             )
         await self._buy_guard_slippage(
             request,
