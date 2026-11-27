@@ -117,7 +117,5 @@ def test_inventory_hash_is_stable() -> None:
 def test_curve_point_rejects_bad_shapes() -> None:
     assert _is_curve_point(b"\x00" * 31) is False
     assert _is_curve_point(b"\xff" * 32) is False  # y >= field, non-canonical
-    rfc = bytes.fromhex(
-        "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
-    )
-    assert _is_curve_point(rfc) is True
+    rfc_hex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    assert _is_curve_point(bytes.fromhex(rfc_hex)) is True
