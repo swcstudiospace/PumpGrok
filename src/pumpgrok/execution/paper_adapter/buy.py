@@ -432,6 +432,33 @@ class _BuyMixin:
             ) from exc
         return (order_id, quote_id)
 
+    async def _buy_zero_output(
+        self,
+        request: OrderRequest,
+        *,
+        order_id: str,
+        out1: int,
+        priced: _BuyQuote,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> None:
+        """Refuse and raise when the CONFIRMING output is not positive."""
+        self._inflight.discard(order_id)
+        raise await self._reject(
+            request,
+            request.decision_id,
+            "zero_output",
+            f"confirm output {out1} is not positive",
+            stage="CONFIRMING",
+            order_id=order_id,
+            quote_out=priced.out0,
+            threshold=priced.threshold,
+            confirm_out=out1,
+            fees=self._fees.network_cost(),
+            source=ledger_source,
+            correlation_id=correlation_id,
+        )
+
     async def _buy_confirm(
         self,
         request: OrderRequest,
@@ -461,20 +488,9 @@ class _BuyMixin:
         priced = self._buy_recap(quote, curve0, cap_now)
         out1 = buy_out(curve1.s_lamports, curve1.t_units, priced.x_net)
         if out1 <= 0:
-            self._inflight.discard(order_id)
-            raise await self._reject(
-                request,
-                request.decision_id,
-                "zero_output",
-                f"confirm output {out1} is not positive",
-                stage="CONFIRMING",
-                order_id=order_id,
-                quote_out=priced.out0,
-                threshold=priced.threshold,
-                confirm_out=out1,
-                fees=self._fees.network_cost(),
-                source=ledger_source,
-                correlation_id=correlation_id,
+            await self._buy_zero_output(
+                request, order_id=order_id, out1=out1, priced=priced,
+                ledger_source=ledger_source, correlation_id=correlation_id,
             )
         await self._buy_guard_slippage(
             request,
@@ -670,6 +686,22 @@ class _BuyMixin:
             },
         }
 
+    def _buy_costs(
+        self, confirmed: _BuyConfirmed, *, first_buy: bool
+    ) -> tuple[int, int, int, Decimal, int]:
+        """Network cost, ATA deposit, cash debit, average price and slippage for a fill.
+
+        The network cost includes the ATA rent whenever this (re-)entry opens
+        a flat mint; the position holds that rent as its deposit asset until
+        it closes.
+        """
+        network_cost = self._fees.buy_network_cost(first_buy=first_buy)
+        deposit = self._fees.ata_deposit_term(first_buy=first_buy)
+        cash_debit = confirmed.filled + network_cost
+        price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
+        slipped = self._buy_slippage_bps(confirmed)
+        return network_cost, deposit, cash_debit, price_avg, slipped
+
     async def _buy_settle(
         self,
         request: OrderRequest,
@@ -695,16 +727,9 @@ class _BuyMixin:
                 f"confirm output {confirmed.out1} is not positive",
                 stage="CONFIRMING",
             )
-        had_position = self._has_open_position(request.mint)
-        first_buy = not had_position
-        # The network cost includes the ATA rent whenever this (re-)entry opens
-        # a flat mint; the position holds that rent as its deposit asset until
-        # it closes.
-        network_cost = self._fees.buy_network_cost(first_buy=first_buy)
-        deposit = self._fees.ata_deposit_term(first_buy=first_buy)
-        cash_debit = confirmed.filled + network_cost
-        price_avg = Decimal(confirmed.x_net) / Decimal(confirmed.out1)
-        slipped = self._buy_slippage_bps(confirmed)
+        network_cost, deposit, cash_debit, price_avg, slipped = self._buy_costs(
+            confirmed, first_buy=not self._has_open_position(request.mint)
+        )
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
         rows = self._buy_fill_rows(
             request,
@@ -719,7 +744,7 @@ class _BuyMixin:
             network_cost=network_cost,
             cash_debit=cash_debit,
             slipped=slipped,
-            had_position=had_position,
+            had_position=self._has_open_position(request.mint),
         )
         stored = self._store.append_batch(
             rows, sidecar=opening_deposit_writer(request.mint, deposit)

@@ -1,5 +1,7 @@
 """Curve quotes and pure-math fill previews."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -82,6 +84,17 @@ class _QuoteMixin:
                 rejection_reason="no_reserves",
                 latency_ms_estimate=1200,
             )
+        return await self._sim_preview(curve, side, mint, size_lamports, token_units)
+
+    async def _sim_preview(
+        self,
+        curve: CurveSnapshot,
+        side: Side,
+        mint: str,
+        size_lamports: int | None,
+        token_units: int | None,
+    ) -> SimulationResult:
+        """Dispatch the BUY or SELL preview behind :meth:`simulate`."""
         if side is Side.BUY:
             size = int(size_lamports or 0)
             if size <= 0:
@@ -97,8 +110,6 @@ class _QuoteMixin:
                 expected_out=out,
                 price_impact_pct=impact_buy(curve.s_lamports, filled),
                 venue_fee_lamports=self._fees.venue_fee(filled),
-                # Preview must match fills: the network cost carries the ATA rent
-                # whenever the mint is flat, exactly as _buy_settle charges it.
                 network_cost_lamports=self._fees.buy_network_cost(
                     first_buy=not self._has_open_position(mint)
                 ),
@@ -123,7 +134,6 @@ class _QuoteMixin:
             rejection_reason=None,
             latency_ms_estimate=1200,
         )
-
     def _sim_reject(self, reason: str, reserve: int, size: int) -> SimulationResult:
         return SimulationResult(
             would_fill=False,

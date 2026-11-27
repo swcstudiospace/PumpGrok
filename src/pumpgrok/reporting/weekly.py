@@ -12,7 +12,13 @@ import os
 from pathlib import Path
 
 from pumpgrok.execution.live.live_gate import LiveGate
-from pumpgrok.reporting.daily import DailyReport, day_next, day_start, read_events_readonly
+from pumpgrok.reporting.daily import (
+    DailyReport,
+    day_next,
+    day_start,
+    parse_day,
+    read_snapshot,
+)
 from pumpgrok.reporting.render import ReportModel
 
 _YMD_TEMPLATE = "{year:04d}-{month:02d}-{dom:02d}"
@@ -70,9 +76,10 @@ class WeeklyReport:
         *,
         mode: str = "paper",
         autonomy: str = "autonomous-paper",
-        root: Path | None = None,
+        root: Path,
         now: str | None = None,
     ) -> ReportModel:
+        parse_day(day)
         monday = _iso_monday(day)
         days: list[str] = [monday]
         cursor = monday
@@ -82,7 +89,8 @@ class WeeklyReport:
         week_start = day_start(monday)
         week_end = day_next(days[-1])
 
-        events = read_events_readonly(ledger_path)
+        snapshot = read_snapshot(ledger_path)
+        events = snapshot.events
         week_events = [e for e in events if week_start <= str(e.get("ts_utc", "")) < week_end]
         fills = [e for e in week_events if e["type"] == "FillRecorded"]
         closed = [e for e in week_events if e["type"] == "PositionClosed"]
@@ -107,10 +115,14 @@ class WeeklyReport:
             )
 
         base = DailyReport.build(
-            ledger_path, monday, mode=mode, autonomy=autonomy, last_day=days[-1]
+            ledger_path, monday, mode=mode, autonomy=autonomy,
+            last_day=days[-1], snapshot=snapshot,
         )
-        gate_root = root if root is not None else Path(os.environ.get("PUMPGROK_ROOT", "."))
-        gate = LiveGate(mode="live", environ=dict(os.environ), root=gate_root)
+        gate = LiveGate(
+            mode="live",
+            environ={"PUMPGROK_LIVE_ENABLE": os.environ.get("PUMPGROK_LIVE_ENABLE", "")},
+            root=root,
+        )
         gate_lines = tuple(
             _GATE_LINE_TEMPLATE.format(
                 number=item.number,

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 from pumpgrok.backtest.roundtrip import RoundTripFill, group_round_trips
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.reporting.daily import (
     _inclusive_days,
     _strategy_fills,
@@ -14,6 +14,7 @@ from pumpgrok.reporting.daily import (
     _strategy_win_stats,
     day_next,
     day_start,
+    read_snapshot,
 )
 
 START = "2026-01-01T00:00:00Z"
@@ -142,13 +143,16 @@ def test_day_helpers() -> None:
 
 
 def _ledger_with_refs(tmp_path: Path) -> Path:
-
+    """A real ledger (full schema); one ticket ref row inserted."""
     path = tmp_path / "ledger.sqlite"
-    db = sqlite3.connect(str(path))
-    db.execute("CREATE TABLE strategy_ticket_refs (ticket_id TEXT, strategy_id TEXT)")
-    db.execute("INSERT INTO strategy_ticket_refs VALUES ('t1', 'momentum_breakout')")
-    db.commit()
-    db.close()
+    store = LedgerStore(str(path))
+    store._db.execute(
+        "INSERT OR REPLACE INTO strategy_ticket_refs (ticket_id, strategy_id, event_id)"
+        " VALUES (?, ?, ?)",
+        ("t1", "momentum_breakout", "e1"),
+    )
+    store._db.commit()
+    store.close()
     return path
 
 
@@ -169,9 +173,12 @@ def test_strategy_section_round_trips_through_the_ledger(tmp_path: Path) -> None
             {"side": "sell", "mint": "M1", "cash_delta_lamports": 130},
         ),
     ]
-    section = _strategy_section(ledger, events, "2026-01-01", "2026-01-01")
+    section = _strategy_section(
+        read_snapshot(ledger).ticket_refs, events, "2026-01-01", "2026-01-01"
+    )
     assert "momentum_breakout" in section
 
 
 def test_strategy_section_empty_without_refs(tmp_path: Path) -> None:
-    assert _strategy_section(tmp_path / "missing.sqlite", [], "2026-01-01", "2026-01-01") == ""
+    refs = read_snapshot(tmp_path / "missing.sqlite").ticket_refs
+    assert _strategy_section(refs, [], "2026-01-01", "2026-01-01") == ""

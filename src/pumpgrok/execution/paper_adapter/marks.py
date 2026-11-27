@@ -463,12 +463,8 @@ class _MarksMixin:
     def _curve_exit(self, mint: str, s_lamports: int, t_units: int, units: int) -> _ExitValue:
         """Exit value for selling ``units`` on this curve, as a normal sell books it.
 
-        Proceeds are gross less venue fee less network cost, floored at zero:
-        a dust exit whose fees exceed its gross books zero proceeds (never a
-        negative credit). The shortfall is the excess of venue plus network
-        over gross, visible in the recorded fee terms against zero proceeds.
-        The open account's ATA deposit is not sale value: it is refunded to
-        cash beside the proceeds.
+        Proceeds are gross less venue fee less network cost. The open account's ATA deposit is
+        not sale value: it is refunded to cash beside the proceeds.
         """
         gross = sell_out(s_lamports, t_units, units)
         venue = self._fees.venue_fee(gross)
@@ -481,7 +477,7 @@ class _MarksMixin:
         """Last ledger mark, else the last-good reserves; never reads a live price.
 
         A ledger mark is market value and already holds the open account's ATA deposit, so
-        its proceeds are the mark less the network cost, floored at zero: the deposit returns
+        its proceeds are the mark less the network cost: the deposit returns
         to cash inside them, once, with no separate refund. Marks written before the
         venue key existed
         report a venue fee of 0 (disclosed); their cash is unaffected. The reserves path

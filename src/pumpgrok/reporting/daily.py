@@ -9,8 +9,11 @@ the path is guarded first and sqlite opens it with ``mode=ro``, because the
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -21,6 +24,7 @@ from pumpgrok.backtest.roundtrip import (
     group_round_trips,
     per_strategy_breakdown,
 )
+from pumpgrok.core.errors import CorruptState
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
 from pumpgrok.ledger.views import (
@@ -32,10 +36,11 @@ from pumpgrok.ledger.views import (
     unrealized_pnl_lamports,
     win_rate,
 )
+from pumpgrok.replay.clock import parse_ts_utc
 from pumpgrok.reporting.render import PositionRow, ReportModel, TradeRow
 from pumpgrok.reporting.strategy_section import render_strategy_section
 
-_RO_URI_TEMPLATE = "file:{path}?mode=ro"
+_RO_URI_TEMPLATE = "{uri}?mode=ro"
 _SIGNED_PCT_TEMPLATE = "{value:+.2f}"
 _PCT_TEMPLATE = "{value:.2f}"
 _RISK_EVENT_TEMPLATE = "{etype} {ts} {cid}"
@@ -44,6 +49,16 @@ _FROZEN_MTM_TEMPLATE = "frozen mtm positions: {count}"
 _LAST_MTM_TEMPLATE = "last mtm: {ts}"
 _MTM_POINTS_TEMPLATE = "mtm points: {count}"
 
+
+def _valid_timestamp(value: object) -> bool:
+    """True when ``ts_utc`` parses as an ISO-8601 timestamp with a UTC offset."""
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        parse_ts_utc(value)
+    except ValueError:
+        return False
+    return True
 
 def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     """Read every tracked event without creating files.
@@ -54,19 +69,21 @@ def read_events_readonly(ledger_path: Path) -> list[dict[str, Any]]:
     """
     if not ledger_path.exists():
         return []
-    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    uri = _RO_URI_TEMPLATE.format(uri=ledger_path.resolve().as_uri())
     db = sqlite3.connect(uri, uri=True)
     try:
         rows = db.execute(
             "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
             " type, payload_json, prev_hash, hash FROM events ORDER BY seq ASC"
         ).fetchall()
-    except sqlite3.Error:
-        return []
     finally:
         db.close()
     events: list[dict[str, Any]] = []
     for seq, ts_utc, source, cid, key, type, payload_json, prev_hash, hash_ in rows:
+        if not _valid_timestamp(ts_utc):
+            raise CorruptState(
+                f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc"
+            )
         try:
             payload = json.loads(payload_json)
         except ValueError:
@@ -96,20 +113,25 @@ def read_initial_equity_readonly(ledger_path: Path) -> int:
     """
     if not ledger_path.exists():
         return 0
-    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    uri = _RO_URI_TEMPLATE.format(uri=ledger_path.resolve().as_uri())
     db = sqlite3.connect(uri, uri=True)
     try:
         row = db.execute(
             "SELECT value FROM meta WHERE key = ?", ("initial_equity_lamports",)
         ).fetchone()
-    except sqlite3.Error:
-        return 0
     finally:
         db.close()
     if row is None:
         return RiskBudget().paper_equity_lamports
     return int(row[0])
 
+
+def _has_table(db: sqlite3.Connection, table: str) -> bool:
+    """True when the sidecar ``table`` exists (legacy ledgers may lack it)."""
+    row = db.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    return row is not None
 
 def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
     """Read the position_deposits sidecar (PositionOpened seq -> deposit) without writing.
@@ -119,12 +141,14 @@ def read_deposits_readonly(ledger_path: Path) -> dict[int, int]:
     """
     if not ledger_path.exists():
         return {}
-    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    uri = _RO_URI_TEMPLATE.format(uri=ledger_path.resolve().as_uri())
     db = sqlite3.connect(uri, uri=True)
     try:
-        rows = db.execute("SELECT opened_seq, deposit_lamports FROM position_deposits").fetchall()
-    except sqlite3.Error:
-        return {}
+        if not _has_table(db, "position_deposits"):
+            return {}
+        rows = db.execute(
+            "SELECT opened_seq, deposit_lamports FROM position_deposits"
+        ).fetchall()
     finally:
         db.close()
     return {int(seq): int(lamports) for seq, lamports in rows}
@@ -138,12 +162,14 @@ def read_ticket_refs_readonly(ledger_path: Path) -> dict[str, str]:
     """
     if not ledger_path.exists():
         return {}
-    uri = _RO_URI_TEMPLATE.format(path=ledger_path.resolve().as_posix())
+    uri = _RO_URI_TEMPLATE.format(uri=ledger_path.resolve().as_uri())
     db = sqlite3.connect(uri, uri=True)
     try:
-        rows = db.execute("SELECT ticket_id, strategy_id FROM strategy_ticket_refs").fetchall()
-    except sqlite3.Error:
-        return {}
+        if not _has_table(db, "strategy_ticket_refs"):
+            return {}
+        rows = db.execute(
+            "SELECT ticket_id, strategy_id FROM strategy_ticket_refs"
+        ).fetchall()
     finally:
         db.close()
     return {str(ticket): str(strategy) for ticket, strategy in rows}
@@ -159,6 +185,16 @@ def _inclusive_days(day: str, last: str) -> Decimal:
         if count > 4000:
             raise ValueError(f"report span {day} to {last} is not a calendar range")
     return Decimal(count)
+
+
+_DAY_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def parse_day(day: str) -> date:
+    """The calendar date a YYYY-MM-DD string names; ValueError when it names no such day."""
+    if not _DAY_PATTERN.fullmatch(day):
+        raise ValueError(f"not a YYYY-MM-DD date: {day!r}")
+    return date.fromisoformat(day)
 
 
 def day_start(day: str) -> str:
@@ -214,24 +250,43 @@ def _fold_bounded(
     return start_state, state, visible
 
 
+def _ledger_money(event: dict[str, Any], key: str) -> int:
+    """A required lamport figure on a ledger row. Absent or non-integer is corruption."""
+    payload = event["payload"]
+    if key not in payload:
+        raise CorruptState(f"ledger event seq {event['seq']} ({event['type']}) has no {key}")
+    value = payload[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CorruptState(
+            f"ledger event seq {event['seq']} ({event['type']}) has a non-integer {key}"
+        )
+    return value
+
 def _closed_trade_rows(window: list[dict[str, Any]]) -> list[TradeRow]:
     rows: list[TradeRow] = []
     for event in window:
         if event["type"] != "PositionClosed":
             continue
         payload = event["payload"]
-        pnl = int(payload.get("realized_pnl_lamports", 0))
-        basis = int(payload.get("cost_basis_lamports", 0))
-        pct = _SIGNED_PCT_TEMPLATE.format(value=pnl * 100.0 / basis) if basis else "n/a"
+        proceeds = _ledger_money(event, "proceeds_lamports")
+        pnl = _ledger_money(event, "realized_pnl_lamports")
+        # The writers book realized P&L as proceeds less the net cost basis, so the
+        # basis is recovered from the two figures the row records.
+        basis = proceeds - pnl
+        pct = (
+            _SIGNED_PCT_TEMPLATE.format(value=Decimal(pnl) * 100 / Decimal(basis))
+            if basis
+            else "n/a"
+        )
         rows.append(
             TradeRow(
                 ticket=str(payload.get("ticket_id", "")),
                 mint=str(payload.get("mint", ""))[:8],
-                size_lamports=int(payload.get("size_lamports", 0)),
+                size_lamports=basis,
                 reason=str(payload.get("reason", "")),
                 pnl_lamports=pnl,
                 pnl_pct=pct,
-                fees_lamports=int(payload.get("fees_lamports", 0)),
+                fees_lamports=None,
                 correlation_id=str(event.get("correlation_id", "")),
             )
         )
@@ -330,6 +385,104 @@ def _data_freshness(visible: list[dict[str, Any]]) -> tuple[str, ...]:
     )
 
 
+def _loss_pct(start: int, end: int) -> str:
+    """The day's loss as a percent of its starting equity; a gain reads 0.00."""
+    if start <= 0:
+        return "n/a"
+    loss = max(start - end, 0)
+    return _PCT_TEMPLATE.format(value=Decimal(loss) * 100 / Decimal(start))
+
+def _read_events_once(db: sqlite3.Connection, _ledger_path: Path) -> list[dict[str, Any]]:
+    """Every tracked event off the snapshot connection, with ts validation."""
+    rows = db.execute(
+        "SELECT seq, ts_utc, source, correlation_id, idempotency_key,"
+        " type, payload_json, prev_hash, hash FROM events ORDER BY seq ASC"
+    ).fetchall()
+    events: list[dict[str, Any]] = []
+    for seq, ts_utc, source, cid, key, type, payload_json, prev_hash, hash_ in rows:
+        if not _valid_timestamp(ts_utc):
+            raise CorruptState(
+                f"ledger event seq {seq} ({type}) has a missing or malformed ts_utc"
+            )
+        try:
+            payload = json.loads(payload_json)
+        except ValueError:
+            continue
+        events.append(
+            {
+                "seq": seq,
+                "ts_utc": ts_utc,
+                "source": source,
+                "correlation_id": cid,
+                "idempotency_key": key,
+                "type": type,
+                "payload": payload,
+                "prev_hash": prev_hash,
+                "hash": hash_,
+            }
+        )
+    return events
+
+
+def _read_deposits_once(db: sqlite3.Connection, _ledger_path: Path) -> dict[int, int]:
+    """PositionOpened seq -> deposit; {} for a legacy ledger without the table."""
+    if not _has_table(db, "position_deposits"):
+        return {}
+    rows = db.execute(
+        "SELECT opened_seq, deposit_lamports FROM position_deposits"
+    ).fetchall()
+    return {int(seq): int(lamports) for seq, lamports in rows}
+
+
+def _read_equity_once(db: sqlite3.Connection, _ledger_path: Path) -> int:
+    """The ``initial_equity_lamports`` meta row; the RiskBudget default when absent."""
+    row = db.execute(
+        "SELECT value FROM meta WHERE key = ?", ("initial_equity_lamports",)
+    ).fetchone()
+    if row is None:
+        return RiskBudget().paper_equity_lamports
+    return int(row[0])
+
+
+def _read_refs_once(db: sqlite3.Connection, _ledger_path: Path) -> dict[str, str]:
+    """Ticket-to-strategy refs; {} when the sidecar table is missing."""
+    if not _has_table(db, "strategy_ticket_refs"):
+        return {}
+    rows = db.execute(
+        "SELECT ticket_id, strategy_id FROM strategy_ticket_refs"
+    ).fetchall()
+    return {str(ticket): str(strategy) for ticket, strategy in rows}
+
+@dataclass(frozen=True)
+class LedgerSnapshot:
+    """The ledger rows a report reads, read once on one read-only connection."""
+
+    events: list[dict[str, Any]]
+    deposits: dict[int, int]
+    initial_equity_lamports: int
+    ticket_refs: dict[str, str]
+
+
+def read_snapshot(ledger_path: Path) -> LedgerSnapshot:
+    """Read the ledger once without creating files.
+
+    An absent ledger reads as an empty desk. On an existing ledger any sqlite
+    failure propagates; only the legacy sidecar tables may be missing, and a
+    missing table reads as no rows.
+    """
+    if not ledger_path.exists():
+        return LedgerSnapshot(events=[], deposits={}, initial_equity_lamports=0, ticket_refs={})
+    uri = _RO_URI_TEMPLATE.format(uri=ledger_path.resolve().as_uri())
+    db = sqlite3.connect(uri, uri=True)
+    try:
+        events = _read_events_once(db, ledger_path)
+        deposits = _read_deposits_once(db, ledger_path)
+        initial_equity_lamports = _read_equity_once(db, ledger_path)
+        ticket_refs = _read_refs_once(db, ledger_path)
+    finally:
+        db.close()
+    return LedgerSnapshot(events, deposits, initial_equity_lamports, ticket_refs)
+
 class DailyReport:
     """Builds the ``ReportModel`` for UTC days ``day`` through ``last_day`` (inclusive)."""
 
@@ -341,16 +494,21 @@ class DailyReport:
         mode: str = "paper",
         autonomy: str = "autonomous-paper",
         last_day: str | None = None,
+        snapshot: LedgerSnapshot | None = None,
     ) -> ReportModel:
+        parse_day(day)
+        if last_day is not None:
+            parse_day(last_day)
         last = day if last_day is None else last_day
-        events = read_events_readonly(ledger_path)
-        deposits = read_deposits_readonly(ledger_path)
+        snap = snapshot if snapshot is not None else read_snapshot(ledger_path)
+        events = snap.events
+        deposits = snap.deposits
         start = day_start(day)
         end = day_next(last)
         window = [e for e in events if _in_window(str(e.get("ts_utc", "")), start, end)]
         genesis = initial_state(
             source="paper",
-            initial_equity_lamports=read_initial_equity_readonly(ledger_path),
+            initial_equity_lamports=snap.initial_equity_lamports,
             day_utc=day,
         )
         start_state, state, visible = _fold_bounded(events, genesis, start, end, deposits)
@@ -377,19 +535,24 @@ class DailyReport:
             realized_lamports=realized_pnl_lamports(visible, since_ts=start, until_ts=end),
             unrealized_lamports=unrealized_pnl_lamports(state),
             fees_venue_lamports=fees_lamports(visible, since_ts=start, until_ts=end),
-            fees_network_lamports=0,
+            fees_network_lamports=None,
             max_drawdown_pct=_PCT_TEMPLATE.format(value=dd * 100),
-            daily_loss_pct="0.00",
+            daily_loss_pct=_loss_pct(
+                equity_lamports(start_state), equity_lamports(state)
+            ),
+            halt_limit_pct=_PCT_TEMPLATE.format(
+                value=RiskBudget().daily_loss_halt_fraction * 100
+            ),
             trade_rows=tuple(_closed_trade_rows(window)),
             position_rows=position_rows,
             rejected=tuple(sorted(_rejected_counts(window).items())),
             verdicts=tuple(sorted(_verdict_counts(window).items())),
             risk_events=_risk_events(window),
             approvals_cleared=_approvals(window),
-            bot_health=(),
+            bot_health=None,
             data_freshness=_data_freshness(visible),
             unverified=_unverified(window, position_rows),
-            strategy_section=_strategy_section(ledger_path, events, day, last),
+            strategy_section=_strategy_section(snap.ticket_refs, events, day, last),
         )
         return model
 
@@ -463,13 +626,12 @@ def _strategy_win_stats(result: RoundTripsResult) -> tuple[dict[str, float], dic
 
 
 def _strategy_section(
-    ledger_path: Path,
+    refs: dict[str, str],
     events: list[dict[str, Any]],
     day: str,
     last: str,
 ) -> str:
     """The period's strategy section, or "" when no strategy row exists."""
-    refs = read_ticket_refs_readonly(ledger_path)
     if not refs:
         return ""
     fills = _strategy_fills(events, refs, day_start(day), day_next(last))

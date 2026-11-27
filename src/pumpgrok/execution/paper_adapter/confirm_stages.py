@@ -140,6 +140,39 @@ class _ConfirmStagesMixin:
             correlation_id=correlation_id,
         )
 
+    async def _read_confirm_curve(
+        self,
+        request: OrderRequest,
+        *,
+        order_id: str,
+        ledger_source: str,
+        correlation_id: str,
+    ) -> CurveSnapshot | None:
+        """Read the CONFIRMING curve, mapping read failures to CONFIRMING refusals."""
+        if request.side is Side.BUY:
+            try:
+                return await self._read_entry_curve(request.mint)
+            except EntryDenied as denied:
+                raise await self._confirm_refuse(
+                    request,
+                    order_id=order_id,
+                    reason="data_unavailable",
+                    detail=denied.detail,
+                    ledger_source=ledger_source,
+                    correlation_id=correlation_id,
+                ) from None
+        try:
+            return await self._read_curve(request.mint)
+        except Exception as exc:
+            raise await self._confirm_refuse(
+                request,
+                order_id=order_id,
+                reason="data_unavailable",
+                detail=f"SELL CONFIRMING curve read failed: {type(exc).__name__}",
+                ledger_source=ledger_source,
+                correlation_id=correlation_id,
+            ) from None
+
     async def _confirm_curve(
         self,
         request: OrderRequest,
@@ -150,30 +183,12 @@ class _ConfirmStagesMixin:
         correlation_id: str,
     ) -> CurveSnapshot:
         """Re-read the curve at CONFIRMING, then apply the layout and graduation gates."""
-        if request.side is Side.BUY:
-            try:
-                curve1 = await self._read_entry_curve(request.mint)
-            except EntryDenied as denied:
-                raise await self._confirm_refuse(
-                    request,
-                    order_id=order_id,
-                    reason="data_unavailable",
-                    detail=denied.detail,
-                    ledger_source=ledger_source,
-                    correlation_id=correlation_id,
-                ) from None
-        else:
-            try:
-                curve1 = await self._read_curve(request.mint)
-            except Exception as exc:
-                raise await self._confirm_refuse(
-                    request,
-                    order_id=order_id,
-                    reason="data_unavailable",
-                    detail=f"SELL CONFIRMING curve read failed: {type(exc).__name__}",
-                    ledger_source=ledger_source,
-                    correlation_id=correlation_id,
-                ) from None
+        curve1 = await self._read_confirm_curve(
+            request,
+            order_id=order_id,
+            ledger_source=ledger_source,
+            correlation_id=correlation_id,
+        )
         if curve1 is None:
             raise await self._confirm_refuse(
                 request,
