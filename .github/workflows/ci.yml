@@ -48,6 +48,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
+          # Canonical suite when run locally: make lint typecheck test audit (the check target).
           git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           git checkout "origin/$BASE_REF" -- pyproject.toml Makefile
           echo "Trusted pyproject.toml and Makefile overlay from origin/$BASE_REF"

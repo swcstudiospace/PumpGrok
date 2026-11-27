@@ -221,9 +221,11 @@ def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int 
                 *(f"  - {problem}" for problem in problems),
             )
             return EXIT_CONFIG, wake_mode
-    # Replay runs are fixture-driven and need no live paper inputs (ONB-03
-    # gates a live start); the smoke replay checkpoint must always complete.
-    if settings.effective_mode == "paper" and getattr(args, "replay", None) is None:
+    # The `--once --replay` checkpoint is a fixture pass that needs no live
+    # paper inputs (ONB-03 gates a live start); every other paper start,
+    # including `--serve`, refuses until the inputs are present.
+    checkpoint = bool(getattr(args, "once", False)) and getattr(args, "replay", None) is not None
+    if settings.effective_mode == "paper" and not checkpoint:
         missing = _paper_start_gate(settings)
         if missing:
             _say(

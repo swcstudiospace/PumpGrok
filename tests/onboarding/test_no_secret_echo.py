@@ -97,7 +97,10 @@ def test_refused_start_never_echoes_the_xai_key(
     caplog.set_level(logging.DEBUG)
     monkeypatch.setenv("PUMPGROK_GROK_GATEWAY__ENABLED", "true")
     monkeypatch.setenv("PUMPGROK_GROK__API_KEY", XAI_SENTINEL)
-    code = main(["run", "--mode", "paper", "--once", "--replay", SMOKE])
+    monkeypatch.setenv("PUMPGROK_HEALTH__PORT", "18089")
+    # The continuous desk start is gated; only the `--once --replay`
+    # checkpoint bypasses the paper start gate.
+    code = main(["run", "--mode", "paper", "--serve", "--replay", SMOKE])
     captured = capsys.readouterr()
     assert code == EXIT_CONFIG
     assert startup_spy == []

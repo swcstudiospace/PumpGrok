@@ -72,6 +72,17 @@ def _run_once(capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
     return code, captured.out + captured.err
 
 
+def _run_serve(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, str]:
+    # The continuous desk start is gated; only the `--once --replay`
+    # checkpoint bypasses the paper start gate.
+    monkeypatch.setenv("PUMPGROK_HEALTH__PORT", "18089")
+    code = main(["run", "--mode", "paper", "--serve", "--replay", SMOKE])
+    captured = capsys.readouterr()
+    return code, captured.out + captured.err
+
+
 def test_enabled_grok_seat_with_empty_xai_key_is_refused_at_startup(
     startup_spy: list[tuple[str, Path]],
     complete_authority: None,
@@ -80,7 +91,7 @@ def test_enabled_grok_seat_with_empty_xai_key_is_refused_at_startup(
 ) -> None:
     monkeypatch.setenv(GATEWAY_ENV, "true")
     monkeypatch.setenv(KEY_ENV, "")
-    code, text = _run_once(capsys)
+    code, text = _run_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert "xai_api_key: missing" in text
     assert startup_spy == [], "a supervisor started with an empty x.ai key"
@@ -93,7 +104,7 @@ def test_enabled_grok_seat_with_unset_xai_key_is_refused_at_startup(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setenv(GATEWAY_ENV, "true")
-    code, text = _run_once(capsys)
+    code, text = _run_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert "xai_api_key: missing" in text
     assert startup_spy == []
@@ -106,7 +117,7 @@ def test_missing_xai_key_and_missing_authority_are_listed_together(
 ) -> None:
     monkeypatch.setenv(GATEWAY_ENV, "true")
     monkeypatch.setenv(KEY_ENV, "")
-    code, text = _run_once(capsys)
+    code, text = _run_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert "xai_api_key: missing" in text
     assert "seat_tool_access: missing" in text
