@@ -18,8 +18,8 @@ from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.autonomy import read_autonomy
-from pumpgrok.ledger.reducer import initial_state, reduce
-from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
+from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import utc_day
@@ -28,7 +28,12 @@ from pumpgrok.supervisor.health import (
     build_status,
     write_health_json,
 )
-from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
+from pumpgrok.supervisor.scheduler.degraded import (
+    DegradedState,
+    LedgerLatches,
+    fold_latches,
+    kill_switch_engaged,
+)
 from pumpgrok.supervisor.scheduler.wake import EVENT_TIMERS, wake_order
 from pumpgrok.supervisor.seat_relay import relay_tail
 from pumpgrok.supervisor.seat_restart import ObserveOnly
@@ -45,6 +50,9 @@ TRIGGER_EVENT: ContextVar[Event | None] = ContextVar("pumpgrok_trigger_event", d
 
 #: Supervisor tick: due seats are started once per tick, in roster order.
 TICK_S = 1.0
+
+#: Consecutive failed DailyRollover appends that latch the day's attempts; /healthz reports it.
+ROLLOVER_FAILURE_LIMIT = 3
 
 #: Per-seat cadence in seconds (paper-engine.md 6.2). Sniper and signal are
 #: queue-driven; a 1 s cadence polls the queue without busy-looping.
@@ -170,6 +178,7 @@ class Supervisor:
         self._started_at = clock.now()
         self._last_health_write = 0.0
         self._last_rollover_day: str | None = None
+        self._rollover_fail: tuple[str, int] = ("", 0)
         self._inflight: dict[str, asyncio.Task[str]] = {}
         self._seat_locks: dict[str, asyncio.Lock] = {seat: asyncio.Lock() for seat in ROSTER}
 
@@ -205,12 +214,16 @@ class Supervisor:
         return self._stop.is_set()
 
     def autonomy_level(self) -> str:
-        """Ledger-recorded level; live mode always forces manual-ticket."""
+        """Ledger-recorded level; live mode always forces manual-ticket.
+
+        An unreadable ledger falls back to manual-ticket and logs why.
+        """
         if self._mode == "live":
             return "manual-ticket"
         try:
             return read_autonomy(self._store)
-        except Exception:
+        except (sqlite3.Error, ValueError) as exc:
+            log.warning("autonomy level unreadable; using manual-ticket: %s", exc)
             return "manual-ticket"
 
     def _seat_context(self, seat: str) -> SeatContext:
@@ -384,7 +397,7 @@ class Supervisor:
         ledger still records one rollover per UTC day (D6).
         """
         day = utc_day(now)
-        if self._last_rollover_day == day:
+        if self._last_rollover_day == day or self._rollover_latched(day):
             return
         try:
             self._store.append(
@@ -407,9 +420,24 @@ class Supervisor:
             self._last_rollover_day = day
             return
         except Exception as exc:
+            failed_day, failures = self._rollover_fail
+            failures = failures + 1 if failed_day == day else 1
+            self._rollover_fail = (day, failures)
             log.warning("daily rollover append failed: %s", exc)
+            if failures == ROLLOVER_FAILURE_LIMIT:
+                log.error(
+                    "daily rollover latched for %s after %d failed appends; "
+                    "/healthz reports rollover_failed",
+                    day,
+                    failures,
+                )
             return
         self._last_rollover_day = day
+
+    def _rollover_latched(self, day: str) -> bool:
+        """True once ``day``'s DailyRollover append has failed ROLLOVER_FAILURE_LIMIT times."""
+        failed_day, failures = self._rollover_fail
+        return failed_day == day and failures >= ROLLOVER_FAILURE_LIMIT
 
     def _day_start_equity(self, now: float) -> int:
         """Account equity folded from the ledger: the day's daily-loss baseline.
@@ -419,6 +447,10 @@ class Supervisor:
         then every row, marked to the last MTM. This is the ``total`` basis that
         ``EngineLimits`` defaults to, so the halt compares like with like.
         """
+        return int(equity_lamports(self.fold_ledger(now)))
+
+    def fold_ledger(self, now: float) -> LedgerState:
+        """Ledger state folded from genesis, dated to ``now``'s UTC day (read-only)."""
         events = self._store.read(since_seq=1, limit=None)
         meta_equity = self._store.get_meta("initial_equity_lamports")
         initial = (
@@ -435,7 +467,7 @@ class Supervisor:
         deposits = position_deposits_by_seq(self._store)
         for event in events:
             state = reduce(state, event, deposits)
-        return int(equity_lamports(state))
+        return state
 
     def _sync_risk_latch(self) -> None:
         """Mirror the latch set into RiskEngine so buys refuse desk-wide."""
@@ -466,16 +498,42 @@ class Supervisor:
         return kill_switch_engaged(self._store)
 
     def health_status(self) -> dict[str, Any]:
-        """Current /healthz body."""
+        """Current /healthz body.
+
+        Ledger status is a live verify; halt and breaker state fold from the ledger. An
+        unreadable ledger reports halted, so the body is never ok while the desk cannot
+        prove its state.
+        """
+        try:
+            latches = fold_latches(self._store)
+        except Exception as exc:
+            log.warning("ledger latches unreadable; reporting halted: %s", exc)
+            latches = LedgerLatches(kill_event=None, halted=True, breakers={})
+        breakers = dict(latches.breakers)
         return build_status(
             mode=self._mode,
             autonomy_level=self.autonomy_level(),
-            ledger_status="CONSISTENT",
+            ledger_status=self._ledger_status(),
             ledger_source=self._source,
             kill_switch=self.kill_switch_engaged(),
             seats=self.seat_freshness(),
             uptime_s=self._clock.now() - self._started_at,
+            halted=latches.halted,
+            breaker="open" if "open" in breakers.values() else "closed",
+            breakers=breakers,
+            rollover_failed=self._rollover_latched(utc_day(self._clock.now())),
         )
+
+    def _ledger_status(self) -> str:
+        """``CONSISTENT`` when the hash chain verifies now; otherwise the failure class."""
+        try:
+            self._store.verify()
+        except LedgerInconsistent:
+            return "INCONSISTENT"
+        except Exception as exc:
+            log.warning("ledger verify unavailable: %s", exc)
+            return "UNVERIFIED"
+        return "CONSISTENT"
 
     def ready(self) -> bool:
         """Readyz: ledger CONSISTENT and each timed seat completed one cycle."""
