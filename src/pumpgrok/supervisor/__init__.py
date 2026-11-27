@@ -32,7 +32,6 @@ from pumpgrok.supervisor.scheduler import (
     DegradedState,
     LedgerUnavailable,
     Supervisor,
-    assert_no_skew,
     build_serve_replay,
     cycle_timeout_s,
     run_once_replay,

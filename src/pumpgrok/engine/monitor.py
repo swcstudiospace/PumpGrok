@@ -20,12 +20,12 @@ Deliberate divergences from the oracle (see STRUCT-003, R45/R46):
 - ``websockets.asyncio.client.connect`` is the only connect path, called
   as ``connect(url, proxy=None, max_queue=data.ws_max_queue)``. Timeouts
   and sleeps go through the injected clock.
+- ``LaunchMonitor.stream`` refuses to run until a buyer-evidence source is
+  named (MISC-D-02). The socket loop, ``_socket_stream``, sits behind that gate.
 """
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import json
 import logging
 from collections import OrderedDict
@@ -34,6 +34,7 @@ from decimal import Decimal
 from typing import Any
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import WebSocketException
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.core.units import sol_to_lamports
@@ -53,6 +54,14 @@ PENDING_TTL_SECONDS = 900.0
 # without end.
 MAX_PENDING = 2_000
 MAX_REMEMBERED = 20_000
+
+# Named source of buyer evidence (MISC-D-02). None until the owner names one;
+# LaunchMonitor.stream() refuses to run while it is None.
+BUYER_EVIDENCE_SOURCE: str | None = None
+
+
+class BuyerEvidenceRefusal(RuntimeError):
+    """The live launch gate has no named buyer-evidence source, so it will not stream."""
 
 
 class SeenSet:
@@ -166,20 +175,19 @@ class LaunchMonitor:
 
     # -- event handling ----------------------------------------------------
 
-    def handle_event(self, payload: dict[str, Any], now: float) -> Token | None:
-        """One socket message. Returns a token ready to move downstream.
+    def handle_event(self, payload: dict[str, Any], now: float) -> None:
+        """One socket message. Buffers a create event; matured tokens come only from sweep().
 
         Non-create payloads are ignored: without a trade subscription there
         is no buyer evidence to fold in, so buys, sells, and curve updates
         from the socket change nothing.
         """
         if payload.get("txType") not in ("create", "created"):
-            return None
+            return
         token = parse_create_event(payload, now)
         if token and token.mint not in self._emitted:
             self._evict_if_crowded()
             self.pending[token.mint] = token
-        return None
 
     def _promote(self, token: Token, now: float) -> Token | None:
         """Check a matured token and take it out of the buffer if decided."""
@@ -207,7 +215,7 @@ class LaunchMonitor:
             promoted = self._promote(token, now)
             if promoted is not None:
                 ready.append(promoted)
-            elif now - token.created_timestamp > PENDING_TTL_SECONDS:
+            elif mint in self.pending and token.age_seconds(now) > PENDING_TTL_SECONDS:
                 self._forget(mint)
                 self._emitted.add(mint)
                 if self.on_skip:
@@ -230,7 +238,21 @@ class LaunchMonitor:
     # -- socket ------------------------------------------------------------
 
     async def stream(self) -> AsyncIterator[Token]:
-        """Endless stream of filtered tokens. Reconnects on its own."""
+        """Endless stream of matured tokens. Refuses until a buyer-evidence source is named.
+
+        Without a named source no token can gain buyer evidence, so the socket
+        loop would only buffer launches that all end in data_unavailable. The
+        refusal is explicit, and nothing connects.
+        """
+        if BUYER_EVIDENCE_SOURCE is None:
+            raise BuyerEvidenceRefusal(
+                "LaunchMonitor refuses to stream: no buyer-evidence source is named (MISC-D-02)"
+            )
+        async for token in self._socket_stream():
+            yield token
+
+    async def _socket_stream(self) -> AsyncIterator[Token]:
+        """Socket loop behind stream(): subscribe, buffer, sweep, reconnect on drops."""
         sweeper_delay = 10.0
         backoff = 1.0
         while True:
@@ -252,19 +274,17 @@ class LaunchMonitor:
                             try:
                                 payload = json.loads(raw)
                             except json.JSONDecodeError:
-                                continue
+                                payload = None  # the sweep check below still runs
                             if isinstance(payload, dict):
-                                token = self.handle_event(payload, self.clock.now())
-                                if token is not None:
-                                    yield token
+                                self.handle_event(payload, self.clock.now())
                         if self.clock.now() - last_sweep >= sweeper_delay:
                             last_sweep = self.clock.now()
                             for token in self.sweep(self.clock.now()):
                                 yield token
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:  # dropped socket: wait and reconnect
+            except (OSError, WebSocketException) as exc:  # dropped socket: wait and reconnect
                 log.warning("monitor dropped (%s), reconnecting in %.0fs", exc, backoff)
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.clock.sleep(backoff)
+                await self.clock.sleep(backoff)
                 backoff = min(backoff * 2, 60.0)
+            except Exception:
+                log.exception("monitor stopped on an unexpected error")
+                raise

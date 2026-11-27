@@ -30,11 +30,18 @@ class _QuoteMixin:
         def _sell_preview_units(
             size_lamports: int | None, token_units: int | None, curve: CurveSnapshot
         ) -> int: ...
+        def _has_open_position(self, mint: str) -> bool: ...
 
     async def quote(
         self, input_mint: str, output_mint: str, amount: int, slippage_bps: int
     ) -> Quote:
         """Buy-direction curve quote: ``amount`` lamports in, token units out."""
+        if not 0 <= slippage_bps <= 10_000:
+            raise OrderRejectedError(
+                "invalid_slippage",
+                f"slippage_bps={slippage_bps} outside 0..10000",
+                stage="ACCEPTED",
+            )
         curve = await self._read_curve(output_mint)
         if curve is None:
             raise OrderRejectedError("no_reserves", f"mint={output_mint}", stage="ACCEPTED")
@@ -77,6 +84,8 @@ class _QuoteMixin:
             )
         if side is Side.BUY:
             size = int(size_lamports or 0)
+            if size <= 0:
+                return self._sim_reject("invalid_size", curve.s_lamports, size)
             if curve.s_lamports < self._floor(size):
                 return self._sim_reject("below_liquidity_floor", curve.s_lamports, size)
             filled = min(size, self._fill_cap(curve.s_lamports))
@@ -88,15 +97,17 @@ class _QuoteMixin:
                 expected_out=out,
                 price_impact_pct=impact_buy(curve.s_lamports, filled),
                 venue_fee_lamports=self._fees.venue_fee(filled),
-                network_cost_lamports=self._fees.network_cost(),
+                # Preview must match fills: the network cost carries the ATA rent
+                # whenever the mint is flat, exactly as _buy_settle charges it.
+                network_cost_lamports=self._fees.buy_network_cost(
+                    first_buy=not self._has_open_position(mint)
+                ),
                 liquidity_ratio=Decimal(curve.s_lamports) / Decimal(size),
                 rejection_reason=None,
                 latency_ms_estimate=1200,
             )
         units = self._sell_preview_units(size_lamports, token_units, curve)
-        if units <= 0:
-            return self._sim_reject("below_liquidity_floor", curve.t_units, units)
-        if curve.t_units < self._floor(units):
+        if units <= 0 or curve.t_units < self._floor(units):
             return self._sim_reject("below_liquidity_floor", curve.t_units, units)
         filled_units = min(units, self._fill_cap(curve.t_units))
         gross = sell_out(curve.s_lamports, curve.t_units, filled_units)

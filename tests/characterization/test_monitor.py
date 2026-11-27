@@ -18,10 +18,12 @@ Adaptations from the oracle (deliberate, R45/R46: no trade subscription):
 - ``test_stream_yields_matured_token`` (``:285-304``) asserted
   ``subscribeTokenTrade``/``unsubscribeTokenTrade`` traffic. The port sends
   ``subscribeNewToken`` only; the test asserts exactly that.
-- ``test_stream_reconnects_after_drop`` (``:307-327``) and
-  ``test_stream_survives_broken_json`` (``:329-343``) are kept in shape but
-  no matured token ever arrives over the wire: without buyer evidence every
-  buffered token ends in ``data_unavailable``.
+- ``stream()`` refuses until a buyer-evidence source is named (MISC-D-02);
+  ``test_stream_refuses_without_named_buyer_source`` pins that. The socket
+  tests below drive ``_socket_stream``, the loop behind that gate.
+- ``test_stream_reconnects_after_drop`` and ``test_stream_survives_broken_json``
+  keep their shape. No matured token ever arrives over the wire: without buyer
+  evidence every buffered token ends in ``data_unavailable``.
 - Time is explicit everywhere: ``parse_create_event``, ``handle_event``,
   ``sweep``, and ``passes_filter`` take ``now`` instead of reading the
   wall clock.
@@ -32,7 +34,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from typing import Any
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
 import pytest
 
@@ -41,6 +44,7 @@ from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.engine.models import Token
 from pumpgrok.engine.monitor import (
     CURVE_COMPLETION_LAMPORTS,
+    BuyerEvidenceRefusal,
     LaunchMonitor,
     SeenSet,
     parse_create_event,
@@ -61,8 +65,7 @@ def make_monitor(skips: list, clock: Any = None) -> LaunchMonitor:
 
 
 class ManualClock:
-    """Controllable now with real sleeps: stream tests must not hang the
-    virtual clock on backoff sleeps."""
+    """Virtual time: sleep() advances it instead of waiting on the wall clock."""
 
     def __init__(self, now: float) -> None:
         self._now = now
@@ -77,7 +80,8 @@ class ManualClock:
         return str(self._now)
 
     async def sleep(self, seconds: float) -> None:
-        await asyncio.sleep(seconds)
+        self._now += seconds
+        await asyncio.sleep(0)
 
     def timeout(self, seconds: float) -> Any:
         return asyncio.timeout(seconds)
@@ -359,6 +363,25 @@ def test_few_buyers_stays_buffered() -> None:
     assert skips == []
 
 
+def test_unknown_age_is_not_stale_in_sweep() -> None:
+    """A creation time of 0 is an unknown age: sweep must not stale it out (MON-01)."""
+    skips: list = []
+    mon = make_monitor(skips)
+    mon.handle_event(
+        {"txType": "create", "mint": "A", "name": "n", "image": "i", "timestamp": "0"},
+        NOW,
+    )
+    assert mon.pending["A"].created_timestamp == 0.0
+    assert mon.sweep(NOW) == []
+    assert "A" in mon.pending
+    assert skips == []
+
+
+def test_handle_event_returns_none() -> None:
+    """Matured tokens come only from sweep(), so handle_event is annotated -> None (MON-02)."""
+    assert get_type_hints(LaunchMonitor.handle_event)["return"] is type(None)
+
+
 # --- monitor memory --------------------------------------------------------
 
 
@@ -450,16 +473,67 @@ def _create_raw(mint: str = "A") -> str:
     )
 
 
-async def _run_briefly(mon: LaunchMonitor, delay: float = 0.1) -> None:
-    async def collect() -> None:
+async def _drain(mon: LaunchMonitor) -> None:
+    async for _ in mon._socket_stream():
+        pass
+
+
+async def _run_until(mon: LaunchMonitor, done: Callable[[], bool], turns: int = 1_000) -> None:
+    """Drive the socket loop until ``done`` holds, then cancel it.
+
+    Waits on observed state, not on a wall-clock delay, so the outcome does
+    not depend on scheduling.
+    """
+    task = asyncio.create_task(_drain(mon))
+    try:
+        for _ in range(turns):
+            if done() or task.done():
+                break
+            await asyncio.sleep(0)
+        assert done(), "socket loop never reached the expected state"
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+class BlockingBackoffClock(ManualClock):
+    """Backoff sleeps never return, so a test can cancel the stream mid-backoff."""
+
+    def __init__(self, now: float) -> None:
+        super().__init__(now)
+        self.entered = asyncio.Event()
+
+    async def sleep(self, seconds: float) -> None:
+        self.entered.set()
+        await asyncio.Event().wait()
+
+
+class TickingClock(ManualClock):
+    """Each clock read advances one second, so a loop that only reads the clock still sweeps."""
+
+    def now(self) -> float:
+        self._now += 1.0
+        return self._now
+
+
+async def test_stream_refuses_without_named_buyer_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MISC-D-02: no buyer-evidence source is named, so stream() refuses before connecting."""
+    opened: list = []
+    kwargs_seen: list = []
+    patch_connect(monkeypatch, [FakeWebSocket([_create_raw()])], opened, kwargs_seen)
+    mon = make_monitor([], ManualClock(NOW))
+
+    async def consume() -> None:
         async for _ in mon.stream():
             pass
 
-    task = asyncio.create_task(collect())
-    await asyncio.sleep(delay)
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
+    with pytest.raises(BuyerEvidenceRefusal):
+        await asyncio.wait_for(consume(), timeout=2)
+    assert opened == []
+    assert mon.pending == {}
 
 
 async def test_stream_sends_only_subscribe_new_token(
@@ -471,7 +545,7 @@ async def test_stream_sends_only_subscribe_new_token(
     opened: list = []
     kwargs_seen: list = []
     patch_connect(monkeypatch, [ws], opened, kwargs_seen)
-    await _run_briefly(mon)
+    await _run_until(mon, lambda: "A" in mon.pending)
 
     assert opened == [mon.data.ws_url]
     assert kwargs_seen == [{"proxy": None, "max_queue": mon.data.ws_max_queue}]
@@ -482,15 +556,78 @@ async def test_stream_sends_only_subscribe_new_token(
 
 async def test_stream_reconnects_after_drop(monkeypatch: pytest.MonkeyPatch) -> None:
     skips: list = []
-    mon = make_monitor(skips, ManualClock(NOW))
+    clock = ManualClock(NOW)
+    mon = make_monitor(skips, clock)
     ws = FakeWebSocket([_create_raw("B")])
     opened: list = []
     kwargs_seen: list = []
     patch_connect(monkeypatch, [FailingWebSocket([]), ws], opened, kwargs_seen)
-    await _run_briefly(mon, delay=1.5)
+    await _run_until(mon, lambda: "B" in mon.pending)
 
     assert len(opened) == 2  # first connect dropped, second one worked
     assert "B" in mon.pending
+    assert clock.now() == NOW + 1.0  # the one backoff sleep ran on virtual time
+
+
+async def test_cancel_during_reconnect_backoff_ends_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shutdown that lands in reconnect backoff ends the task (ENG-03)."""
+    clock = BlockingBackoffClock(NOW)
+    mon = make_monitor([], clock)
+    opened: list = []
+    kwargs_seen: list = []
+    patch_connect(monkeypatch, [FailingWebSocket([]), FakeWebSocket([])], opened, kwargs_seen)
+
+    task = asyncio.create_task(_drain(mon))
+    try:
+        await asyncio.wait_for(clock.entered.wait(), timeout=5)
+        task.cancel()
+        await asyncio.wait({task}, timeout=1)
+        assert task.done()
+        assert len(opened) == 1  # no reconnect after the cancel
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def test_logic_error_is_not_retried_as_a_dropped_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only socket errors reconnect; a logic bug reaches the caller (MON-04)."""
+    mon = make_monitor([], ManualClock(NOW))
+    opened: list = []
+    kwargs_seen: list = []
+    patch_connect(
+        monkeypatch,
+        [FakeWebSocket([_create_raw("B")]), FakeWebSocket([])],
+        opened,
+        kwargs_seen,
+    )
+
+    def logic_bug(payload: dict[str, Any], now: float) -> None:
+        raise RuntimeError("logic bug")
+
+    monkeypatch.setattr(mon, "handle_event", logic_bug)
+
+    with pytest.raises(RuntimeError, match="logic bug"):
+        await asyncio.wait_for(_drain(mon), timeout=2)
+    assert len(opened) == 1  # no reconnect for a non-socket error
+
+
+async def test_flood_of_undecodable_frames_still_sweeps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Undecodable frames must not starve the sweep (MON-03)."""
+    skips: list = []
+    mon = make_monitor(skips, TickingClock(NOW))
+    mon.pending["S"] = Token(mint="S", name="n", image_uri="i", created_timestamp=NOW - 2_000)
+    patch_connect(monkeypatch, [FakeWebSocket(["{broken"] * 50)], [], [])
+    await _run_until(mon, lambda: bool(skips))
+
+    assert skips == [("S", "data_unavailable")]
+    assert "S" not in mon.pending
 
 
 async def test_stream_survives_broken_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -500,6 +637,6 @@ async def test_stream_survives_broken_json(monkeypatch: pytest.MonkeyPatch) -> N
     opened: list = []
     kwargs_seen: list = []
     patch_connect(monkeypatch, [ws], opened, kwargs_seen)
-    await _run_briefly(mon)
+    await _run_until(mon, lambda: "C" in mon.pending)
 
     assert "C" in mon.pending

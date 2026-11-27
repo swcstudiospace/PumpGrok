@@ -27,6 +27,7 @@ Deliberate divergences from the oracle:
 
 from __future__ import annotations
 
+import heapq
 import json
 import logging
 from pathlib import Path
@@ -72,8 +73,6 @@ class CreatorRecord(BaseModel):
     def is_known_bad(self) -> bool:
         return self.rugs > 0
 
-    model_config = ConfigDict(extra="forbid")
-
 
 class ReputationBook(BaseModel):
     version: int = 1
@@ -88,6 +87,13 @@ class ReputationBook(BaseModel):
     # -- disk --------------------------------------------------------------
 
     @classmethod
+    def _new(cls, clock: Clock | None) -> ReputationBook:
+        book = cls()
+        if clock is not None:
+            book._clock = clock
+        return book
+
+    @classmethod
     def load(cls, path: str | Path, clock: Clock | None = None) -> ReputationBook:
         """Load the book. A corrupt or marked book comes back degraded (refusing buys).
 
@@ -97,6 +103,10 @@ class ReputationBook(BaseModel):
         existing marker as degraded, even when the book file is missing, so a restarted
         process cannot come back healthy and empty.
 
+        A present but unreadable file (an ``OSError``, for example EACCES or EIO) is not
+        renamed: the book degrades in place and the marker records the cause with no
+        quarantine path, so a transient fault cannot move a healthy book aside.
+
         Nothing clears the marker automatically. A human clears the degraded state by
         removing the marker, after restoring or rebuilding the book. The refusal logic
         is unchanged: a degraded book refuses buys.
@@ -104,19 +114,35 @@ class ReputationBook(BaseModel):
         file = Path(path)
         marker = file.with_name(f"{file.stem}.degraded.json")
         if marker.exists():
-            book = cls()
-            if clock is not None:
-                book._clock = clock
+            book = cls._new(clock)
             book.degraded = True
             log.error("reputation book degraded by marker %s: remove it to clear", marker)
             return book
         if not file.exists():
-            book = cls()
-            if clock is not None:
-                book._clock = clock
+            book = cls._new(clock)
             return book
         try:
-            raw: Any = json.loads(file.read_text(encoding="utf-8"))
+            data = file.read_bytes()
+        except OSError as exc:
+            # Present but unreadable: a transient I/O fault must not rename a healthy book.
+            # Degrade in place, leave the file for a human, and persist the marker.
+            book = cls._new(clock)
+            book.degraded = True
+            log.error(
+                "reputation book %s unreadable (%s), degraded in place, not renamed",
+                file,
+                type(exc).__name__,
+            )
+            cls._write_degraded_marker(
+                marker,
+                book_file=file,
+                quarantine=None,
+                cause=type(exc).__name__,
+                now=book._clock.now(),
+            )
+            return book
+        try:
+            raw: Any = json.loads(data.decode("utf-8"))
             book = cls.model_validate(raw)
         except Exception as exc:
             book = cls()
@@ -221,8 +247,8 @@ class ReputationBook(BaseModel):
         if record is None:
             record = CreatorRecord(creator=creator)
             self.creators[creator] = record
-            self._evict_if_crowded()
         record.last_seen = self._clock.now()
+        self._evict_if_crowded(keep=creator)
         return record
 
     def observe(self, creator: str | None) -> None:
@@ -287,17 +313,25 @@ class ReputationBook(BaseModel):
             del self.creators[key]
         return len(stale)
 
-    def _evict_if_crowded(self) -> None:
-        """Evict clean addresses first: rugs are what this book is for."""
-        if len(self.creators) <= MAX_CREATORS:
+    def _evict_if_crowded(self, keep: str) -> None:
+        """Evict clean addresses first: rugs are what this book is for.
+
+        ``keep`` is the address just inserted; it is never its own victim, so the
+        record the caller holds stays in the book. Only the excess is selected, with
+        a heap instead of a full sort of the book on every insert.
+        """
+        excess = len(self.creators) - MAX_CREATORS
+        if excess <= 0:
             return
-        order = sorted(
-            self.creators.items(),
-            key=lambda item: (item[1].is_known_bad, item[1].last_seen),
+        victims = heapq.nsmallest(
+            excess,
+            (
+                (record.is_known_bad, record.last_seen, key)
+                for key, record in self.creators.items()
+                if key != keep
+            ),
         )
-        for key, _ in order:
-            if len(self.creators) <= MAX_CREATORS:
-                break
+        for _, _, key in victims:
             del self.creators[key]
 
     def summary(self) -> str:

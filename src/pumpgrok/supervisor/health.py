@@ -51,6 +51,7 @@ def build_status(
     halted: bool = False,
     breaker: str = "closed",
     breakers: Mapping[str, str] | None = None,
+    rollover_failed: bool = False,
     equity_lamports: int = 0,
     drawdown_pct: float = 0.0,
     data_age_s: float = 0.0,
@@ -61,7 +62,14 @@ def build_status(
 ) -> dict[str, Any]:
     """Build the /healthz body. ``status`` is ok/degraded/stopped."""
     stale = any(bool(info.get("stale", False)) for info in seats.values())
-    degraded = ledger_status != "CONSISTENT" or stale or halted or kill_switch or breaker == "open"
+    degraded = (
+        ledger_status != "CONSISTENT"
+        or stale
+        or halted
+        or kill_switch
+        or breaker == "open"
+        or rollover_failed
+    )
     return {
         "status": "degraded" if degraded else "ok",
         "mode": mode,
@@ -71,6 +79,7 @@ def build_status(
         "halted": halted,
         "breaker": breaker,
         "breakers": dict(breakers or {}),
+        "rollover_failed": rollover_failed,
         "autonomy_level": autonomy_level,
         "ledger_status": ledger_status,
         "ledger_source": ledger_source,

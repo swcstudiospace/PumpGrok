@@ -6,6 +6,7 @@ cycle's clock, and runs the ported rules (``engine/exits.py``) through the porte
 one sell through the exit seat's granted ``exec.place``. A sell the venue reports
 ``unknown`` is never retried: that position is held out of later passes (R18,
 single-send), so the desk does not sell it twice.
+A sell that raises is recorded with status ``error``; the pass goes on to the later positions.
 
 A position whose curve has completed (graduated) cannot take an ordinary order, so
 it is closed first, at its last pre-graduation reserves, with reason ``graduated``.
@@ -71,6 +72,18 @@ def _track_sell(event: Mapping[str, Any], sells: dict[str, str], settled: set[st
         sells[order_id] = str(body.get("ticket_id", ""))
     elif event["type"] in ("FillRecorded", "OrderRejected"):
         settled.add(order_id)
+
+
+def exit_deadline(position: ExitPosition, cfg: ExitsSettings) -> float | None:
+    """When the max-hold rule fires for an open position; None when it has no time limit.
+
+    The same test ``exit_signal`` applies: the rule fires once the clock reaches the deadline.
+    The deadline is the opening time plus the hold cap, read from the ledger's PositionOpened
+    row, so a restart re-arms the deadline the position was opened with.
+    """
+    if not cfg.max_hold_seconds or not position.opened_at:
+        return None
+    return position.opened_at + cfg.max_hold_seconds
 
 
 @dataclass(frozen=True)
@@ -141,6 +154,15 @@ class LedgerExitBook:
     def strategy_sell_pending(self, mint: str) -> bool:
         """Whether the tracked position is a strategy ticket with a sell still pending."""
         return self._tickets.get(mint) in self._strategy_pending
+
+    def exit_deadlines(self) -> dict[str, float]:
+        """Each tracked position's max-hold deadline, by mint (see ``exit_deadline``)."""
+        deadlines: dict[str, float] = {}
+        for mint, position in self._positions.items():
+            deadline = exit_deadline(position, self.exits)
+            if deadline is not None:
+                deadlines[mint] = deadline
+        return deadlines
 
     def sync(self, store: LedgerStore) -> None:
         """Rebuild the open positions from the ledger, one tracked position per mint.
@@ -307,7 +329,12 @@ class ExitRules:
         """One pass over the open positions at ``now``; returns the sells it placed."""
         self._book.sync(self._store)
         self._sold = []
-        await self._close_graduated()
-        self._book.sync(self._store)
-        await self._watcher.check_once(now)
+        try:
+            await self._close_graduated()
+            self._book.sync(self._store)
+            await self._watcher.check_once(now)
+        finally:
+            # The book is rebuilt from the ledger even when the pass raised, so the in-memory
+            # positions match the rows the sells wrote.
+            self._book.sync(self._store)
         return list(self._sold)

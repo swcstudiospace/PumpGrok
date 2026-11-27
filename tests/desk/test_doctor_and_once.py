@@ -11,12 +11,16 @@ network is attempted). Warnings never fail the report (exit 0).
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from pumpgrok.cli import main
 from pumpgrok.config import settings as settings_mod
 from pumpgrok.core.manifests import EXPECTED_SEAT_IDS, roster_tool_names
+from pumpgrok.doctor import SUBSYSTEMS
 from pumpgrok.ledger import operator_choices as oc
 from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
 from pumpgrok.ledger.store import LedgerStore
@@ -27,6 +31,47 @@ SMOKE = str(REPO_ROOT / "tests" / "fixtures" / "replay" / "smoke")
 
 
 AUTHORITY_AT = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+
+
+#: Subsystem lines: ``ok`` for a resolved module, or ``warn`` for one whose phase has not landed.
+_SUBSYSTEM_OK = re.compile(r"ok    ([\w.]+) \(([\w.]+)\)")
+_SUBSYSTEM_WARN = re.compile(r"warn  ([\w.]+) \(([\w.]+)\): not-yet-implemented")
+#: Every other report line in its one documented shape. Anything outside these fails the report.
+_REPORT_SHAPES = tuple(
+    re.compile(shape)
+    for shape in (
+        r"info  mode=\S+ profile=\S+",
+        r"info  clock-sync \((not NTP-synchronized; wall clock may drift"
+        r"|unknown: timedatectl unavailable)\)",
+        r"info  hermes-jobs: (store unreadable for profile .+|superseded enabled: .+)"
+        r" \(cadence; event mode refused\)",
+        r"ok    clock-sync \(NTP synchronized\)",
+        r"ok    ONB-08 rpc=default \((no operator key; )?no (operator )?"
+        r"endpoint choice recorded\)",
+        r"ok    ONB-08 rpc=explicit endpoint=.+ \(operator-authenticated\)",
+        r"ok    hermes-jobs: (no installed jobs found \(default profile\)"
+        r"|\d+ installed, no superseded job enabled)",
+        r"warn  /(healthz|metrics) \(not served: health\.port=0, only `run --serve` binds"
+        r" a port\)",
+        r"doctor: \d+ present, \d+ not-yet-implemented \(warnings\), exit 0",
+    )
+)
+
+
+def _malformed_report_lines(report: str) -> list[str]:
+    """Report lines in no documented shape, or naming a subsystem or module SUBSYSTEMS lacks."""
+    modules = dict(SUBSYSTEMS)
+    malformed: list[str] = []
+    for line in report.splitlines():
+        if not line.strip():
+            continue
+        subsystem = _SUBSYSTEM_OK.fullmatch(line) or _SUBSYSTEM_WARN.fullmatch(line)
+        if subsystem is not None:
+            if modules.get(subsystem.group(1)) != subsystem.group(2):
+                malformed.append(line)
+        elif not any(shape.fullmatch(line) for shape in _REPORT_SHAPES):
+            malformed.append(line)
+    return malformed
 
 
 def _record_complete_authority() -> None:
@@ -72,12 +117,18 @@ def test_once_skip_only_cycle_and_doctor_rows(tmp_path, monkeypatch, capsys) -> 
 
     assert main(["doctor"]) == 0
     report = capsys.readouterr().out
-    lines = [line for line in report.splitlines() if line.strip()]
-    assert lines, "doctor printed nothing"
-    for line in lines:
-        if line.startswith(("ok", "info", "doctor:")):
-            continue
-        assert line.startswith("warn"), line
-        # Two documented warning shapes: absent subsystems and unbound
-        # served endpoints (05-07 probes; no network attempted at port 0).
-        assert "not-yet-implemented" in line or "(not served: health.port=0" in line, line
+    assert report.strip(), "doctor printed nothing"
+    assert _malformed_report_lines(report) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ok   ledger broken",
+        "ok    ledger (pumpgrok.ledger) extra",
+        "ok    ledger (pumpgrok.core)",
+        "warn  ledger (pumpgrok.ledger): broken",
+    ],
+)
+def test_report_checker_rejects_malformed_lines(line: str) -> None:
+    assert _malformed_report_lines(line) == [line]

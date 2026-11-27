@@ -36,6 +36,7 @@ from pumpgrok.config.settings import DataSettings, FilterSettings
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
+from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,11 @@ HOLDER_LIMIT = 50
 # so they set the maximum risk instead of adding to it.
 CREATOR_SHARE_VETO = 0.25
 TOP5_SHARE_VETO = 0.80
+
+# Health keys: endpoint templates, so ``Analyzer.health`` is bounded by endpoint count.
+CARD_ENDPOINT = "/coins/{mint}"
+HOLDERS_ENDPOINT = "/coins/{mint}/holders"
+TRADES_ENDPOINT = "/trades/all/{mint}"
 
 
 class Analyzer:
@@ -91,9 +97,9 @@ class Analyzer:
             raise RuntimeError("Analyzer used outside `async with`")
         return self._client
 
-    def source_health(self, path: str) -> bool:
-        """Last fetch ok for this endpoint path; True when never fetched."""
-        return self.health.get(path, True)
+    def source_health(self, endpoint: str) -> bool:
+        """Last fetch ok for this endpoint template; True when never fetched."""
+        return self.health.get(endpoint, True)
 
     # -- network -----------------------------------------------------------
 
@@ -110,6 +116,7 @@ class Analyzer:
             raise DataStale(f"analyzer fetch failed: {path}", path=path) from exc
         self.health[path] = True
         return body
+
 
     async def fetch(self, mint: str) -> tuple[dict[str, Any], list[Holder], list[Trade]]:
         """Card, holders, and trades: three parallel requests.
@@ -253,7 +260,12 @@ def enrich_token(token: Token, info: dict[str, Any]) -> Token:
             token.market_cap_sol = _to_lamports(info["market_cap"])
     if info.get("virtual_sol_reserves") is not None:
         with contextlib.suppress(ValueError, TypeError):
-            token.sol_in_curve = _to_base_units(info["virtual_sol_reserves"])
+            # Provider reserves are SOL (owner-confirmed 2026-11-19): scale to lamports before
+            # deriving curve progress against the lamport completion threshold.
+            token.sol_in_curve = _to_int_units(
+                info["virtual_sol_reserves"], per_unit=LAMPORTS_PER_SOL
+            )
+            token.curve_progress = min(1.0, token.sol_in_curve / CURVE_COMPLETION_LAMPORTS)
     return token
 
 
@@ -332,7 +344,8 @@ def _wallet_diversity(buys: list[Trade]) -> float:
 
     volume: dict[str, int] = {}
     for t in buys:
-        volume[t.wallet] = volume.get(t.wallet, 0) + t.sol_amount
+        if t.wallet:  # no identity, no concentration: the same rule as the uniqueness count
+            volume[t.wallet] = volume.get(t.wallet, 0) + t.sol_amount
     total = sum(volume.values())
     concentration = max(volume.values()) / total if total else 1.0
     return max(0.0, min(1.0, uniqueness * (1.0 - concentration)))

@@ -37,7 +37,12 @@ class SellPlan:
 
 @dataclass(frozen=True)
 class SellFigures:
-    """Settlement numbers for one exit, fixed once the CONFIRMING checks pass."""
+    """Settlement numbers for one exit, fixed once the CONFIRMING checks pass.
+
+    ``price_avg`` is net of the venue fee (gross less venue, per unit), the
+    same basis the BUY fill records (EXEC-D-27, net basis): a round trip at
+    unchanged reserves reports no price move.
+    """
 
     fraction: Decimal
     gross1: int
@@ -285,9 +290,14 @@ class _SellStagesMixin:
         )
 
     def _sell_figures(self, plan: SellPlan, *, gross1: int, out1: int) -> SellFigures:
-        """Proceeds, fees and slippage for a fill that passed CONFIRMING."""
+        """Proceeds, fees and slippage for a fill that passed CONFIRMING.
+
+        ``price_avg`` is the venue-net price, ``out1`` (gross less venue fee)
+        over the filled units, matching the BUY basis.
+        """
         network_cost = self._fees.network_cost()
-        price_avg = Decimal(gross1) / Decimal(plan.filled_units)
+        venue_fee = self._fees.venue_fee(gross1)
+        price_avg = Decimal(out1) / Decimal(plan.filled_units)
         slipped = (plan.out0 - out1) * 10_000 // plan.out0 if out1 < plan.out0 and plan.out0 else 0
         venue_tx_ref = f"dry_run:{self._ids.ulid()}"
         return SellFigures(
@@ -295,7 +305,7 @@ class _SellStagesMixin:
             gross1=gross1,
             proceeds=out1 - network_cost,
             network_cost=network_cost,
-            venue_fee=self._fees.venue_fee(gross1),
+            venue_fee=venue_fee,
             price_avg=price_avg,
             slipped=slipped,
             venue_tx_ref=venue_tx_ref,

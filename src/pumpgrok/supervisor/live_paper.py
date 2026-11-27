@@ -243,6 +243,7 @@ async def build_live_paper_root(
     max_age_s: float,
     max_observations: int,
     rent_rpc: RentRpc | None = None,
+    entry_hook: EntryHook | None = None,
 ) -> LivePaperRoot:
     """Build the live-data paper root over a read-only ``endpoint`` and ``transport``.
 
@@ -304,6 +305,7 @@ async def build_live_paper_root(
             rng=rng,
             live_source=prices,
             reserves_observer=reserves.observe,
+            entry_hook=entry_hook,
             fees=fees,
             source="paper",
         )

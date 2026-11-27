@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -74,6 +74,9 @@ class PaperAdapter(
         self._entry_policy = entry_policy
         self._inflight = _InflightOrders()
         self._cancelled: set[str] = set()
+        # Orders whose latency sleep has completed: cancel is refused for these,
+        # so a cancel that races settlement cannot be silently ignored (EX-03).
+        self._latency_done: set[str] = set()
         self._last_price_ts: dict[str, float] = {}
         self._last_reserves: dict[str, tuple[int, int]] = {}
         self._frozen_marks: dict[str, int] = {}
@@ -192,8 +195,14 @@ class PaperAdapter(
     # -- ExecutionAdapter: cancel / positions -------------------------------
 
     async def cancel(self, order_id: str, ticket_id: str, decision_id: str) -> bool:
-        """Cancel while ACCEPTED; False once the latency sleep has completed."""
-        if order_id not in self._inflight:
+        """Cancel while the order is still in its latency sleep.
+
+        Returns False for an unknown order, and False once the latency sleep
+        has completed: from that point the order is priced at CONFIRMING and
+        settlement proceeds, so the cancel is refused rather than recorded
+        and ignored (EX-03).
+        """
+        if order_id not in self._inflight or order_id in self._latency_done:
             return False
         self._cancelled.add(order_id)
         return True
@@ -209,8 +218,10 @@ class PaperAdapter(
                 continue
             try:
                 opened_at = datetime.fromisoformat(view.opened_ts_utc)
-            except ValueError:
-                opened_at = datetime.fromtimestamp(self._clock.now(), UTC)
+            except ValueError as exc:
+                raise ValueError(
+                    f"unparseable opened_ts_utc for {key}: {view.opened_ts_utc!r}"
+                ) from exc
             out.append(
                 Position(
                     ticket_id=view.ticket_id,

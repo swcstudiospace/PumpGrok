@@ -47,7 +47,11 @@ def paper_fees_from(settings: PaperFeesSettings) -> FeeModel:
 __all__ = ["VerifiedReplay", "build_paper_adapter", "paper_fee_model", "verify_replay"]
 
 # Module-private mint token: only verify_replay holds it, so a VerifiedReplay
-# cannot be assembled by a caller that merely names the class.
+# cannot be assembled by a caller that merely names the class. This sentinel
+# is a convention-only trust boundary (EXEC-D-32): it is module-private by
+# convention, but any in-process importer can reach it, so it is not a
+# security boundary. It protects production composition from accidental
+# construction only.
 _MINT: Final = object()
 
 
@@ -56,6 +60,12 @@ class VerifiedReplay:
 
     Minted only by :func:`verify_replay`. Both attributes are read-only, so a
     caller cannot swap in a different curve source after verification.
+
+    Trust note (EXEC-D-32, convention-only): the mint token above is
+    module-private by convention and is not a hard boundary; an in-process
+    importer could construct this class. Replay authority is therefore
+    trusted only across the :func:`verify_replay` boundary in production
+    composition, never as a cryptographic claim.
     """
 
     __slots__ = ("_curves", "_dataset")

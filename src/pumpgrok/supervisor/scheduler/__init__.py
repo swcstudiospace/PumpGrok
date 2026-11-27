@@ -7,21 +7,20 @@ loop never awaits a cycle, so a slow seat cannot hold other seats or the next
 tick, and a seat never overlaps itself. Every wait goes through the injected
 clock.
 
-AUTO-005 degraded modes live in :mod:`degraded`: LLM fallback,
-RPC failover/BLIND, WS reconnect/DataStale, bounded unwritable-ledger
-buffer, and clock-skew refusal. AUTO-006 is :func:`run_once_replay`: one
-full ten-seat cycle over a fixture through the engine, risk, and paper
-adapter, writing ``var/replay/<dataset>/ledger.sqlite`` with no network.
+AUTO-005 degraded modes live in :mod:`degraded`: LLM fallback, the bounded
+unwritable-ledger buffer, and the health latches folded from the ledger.
+AUTO-006 is :func:`run_once_replay`: one full ten-seat cycle over a fixture
+through the engine, risk, and paper adapter, writing
+``var/replay/<dataset>/ledger.sqlite`` with no network.
 """
 
 from __future__ import annotations
 
 from pumpgrok.supervisor.scheduler.degraded import (
     LEDGER_BUFFER_CAP,
-    WS_STALE_S,
     DegradedState,
     LedgerUnavailable,
-    assert_no_skew,
+    fold_latches,
     kill_switch_engaged,
 )
 from pumpgrok.supervisor.scheduler.replay_runtime import (
@@ -81,7 +80,6 @@ __all__ = [
     "SERVE_PACE_S",
     "TICK_S",
     "TRADE_ROW_TYPES",
-    "WS_STALE_S",
     "DegradedState",
     "LedgerUnavailable",
     "ReplayRuntime",

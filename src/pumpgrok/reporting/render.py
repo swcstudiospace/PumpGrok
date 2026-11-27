@@ -7,6 +7,7 @@ Every emitted document is verified ASCII-only before return.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from pumpgrok.core.units import split_lamports
 
@@ -27,6 +28,16 @@ def assert_ascii(body: str) -> str:
     return body
 
 
+def cell(value: str) -> str:
+    """Free text for one Markdown table cell: pipes escaped, line breaks flattened."""
+    return _flat(value).replace("|", "\\|")
+
+
+def _flat(value: str) -> str:
+    """Free text kept to one line."""
+    return value.replace("\r", " ").replace("\n", " ")
+
+
 @dataclass(frozen=True)
 class TradeRow:
     """One closed position for the trades table (all money in lamports)."""
@@ -37,7 +48,8 @@ class TradeRow:
     reason: str = ""
     pnl_lamports: int = 0
     pnl_pct: str = "n/a"
-    fees_lamports: int = 0
+    # None when the closing record does not carry fees; rendered as "not tracked".
+    fees_lamports: int | None = None
     correlation_id: str = ""
 
 
@@ -72,21 +84,24 @@ class ReportModel:
     realized_lamports: int = 0
     unrealized_lamports: int = 0
     fees_venue_lamports: int = 0
-    fees_network_lamports: int = 0
+    # None when the ledger does not track network fees separately; rendered "not tracked".
+    fees_network_lamports: int | None = None
     max_drawdown_pct: str = "0.00"
-    daily_loss_pct: str = "0.00"
-    halt_limit_pct: str = "5.00"
+    daily_loss_pct: str = "n/a"
+    halt_limit_pct: str = "n/a"
     trade_rows: tuple[TradeRow, ...] = ()
     position_rows: tuple[PositionRow, ...] = ()
     rejected: tuple[tuple[str, int], ...] = ()
     verdicts: tuple[tuple[str, int], ...] = ()
     risk_events: tuple[str, ...] = ()
     approvals_cleared: tuple[str, ...] = ()
-    bot_health: tuple[str, ...] = ()
+    # None when heartbeats are not tracked; an empty tuple when tracked and none recorded.
+    bot_health: tuple[str, ...] | None = None
     data_freshness: tuple[str, ...] = ()
     live_gate: tuple[str, ...] = ()
     unverified: tuple[str, ...] = ()
     per_day: tuple[str, ...] = ()
+    # The per-strategy section, appended after the report body; "" when there is none.
     strategy_section: str = ""
 
 
@@ -94,7 +109,7 @@ _SUMMARY_TEMPLATE = (
     "## Summary\n"
     "trades (buys/sells): {trades} | closed: {closed} | win rate: {win_rate}\n"
     "realized PnL: {realized} SOL | unrealized PnL: {unrealized} SOL\n"
-    "fees: venue {fees_venue} SOL + network {fees_network} SOL\n"
+    "fees: venue {fees_venue} SOL + network {fees_network}\n"
     "equity start: {equity_start} SOL | equity end: {equity_end} SOL ({equity_pct} since start)\n"
     "max drawdown: {drawdown} % | daily loss: {daily_loss} % (halt at {halt_limit} %)\n"
 )
@@ -125,11 +140,16 @@ _RISK_HEADER = "## Risk events\n"
 _RISK_ROW = "- {event}\n"
 _RISK_EMPTY = "## Risk events\nnone\n"
 
+_APPROVALS_HEADER = "## Approvals\n"
+_APPROVAL_ROW = "- {event}\n"
+_APPROVALS_EMPTY = "## Approvals\nnone\n"
+
 _HEALTH_HEADER = (
     "## Bot health\nseat | cycles | crashes | restarts | observe_only | p50_s | p95_s\n"
 )
 _HEALTH_ROW = "{line}\n"
 _HEALTH_EMPTY = "## Bot health\nno heartbeat rows recorded\n"
+_HEALTH_UNTRACKED = "## Bot health\nnot tracked\n"
 
 _FRESHNESS_HEADER = "## Data freshness\n"
 _FRESHNESS_ROW = "- {line}\n"
@@ -161,13 +181,28 @@ _MODE_LINE = (
 def _equity_pct(model: ReportModel) -> str:
     if not model.equity_start_lamports:
         return "n/a"
-    pct = (model.equity_end_lamports - model.equity_start_lamports) * 100.0
-    pct /= model.equity_start_lamports
+    change = model.equity_end_lamports - model.equity_start_lamports
+    pct = Decimal(change) * 100 / Decimal(model.equity_start_lamports)
     return _SIGNED_PCT_TEMPLATE.format(value=pct)
+
+
+def _fees_network(model: ReportModel) -> str:
+    if model.fees_network_lamports is None:
+        return "not tracked"
+    return f"{sol(model.fees_network_lamports)} SOL"
+
+
+def _section_tail(model: ReportModel) -> str:
+    return "\n" + model.strategy_section if model.strategy_section else ""
 
 
 def render_daily(model: ReportModel) -> str:
     """Render the daily markdown document (paper-engine.md 8.3)."""
+    return assert_ascii(_daily_body(model) + _section_tail(model))
+
+
+def _daily_body(model: ReportModel) -> str:
+    """The daily document without its strategy section."""
     parts = [
         _DAILY_TITLE.format(day=model.day),
         _MODE_LINE.format(
@@ -185,7 +220,7 @@ def render_daily(model: ReportModel) -> str:
             realized=sol(model.realized_lamports),
             unrealized=sol(model.unrealized_lamports),
             fees_venue=sol(model.fees_venue_lamports),
-            fees_network=sol(model.fees_network_lamports),
+            fees_network=_fees_network(model),
             equity_start=sol(model.equity_start_lamports),
             equity_end=sol(model.equity_end_lamports),
             equity_pct=_equity_pct(model),
@@ -200,14 +235,14 @@ def render_daily(model: ReportModel) -> str:
         for row in model.trade_rows:
             parts.append(
                 _TRADES_ROW.format(
-                    ticket=row.ticket or "-",
-                    mint=row.mint,
+                    ticket=cell(row.ticket or "-"),
+                    mint=cell(row.mint),
                     size=sol(row.size_lamports),
-                    reason=row.reason or "-",
+                    reason=cell(row.reason or "-"),
                     pnl=sol(row.pnl_lamports),
                     pnl_pct=row.pnl_pct,
-                    fees=row.fees_lamports,
-                    cid=row.correlation_id or "-",
+                    fees="not tracked" if row.fees_lamports is None else str(row.fees_lamports),
+                    cid=cell(row.correlation_id or "-"),
                 )
             )
     else:
@@ -224,6 +259,8 @@ def render_daily(model: ReportModel) -> str:
     parts.append("\n")
     parts.append(_render_risk_events(model))
     parts.append("\n")
+    parts.append(_render_approvals(model))
+    parts.append("\n")
     parts.append(_render_health(model))
     parts.append("\n")
     parts.append(_render_freshness(model))
@@ -231,12 +268,12 @@ def render_daily(model: ReportModel) -> str:
     parts.append(_GATE_ABSENT)
     parts.append("\n")
     parts.append(_render_unverified(model))
-    return assert_ascii("".join(parts))
+    return "".join(parts)
 
 
 def render_weekly(model: ReportModel) -> str:
     """Render the weekly markdown: daily shape plus per-day table and live gate."""
-    daily = render_daily(model).replace(
+    daily = _daily_body(model).replace(
         "# PumpGrok paper report - daily -", "# PumpGrok paper report - weekly -", 1
     )
     insert: list[str] = []
@@ -254,7 +291,8 @@ def render_weekly(model: ReportModel) -> str:
     else:
         insert.append("## Live gate\nno gate evaluation recorded\n")
     insert.append("\n")
-    return assert_ascii(daily.replace(_GATE_ABSENT, "".join(insert), 1))
+    body = daily.replace(_GATE_ABSENT, "".join(insert), 1)
+    return assert_ascii(body + _section_tail(model))
 
 
 def _render_positions(model: ReportModel) -> str:
@@ -264,12 +302,12 @@ def _render_positions(model: ReportModel) -> str:
     for row in model.position_rows:
         parts.append(
             _POSITIONS_ROW.format(
-                mint=row.mint,
+                mint=cell(row.mint),
                 entry=sol(row.entry_lamports),
                 mtm=sol(row.mtm_lamports),
                 unrealized=sol(row.unrealized_lamports),
-                age=row.age or "-",
-                source=row.mtm_source or "-",
+                age=cell(row.age or "-"),
+                source=cell(row.mtm_source or "-"),
                 frozen="true" if row.mtm_frozen else "false",
             )
         )
@@ -281,7 +319,7 @@ def _render_rejected(model: ReportModel) -> str:
         return _REJECTED_EMPTY
     parts = [_REJECTED_HEADER]
     for reason, count in model.rejected:
-        parts.append(_REJECTED_ROW.format(reason=reason, count=count))
+        parts.append(_REJECTED_ROW.format(reason=cell(reason), count=count))
     return "".join(parts)
 
 
@@ -295,17 +333,26 @@ def _render_verdicts(model: ReportModel) -> str:
 
 
 def _render_risk_events(model: ReportModel) -> str:
-    if not model.risk_events and not model.approvals_cleared:
+    if not model.risk_events:
         return _RISK_EMPTY
     parts = [_RISK_HEADER]
     for event in model.risk_events:
-        parts.append(_RISK_ROW.format(event=event))
-    for cleared in model.approvals_cleared:
-        parts.append(_RISK_ROW.format(event=cleared))
+        parts.append(_RISK_ROW.format(event=_flat(event)))
+    return "".join(parts)
+
+
+def _render_approvals(model: ReportModel) -> str:
+    if not model.approvals_cleared:
+        return _APPROVALS_EMPTY
+    parts = [_APPROVALS_HEADER]
+    for approval in model.approvals_cleared:
+        parts.append(_APPROVAL_ROW.format(event=_flat(approval)))
     return "".join(parts)
 
 
 def _render_health(model: ReportModel) -> str:
+    if model.bot_health is None:
+        return _HEALTH_UNTRACKED
     if not model.bot_health:
         return _HEALTH_EMPTY
     parts = [_HEALTH_HEADER]

@@ -241,3 +241,39 @@ async def test_pnl_reports_current_drawdown_and_daily_loss(tmp_path: Path) -> No
     assert out.peak_equity_lamports == 1_000_000_000
     assert out.drawdown_fraction == Decimal("0.3")
     assert out.daily_loss_fraction == Decimal("0.3")
+
+
+def _close(store: LedgerStore, key: str, realised: int) -> None:
+    store.append(
+        ts_utc=format_ts_utc(START),
+        source="paper",
+        correlation_id="t",
+        idempotency_key=key,
+        type="PositionClosed",
+        payload={
+            "source": "paper",
+            "mint": "So11111111111111111111111111111111111111112",
+            "price_exit": "2",
+            "proceeds_lamports": 6000,
+            "realized_pnl_lamports": realised,
+            "reason": "take_profit",
+        },
+    )
+
+
+async def test_pnl_profit_factor_is_gross_gain_over_gross_loss(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _close(store, "pf-win-1", 300)
+    _close(store, "pf-loss", -100)
+    _close(store, "pf-win-2", 300)
+    out = await build_pnl_tool(store, FixtureClock(start=START))(PnlIn(window="all"))
+    store.close()
+    assert out.profit_factor == Decimal(6)
+
+
+async def test_pnl_profit_factor_is_none_without_losses(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _close(store, "pf-win", 300)
+    out = await build_pnl_tool(store, FixtureClock(start=START))(PnlIn(window="all"))
+    store.close()
+    assert out.profit_factor is None

@@ -75,6 +75,11 @@
       "default": "",
       "title": "Risk Json",
       "type": "string"
+    },
+    "seat": {
+      "default": "",
+      "title": "Seat",
+      "type": "string"
     }
   },
   "required": [

@@ -118,11 +118,15 @@ class FeeModel:
 class FeeModelV2(FeeModel):
     """Fee model v2 (FEE-01): v1 plus ATA rent, a PumpPortal term and a priority cap.
 
-    ``ata_rent_lamports`` is charged once per mint, on its first buy. The default is
-    the offline pin, and ``ata_rent_source`` says so. ``pumpportal_fee_bps`` applies
-    only to fills routed through the PumpPortal builder (``pumpportal_builder=True``).
-    The priority price is clamped to ``priority_cap_micro_lamports_per_cu`` before the
-    v1 formula. All values are integer lamports.
+    ``ata_rent_lamports`` is charged on each (re-)entry while the mint is flat
+    (the caller passes ``first_buy=True`` when the ledger holds no open
+    position for the mint), matching on-chain ATA recreation
+    (charge_on_reentry): a close refunds the deposit, and the next entry pays
+    it again. The default is the offline pin, and ``ata_rent_source`` says
+    so. ``pumpportal_fee_bps`` applies only to fills routed through the
+    PumpPortal builder (``pumpportal_builder=True``). The priority price is
+    clamped to ``priority_cap_micro_lamports_per_cu`` before the v1 formula.
+    All values are integer lamports.
     """
 
     ata_rent_lamports: int = ATA_RENT_OFFLINE_LAMPORTS
@@ -137,7 +141,11 @@ class FeeModelV2(FeeModel):
         return capped * self.compute_units // 1_000_000
 
     def ata_rent_term(self, first_buy: bool) -> int:
-        """ATA rent for this fill: charged on the first buy of a mint only."""
+        """ATA rent for this fill: charged when the entry opens a flat mint.
+
+        ``first_buy`` is the (re-)entry flag: True whenever the mint holds no
+        open position, including a re-entry after a close refunded the deposit.
+        """
         return self.ata_rent_lamports if first_buy else 0
 
     def ata_deposit_term(self, *, first_buy: bool) -> int:
@@ -151,7 +159,7 @@ class FeeModelV2(FeeModel):
         return filled_lamports * self.pumpportal_fee_bps // 10_000
 
     def buy_network_cost(self, *, first_buy: bool) -> int:
-        """Base plus priority, plus the ATA rent on a first buy."""
+        """Base plus priority, plus the ATA rent on a (re-)entry of a flat mint."""
         return self.network_cost() + self.ata_rent_term(first_buy)
 
     def buy_debit_v2(

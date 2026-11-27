@@ -6,15 +6,19 @@ exception propagates instead of being swallowed as a generic failure string.
 
 from __future__ import annotations
 
+import json
 import random
 from typing import Any
 
 import httpx
 import pytest
 
+from pumpgrok.core.errors import DataStale
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.tools.onchain.authorities import check_mint
 from pumpgrok.tools.onchain.holders import holder_snapshot
+from pumpgrok.tools.onchain.large_transfers import LargeTransfersIn, run_large_transfers
+from pumpgrok.tools.onchain.priority_fee import estimate_priority_fee
 from pumpgrok.tools.onchain.rpc import RpcClient
 
 MINT = "So11111111111111111111111111111111111111112"
@@ -118,3 +122,53 @@ async def test_holder_huge_integer_amount_is_typed_false() -> None:
 async def test_holder_unexpected_error_propagates() -> None:
     with pytest.raises(RuntimeError, match="unexpected"):
         await holder_snapshot(MINT, _raising(_http_status(200)))
+
+
+async def test_holder_null_ui_amount_is_typed_false() -> None:
+    """A null amount is missing data, not a zero holder; shares must not be understated."""
+    result = await holder_snapshot(MINT, _result([{"address": "Holder", "uiAmount": None}]))
+    assert result == {"ok": False, "error": "holder check failed", "mint": MINT}
+
+
+async def test_priority_fee_rpc_error_is_typed_false() -> None:
+    result = await estimate_priority_fee(_http_status(400))
+    assert result == {
+        "ok": False,
+        "error": "rpc failed method=getRecentPrioritizationFees endpoints=1",
+    }
+
+
+async def test_priority_fee_unexpected_error_propagates() -> None:
+    with pytest.raises(RuntimeError, match="unexpected"):
+        await estimate_priority_fee(_raising(_http_status(200)))
+
+
+def _large_transfers_rpc(failing: str) -> RpcClient:
+    """Supply and signatures succeed; the ``failing`` method answers with an RPC error."""
+    answers: dict[str, Any] = {
+        "getTokenSupply": {"value": {"amount": "100000000", "decimals": 6}},
+        "getSignaturesForAddress": [{"signature": "s1", "blockTime": 1}],
+        "getTransaction": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        method = json.loads(request.content.decode("utf-8"))["method"]
+        if method == failing:
+            body = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32005}}
+            return httpx.Response(200, json=body)
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": answers[method]})
+
+    return _rpc(handler)
+
+
+async def test_large_transfers_signature_rpc_error_is_data_stale() -> None:
+    """A failed wallet read must not come back as a complete scan of the other wallets."""
+    rpc = _large_transfers_rpc("getSignaturesForAddress")
+    with pytest.raises(DataStale):
+        await run_large_transfers(LargeTransfersIn(mint=MINT, wallets=["7" * 44]), rpc)
+
+
+async def test_large_transfers_transaction_rpc_error_is_data_stale() -> None:
+    rpc = _large_transfers_rpc("getTransaction")
+    with pytest.raises(DataStale):
+        await run_large_transfers(LargeTransfersIn(mint=MINT, wallets=["7" * 44]), rpc)

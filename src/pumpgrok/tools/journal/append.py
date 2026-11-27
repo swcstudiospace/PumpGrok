@@ -64,6 +64,14 @@ class JournalAppendIn(ToolInput):
             raise ValueError("note_kind is only valid when kind is journal_note")
         return self
 
+    @model_validator(mode="after")
+    def _refs_rule(self) -> Self:
+        if self.kind == "journal_note":
+            refs = self.body.get("refs", [])
+            if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
+                raise ValueError("body.refs must be a list of strings")
+        return self
+
 
 class JournalAppendOut(ToolOutput):
     """Stored seq and the JSONL export path."""
@@ -158,6 +166,8 @@ def _export_line(journal_dir: Path, day: datetime, seq: int, line: str) -> Path:
             handle.truncate(len(complete))
         handle.seek(0, os.SEEK_END)
         handle.write((line + "\n").encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
     return journal_path
 
 
