@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tomllib
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,7 +27,6 @@ def _row(check_id: str, status: str = "pass") -> CheckResult:
     return CheckResult(
         id=cast(CheckId, check_id),
         status=cast(Any, status),
-        weight=Decimal("0.10"),
         reason=f"{check_id} {status}",
     )
 
