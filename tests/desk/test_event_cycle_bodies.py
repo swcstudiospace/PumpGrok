@@ -13,7 +13,10 @@ import random
 from types import SimpleNamespace
 from typing import Any
 
+from pydantic import BaseModel
+
 from pumpgrok.config.sections.engine import FilterSettings
+from pumpgrok.core.ids import IdFactory
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.replay.clock import FixtureClock
@@ -202,9 +205,6 @@ def test_degraded_state_rpc_blind_needs_all_endpoints_down() -> None:
 
 
 def test_sniper_places_one_buy_on_an_intent() -> None:
-    from pydantic import BaseModel
-
-    from pumpgrok.core.ids import IdFactory
 
     class _Input(BaseModel):
         ticket_id: str

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from pumpgrok.events.models import Event, EventKind
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.supervisor.scheduler import event_cycles_aux
 from pumpgrok.supervisor.scheduler.degraded import DegradedState
@@ -168,7 +169,6 @@ def test_first_rows_by_mint_keeps_the_first_row() -> None:
 
 
 def test_journal_notes_trades_and_rolls_up_on_timer(tmp_path: Any) -> None:
-    from pumpgrok.ledger.store import LedgerStore
 
     store = LedgerStore(str(tmp_path / "ledger.sqlite"))
     journal_dir = tmp_path / "journal"

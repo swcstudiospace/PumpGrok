@@ -9,8 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from pumpgrok.datafeed.bridge import ObservationBridge
-from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.bridge import ObservationBridge, publish, to_bus_event
+from pumpgrok.datafeed.events import (
+    CurveObservation,
+    CurveTick,
+    GapEvent,
+    MarkMade,
+    Migrated,
+    TokenCreated,
+    TradeSeen,
+)
 from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
@@ -292,15 +300,6 @@ async def test_live_price_source_receives_the_accepted_observation(tmp_path: Pat
 
 
 def test_to_bus_event_maps_every_record_kind() -> None:
-    from pumpgrok.datafeed.bridge import publish, to_bus_event
-    from pumpgrok.datafeed.events import (
-        CurveTick,
-        GapEvent,
-        MarkMade,
-        Migrated,
-        TokenCreated,
-        TradeSeen,
-    )
 
     tick = CurveTick(
         mint="Mint11111111111111111111111111111111111111111",
@@ -362,7 +361,6 @@ def test_to_bus_event_maps_every_record_kind() -> None:
 
 
 def test_to_bus_event_refuses_unknown_records() -> None:
-    from pumpgrok.datafeed.bridge import to_bus_event
 
     with pytest.raises(TypeError):
         to_bus_event(object())  # type: ignore[arg-type]

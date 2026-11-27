@@ -5,7 +5,14 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from pumpgrok.strategies.base import bounds_for, strategy_version_id
+from pumpgrok.strategies.base import (
+    Intent,
+    bounds_for,
+    code_digest,
+    source_digest,
+    strategy_version_id,
+    version_id,
+)
 from pumpgrok.upgrade.bounds import load_bounds
 
 BOUNDS_PATH = (
@@ -71,7 +78,6 @@ def test_bounds_for_legacy_declares_none_and_unknown_fails_loudly() -> None:
 
 
 def test_code_digest_unknown_id_and_real_modules() -> None:
-    from pumpgrok.strategies.base import code_digest
 
     assert code_digest("legacy_screening") == ""
     first = code_digest("momentum_breakout")
@@ -81,11 +87,7 @@ def test_code_digest_unknown_id_and_real_modules() -> None:
 
 
 def test_intent_rejects_bad_shape() -> None:
-    from pumpgrok.strategies.base import Intent
-
-    valid = Intent(
-        strategy_id="momentum_breakout", side="buy", mint="MintAAA", size_lamports=1_000
-    )
+    valid = Intent(strategy_id="momentum_breakout", side="buy", mint="MintAAA", size_lamports=1_000)
     assert valid.reason == ""
     for kwargs in (
         {"strategy_id": "momentum_breakout", "side": "hold", "mint": "M", "size_lamports": 1},
@@ -102,8 +104,6 @@ def test_intent_rejects_bad_shape() -> None:
 
 
 def test_source_digest_and_version_id_of_a_strategy_class() -> None:
-    from pumpgrok.strategies.base import source_digest, version_id
-
     class DummyStrategy:
         strategy_id = "momentum_breakout"
 
