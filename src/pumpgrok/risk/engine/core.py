@@ -619,7 +619,11 @@ class RiskEngine(_EngineSteps):
         clears on its own (R5).
         """
         by = approval.approved_by
-        if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
+        if (
+            not by.startswith("human:")
+            or not by.removeprefix("human:").strip()
+            or SEAT_RE.match(by.removeprefix("human:"))
+        ):
             raise ValueError(f"halt clear must come from a human, got {by!r}")
         if approval.kind != "halt_clear":
             raise ValueError(f"halt clear needs a halt_clear approval, got {approval.kind!r}")
