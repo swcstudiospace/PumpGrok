@@ -80,3 +80,20 @@ class GrokOps:
             "blocked": dict(self.blocked),
             "failures": dict(self.failures),
         }
+
+
+class BudgetSurface:
+    """Budget surface only. No transport, no HTTP: agents debit through here."""
+
+    def __init__(self, budget: Any) -> None:
+        self._budget = budget
+
+    def try_spend(self, agent: str, cost: int = 1) -> bool:
+        """Debit the wrapped layered budget. False when a cap refuses."""
+        debit = getattr(self._budget, "try_debit", None)
+        if callable(debit):
+            return bool(debit(agent, cost))
+        try_spend = getattr(self._budget, "try_spend", None)
+        if callable(try_spend):
+            return bool(try_spend())
+        raise TypeError("budget must provide try_debit or try_spend")

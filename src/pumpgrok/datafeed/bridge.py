@@ -1,21 +1,75 @@
-"""Bridge read-only market observations onto the existing event bus.
+"""Bridge datafeed events and read-only market observations onto the event bus.
 
-Curve observations are recorded durably first, then handed to the live price source,
-then published as ``curve_tick``. Portal and trade facts publish as the existing
-``token_created``, ``migration`` and ``trade`` kinds without a recorder: they carry no
-reserves and never authorize a price.
+Imports events models only: never the supervisor, never a network client.
+The publisher is injected, so tests pass a recording fake.
+
+Curve observations are recorded durably first, then handed to the live price
+source, then published as ``curve_tick``. Portal and trade facts publish as the
+existing ``token_created``, ``migration`` and ``trade`` kinds without a
+recorder: they carry no reserves and never authorize a price.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Protocol
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Protocol
 
-from pumpgrok.datafeed.events import CurveObservation
-from pumpgrok.events.bus import Dlq, EventBus, Handler
+from pumpgrok.datafeed.events import (
+    CurveObservation,
+    CurveTick,
+    DatafeedEvent,
+    GapEvent,
+    MarkMade,
+    Migrated,
+    TokenCreated,
+    TradeSeen,
+)
 from pumpgrok.events.models import Event, EventKind, FrozenPayload
 from pumpgrok.replay.clock import Clock
-from pumpgrok.replay.live_recorder import LiveRecorder
+
+if TYPE_CHECKING:
+    from pumpgrok.events.bus import Dlq, EventBus, Handler
+    from pumpgrok.replay.live_recorder import LiveRecorder
+
+
+Publisher = Callable[[Event], None]
+
+
+def _payload(record: DatafeedEvent) -> FrozenPayload:
+    return FrozenPayload(dict(record.model_dump()))
+
+
+def to_bus_event(record: DatafeedEvent) -> Event:
+    """Map one datafeed event onto its single-catalog bus kind."""
+    if isinstance(record, CurveTick):
+        kind = EventKind.curve_tick
+    elif isinstance(record, GapEvent):
+        kind = EventKind.gap
+    elif isinstance(record, TokenCreated):
+        kind = EventKind.token_created
+    elif isinstance(record, Migrated):
+        kind = EventKind.migration
+    elif isinstance(record, TradeSeen):
+        kind = EventKind.trade
+    elif isinstance(record, MarkMade):
+        kind = EventKind.mark
+    else:
+        raise TypeError(f"unknown datafeed event: {type(record).__name__}")
+    mint: str = getattr(record, "mint", "") or ""
+    return Event(
+        kind=kind,
+        entity_id=mint,
+        payload=_payload(record),
+        occurred_at=record.ts_utc,
+    )
+
+
+def publish(record: DatafeedEvent, publisher: Publisher) -> Event:
+    """Publish one datafeed event onto the injected publisher."""
+    event = to_bus_event(record)
+    publisher(event)
+    return event
+
 
 MARKET_KINDS = frozenset({EventKind.token_created, EventKind.migration, EventKind.trade})
 
@@ -90,5 +144,7 @@ def build_observation_bridge(
     The bus is constructed here so composition roots that must not import the bus
     module can still obtain a bridge. The bridge behaves exactly as one built directly.
     """
+    from pumpgrok.events.bus import EventBus  # noqa: PLC0415
+
     bus = EventBus(clock=clock, handler=handler, dlq=dlq)
     return ObservationBridge(bus=bus, recorder=recorder, price=price)

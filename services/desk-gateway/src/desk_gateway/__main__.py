@@ -21,9 +21,9 @@ import os
 import sys
 from pathlib import Path
 
-from desk_gateway.config import GatewayConfig, load_tokens
+from desk_gateway.config import GatewayConfig, load_tokens, validate_gateway_bind, validate_tokens
 from desk_gateway.server import GatewayRefusedError, close_server, create_server
-from pumpgrok.config.settings import ConfigError, current_profile, load_settings
+from pumpgrok.config.settings import ConfigError, Settings, current_profile, load_settings
 from pumpgrok.contracts.projection import default_contracts_dir, short_to_seat
 from pumpgrok.ledger.paths import DESK_DATA_DIR, PAPER_LEDGER_PATH
 from pumpgrok.logging.json import setup_logging
@@ -77,6 +77,11 @@ def main() -> int:
         _say(str(exc))
         return EXIT_CONFIG
     host = os.environ.get("DESK_GATEWAY_HOST", "").strip() or DEFAULT_HOST
+    try:
+        validate_gateway_bind(host)
+    except ValueError as exc:
+        _say(str(exc))
+        return EXIT_CONFIG
     # Anchored to the working directory the target runs from (the repo root), so the gateway
     # reads and writes the same var/ as the CLI, the reports and the kill latch.
     desk_root = Path.cwd()
@@ -86,6 +91,11 @@ def main() -> int:
     contracts_dir = default_contracts_dir()
     shorts = sorted(short_to_seat(contracts_dir).keys())
     tokens = load_tokens(shorts)
+    try:
+        validate_tokens(tokens)
+    except ValueError as exc:
+        _say(str(exc))
+        return EXIT_CONFIG
     if not tokens:
         log.warning("no DESK_GATEWAY_TOKEN_<SHORT> configured: every seat answers 503")
     config = GatewayConfig(
@@ -98,6 +108,11 @@ def main() -> int:
         ledger_path=desk_root / PAPER_LEDGER_PATH,
         telegram_token=read_telegram_token(),
     )
+    return _serve(settings, host, port, config)
+
+
+def _serve(settings: Settings, host: str, port: int, config: GatewayConfig) -> int:
+    """Create the server, serve until interrupted, and return the exit code."""
     try:
         server = create_server(config, settings=settings)
     except GatewayRefusedError as exc:

@@ -20,6 +20,7 @@ Only the injected clock is read. Nothing here imports the Grok gateway or calls 
 from __future__ import annotations
 
 import functools
+import random
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,9 +28,10 @@ from typing import TYPE_CHECKING, Any
 from pumpgrok.core.errors import DataStale
 from pumpgrok.core.ids import bind_calling_seat
 from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
+from pumpgrok.events.drain import DrainBytes, drain
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.ledger.events import NoteKind
-from pumpgrok.replay.clock import parse_ts_utc
+from pumpgrok.replay.clock import FixtureClock, parse_ts_utc
 from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
 from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
 from pumpgrok.tools.journal.append import JournalAppendIn, run_journal_append
@@ -42,6 +44,23 @@ if TYPE_CHECKING:
     from pumpgrok.supervisor.scheduler.degraded import DegradedState
     from pumpgrok.supervisor.scheduler.replay_runtime import _ReplayTrading
     from pumpgrok.tools.onchain.rpc import RpcClient
+
+#: Seed pinned by the smoke datasets (manifest seed_hint).
+FIXTURE_SEED = 20260101
+
+
+class DeterministicBus:
+    """The Phase 12 drain as a bus. Only this drain is used; no second copy."""
+
+    def __init__(self, *, clock: FixtureClock, rng: random.Random) -> None:
+        self._clock = clock
+        self._rng = rng
+
+    def deliver(self, events: Sequence[Event], *, fixture_compat: bool = True) -> DrainBytes:
+        if not fixture_compat:
+            raise ValueError("deterministic bus requires fixture_compat")
+        return drain(events, self._clock, self._rng)
+
 
 __all__ = ["build_aux_event_cycles", "synthetic_signal_score"]
 

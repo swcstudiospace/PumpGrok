@@ -459,7 +459,11 @@ class KillSwitch:
         explicit refusal ("already cleared, re-poll"), never a false success.
         """
         by = approval.approved_by
-        if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
+        if (
+            not by.startswith("human:")
+            or not by.removeprefix("human:").strip()
+            or SEAT_RE.match(by.removeprefix("human:"))
+        ):
             raise ClearRefused(f"clear must come from a human, got {by!r}")
         if approval.kind != "killswitch_clear":
             raise ClearRefused(f"clear needs a killswitch_clear approval, got {approval.kind!r}")

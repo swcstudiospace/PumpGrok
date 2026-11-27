@@ -13,13 +13,15 @@ model call can hold a protective exit.
 from __future__ import annotations
 
 import functools
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pumpgrok.core.ids import CorrelationId, bind_correlation
 from pumpgrok.engine.pipeline import SKIP, decide_token, tick_to_candidate
 from pumpgrok.events.models import Event, EventKind
 from pumpgrok.logging.json import bind_seat
+from pumpgrok.replay.clock import Clock
 from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
 from pumpgrok.supervisor.scheduler.orders import _run_exit_rules
 from pumpgrok.supervisor.scheduler.replay_runtime import (
@@ -31,7 +33,11 @@ from pumpgrok.supervisor.scheduler.replay_runtime import (
     _ReplayTrading,
 )
 from pumpgrok.supervisor.scheduler.supervisor import TRIGGER_EVENT
-from pumpgrok.supervisor.scheduler.wake import AUX_EVENT_CYCLE_SEATS, EVENT_CYCLE_SEATS
+from pumpgrok.supervisor.scheduler.wake import (
+    AUX_EVENT_CYCLE_SEATS,
+    EVENT_CYCLE_SEATS,
+    Wake,
+)
 from pumpgrok.supervisor.seat_task import CycleFn, SeatContext
 
 if TYPE_CHECKING:
@@ -39,6 +45,62 @@ if TYPE_CHECKING:
     from pumpgrok.ledger.store import LedgerStore
     from pumpgrok.replay.sources import FixtureCurveSource
     from pumpgrok.risk.engine import RiskEngine
+
+TEN_SEATS: tuple[str, ...] = (
+    "bot-00-chief",
+    "bot-01-scout",
+    "bot-02-risk",
+    "bot-03-whale",
+    "bot-04-sniper",
+    "bot-05-rug",
+    "bot-06-exit",
+    "bot-07-shill",
+    "bot-08-signal",
+    "bot-09-journal",
+)
+
+
+@dataclass(frozen=True)
+class CycleResult:
+    seat: str
+    kind: str
+    entity_id: str
+    outcome: str = "ok"
+
+
+def _make_body(seat: str) -> Callable[[Wake, Clock], CycleResult]:
+    def body(wake: Wake, clock: Clock) -> CycleResult:
+        _ = clock.now()
+        return CycleResult(seat=seat, kind=str(wake.event.kind), entity_id=wake.event.entity_id)
+
+    return body
+
+
+#: One body per seat, keyed by seat id. New seats must be added here
+#: deliberately; an unknown seat has no body and fails loudly.
+SEAT_BODIES: dict[str, Callable[[Wake, Clock], CycleResult]] = {
+    seat: _make_body(seat) for seat in TEN_SEATS
+}
+
+
+def run_cycle(seat: str, wake: Wake, *, clock: Clock) -> CycleResult:
+    """Run one seat cycle on one wake. At most one cycle per seat per wake."""
+    try:
+        body = SEAT_BODIES[seat]
+    except KeyError:
+        raise KeyError(f"no cycle body for seat {seat}") from None
+    return body(wake, clock)
+
+
+def run_wake(wakes: list[Wake], *, clock: Clock) -> list[CycleResult]:
+    """Run every woken seat once, in wake order."""
+    return [run_cycle(wake.seat, wake, clock=clock) for wake in wakes]
+
+
+def event_typed_fields(event: Event) -> dict[str, str]:
+    """The only fields a cycle body may read from the waking event."""
+    return {"kind": str(event.kind), "entity_id": event.entity_id}
+
 
 __all__ = ["build_event_cycles", "merge_event_cycles"]
 

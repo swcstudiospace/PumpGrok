@@ -1,0 +1,16 @@
+# Per-strategy exposure slices (Phase 17, RSK-01, V4-10).
+#
+# Weights are fractions of desk equity; the four registered strategies get
+# 0.20 each and 0.20 stays reserved unallocated. Weights sum to at most 1.0.
+# Enforcement is config-gated off by default (enabled = false), so replay
+# output is unchanged while the flag is off.
+
+[strategy.slice]
+enabled = false
+reserve = "0.20"
+
+[strategy.slice.weights]
+legacy_screening = "0.20"
+momentum_breakout = "0.20"
+new_launch_sniper = "0.20"
+mean_reversion = "0.20"

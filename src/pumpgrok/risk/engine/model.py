@@ -97,6 +97,7 @@ class _StepCtx:
     equity: int
     approvals: dict[str, ApprovalRecord]
     half_blocked: bool = False
+    strategy_id: str | None = None
     evaluated: dict[str, str] = field(default_factory=dict)
     approval: ApprovalRecord | None = None
     approval_id: str | None = None
@@ -104,7 +105,6 @@ class _StepCtx:
     caps: dict[str, int] = field(default_factory=dict)
     capped: bool = False
     probe: bool = False
-    strategy_id: str | None = None
     strategy_tickets: frozenset[str] = frozenset()
 
     def mark(self, step: str, status: str = "pass") -> None:

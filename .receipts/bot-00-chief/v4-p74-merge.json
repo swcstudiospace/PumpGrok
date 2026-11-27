@@ -1,0 +1,54 @@
+{
+ "approved_by": "human:SomeRandmGuyy",
+ "bot": "bot-00-chief",
+ "branch": "bot-00-chief/phase-6-integrity",
+ "claims": [
+  {
+   "claim": "Merged tree (merge commit 741aecf + fix-ups, branch bot-00-chief/phase-6-integrity) passes lint, typecheck, test, audit, replay-smoke, gateway, and instruction lint on the gated-green tree.",
+   "evidence_command_index": 2
+  }
+ ],
+ "commands": [
+  {
+   "cmd": "make lint",
+   "exit_code": 0,
+   "output_tail": "1006 files already formatted; service lint skipped"
+  },
+  {
+   "cmd": "make typecheck",
+   "exit_code": 0,
+   "output_tail": "Success: no issues found in 233 source files"
+  },
+  {
+   "cmd": "make test",
+   "exit_code": 0,
+   "output_tail": "Required test coverage of 89.9% reached. Total coverage: 91.62%"
+  },
+  {
+   "cmd": "make audit",
+   "exit_code": 0,
+   "output_tail": "No known vulnerabilities found"
+  },
+  {
+   "cmd": "uv run pumpgrok run --mode paper --once --replay tests/fixtures/replay/smoke",
+   "exit_code": 0,
+   "output_tail": "trades filled=2 not_filled=1"
+  },
+  {
+   "cmd": "./scripts/check.sh",
+   "exit_code": 0,
+   "output_tail": "PumpGrok repository structure looks healthy."
+  },
+  {
+   "cmd": "python3 -P ci/gates/check_ownership.py --bot bot-00-chief --base origin/main",
+   "exit_code": 0,
+   "output_tail": "G-1 PASS \u2014 bot-00-chief: 99 file(s) within owned paths"
+  }
+ ],
+ "correlation_id": "1482cee0-ef94-43e4-8400-e343d6141fbe",
+ "rollback_plan": "Revert merge commit and fix-up commits on the branch; PR 74 stays open unmerged, no main state changed.",
+ "task_id": "v4-p74-merge",
+ "unverified": [
+  "GitHub CI on PR 74 (rerun if red)"
+ ]
+}

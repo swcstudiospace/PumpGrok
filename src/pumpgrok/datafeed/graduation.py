@@ -1,11 +1,16 @@
-"""Paper-only decisions for curve graduation and unavailable-price gaps.
+"""Graduation check: a completed curve refuses entry (MKT-07).
 
+Exit and flatten paths never consult this check; only entries do.
+
+Also: paper-only decisions for curve graduation and unavailable-price gaps.
 These decisions do not place orders or change positions. A timeout requests a
 zero accounting mark, not a simulated sale; graduation is a separate signal.
 
 A fixture snapshot admits only when the caller passes the :class:`VerifiedReplay`
 whose dataset the snapshot was read from. A source label alone never admits.
 """
+
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass
@@ -47,11 +52,23 @@ class GapSettings:
             raise ValueError("timeout must not precede the gap threshold")
 
 
+def entry_refused(*, complete: bool) -> bool:
+    """True when a completed curve refuses a new entry."""
+    return complete
+
+
+def graduation_refusal_reason(*, complete: bool) -> str | None:
+    """Human-readable refusal reason, or None when entry is allowed."""
+    if complete:
+        return "graduated: curve is complete"
+    return None
+
+
 def _is_reserve(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
+def _is_bound_tick(snapshot: CurveSnapshot, replay: VerifiedReplay) -> bool:
     """True when ``snapshot`` equals a tick of the dataset ``replay`` verified.
 
     A hand-built snapshot that only carries the ``fixture`` label matches no
@@ -76,7 +93,7 @@ def _is_bound_tick(snapshot: CurveSnapshot, replay: "VerifiedReplay") -> bool:
 
 
 def _provenance(
-    snapshot: CurveSnapshot, replay: "VerifiedReplay | None"
+    snapshot: CurveSnapshot, replay: VerifiedReplay | None
 ) -> curve_layout.CurveProvenance:
     """Honest origin of a snapshot, from what the caller can prove.
 
@@ -95,7 +112,7 @@ def _provenance(
     return curve_layout.CurveProvenance.UNKNOWN
 
 
-def _admitted(snapshot: CurveSnapshot, replay: "VerifiedReplay | None") -> bool:
+def _admitted(snapshot: CurveSnapshot, replay: VerifiedReplay | None) -> bool:
     return (
         snapshot.source in {"fixture", "rpc"}
         and snapshot.s_lamports > 0
@@ -111,7 +128,7 @@ def entry_allowed(
     *,
     now: float,
     max_age_s: float,
-    replay: "VerifiedReplay | None" = None,
+    replay: VerifiedReplay | None = None,
 ) -> bool:
     """Authorize only a fresh, admitted, incomplete paper entry observation."""
     if (
@@ -138,7 +155,7 @@ def position_action(
     last_trusted_at: float,
     now: float,
     settings: GapSettings,
-    replay: "VerifiedReplay | None" = None,
+    replay: VerifiedReplay | None = None,
 ) -> PositionAction:
     """Select a mark, hold, zero mark, or graduated signal without executing it.
 

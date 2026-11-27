@@ -7,7 +7,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-from pumpgrok.cli.backtest import _backtest_verb
+from pumpgrok.cli.backtest import _backtest_verb, _replay_verb
 from pumpgrok.cli.codes import (
     _FIND_ONLY_ROUTES,
     EXIT_CONFIG,
@@ -17,19 +17,19 @@ from pumpgrok.cli.codes import (
 )
 from pumpgrok.cli.errors import UsageError, _not_implemented, _say
 from pumpgrok.cli.events import events_verb
+from pumpgrok.cli.ledger import _ledger_verb
 from pumpgrok.cli.onboarding import onboarding_verb
 from pumpgrok.cli.parsing import build_parser
+from pumpgrok.cli.promotion_verb import _promotion_verb
 from pumpgrok.cli.verbs_ops import (
     _doctor_verb,
     _live_verb,
-    _replay_verb,
     _report_verb,
     _verify_verb,
 )
 from pumpgrok.cli.verbs_state import (
     _killswitch,
     _paper,
-    _promotion_demote,
     _run,
     _state,
     _ticket_verb,
@@ -85,21 +85,27 @@ def _events_handler(args: argparse.Namespace, settings: Settings) -> int:
     return events_verb(args, settings)
 
 
+def _ledger_handler(args: argparse.Namespace, settings: Settings) -> int:
+    """Run the ledger backup/restore verb. Selected only for that verb."""
+    return _ledger_verb(args, settings)
+
+
 _VERB_HANDLERS: dict[str, Callable[[argparse.Namespace, Settings], int]] = {
     "doctor": _doctor_verb,
     "run": _run,
     "paper": _paper,
     "state": _state,
     "killswitch": _killswitch,
-    "promotion": _promotion_demote,
     "ticket": _ticket_verb,
     "live": _live_verb,
     "verify": _verify_verb,
     "report": _report_verb,
     "backtest": _backtest_verb,
+    "replay": _replay_verb,
     "events": _events_handler,
     "onboarding": onboarding_verb,
-    "replay": _replay_verb,
+    "promotion": _promotion_verb,
+    "ledger": _ledger_handler,
 }
 
 

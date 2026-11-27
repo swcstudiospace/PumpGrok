@@ -56,6 +56,9 @@ def build_status(
     drawdown_pct: float = 0.0,
     data_age_s: float = 0.0,
     ledger_seq: int = 0,
+    events: Mapping[str, Any] | None = None,
+    strategies: Mapping[str, Mapping[str, Any]] | None = None,
+    promotion: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the /healthz body. ``status`` is ok/degraded/stopped."""
     stale = any(bool(info.get("stale", False)) for info in seats.values())
@@ -86,6 +89,9 @@ def build_status(
         "equity_lamports": equity_lamports,
         "drawdown_pct": drawdown_pct,
         "data_age_s": round(max(0.0, data_age_s), 3),
+        "events": dict(events or {"depth": 0, "sources": {}, "dlq": 0}),
+        "strategies": {sid: dict(info) for sid, info in (strategies or {}).items()},
+        "promotion": dict(promotion or {"stages": {}, "recent": []}),
     }
 
 

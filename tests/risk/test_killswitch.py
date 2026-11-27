@@ -262,16 +262,17 @@ def test_clear_refused_for_seat_signature(tmp_path: Path) -> None:
     store = _store(tmp_path)
     ids = IdFactory(clock, random.Random(7))
     try:
-        ks = KillSwitch(clock, store=store, env={})
-        seat_approval = ApprovalRecord(
-            id=f"apr-{ids.ulid()}",
-            kind="killswitch_clear",
-            approved_by="human:bot-04-sniper",
-            raw_message="forged",
-            at=datetime.fromtimestamp(clock.now(), UTC),
-        )
-        with pytest.raises(ClearRefused):
-            ks.request_clear(seat_approval, "x", ts_utc=format_ts_utc(START))
+        KillSwitch(clock, store=store, env={})
+        # A seat-signed approval never constructs: the model refuses it before
+        # any clear path can read it.
+        with pytest.raises(ValidationError):
+            ApprovalRecord(
+                id=f"apr-{ids.ulid()}",
+                kind="killswitch_clear",
+                approved_by="human:bot-04-sniper",
+                raw_message="forged",
+                at=datetime.fromtimestamp(clock.now(), UTC),
+            )
     finally:
         store.close()
 
@@ -324,16 +325,16 @@ def test_halt_latches_and_clears_only_via_human(tmp_path: Path) -> None:
         )
         engine = _engine(store, clock)
         assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "daily_loss_halt"
-        # seat-signed approvals refuse: human prefix forged with a seat id
-        seat = ApprovalRecord(
-            id=f"apr-{ids.ulid()}",
-            kind="halt_clear",
-            approved_by="human:bot-02-risk",
-            raw_message="forged",
-            at=datetime.fromtimestamp(clock.now(), UTC),
-        )
-        with pytest.raises(ValueError):
-            engine.request_halt_clear(seat, "x")
+        # seat-signed approvals never construct: the human prefix forged with a
+        # seat id is refused by the approval model itself.
+        with pytest.raises(ValidationError):
+            ApprovalRecord(
+                id=f"apr-{ids.ulid()}",
+                kind="halt_clear",
+                approved_by="human:bot-02-risk",
+                raw_message="forged",
+                at=datetime.fromtimestamp(clock.now(), UTC),
+            )
         clock.advance_to(START + 86400.0)
         assert engine.check(_buy(clock, ids), seat="bot-04-sniper").reason == "halted"
         engine.request_halt_clear(_human_approval(clock, ids, "halt_clear"), "reviewed")

@@ -1,5 +1,12 @@
 """Promotion stages as ledger rows: BACKTEST, PAPER, LIVE_ELIGIBLE (PRM-01, PRM-03, PRM-06).
 
+Stages BACKTEST, PAPER and LIVE_ELIGIBLE are ledger rows (JournalNote
+verdicts), one per strategy, each carrying the strategy version id, the
+parameter-set hash, the evidence run id and the deciding metrics
+snapshot. LIVE is derived from LIVE_ELIGIBLE plus the arm record and is
+never stored (V4-11). Every transition appends to a decision log row
+with the evidence id, the triggering event id and the previous stage.
+
 Each stage change is one PromotionStageSet row with its decision log. The current stage is
 folded from those rows; nothing is held in memory. A strategy moves one stage at a time.
 
@@ -13,9 +20,8 @@ open ticket for its mint. PositionOpened opens a mint's ticket and PositionClose
 FillRecorded names only its mint, so it takes the open ticket for that mint. A buy fill that
 arrives before the PositionOpened it opens is held for that mint and claimed by the open. This
 differs from attribution.py, which leaves such a fill in the unattributed bucket: a promotion
-window must count the fill that opened the strategy's position. The
-strategy's window starts at its first PositionOpened on one of its tickets. A window with no
-attributable fill is refused.
+window must count the fill that opened the strategy's position. The strategy's window starts at
+its first PositionOpened on one of its tickets. A window with no attributable fill is refused.
 
 Drawdown follows LiveGate's formula (live_gate.py:197-216, fold 231-241): peak ratchets over
 marked equity and drawdown = (peak - equity) / peak at window end. Marked equity at each
@@ -24,7 +30,8 @@ read from that row's prices_json (mtm_lamports per held mint). Peak starts at th
 strategy deployed. A zero-loss record is refused before the gate.
 
 A stage change needs a human: or gate: writer. Its parameter set must be the active set, and
-that set's stored content must verify before the row is written.
+that set's stored content must verify before the row is written. Only ``is_writer`` callers write,
+and stored content is verified before use; a non-writer caller raises instead of writing (PRM-06).
 """
 
 from __future__ import annotations
@@ -60,24 +67,197 @@ if TYPE_CHECKING:
 __all__ = [
     "Stage",
     "StageRefused",
+    "StageRow",
     "advance_stage",
     "append_stage",
+    "append_stage_row",
+    "append_transition",
     "current_stage",
+    "decision_log",
     "last_stage_row",
     "lower_stage",
     "paper_record",
     "paper_window",
+    "read_stage_row",
     "require_writer",
     "stage_rows",
 ]
 
 
+STAGE_PREFIX = "PROMOTION stage="
+TRANSITION_PREFIX = "PROMOTION transition "
+
+
 class Stage(StrEnum):
-    """The three promotion stages, lowest first."""
+    """The three promotion stages, lowest first. LIVE is derived, never stored."""
 
     BACKTEST = "BACKTEST"
     PAPER = "PAPER"
     LIVE_ELIGIBLE = "LIVE_ELIGIBLE"
+
+
+@dataclass(frozen=True)
+class StageRow:
+    """One strategy's stage row: stage plus the evidence it rests on."""
+
+    strategy_id: str
+    stage: Stage
+    version_id: str = ""
+    param_hash: str = ""
+    evidence_run_id: str = ""
+    metrics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Transition:
+    """One decision-log entry: the move, its evidence and its trigger."""
+
+    strategy_id: str
+    previous_stage: Stage | None
+    next_stage: Stage
+    evidence_id: str
+    event_id: str
+
+
+def _row_text(row: StageRow) -> str:
+    metrics = json.dumps(row.metrics, sort_keys=True, separators=(",", ":"))
+    return (
+        f"{STAGE_PREFIX}{row.stage.value} strategy={row.strategy_id} "
+        f"version={row.version_id} param={row.param_hash} run={row.evidence_run_id} "
+        f"metrics={metrics}"
+    )
+
+
+def append_stage_row(
+    store: LedgerStore,
+    row: StageRow,
+    *,
+    by: str,
+    ts_utc: str,
+    source: str = "paper",
+    correlation_id: str = "desk",
+) -> None:
+    """Append one stage row; raises unless ``by`` is a writer (PRM-06)."""
+    if not is_writer(by):
+        raise ValueError(f"promotion stage write refused: {by!r} is not a writer")
+    store.append(
+        ts_utc=ts_utc,
+        source=source,
+        correlation_id=correlation_id,
+        idempotency_key=f"promotion|{row.strategy_id}|{row.stage.value}|{ts_utc}",
+        type="JournalNote",
+        payload={
+            "source": source,
+            "seat": "gate:promotion",
+            "note_kind": "verdict",
+            "text": _row_text(row),
+            "refs": [],
+        },
+    )
+
+
+def read_stage_row(store: LedgerStore, strategy_id: str) -> StageRow | None:
+    """Latest stage row for one strategy, or None when never promoted."""
+    row: StageRow | None = None
+    for event in store.read(types=["JournalNote"], limit=None):
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("note_kind", "")) != "verdict":
+            continue
+        text = str(payload.get("text", ""))
+        if not text.startswith(STAGE_PREFIX):
+            continue
+        fields = dict(part.split("=", 1) for part in text.split(" ")[1:] if "=" in part)
+        if fields.get("strategy") != strategy_id:
+            continue
+        try:
+            stage = Stage(fields["stage"])
+        except ValueError:
+            continue
+        try:
+            metrics = json.loads(fields.get("metrics", "{}"))
+        except ValueError:
+            metrics = {}
+        row = StageRow(
+            strategy_id=strategy_id,
+            stage=stage,
+            version_id=fields.get("version", ""),
+            param_hash=fields.get("param", ""),
+            evidence_run_id=fields.get("run", ""),
+            metrics=metrics if isinstance(metrics, dict) else {},
+        )
+    return row
+
+
+def append_transition(
+    store: LedgerStore,
+    transition: Transition,
+    *,
+    by: str,
+    ts_utc: str,
+    source: str = "paper",
+    correlation_id: str = "desk",
+) -> None:
+    """Append one decision-log row; writer-gated like stage rows."""
+    if not is_writer(by):
+        raise ValueError(f"promotion transition write refused: {by!r} is not a writer")
+    previous = transition.previous_stage.value if transition.previous_stage is not None else "NONE"
+    store.append(
+        ts_utc=ts_utc,
+        source=source,
+        correlation_id=correlation_id,
+        idempotency_key=(
+            f"promotion-transition|{transition.strategy_id}|{previous}|"
+            f"{transition.next_stage.value}|{ts_utc}"
+        ),
+        type="JournalNote",
+        payload={
+            "source": source,
+            "seat": "gate:promotion",
+            "note_kind": "verdict",
+            "text": (
+                f"{TRANSITION_PREFIX}"
+                f"stage={transition.next_stage.value} "
+                f"strategy={transition.strategy_id} from={previous} "
+                f"evidence={transition.evidence_id} event={transition.event_id}"
+            ),
+            "refs": [],
+        },
+    )
+
+
+def decision_log(store: LedgerStore, strategy_id: str) -> list[Transition]:
+    """Every recorded transition for one strategy, oldest first."""
+    log: list[Transition] = []
+    for event in store.read(types=["JournalNote"], limit=None):
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("note_kind", "")) != "verdict":
+            continue
+        text = str(payload.get("text", ""))
+        if not text.startswith(TRANSITION_PREFIX):
+            continue
+        fields = dict(part.split("=", 1) for part in text.split(" ")[1:] if "=" in part)
+        if fields.get("strategy") != strategy_id:
+            continue
+        try:
+            next_stage = Stage(fields["stage"])
+        except (KeyError, ValueError):
+            continue
+        previous_raw = fields.get("from", "NONE")
+        previous = None if previous_raw == "NONE" else Stage(previous_raw)
+        log.append(
+            Transition(
+                strategy_id=strategy_id,
+                previous_stage=previous,
+                next_stage=next_stage,
+                evidence_id=fields.get("evidence", ""),
+                event_id=fields.get("event", ""),
+            )
+        )
+    return log
 
 
 _UP: dict[Stage, Stage] = {Stage.BACKTEST: Stage.PAPER, Stage.PAPER: Stage.LIVE_ELIGIBLE}

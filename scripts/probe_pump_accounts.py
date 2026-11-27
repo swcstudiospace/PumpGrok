@@ -195,12 +195,12 @@ def _decode_outcome(value: Mapping[str, Any] | None) -> tuple[str | None, dict[s
     raw = _raw_bytes(value)
     if raw is None:
         return "account data is not base64; layout stays ASSUMED", None
+    if raw[:8].hex() != EXPECTED_DISCRIMINATOR_HEX:
+        return "discriminator does not match the ASSUMED layout; layout stays ASSUMED", None
     try:
         state = decode_curve_account(raw)
     except CurveDecodeError as exc:
         return f"{exc}; layout stays ASSUMED", None
-    if raw[:8].hex() != EXPECTED_DISCRIMINATOR_HEX:
-        return "discriminator does not match the ASSUMED layout; layout stays ASSUMED", None
     return None, state.model_dump()
 
 
@@ -239,6 +239,44 @@ def probe_account(account: str, endpoint: str, fetch: AccountFetch, clock: Clock
     return record
 
 
+def format_record_markdown(record: Mapping[str, Any]) -> str:
+    """Render one probe record as the the curve layout probe record body.
+
+    Never writes VERIFIED: a decode reads decoded_pending_review until a
+    human sets reviewed_by; every other outcome reads ASSUMED with the
+    exact probe error.
+    """
+    status = str(record.get("status", STATUS_ASSUMED))
+    lines = [
+        "# Bonding-curve layout probe (INT-10, R65)",
+        "",
+        f"Status: {status}",
+    ]
+    error = record.get("error")
+    if error:
+        lines.append(f"Error: {error}")
+    if record.get("account"):
+        lines.append(f"Account: {record['account']}")
+    lines.extend(
+        [
+            "Endpoint: https://api.mainnet-beta.solana.com",
+            "Method: getAccountInfo (read-only, no keys)",
+            "Layout: ASSUMED until a live probe decodes under it;",
+            "RPC-derived entries fail closed with data_unavailable.",
+            "Record: decoded_pending_review means decoded but not",
+            "human-reviewed; VERIFIED needs reviewed_by human:<name> <date>.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def write_record_doc(record: Mapping[str, Any], path: Path) -> Path:
+    """Write the rendered probe record to ``path``. Never VERIFIED."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(format_record_markdown(record), encoding="utf-8")
+    return path
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -249,6 +287,7 @@ def main(
     parser.add_argument("--account", default=os.environ.get("BONDING_CURVE_ACCOUNT", ""))
     parser.add_argument("--endpoint", default=os.environ.get("RPC_ENDPOINT", DEFAULT_ENDPOINT))
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--record-doc", type=Path, default=None)
     args = parser.parse_args(argv)
     if not _PUBKEY.fullmatch(args.account) or len(_base58_decode(args.account)) != PUBKEY_BYTES:
         print(
@@ -269,6 +308,8 @@ def main(
         args.account, args.endpoint, fetch, clock if clock is not None else WallClock()
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
+    if args.record_doc is not None:
+        write_record_doc(record, args.record_doc)
     args.out.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"probe status={record['status']} record={args.out}")
     return 0

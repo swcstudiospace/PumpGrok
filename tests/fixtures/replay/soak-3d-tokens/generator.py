@@ -14,7 +14,7 @@ Mapping. Each tick row is one candidate: one sighting of a mint at the tick's ti
   the mint's first tick in each window stands for both.
 - ``name``: ``"Soak 3d "`` plus the first six characters of the mint, then ``" w"`` and the
   two-digit window index from ``00``, so each window's token text is distinct.
-- ``image_uri``: ``fixture://soak-3d-tokens/token.png``.
+- ``image_uri``: ``fixture://soak-3d-tokens/tokens.png``.
 - ``created_ts_utc`` and ``first_trade_ts_utc``: the time of the mint's first tick in its window.
 - ``unique_buyers``: the tick's 1-based ordinal within its mint's window. The soak carries no wallet
   identities, so each tick is taken as one buy by a distinct buyer.
@@ -62,7 +62,7 @@ DIR = Path(__file__).resolve().parent
 SOURCE_DIR = DIR.parent / "soak-3d"
 COMMAND = ".venv/bin/python tests/fixtures/replay/soak-3d-tokens/generator.py"
 SEED_HINT = 20260101
-IMAGE_URI = "fixture://soak-3d-tokens/token.png"
+IMAGE_URI = "fixture://soak-3d-tokens/tokens.png"
 WINDOW_S = 6 * 3600  # UTC-aligned launch window: one token instance per mint per window
 LLM_LATENCY_S = 1.9  # the soak-3d recorded LLM latency
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

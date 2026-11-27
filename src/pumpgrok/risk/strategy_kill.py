@@ -36,7 +36,11 @@ def is_strategy_killed(state: LedgerState, strategy_id: str) -> bool:
 
 
 def _human(by: str) -> None:
-    if not by.startswith("human:") or SEAT_RE.match(by.removeprefix("human:")):
+    if (
+        not by.startswith("human:")
+        or not by.removeprefix("human:").strip()
+        or SEAT_RE.match(by.removeprefix("human:"))
+    ):
         raise StrategyKillRefused(f"strategy kill must come from a human, got {by!r}")
 
 

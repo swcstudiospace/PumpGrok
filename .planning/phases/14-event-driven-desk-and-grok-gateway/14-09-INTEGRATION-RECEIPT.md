@@ -48,3 +48,6 @@ Commands run by the orchestrator on the integrated tree. The commands are the ro
 
 ## Runner note
 The criteria runner (/tmp/crit.sh) still uses the pre-amendment literals for 12c (soak-3d) and 17 (b69c hash); their amended forms were run separately on 634d87e and pass (see table).
+
+## Post-merge record (2026-11-26)
+Code merged to local main 8354ee6666139a7817ca246bef9ca2e5a0b3b4b8 via integration PR #75 (branch bot-00-chief/v4-phase-14, integrated head 634d87e). Local-only: GitHub PR still OPEN until push. Criterion 1e (paper smoke checkpoint, seat tool authorization human step) remains OPEN; this record does not close it.

@@ -32,6 +32,10 @@ if TYPE_CHECKING:
 
 TICKET_RE = re.compile(r"^SOL-\d{8}-\d{3}$")
 
+#: Seat ids look like ``bot-04-sniper`` (core/bot.py SEAT_RE, R19); a human
+#: attribution naming a seat is not a human.
+_SEAT_RE = re.compile(r"^bot-0[0-9]-[a-z-]+$")
+
 
 class ApprovalRecord(BaseModel):
     """Parsed human approval phrase `approve <ticket> <mint> <size> <slippage>`
@@ -85,6 +89,9 @@ class ApprovalRecord(BaseModel):
     def _human_kinds_need_human(self) -> Self:
         if self.kind in self.HUMAN_KINDS:
             if not self.approved_by.startswith("human:"):
+                raise ValueError("human approval must be signed by a human, not a seat")
+            actor = self.approved_by.removeprefix("human:")
+            if not actor.strip() or _SEAT_RE.match(actor):
                 raise ValueError("human approval must be signed by a human, not a seat")
             if self.kind in ("human_buy", "human_sell") and (
                 self.ticket_id is None or self.mint is None or self.max_slippage_bps is None

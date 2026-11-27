@@ -61,6 +61,13 @@ BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS snapshots_append_only_d BEFORE DELETE ON snapshots
 BEGIN SELECT RAISE(ABORT, 'ledger is append-only'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- M-2026-1120 indexes (T1482-data), verbatim from
+-- migrations/20261120_01_events_indexes.up.sql: per-type replay windows,
+-- per-cycle correlation reads, time-boxed scans. IF NOT EXISTS keeps fresh
+-- and migrated ledgers identical; existing ledgers gain them on next open.
+CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events (type, ts_utc, seq);
+CREATE INDEX IF NOT EXISTS idx_events_correlation ON events (correlation_id, seq);
+CREATE INDEX IF NOT EXISTS idx_events_ts_seq ON events (ts_utc, seq);
 -- Sidecar tables (STR-03): derived state kept outside the hash chain. No event type or
 -- field is added; strategy_state rows are replaced on write, refs are keyed by ticket.
 CREATE TABLE IF NOT EXISTS strategy_ticket_refs (

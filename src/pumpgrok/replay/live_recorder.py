@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import IO
@@ -168,6 +169,7 @@ def seal_directory(
     sources: dict[str, str],
     notes: str,
     seed_hint: int = 0,
+    dataset_name: str | None = None,
 ) -> None:
     """Write the manifest for a directory of data files, then accept it with the replay loader.
 
@@ -178,7 +180,7 @@ def seal_directory(
     linked = False
     try:
         manifest = FixtureManifest(
-            dataset=dataset_dir.name,
+            dataset=dataset_name or dataset_dir.name,
             recorded_from_utc=recorded_from_utc,
             recorded_to_utc=recorded_to_utc,
             seed_hint=seed_hint,
@@ -216,8 +218,9 @@ def seal_directory(
 class LiveRecorder:
     """Append ticks before publication and seal their exact bytes with a manifest."""
 
-    def __init__(self, dataset_dir: Path, *, clock: Clock) -> None:
+    def __init__(self, dataset_dir: Path, *, clock: Clock, dataset_name: str | None = None) -> None:
         self.dataset_dir = dataset_dir
+        self.dataset_name = dataset_name
         self.clock = clock
         self._first_utc: str | None = None
         self._last_utc: str | None = None
@@ -268,7 +271,7 @@ class LiveRecorder:
         epoch = observation.validate()
         if self._last_epoch is not None and epoch < self._last_epoch:
             raise ValueError("observation timestamps must not go backwards")
-        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
         data = (json.dumps(observation.replay_tick(), separators=(",", ":")) + "\n").encode("utf-8")
         self._persist(EVENTS_NAME, data)
         if self._first_utc is None:
@@ -285,7 +288,7 @@ class LiveRecorder:
             raise ValueError("only closed gaps are recorded")
         if parse_ts_utc(gap.end_ts_utc) < parse_ts_utc(gap.start_ts_utc):
             raise ValueError("gap ends before it starts")
-        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
         line = {
             "start_ts_utc": gap.start_ts_utc,
             "end_ts_utc": gap.end_ts_utc,
@@ -312,7 +315,7 @@ class LiveRecorder:
             raise ValueError("stream must be a nonempty string")
         if not isinstance(payload, dict):
             raise ValueError("payload must be a JSON object")
-        FixtureManifest._plain_dataset_name(self.dataset_dir.name)
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
         line = {"ts": self.clock.now(), "stream": stream, "payload": payload}
         data = (
             json.dumps(line, separators=(",", ":"), sort_keys=True, allow_nan=False) + "\n"
@@ -357,4 +360,52 @@ class LiveRecorder:
         except BaseException:
             self._failed = True
             raise
+
+    def record_tick(self, tick: object) -> None:
+        """Append one CurveTick's dump to events.jsonl, stamped by the tick itself.
+
+        REC-03 surface: trim/seal keep the original event timestamps so a
+        re-sealed window reproduces the source bytes exactly.
+        """
+        if self._sealed or self._failed:
+            raise RuntimeError("recorder is sealed or failed")
+        dumped = tick.model_dump(mode="json")  # type: ignore[attr-defined]
+        stamp = str(dumped["ts_utc"])
+        epoch = float(parse_ts_utc(stamp))
+        if self._last_epoch is not None and epoch < self._last_epoch:
+            raise ValueError("tick timestamps must be non-decreasing")
+        FixtureManifest._plain_dataset_name(self.dataset_name or self.dataset_dir.name)
+        data = (json.dumps(dumped, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+        self._persist(EVENTS_NAME, data)
+        if self._first_utc is None:
+            self._first_utc = stamp
+        self._last_utc = stamp
+        self._last_epoch = epoch
+        self._sources[str(dumped.get("source", "rest"))] = str(dumped.get("source", "rest"))
+
+    def seal_dataset(self, dataset_name: str, *, seed_hint: int = 0) -> "Path":
+        """REC-03 seal: named dataset manifest; return the dataset directory."""
+        validate_dataset_name(dataset_name)
+        if self._first_utc is None or self._last_utc is None:
+            raise ValueError("cannot seal a dataset without observations")
+        seal_directory(
+            self.dataset_dir,
+            recorded_from_utc=self._first_utc,
+            recorded_to_utc=self._last_utc,
+            sources=dict(self._sources),
+            notes="",
+            seed_hint=seed_hint,
+            dataset_name=dataset_name,
+        )
         self._sealed = True
+        return self.dataset_dir
+
+
+_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+
+def validate_dataset_name(name: str) -> str:
+    """Mirror ``FixtureManifest.dataset``: one plain name, no separators or '..'."""
+    if not _NAME_RE.fullmatch(name) or ".." in name:
+        raise ValueError("dataset must be a plain name without separators or '..'")
+    return name

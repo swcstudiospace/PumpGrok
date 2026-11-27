@@ -11,7 +11,7 @@ defaults:
 jobs:
   - id: scout-discover
     owner: scout
-    enabled: true
+    enabled: false
     schedule: "every 60m"
     name: "[bot:scout] discover"
     deliver: "bot-chat:chief"
@@ -22,7 +22,7 @@ jobs:
 
   - id: risk-audit-open-leads
     owner: risk
-    enabled: true
+    enabled: false
     schedule: "every 15m"
     name: "[bot:risk] audit-open-leads"
     deliver: "bot-chat:chief"
@@ -44,7 +44,7 @@ jobs:
 
   - id: rug-watch-paper
     owner: rug
-    enabled: true
+    enabled: false
     schedule: "every 30m"
     name: "[bot:rug] watch-paper"
     deliver: telegram
@@ -67,7 +67,7 @@ jobs:
 
   - id: scout-pipeline
     owner: scout
-    enabled: true
+    enabled: false
     schedule: "every 60m"
     name: "[bot:scout] pipeline"
     deliver: "bot-chat:chief"

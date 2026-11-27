@@ -1,0 +1,104 @@
+{
+  "tokens_version": "1.0.0",
+  "fidelity": "lofi",
+  "provisional": true,
+  "notes": "No brand guide and no Figma in inputs; no design-system component registry found in docs/ or src/ (grep ds/ 2026-11-20). Components below compose provisional ds/* primitives and must be reconciled to the real registry by A06/A08; no new component is claimed. All screens are ASCII-only operator console/CLI views per NFR-A1/NFR-I1, paper-only per NFR-C1: no live trade, no key, no fund movement surface, no seed phrase or private key field on any screen.",
+  "screens": [
+    {
+      "screen_id": "SCR-MilestoneTracker",
+      "flows": ["chief", "release-owner"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.milestones", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["milestone", "units", "evidence", "owner"] } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "primary", "label": "Refresh tracker" } },
+        { "ref": "ds/Input@1.0.0", "props": { "label": "Filter milestone", "type": "text" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["filter-milestone", "refresh-tracker", "milestone-row-1", "milestone-row-2"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-001", "AC-002", "AC-005", "AC-023"]
+    },
+    {
+      "screen_id": "SCR-GateDashboard",
+      "flows": ["release-owner", "auditor"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.gates", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["gate", "exit-code", "job", "status"] } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Alert@1.0.0", "props": { "variant": "error", "single_line_ascii": true } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "secondary", "label": "Rerun gates" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["rerun-gates", "gate-row-1", "gate-row-2", "gate-row-3"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-017", "AC-021", "AC-024", "AC-027", "AC-029"]
+    },
+    {
+      "screen_id": "SCR-QualitySweeps",
+      "flows": ["typecheck-owner", "style-owner", "ledger-owner", "replay-owner", "contract-owner", "risk-owner", "quality-owner", "security-owner"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.sweeps", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["sweep", "check", "count", "result"] } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Progress@1.0.0", "props": { "bar": "determinate" } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "secondary", "label": "Export sweep report" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["export-sweep-report", "sweep-row-1", "sweep-row-2"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-006", "AC-007", "AC-008", "AC-009", "AC-010", "AC-011", "AC-013", "AC-014"]
+    },
+    {
+      "screen_id": "SCR-ReplayDesk",
+      "flows": ["operator", "replay-owner"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.replay", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["run", "seed", "event-hash", "cycle"] } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "primary", "label": "Run replay smoke" } },
+        { "ref": "ds/Input@1.0.0", "props": { "label": "Seed", "type": "number" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["seed", "run-replay-smoke", "replay-row-1"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-012", "AC-018", "AC-028"]
+    },
+    {
+      "screen_id": "SCR-AuditEvidence",
+      "flows": ["auditor", "chief"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.evidence", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["claim", "command", "exit-code", "output-hash"] } },
+        { "ref": "ds/Alert@1.0.0", "props": { "variant": "info", "single_line_ascii": true } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "secondary", "label": "Rerun transcript" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["rerun-transcript", "evidence-row-1", "evidence-row-2"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-003"]
+    },
+    {
+      "screen_id": "SCR-OperatorDocs",
+      "flows": ["operator", "docs-owner"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.docs", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["document", "command", "expected-exit", "actual-exit"] } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "secondary", "label": "Verify doc commands" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["verify-doc-commands", "doc-row-1", "doc-row-2"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-004", "AC-015", "AC-026"]
+    },
+    {
+      "screen_id": "SCR-SafetyPaperOnly",
+      "flows": ["operator", "compliance-owner", "chief"],
+      "states": ["default", "loading", "error.network", "error.validation", "empty.receipts", "success"],
+      "components": [
+        { "ref": "ds/Table@1.0.0", "props": { "columns": ["check", "precondition", "result", "exit-code"] } },
+        { "ref": "ds/Alert@1.0.0", "props": { "variant": "error", "single_line_ascii": true } },
+        { "ref": "ds/Badge@1.0.0", "props": { "variant": "status" } },
+        { "ref": "ds/Button@1.0.0", "props": { "variant": "secondary", "label": "Check live refusal" } }
+      ],
+      "a11y": { "target": "WCAG-2.2-AA", "focus_order": ["check-live-refusal", "safety-row-1", "safety-row-2", "safety-row-3"], "min_contrast": 5.69 },
+      "tokens_version": "1.0.0", "fidelity": "lofi", "provisional": true,
+      "acceptance_refs": ["AC-016", "AC-019", "AC-020", "AC-022", "AC-025", "AC-030"]
+    }
+  ]
+}

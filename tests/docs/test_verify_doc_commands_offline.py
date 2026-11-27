@@ -1,6 +1,6 @@
 """Offline contract for scripts/verify_doc_commands.sh and scripts/probe_pump_accounts.py.
 
-Greptile R1 findings 17 and 18. The shell script is run from a throwaway repo
+Greptile R1 finding 17. The shell script is run from a throwaway repo
 root holding a copy of itself, so the real CLAUDE.md and AGENTS.md are never
 read. A fake ``uv`` on PATH stands in for the real binary; no network is used.
 """
@@ -136,7 +136,7 @@ def _account_value(owner: str, disc_hex: str) -> dict:
         (
             "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
             "0000000000000000",
-            "invalid bonding curve discriminator; layout stays ASSUMED",
+            "discriminator does not match the ASSUMED layout; layout stays ASSUMED",
         ),
     ],
 )

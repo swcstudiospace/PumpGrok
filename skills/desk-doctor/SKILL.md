@@ -63,4 +63,8 @@ doctor --json exit 1  -> STOP: read the failing name and status, fix the cause, 
 - Skill contract: `src/pumpgrok/core/skill.py:32-52` (`SkillManifest`, `SkillPermissions`)
 - Rosters: `contracts/tool-rosters/bot-00-chief.yaml` (seat grants plus core merge)
 - Gate G-7: setup and doctor gate for desk changes
-- Companion skills: `pumpgrok-setup` (bootstrap and paper start), `tool-connections` (RPC source), `verification-receipts` (receipt chain)
+- Companion skills: `verification-receipts` (receipt chain), `pumpgrok-setup` (bootstrap and paper start), `tool-connections` (RPC source)
+
+## v4 notes
+
+Doctor v4 adds read-only sections: event bus depth, source states, Grok budget windows, strategy stages, active kills, and signer attestation (present or absent, by name only). Doctor output is status text; it never writes state, sends, or holds a key.

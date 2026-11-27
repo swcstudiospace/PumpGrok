@@ -1,3 +1,21 @@
+NOTE: prelude hash lines below are pre-repin measurements (b69c2959/bdcbe2d3, 2026-11-22). Enforced pins today: smoke-10m SH0032=1dffa784 and trading a4461e80 (pin_support.py, trading_smoke.json); phase sections below carry the repinned family.
+Phase 19: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 19: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 19: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 19: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 17: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 17: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 17: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 17: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+
+Phase 16: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 16: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 16: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 16: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 15: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 15: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+Phase 15: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+Phase 15: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 # Changelog
 
 All notable changes to PumpGrok are recorded here. The format follows Keep a Changelog.
@@ -10,10 +28,8 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Entry checks and mint lists (RSK-05).
 - Promotion stages as ledger rows with fail-closed thresholds, gate reuse and demotion (PRM-01 to PRM-04, PRM-06; S-B4, S-P2).
 - Event-driven promotion evaluator with no timers and no Grok call (PRM-05), and an explicit promotion mode (S-P1).
-- Event desk composition root (RT-03) in src/pumpgrok/events/, outside the supervisor package that the events-not-wired guard protects.
+- Event desk composition root (RT-03) at `supervisor/` (supersedes the PR-branch `events/` path).
 - Restart recovery from the ledger (RT-04, narrowed): probation, the desk-wide watch set, exit deadlines and exit peaks. Tapes start empty.
-- Exit-sell guard (S-X1).
-- Promotion cursor persisted in the store meta table, with a pending mark.
 
 ### Fixed
 
@@ -31,11 +47,29 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 17: smoke-10m events.hash after: 1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700 (equal to before)
 - Phase 17: trading-smoke events.hash before: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
 - Phase 17: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404 (equal to before)
-- Criterion 12: git diff --name-only v4-base -- contracts lists exactly four files: contracts/changes/phase-17-strategy-kill-events.yaml, contracts/events/strategy_kill_cleared.schema.json, contracts/events/strategy_kill_set.schema.json, contracts/events/promotion_stage_set.schema.json.
-- Criterion 14: uv run pumpgrok run --mode live --once exits 3 (refused; no transaction attempted).
-- At c53d3c0, the integration head: make lint clean; make typecheck clean (mypy --strict, 304 source files); make test passed with 91.37 percent total coverage against the 89.9 percent floor; make audit reports no known vulnerabilities; scripts/check.sh exit 0.
+- At the integration head this run lands on: make lint, make typecheck and ./scripts/check.sh exit 0 (orchestrator gate run 2026-11-26); full suite result recorded on the merge PR CI.
 - Criterion 1 is deferred; see Changed.
+Status: partial. Core code is on main (2026-11-22 integration commits c96e993 event desk, cb91cf6 restart recovery). Exit-sell guard (S-X1) and a persisted promotion cursor are absent (no try/except in exit_rules _sell; no meta cursor in promotion/event_desk); desk tests test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart remain to port (PRs #98-#100 still open).
 
+## [Unreleased] - v4 Phase 14: event-driven desk and Grok gateway
+
+### Added
+
+- Single Grok gateway (`src/pumpgrok/grok/`): deterministic prefilter that skips before budget spend, sanitizer plus strict JSON parse, canonical cache key of ints/strings with per-agent TTLs, in-flight coalescing, layered persisted budget with reserve share, hash-only gateway ledger, and a replay backend that raises on a miss. Four agents run behind it; the signal seat never calls the vendor agent directly. Fallback ladder keyed by `signal_scoring_mode` with a breaker and half-open probe.
+- Supervisor event-mode wake: closed `SEAT_WAKES` dispatch, allowed-timer set (only `wake`), `--wake-mode {cadence,event}` defaulting to cadence, and event/Grok metric families registered only in event mode. Ten seat cycle bodies run on wakes with pinned golden hashes; the DeterministicBus under fixture_compat reproduces the legacy smoke-10m hash exactly.
+- Operator onboarding: snapshot-pinned input inventory, `doctor --json` readiness records (presence and source only), paper start gate, seat access grants only as operator-choice ledger rows, wallet base58 plus Ed25519 curve-point validation, RPC host-only choice records, empty x.ai key counts as missing, HMAC confirmation key forbidden in live.
+- Hermes cron cutover: five superseded jobs disabled (not deleted) in `hermes/cron/jobs.yaml`, `docs/runbooks/events.md`, doctor refusal in event mode, read-only time-sync probe. Idle-zero-Grok CI gate (`ci/gates/check_idle_grok.py` wired into `run_all.py`, `Makefile`, `ci.yml`). Grok measurement (`scripts/measure_grok_calls.py`) and the `evidence-50` fixture (60 admitted candidates, ratio 0.1875).
+
+### Verified
+
+- Phase 14: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 14: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 14: events-smoke-10m golden hash: 888e1849dca763a0ecbc088e873969f5c8da7fee63031bca7310f58203f2204c
+- Phase 14: events-soak-3d golden hash: c08ad0ddddfd44de00590c9fc2f5f80b6852aa428e3d05ec1f4d26d8a7194e70
+- Phase 14: `scripts/probe_curve_layout.py` deleted with all references removed.
+- `pumpgrok run --mode live --once` exits 3. No contracts/ file changed.
 ## [Unreleased] - v4 Phase 16: backtest v2 and autonomous evaluation
 
 ### Added
@@ -66,7 +100,6 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 16: trading-smoke events.hash after: a4461e80f926e46f9d5b85b0305c41fb44c72b63a875369e2b825ea8b7cd9404
 - Phase 16 before values were measured at 5fa947b, the integration head before the first Phase 16 merge (22dd90b). After values were measured at f05381d.
 - At f05381d, make lint, make typecheck, make test and ./scripts/check.sh exit 0 (coverage 91.30 percent, floor 89.9 percent). Criterion 1 is deferred; see Changed.
-
 ## [Unreleased] - v4 Phase 15: strategy framework and multi-strategy paper
 
 ### Changed
@@ -88,7 +121,6 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 15 (refund era): test_one_buy_flows_to_curve_priced_fill expected network cost is 1497440 (fee model v2: 9000 plus the first-buy rent 1488440)
 - Phase 15 starts at the Phase 14 close, where smoke-10m already measures 1dffa784 (Phase 14 entry below). The b69c29... value that the Phase 15 plan text cites is the Phase 14 before value, not a Phase 15 starting value.
 - Owner decision 1: one trading-smoke re-pin, recorded in the two trading-smoke lines above. Strategy parameters are PENDING OWNER APPROVAL (see docs/runbooks/strategies.md); they are proposals inside bounds, not final pins.
-
 ## [Unreleased] - v4 Phase 14: replay operator grants
 
 ### Changed
@@ -103,7 +135,6 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 14: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - Phase 14: trading-smoke events.hash after: 106495a9e335ada1b2407811feda000eb6cd32dbae10372209b9ddf697161627
 - Phase 14: trading-smoke seq and row count before: 11, after: 155 (events read 5 in both)
-
 ## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
 
 ### Added
@@ -122,12 +153,10 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Verification
 
 - Full `make test`, `make lint`, `make typecheck`, `./scripts/check.sh`, the smoke replay, and `run --mode live --once` (exit 3) pass on the Phase 13 integration head.
-
 - Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
-
 ## [Unreleased] - v4 Phase 12: event runtime core
 
 ### Added
@@ -146,6 +175,23 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 - Phase 12: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - Phase 12: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
 - `pumpgrok run --mode live --once` exits 3. The smoke-10m hash above was measured from a temp cwd on `bot-02-risk/phase-12-event-runtime` at `66246aa`.
+
+## [Unreleased] - v4 Phase 13: curve truth, live market data and recorder
+
+### Added
+
+- Token-first curve layout (49/166 byte accounts) behind an allowlist price gate; statuses stay ASSUMED.
+- Datafeed package (ticks, watch set, mint book, bus bridge), fail-closed LivePriceSource, graduation and marks loop, PumpPortal/logs feed with a 30/10s limiter and readonly allowlist, sealed recorder datasets with gaps and torn-line recovery.
+
+### Verified
+
+- Phase 13: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase 13: trading-smoke events.hash before: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: trading-smoke events.hash after: bdcbe2d321eea3e4ff814e91434f5ffb8ab84963cea1237c2f453500f5093e54
+- Phase 13: probe outcome ASSUMED with the exact probe error; no VERIFIED flip without a human reviewed_by.
+- Phase 13: paper fee default v1; fee model v2 selectable (builder fee, first-buy ATA, priority cap).
+- `pumpgrok run --mode live --once` still exits 3; no contracts/ file changed.
 
 ## [Unreleased] - v4 Phase 11: engineering foundation and quality
 
@@ -210,6 +256,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 
 ### Verified
 
+- Phase built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- Phase built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
+- `make lint`, `make typecheck`, `make test`, `./scripts/check.sh`, both generator checks and the schema check exit 0. `run --mode live --once` exits 3.
 - Desk built-ins: smoke-10m events.hash before: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - Desk built-ins: smoke-10m events.hash after: b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d
 - The rebased branch is re-verified by the full gate set before its PR is opened.
@@ -284,6 +333,9 @@ All notable changes to PumpGrok are recorded here. The format follows Keep a Cha
 ### Added
 
 - UPG-01 adds content-hashed parameter sets within version-controlled bounds (src/pumpgrok/config/upgrade_bounds.toml). An out-of-bounds value fails with a typed error and is never clamped.
+- UPG-02 gates every promotion in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason.
+- UPG-03 records each active-set change as a ConfigChanged row with evidence under var/upgrade/promotions/, and restores the exact prior set in one operation.
+- UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. It never writes an active-set row.
 - UPG-02 adds `evaluate_candidate`, a gate that checks in fixed order: bounds, trial limits, autonomy level, holdout, then the Phase 8 divergence check. The first failure is the typed reason. `record_promotion` does not require `promotion_eligible` or check `blocks_promotion`, so gate enforcement is by convention.
 - UPG-03 adds `record_promotion`, which writes an evidence manifest under var/upgrade/promotions/ and refuses different evidence at the same hash without recording anything. `record_active_set` accepts any `by` value, needs no gate verdict and writes a ConfigChanged row with no evidence file. `restore_active_set` writes the prior hash back as a new ConfigChanged row; it does not check the caller and does not verify stored content for that hash.
 - UPG-04 escalates an ineligible candidate through the existing Escalation channel with a decision request. `escalate_candidate` is a library function with tests; no production code calls it, so it runs only when a caller invokes it. It never writes an active-set row.

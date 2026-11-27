@@ -241,7 +241,7 @@ def test_pem_block_without_end_masks_to_end_of_text() -> None:
 # -- LOG-01 / LOG-02 / LOG-03: non-JSON extras, free-text credentials, render failures ----
 
 BEARER_SYNTHETIC = "synthetic-bearer-0123456789"  # pragma: allowlist secret
-KEY_VALUE_SYNTHETIC = "hunter2-synthetic-9876"  # pragma: allowlist secret
+KEY_VALUE_SYNTHETIC = "AbCdEfGhIjKlMnOpQrStUvWx1234"  # pragma: allowlist secret
 BASIC_SYNTHETIC = "dXNlcjpwYXNzd29yZA=="  # pragma: allowlist secret
 
 

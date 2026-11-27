@@ -9,9 +9,18 @@ touched (the RPC client answers through ``httpx.MockTransport``).
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# src-layout bootstrap: `uv run pytest services/desk-gateway/tests/` from the
+# repo root runs the root venv, which does not install `desk_gateway`. Put this
+# project's src (and the repo src for `pumpgrok`) on sys.path so the imports
+# below resolve under both `uv run pytest` and bare `pytest`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+
 import json
 import threading
-from pathlib import Path
 from typing import Any
 
 import httpx

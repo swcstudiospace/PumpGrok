@@ -16,6 +16,7 @@ import ast
 import importlib.util
 import json
 import re
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -366,7 +367,8 @@ class TestG3Secrets:
         assert [f["rule"] for f in findings] == ["forbidden_file"]
 
     def test_pragma_allowlist_marker_suppresses_a_line(self, secrets_gate):
-        line = 'API_KEY = "Zq8Lr2Tv9Wm4Xk7Nb1Hc6Yd3Pe5Fg0Js"  # pragma: allowlist secret'
+        # Sampled at runtime: no synthetic credential literal lives in this file.
+        line = 'API_KEY = "' + secrets.token_hex(16) + '"  # pragma: allowlist secret'
         assert secrets_gate.scan_line("fixture.py", 1, line) == []
 
     def test_placeholder_values_are_not_high_entropy_findings(self, secrets_gate):
@@ -907,9 +909,48 @@ class TestG7DeskIntegrity:
             packs_dir=tmp_path / "contracts/tool-packs",
             prompts_dir=tmp_path / "prompts",
             assembled_dir=tmp_path / "prompts-assembled",
-            templates_dir=tmp_path / "grokbot/templates",
+            templates_dir=tmp_path / "agents",
         )
         assert any("roster directory not found" in p for p in problems)
+
+    def _run_desk(self, integrity_gate, tmp_path, present):
+        rosters = tmp_path / "contracts" / "tool-rosters"
+        core = {"tools": [_tool(f"desk.core_{i}") for i in range(8)]}
+        _write_roster(rosters, "_core.yaml", core)
+        (tmp_path / "contracts/tool-packs").mkdir(parents=True)
+        for name in present:
+            (tmp_path / name).mkdir()
+        return integrity_gate.run(
+            tmp_path,
+            rosters,
+            packs_dir=tmp_path / "contracts/tool-packs",
+            prompts_dir=tmp_path / "prompts",
+            assembled_dir=tmp_path / "prompts-assembled",
+            templates_dir=tmp_path / "agents",
+        )
+
+    @pytest.mark.parametrize("missing", ["prompts", "prompts-assembled", "agents"])
+    def test_missing_prompt_or_template_directory_fails_the_run(
+        self, integrity_gate, tmp_path, missing
+    ):
+        present = [d for d in ("prompts", "prompts-assembled", "agents") if d != missing]
+        problems, _ = self._run_desk(integrity_gate, tmp_path, present)
+        assert len(problems) == 1
+        assert problems[0].startswith(f"{missing}: ")
+
+    def test_all_desk_directories_present_passes_the_run(self, integrity_gate, tmp_path):
+        problems, _ = self._run_desk(
+            integrity_gate, tmp_path, ["prompts", "prompts-assembled", "agents"]
+        )
+        assert problems == []
+
+    @pytest.mark.parametrize(
+        "attr", ["ROSTERS_DIR", "PROMPTS_DIR", "ASSEMBLED_DIR", "TEMPLATES_DIR"]
+    )
+    def test_default_desk_directories_exist_in_this_checkout(self, integrity_gate, attr):
+        # G-7 fails closed on a missing directory, so each default it checks must exist here.
+        repo = Path(__file__).resolve().parents[2]
+        assert (repo / getattr(integrity_gate, attr)).is_dir()
 
     def test_valid_roster_directory_passes_the_run(self, integrity_gate, tmp_path):
         rosters = tmp_path / "contracts" / "tool-rosters"
@@ -933,6 +974,8 @@ class TestG7DeskIntegrity:
                 ],
             },
         )
+        for directory in ("prompts", "prompts-assembled", "agents"):
+            (tmp_path / directory).mkdir()
         (tmp_path / "contracts" / "tool-packs").mkdir(parents=True)
         (tmp_path / "grokbot" / "templates").mkdir(parents=True)
         problems, counts = integrity_gate.run(
@@ -941,7 +984,7 @@ class TestG7DeskIntegrity:
             packs_dir=tmp_path / "contracts/tool-packs",
             prompts_dir=tmp_path / "prompts",
             assembled_dir=tmp_path / "prompts-assembled",
-            templates_dir=tmp_path / "grokbot/templates",
+            templates_dir=tmp_path / "agents",
         )
         assert problems == []
         assert counts["rosters"] == 1

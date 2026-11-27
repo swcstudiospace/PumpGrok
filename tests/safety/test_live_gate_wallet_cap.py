@@ -16,8 +16,9 @@ from pumpgrok.core.units import LAMPORTS_PER_SOL
 from pumpgrok.execution.live.live_gate import PRECONDITION_IDS, LiveGate, Precondition
 
 NOW = "2026-10-20T00:00:00Z"
+# RFC 8032 TEST 1 public key in base58; a real (non-small-order) Ed25519 point.
 VALID_KEY = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
-ALLOWLIST_EMPTY = "live.wallet_allowlist is empty; no public key is allowlisted"
+ALLOWLIST_EMPTY = "wallet.allowlist is empty; no public key is allowlisted"
 CAP_UNSET = "live.notional_cap_lamports is not set"
 CAP_RANGE = "live.notional_cap_lamports must satisfy 0 < value <= 1 SOL"
 ADAPTER_UNMET = "no live adapter implementation ships in this release"
@@ -51,7 +52,7 @@ def test_allowlist_of_one_key_meets_row_5_only(tmp_path: Path) -> None:
         )
     )
     assert gate["wallet_allowlist"].met is True
-    assert gate["wallet_allowlist"].reason == "live.wallet_allowlist lists 1 public key(s)"
+    assert gate["wallet_allowlist"].reason == "wallet.allowlist lists 1 public key(s)"
     assert gate["notional_cap"].met is False
     for name in (
         "mode_live",

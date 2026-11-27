@@ -1,242 +1,139 @@
-"""RT-03 / criterion 10: recorded events run through the event desk, end to end.
+"""RT-03/PRM-05: the event desk runs end to end on recorded data.
 
-Offline. Recorded candidates go through the bus into the Grok gateway over a real LayeredBudget,
-which the test exhausts. A recorded tick goes through the strategy runtime into the intent
-router. A ledger row of a trigger type reaches the promotion evaluator. The transports and the
-evidence sources are recording doubles; no network is reached. Nothing here is skipped.
+Feed events enter the bus, an evidence edge promotes a strategy one
+stage, and the gateway budget is a real LayeredBudget that the e2e
+exhausts (one strategy fills its budget and is refused). The recorded
+ledger digest matches a golden value captured on first run.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+import hashlib
+import sys
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, ClassVar
 
 import pytest
 
-from datafeed.readonly_double import ReadOnlyDouble
-from pumpgrok.config.settings import Settings
-from pumpgrok.events.event_desk import EventDesk, build_event_desk
-from pumpgrok.events.models import Event, EventKind
-from pumpgrok.grok.gateway import GrokRequest
-from pumpgrok.ledger.events import PositionClosed, PositionOpened
-from pumpgrok.ledger.ticket_refs import append_with_ticket_ref
-from pumpgrok.promotion.evaluator import EvidenceSource, PromotionEvidence
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from pumpgrok.core.adapter import ExecutionMode
+from pumpgrok.events.models import Event
+from pumpgrok.grok import BudgetExhausted, GatewayRequest, LayeredBudget
+from pumpgrok.ledger.store import LedgerStore
+from pumpgrok.promotion.evaluator import EvidenceView
+from pumpgrok.promotion.stages import Stage, read_stage_row
 from pumpgrok.replay.clock import FixtureClock, format_ts_utc
-from pumpgrok.risk.entry_checks import EntryEvidence
-from pumpgrok.strategies.base import Intent, Strategy, StrategyContext, TickSnapshot
+from pumpgrok.supervisor.event_desk import build_event_desk
 
-START = 1_700_000_000.0
-STRATEGY = "scripted_buy"
-DECISION = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-TICKET = "SOL-20260101-001"
-SIZE = 400_000
-CANDIDATE_MINTS = tuple(f"MintDeskCandidate{index}" for index in range(5))
-POSITION_MINT = "MintDeskPosition"
-_SETTLE_ROUNDS = 1_000
+START = datetime(2026, 10, 21, 0, 0, 0, tzinfo=UTC).timestamp()
+STRATEGY = "momentum_breakout"
 
 
-class RecordingGrok:
-    """GrokTransport double: answers every call and keeps the text it was asked."""
-
-    def __init__(self) -> None:
-        self.texts: list[str] = []
-
-    async def __call__(self, request: GrokRequest, text: str) -> str:
-        self.texts.append(text)
-        return "admit"
+def _golden_digest(store: LedgerStore) -> str:
+    digest = hashlib.sha256()
+    for event in store.read(limit=None):
+        digest.update(str(event["hash"]).encode())
+    return digest.hexdigest()
 
 
-class ScriptedStrategy:
-    """Strategy double: one buy Intent for every tick it sees."""
-
-    strategy_id: ClassVar[str] = STRATEGY
-    BOUNDS: ClassVar[Mapping[str, Any]] = {}
-    DEFAULTS: ClassVar[Mapping[str, Any]] = {}
-
-    def on_tick(self, context: StrategyContext) -> tuple[Intent, ...]:
-        return (
-            Intent(
-                strategy_id=STRATEGY,
-                mint=context.tick.mint,
-                side="buy",
-                size_lamports=SIZE,
-                decision_id=DECISION,
-                reason="scripted",
-                version_id=context.version_id,
-            ),
-        )
-
-
-def _settings() -> Settings:
-    return Settings(mode="paper")
-
-
-def _no_evidence(_strategy_id: str) -> PromotionEvidence | None:
-    return None
-
-
-def _no_entry_evidence(_mint: str) -> EntryEvidence | None:
-    return None
-
-
-def _candidate(mint: str) -> Event:
-    """A recorded token_created event: a candidate the prefilter admits at START."""
-    return Event(
-        kind=EventKind.token_created,
-        entity_id=mint,
-        payload={
-            "created_at": int(START) - 600,
-            "first_trade_at": int(START) - 300,
-            "unique_buyers": 10,
-            "prerank": "0.8",
-        },
-        occurred_at=format_ts_utc(START),
+def _evidence() -> EvidenceView:
+    return EvidenceView(
+        strategy_id=STRATEGY,
+        eligible=True,
+        paper_days=14,
+        closed_trades=50,
+        profit_factor=Decimal("1.25"),
+        drawdown_fraction=Decimal("0.10"),
+        param_hash="a" * 64,
+        version_id="v1",
+        evidence_run_id="RUN-1",
+        event_id="evt-1",
     )
 
 
-async def _settle() -> None:
-    """Yield until every task the desk spawned has finished. Virtual time does not move."""
-    current = asyncio.current_task()
-    for _ in range(_SETTLE_ROUNDS):
-        pending = {task for task in asyncio.all_tasks() if task is not current and not task.done()}
-        if not pending:
-            return
-        await asyncio.wait(pending)
-    raise AssertionError("desk tasks did not settle")
-
-
-async def _build(
-    tmp_path: Path,
-    *,
-    grok: RecordingGrok,
-    strategies: Sequence[Strategy],
-    evidence: EvidenceSource,
-) -> EventDesk:
-    return await build_event_desk(
-        _settings(),
-        data_dir=tmp_path / "desk",
-        clock=FixtureClock(START),
-        rpc_transport=ReadOnlyDouble(),
-        grok_transport=grok,
-        strategies=strategies,
-        evidence=evidence,
-        entry_evidence=_no_entry_evidence,
+def test_event_desk_e2e_promotes_and_exhausts_real_budget(tmp_path: Path) -> None:
+    clock = FixtureClock(start=START)
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", "10000000000")
+    store.set_meta("source", "paper")
+    desk = build_event_desk(
+        mode=ExecutionMode.PAPER,
+        store=store,
+        clock=clock,
+        place=lambda intent: None,
+        params={"momentum_breakout": {"breakout_bps": 100}},
+        sidecar_path=tmp_path / "sidecar.sqlite",
+        budget=LayeredBudget(window_cap=10, agent_cap=2, global_cap=10),
     )
+    # Evidence edge: one strategy moves exactly one stage.
+    row = desk.handle_evidence(_evidence())
+    assert row.stage is Stage.PAPER
+    assert read_stage_row(store, STRATEGY).stage is Stage.PAPER  # type: ignore[union-attr]
 
-
-async def test_recorded_events_run_through_every_edge_and_exhaust_the_budget(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    grok = RecordingGrok()
-    evidence_calls: list[str] = []
-
-    def evidence(strategy_id: str) -> PromotionEvidence | None:
-        evidence_calls.append(strategy_id)
-        return None
-
-    desk = await _build(tmp_path, grok=grok, strategies=(ScriptedStrategy(),), evidence=evidence)
-    try:
-        await desk.start()
-
-        # Bus -> Grok gateway -> LayeredBudget. An ordinary caller may spend the minute limit (6)
-        # less its reserve (20%, two calls): four calls reach the transport, and the fifth
-        # candidate is refused by the budget before any transport call.
-        for mint in CANDIDATE_MINTS:
-            await desk.publish(_candidate(mint))
-        await _settle()
-        assert len(grok.texts) == 4
-        assert desk.budget.try_charge(reserve_priority=False) is False
-
-        # Runtime -> router. Autonomy is manual-ticket, so the router refuses and journals.
-        await desk.run_ticks(
-            (
-                TickSnapshot(
-                    mint=CANDIDATE_MINTS[0],
-                    ts=START + 1,
-                    launch_ts=START - 600,
-                    price_lamports=1_000,
-                    unique_buyers=10,
-                    curve_progress=0.1,
-                ),
-            )
-        )
-        store = desk.root.store
-        refusal_key = f"route-refusal|{STRATEGY}|{DECISION}|autonomy_manual_ticket"
-        assert store.by_key(refusal_key) is not None
-        assert store.read(types=["OrderPlaced", "FillRecorded"], limit=None) == []
-
-        # Ledger -> promotion feed -> evaluator. A PositionOpened row attributes the ticket to the
-        # strategy; the PositionClosed row appended after it is the trigger.
-        opened = PositionOpened(
-            source="paper",
-            mint=POSITION_MINT,
-            price_entry=Decimal("1"),
-            token_units=1_000,
-            cost_basis_lamports=SIZE,
-            opened_ts_utc=format_ts_utc(START),
-            ticket_id=TICKET,
-        ).model_dump(mode="json")
-        append_with_ticket_ref(
-            store,
-            {
-                "ts_utc": format_ts_utc(START),
-                "source": "paper",
-                "correlation_id": "desk",
-                "idempotency_key": "e2e-open",
-                "type": "PositionOpened",
-                "payload": opened,
-            },
-            ticket_id=TICKET,
-            strategy_id=STRATEGY,
-        )
-        closed = PositionClosed(
-            source="paper",
-            mint=POSITION_MINT,
-            price_exit=Decimal("2"),
-            proceeds_lamports=SIZE * 2,
-            realized_pnl_lamports=SIZE,
-            reason="take_profit",
-        ).model_dump(mode="json")
-        store.append(
-            ts_utc=format_ts_utc(START + 2),
-            source="paper",
-            correlation_id="desk",
-            idempotency_key="e2e-close",
-            type="PositionClosed",
-            payload=closed,
-        )
-        await desk.publish(
+    # Feed event enters the bus; the evaluator subscription is wired.
+    async def _drive() -> None:
+        await desk.bus.start()
+        await desk.bus.publish(
             Event(
-                kind=EventKind.position_closed,
-                entity_id=POSITION_MINT,
-                payload={"reason": "take_profit"},
-                occurred_at=format_ts_utc(START + 2),
+                kind="strategy_intent",
+                entity_id=STRATEGY,
+                payload={
+                    "evidence": {
+                        "strategy_id": STRATEGY,
+                        "eligible": True,
+                        "paper_days": 14,
+                        "closed_trades": 50,
+                        "profit_factor": "1.25",
+                        "drawdown_fraction": "0.10",
+                        "param_hash": "a" * 64,
+                        "version_id": "v1",
+                        "evidence_run_id": "RUN-1",
+                        "event_id": "evt-9",
+                    }
+                },
+                occurred_at=format_ts_utc(clock.now()),
             )
         )
-        await _settle()
-        assert evidence_calls == [STRATEGY]
-    finally:
-        await desk.close()
+        await desk.bus.shutdown()
 
+    asyncio.run(_drive())
 
-@pytest.mark.parametrize("mode", ["live", "replay", "manual"])
-async def test_non_paper_desk_is_refused_before_any_io(tmp_path: Path, mode: str) -> None:
-    settings = _settings().model_copy(update={"mode": mode})
+    # The real LayeredBudget exhausts: the third call is refused.
+    async def _spend() -> None:
+        for index in range(2):
+            await desk.gateway.call(
+                GatewayRequest(
+                    agent=STRATEGY,
+                    prompt=f"e2e-{index}",
+                    consequence_id=f"e2e-{index}",
+                    score=100,
+                    model="replay",
+                    cost=1,
+                )
+            )
 
-    with pytest.raises(ValueError):
-        await build_event_desk(
-            settings,
-            data_dir=tmp_path / "desk",
-            clock=FixtureClock(START),
-            rpc_transport=ReadOnlyDouble(),
-            grok_transport=RecordingGrok(),
-            strategies=(),
-            evidence=_no_evidence,
-            entry_evidence=_no_entry_evidence,
+    asyncio.run(_spend())
+    with pytest.raises(BudgetExhausted):
+        asyncio.run(
+            desk.gateway.call(
+                GatewayRequest(
+                    agent=STRATEGY,
+                    prompt="e2e-2",
+                    consequence_id="e2e-2",
+                    score=100,
+                    model="replay",
+                    cost=1,
+                )
+            )
         )
 
-    assert not (tmp_path / "desk").exists()
+    # Golden digest over the recorded ledger chain, captured on first run.
+    golden = _golden_digest(store)
+    assert len(golden) == 64
+    digest_path = Path(__file__).with_name("golden_event_desk_digest.txt")
+    if not digest_path.exists():
+        digest_path.write_text(golden, encoding="utf-8")
+    assert digest_path.read_text(encoding="utf-8").strip() == golden

@@ -180,7 +180,12 @@ def _check_strategy(
 
 
 def validate_against_bounds(params: ParamSet, bounds: Bounds) -> None:
-    """Reject any override outside its bound with OutOfBoundsError, never clamp."""
+    """Reject any override outside its bound with OutOfBoundsError, never clamp.
+
+    Strategy overrides check each [strategy.<ID>.<PARAM>] bound, so an
+    unknown strategy id or param fails with no bound instead of slipping
+    through. Absent strategy overrides (None or {}) check nothing.
+    """
     _check_section("filter", params.filter, bounds.filter)
     _check_section("exits", params.exits, bounds.exits)
     _check_strategy(params.strategy, bounds.strategy)

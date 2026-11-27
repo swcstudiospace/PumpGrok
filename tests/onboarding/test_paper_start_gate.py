@@ -87,10 +87,23 @@ def _run_paper_once(capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
     return code, captured.out + captured.err
 
 
+def _run_paper_serve(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, str]:
+    # The continuous desk start is gated; only the `--once --replay`
+    # checkpoint bypasses the paper start gate.
+    monkeypatch.setenv("PUMPGROK_HEALTH__PORT", HEALTH_PORT)
+    code = main(["run", "--mode", "paper", "--serve", "--replay", SMOKE])
+    captured = capsys.readouterr()
+    return code, captured.out + captured.err
+
+
 def test_clean_environment_lists_every_missing_input_before_any_start(
-    startup_spy: list[tuple[str, Path]], capsys: pytest.CaptureFixture[str]
+    startup_spy: list[tuple[str, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    code, text = _run_paper_once(capsys)
+    code, text = _run_paper_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert "seat_tool_access: missing" in text
     for seat in EXPECTED_SEAT_IDS:
@@ -111,7 +124,7 @@ def test_refusal_names_only_seats_that_lack_an_authenticated_decision(
         decisions[oc.tool_scope(unbound, tool)] = _decision(unbound, tool, bound=False)
     monkeypatch.setattr(oc, "read_authority", lambda *_a, **_k: decisions)
 
-    code, text = _run_paper_once(capsys)
+    code, text = _run_paper_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert f"seat {unbound}:" in text, "an unbound decision must not count as authenticated"
     assert f"seat {decided}:" not in text
@@ -165,9 +178,11 @@ def test_no_replay_run_is_not_counted_as_a_passed_gate(
 
 
 def test_refused_start_writes_nothing_to_disk(
-    startup_spy: list[tuple[str, Path]], capsys: pytest.CaptureFixture[str]
+    startup_spy: list[tuple[str, Path]],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    code, _text = _run_paper_once(capsys)
+    code, _text = _run_paper_serve(capsys, monkeypatch)
     assert code == EXIT_CONFIG
     assert not PAPER_LEDGER_PATH.exists()
     assert not (Path("var") / "operator").exists()

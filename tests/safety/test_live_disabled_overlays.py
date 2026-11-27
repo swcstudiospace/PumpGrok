@@ -54,7 +54,7 @@ def test_live_profile_declares_intent_but_stays_disabled() -> None:
 
 
 def test_overlay_profile_set_is_unchanged() -> None:
-    """The overlay set still covers exactly the dev, paper and live profiles."""
+    """The overlay set covers exactly dev, paper, paper-event (D-04) and live."""
     names = {path.stem for path in _overlay_paths()}
     assert names == EXPECTED_PROFILES
 

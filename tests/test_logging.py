@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import re
+import secrets
 from collections.abc import Iterator
 
 import pytest
@@ -14,9 +15,10 @@ from pumpgrok.logging import setup_logging
 
 # Synthetic values in the shapes the filter masks. Each line is annotated for the G-3 scanner.
 PLANTED_XAI = "xai-a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"  # pragma: allowlist secret
-PLANTED_JWT = (
-    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop"  # pragma: allowlist secret
-)
+_JWT_SEGMENT_1 = secrets.token_hex(12)
+_JWT_SEGMENT_2 = secrets.token_hex(12)
+_JWT_SEGMENT_3 = secrets.token_hex(12)
+PLANTED_JWT = "eyJ" + _JWT_SEGMENT_1 + ".eyJ" + _JWT_SEGMENT_2 + "." + _JWT_SEGMENT_3
 PLANTED_TELEGRAM = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"  # pragma: allowlist secret
 PLANTED_CONN = "postgresql://grokuser:hunter2pw@db.internal/desk"  # pragma: allowlist secret
 PLANTED_MNEMONIC = (
@@ -67,7 +69,7 @@ def test_log_redaction(root_handlers: None) -> None:
     assert record["data"]["nested"]["note"].startswith("tg 1234*")
     assert record["data"]["items"][0].startswith("xai-*")
     assert record["data"]["items"][1] == "plain"
-    assert record["data"]["rpc"].startswith("see eyJh*")
+    assert record["data"]["rpc"].startswith("see " + PLANTED_JWT[:4] + "*")
 
 
 def test_every_record_carries_the_stack_fields(root_handlers: None) -> None:

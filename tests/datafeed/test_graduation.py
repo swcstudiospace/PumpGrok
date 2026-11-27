@@ -1,4 +1,9 @@
-"""Graduation and data gaps must not manufacture a paper sale."""
+"""Graduation refusal (MKT-07).
+
+Graduation and data gaps must not manufacture a paper sale.
+"""
+
+from __future__ import annotations
 
 import asyncio
 import hashlib
@@ -7,7 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from pumpgrok.datafeed.graduation import GapSettings, PositionAction, entry_allowed, position_action
+from pumpgrok.datafeed.graduation import (
+    GapSettings,
+    PositionAction,
+    entry_allowed,
+    entry_refused,
+    graduation_refusal_reason,
+    position_action,
+)
 from pumpgrok.execution import verify_replay
 from pumpgrok.execution.paper_adapter.models import CurveSnapshot
 from pumpgrok.execution.paper_factory import VerifiedReplay
@@ -17,6 +29,16 @@ from pumpgrok.tools.onchain import curve_layout
 MINT = "mint-1"
 S0 = 42_000_000_000
 T0 = 766_428_571_428_571
+
+
+def test_completed_refuses() -> None:
+    assert entry_refused(complete=True) is True
+    assert graduation_refusal_reason(complete=True) == "graduated: curve is complete"
+
+
+def test_incomplete_allowed() -> None:
+    assert entry_refused(complete=False) is False
+    assert graduation_refusal_reason(complete=False) is None
 
 
 def snapshot(*, complete: bool = False, source: str = "rpc") -> CurveSnapshot:

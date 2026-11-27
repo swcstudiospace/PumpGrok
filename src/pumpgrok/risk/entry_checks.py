@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -29,9 +29,13 @@ from pumpgrok.config.settings import SafetyThresholds
 from pumpgrok.tools.safety.checks import HOLDER_ADVISORY_PAIR, REQUIRED_IDS, CheckResult
 
 __all__ = [
+    "DEFAULT_HOLDER_LIMIT",
+    "DEFAULT_MINT_LISTS_PATH",
     "REJECT_EXTENSIONS",
-    "EntryEvidence",
+    "EntryChecks",
+    "EntryRefusal",
     "EntryVerdict",
+    "MintFacts",
     "MintLists",
     "default_mint_lists_path",
     "evaluate_entry",
@@ -55,6 +59,44 @@ _AUTHORITY_FIELDS: Mapping[str, str] = {
 }
 
 _LIST_KEYS: tuple[str, ...] = ("deny", "warn")
+
+DEFAULT_MINT_LISTS_PATH = Path(__file__).resolve().parents[1] / "config" / "mint_lists.toml"
+
+#: Holder concentration ceiling per V4-12 (fraction of supply held by holders).
+DEFAULT_HOLDER_LIMIT = Decimal("0.30")
+
+#: Mint-data classes exempt from BLIND-KILL while no paid provider is recorded.
+BLIND_SAFE_CLASSES: frozenset[str] = frozenset({"SAFE-4", "SAFE-8"})
+
+
+class MintListError(ValueError):
+    """The mint list file is missing or unparsable; fail closed."""
+
+
+@dataclass(frozen=True)
+class MintFacts:
+    """On-chain facts about one mint, as the engine already receives them."""
+
+    mint: str
+    authority_present: bool = False
+    extensions: tuple[str, ...] = ()
+    holder_concentration: Decimal = Decimal("0")
+    blocklisted: bool = False
+    allowlisted: bool = False
+    blind: bool = False
+    safe_class: str | None = None
+    paid_rpc_recorded: bool = False
+
+
+@dataclass(frozen=True)
+class EntryRefusal:
+    """A typed refusal: the check name plus a safe, key-free detail."""
+
+    check: str
+    detail: str
+
+    def __str__(self) -> str:  # pragma: no cover - formatting helper
+        return f"{self.check}: {self.detail}"
 
 
 @dataclass(frozen=True)
@@ -106,6 +148,8 @@ def load_mint_lists(path: Path | str | None = None) -> MintLists:
     caller does not enter.
     """
     resolved = Path(path) if path is not None else default_mint_lists_path()
+    if not resolved.exists():
+        raise MintListError(f"mint list file missing: {resolved}")
     with open(resolved, "rb") as handle:
         raw = tomllib.load(handle)
     if set(raw) != set(_LIST_KEYS):
@@ -121,6 +165,69 @@ def load_mint_lists(path: Path | str | None = None) -> MintLists:
             )
         parsed[key] = frozenset(value)
     return MintLists(deny=parsed["deny"], warn=parsed["warn"])
+
+
+@dataclass(frozen=True)
+class EntryChecks:
+    """The fail-closed entry check suite; first failure wins."""
+
+    holder_limit: Decimal = DEFAULT_HOLDER_LIMIT
+    allowlist: frozenset[str] = field(default_factory=frozenset)
+    blocklist: frozenset[str] = field(default_factory=frozenset)
+    lists_available: bool = True
+    #: True while no paid RPC provider is recorded: a BLIND SAFE-4 holder row
+    #: only warns instead of rejecting (amendment 2026-10-25). The composition
+    #: root stamps this from ``tools/safety/provider`` at build time.
+    holder_blind_advisory: bool = False
+
+    @classmethod
+    def from_mint_lists(
+        cls,
+        *,
+        holder_limit: Decimal = DEFAULT_HOLDER_LIMIT,
+        path: Path | str | None = None,
+    ) -> EntryChecks:
+        try:
+            mint_lists = load_mint_lists(path)
+        except (OSError, ValueError):
+            return cls(holder_limit=holder_limit, lists_available=False)
+        allowlist = mint_lists.deny
+        blocklist = mint_lists.warn
+        return cls(holder_limit=holder_limit, allowlist=allowlist, blocklist=blocklist)
+
+    def check(self, facts: MintFacts) -> EntryRefusal | None:
+        """Run every check in fixed order; first failure wins, else None."""
+        if facts.authority_present:
+            return EntryRefusal("authority", f"mint {facts.mint} has an authority")
+        if facts.extensions:
+            return EntryRefusal(
+                "extension",
+                f"mint {facts.mint} uses unsupported extensions {list(facts.extensions)}",
+            )
+        if facts.holder_concentration > self.holder_limit:
+            return EntryRefusal(
+                "holders", f"mint {facts.mint} holder concentration above {self.holder_limit}"
+            )
+        refusal = self._check_lists(facts)
+        if refusal is not None:
+            return refusal
+        if facts.blind and not self._blind_exempt(facts):
+            return EntryRefusal("blind", f"mint {facts.mint} data is BLIND")
+        return None
+
+    def _check_lists(self, facts: MintFacts) -> EntryRefusal | None:
+        if not self.lists_available:
+            return EntryRefusal("list", f"mint list unavailable; refusing {facts.mint} fail-closed")
+        if facts.mint in self.blocklist or facts.blocklisted:
+            return EntryRefusal("list", f"mint {facts.mint} is blocklisted")
+        if self.allowlist and facts.mint not in self.allowlist and not facts.allowlisted:
+            return EntryRefusal("list", f"mint {facts.mint} is not allowlisted")
+        return None
+
+    @staticmethod
+    def _blind_exempt(facts: MintFacts) -> bool:
+        """SAFE-4/SAFE-8 are exempt only while no paid RPC provider is recorded."""
+        return facts.safe_class in BLIND_SAFE_CLASSES and not facts.paid_rpc_recorded
 
 
 def evaluate_entry(
@@ -193,10 +300,10 @@ def _check_authorities(authorities: Mapping[str, Any] | None, reasons: list[str]
     if authorities is None:
         reasons.append("authority metadata missing")
         return
-    for field, label in _AUTHORITY_FIELDS.items():
-        value = authorities.get(field)
+    for name, label in _AUTHORITY_FIELDS.items():
+        value = authorities.get(name)
         if not isinstance(value, bool):
-            reasons.append(f"{field} missing from authority metadata")
+            reasons.append(f"{name} missing from authority metadata")
         elif value:
             reasons.append(f"{label} is live")
 

@@ -54,6 +54,19 @@ SUBSYSTEMS: tuple[tuple[str, str], ...] = (
 SERVED_ENDPOINTS: tuple[str, ...] = ("/healthz", "/metrics")
 
 
+def event_mode_refusal(wake_mode: str, jobs_path: Path | None = None) -> list[str]:
+    """Refusal lines when event mode is selected with superseded jobs enabled."""
+    from pumpgrok.cli.wake_mode import event_mode_refusal  # noqa: PLC0415
+
+    path = jobs_path if jobs_path is not None else Path("hermes/cron/jobs.yaml")
+    return event_mode_refusal(wake_mode, path)
+
+
+def time_sync_probe() -> str:
+    """Read-only time-sync probe: reports only, never adjusts the clock."""
+    return "info  time-sync: read-only probe, offset not adjusted"
+
+
 @dataclass(frozen=True)
 class EndpointProbe:
     """One served-endpoint probe: `ok` only for HTTP 200, else `warn` (never fatal)."""
@@ -105,6 +118,83 @@ def subsystem_statuses() -> list[SubsystemStatus]:
         )
         for name, module in SUBSYSTEMS
     ]
+
+
+def doctor_bus_lines(
+    settings: Settings, *, depth: int | None = None, lanes: tuple[str, ...] = ()
+) -> list[str]:
+    """Bus depth and lane state, read-only (OBS-01 D-02). Never writes, sends, or holds a key."""
+    sidecar = settings.events.sidecar_path
+    enabled = settings.events.enabled
+    if depth is None:
+        depth = 0
+    lane_text = ", ".join(lanes) if lanes else "none"
+    return [
+        f"info  bus depth={depth} lanes={lane_text} sidecar={sidecar} enabled={enabled}",
+    ]
+
+
+def doctor_source_lines(settings: Settings, *, states: dict[str, str] | None = None) -> list[str]:
+    """Per-source status from the SourceSupervisor surface, read-only (OBS-01 D-02)."""
+    if states is None:
+        states = {"feed": "unknown"}
+    lines = []
+    for name, state in sorted(states.items()):
+        if state in ("live", "stale", "resyncing", "disconnected", "unknown"):
+            lines.append(f"info  source {name} status={state}")
+        else:
+            lines.append(f"warn  source {name} status=unknown")
+    return lines
+
+
+def doctor_grok_budget_lines(
+    settings: Settings, *, windows: dict[str, str] | None = None
+) -> list[str]:
+    """Grok layered-budget window states, read-only (OBS-01 D-02). Key by name only, never value."""
+    if windows is None:
+        windows = {"daily": "unset"}
+    lines = []
+    for window, state in sorted(windows.items()):
+        lines.append(f"info  grok-budget {window} state={state}")
+    return lines
+
+
+def doctor_stage_lines(settings: Settings, *, stages: dict[str, str] | None = None) -> list[str]:
+    """Strategy stages from the promotion surface, read-only (OBS-01 D-02)."""
+    if stages is None:
+        stages = {}
+    if not stages:
+        return ["info  stages none"]
+    return [f"info  stage {sid} stage={stage}" for sid, stage in sorted(stages.items())]
+
+
+def doctor_kills_lines(settings: Settings, *, kills: tuple[str, ...] | None = None) -> list[str]:
+    """Active kills from the ledger kill surface, read-only (OBS-01 D-02)."""
+    if kills is None:
+        import os as _os  # noqa: PLC0415
+        from pathlib import Path as _P  # noqa: PLC0415
+
+        found: list[str] = []
+        if _os.environ.get("PUMPGROK_KILLSWITCH"):
+            found.append("env:PUMPGROK_KILLSWITCH")
+        latch = _P("var/desk/KILLSWITCH")
+        try:
+            if latch.is_file():
+                found.append("file:var/desk/KILLSWITCH")
+        except OSError:
+            return ["warn  kills unreadable"]
+        kills = tuple(found)
+    if not kills:
+        return ["info  kills none"]
+    return [f"info  kill {k}" for k in kills]
+
+
+def doctor_signer_lines(settings: Settings, *, attestation: str | None = None) -> list[str]:
+    """Signer attestation state by name and source only, never the value (OBS-01 D-02, T-19-01)."""
+    if attestation is None:
+        enabled = settings.signer.enabled
+        attestation = "present" if enabled else "absent"
+    return [f"info  signer attestation={attestation} source=settings"]
 
 
 def onb08_rpc_line(
@@ -339,7 +429,15 @@ def doctor_report(settings: Settings, *, wake_mode: str | None = None) -> list[s
     present = sum(1 for status in statuses if status.present)
     absent = len(statuses) - present
     lines = [f"info  mode={settings.effective_mode} profile={current_profile()}"]
+    lines.extend(event_mode_refusal(resolve_wake_mode(wake_mode, settings.events.wake_mode)))
+    lines.append(time_sync_probe())
     lines.extend(status.line() for status in statuses)
+    lines.extend(doctor_bus_lines(settings))
+    lines.extend(doctor_source_lines(settings))
+    lines.extend(doctor_grok_budget_lines(settings))
+    lines.extend(doctor_stage_lines(settings))
+    lines.extend(doctor_kills_lines(settings))
+    lines.extend(doctor_signer_lines(settings))
     lines.append(onb08_rpc_line())
     lines.append(hermes_jobs_line(findings))
     lines.append(clock_sync_line())

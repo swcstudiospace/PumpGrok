@@ -36,6 +36,7 @@ from pumpgrok.cli.validators import (
 )
 from pumpgrok.cli.wiring import (
     _call_use,
+    _repo_root,
     _run_wired,
     _seat_manifest_id,
     _unflattened_lines,
@@ -62,7 +63,9 @@ from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
 from pumpgrok.ledger.tickets import allocate_ticket
 from pumpgrok.promotion.demote import demote
 from pumpgrok.replay.clock import WallClock, format_ts_utc
-from pumpgrok.replay.live_recorder import DatasetConflict
+from pumpgrok.replay.fixtures import load_dataset
+from pumpgrok.replay.live_recorder import DatasetConflict, LiveRecorder
+from pumpgrok.replay.normalize import to_curve_tick
 from pumpgrok.replay.rng import make_rng
 from pumpgrok.replay.runner import format_trade
 from pumpgrok.risk.engine import RiskEngine
@@ -218,7 +221,11 @@ def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int 
                 *(f"  - {problem}" for problem in problems),
             )
             return EXIT_CONFIG, wake_mode
-    if settings.effective_mode == "paper":
+    # The `--once --replay` checkpoint is a fixture pass that needs no live
+    # paper inputs (ONB-03 gates a live start); every other paper start,
+    # including `--serve`, refuses until the inputs are present.
+    checkpoint = bool(getattr(args, "once", False)) and getattr(args, "replay", None) is not None
+    if settings.effective_mode == "paper" and not checkpoint:
         missing = _paper_start_gate(settings)
         if missing:
             _say(
@@ -231,9 +238,32 @@ def _run_start_block(args: argparse.Namespace, settings: Settings) -> tuple[int 
     return None, wake_mode
 
 
+def _record_dataset(args: argparse.Namespace, settings: Settings) -> int:
+    """`run --record DATASET`: seal a recorded dataset from the replay source.
+
+    The source is `--replay <dir>` when given, else the bundled smoke
+    fixture; the sealed output passes load_dataset unchanged (REC-03).
+    """
+    source = (
+        Path(args.replay)
+        if args.replay
+        else _repo_root() / "tests" / "fixtures" / "replay" / "smoke"
+    )
+    dataset = load_dataset(source)
+    target = Path(str(args.record))
+    recorder = LiveRecorder(target, clock=WallClock())
+    for record in dataset.events:
+        recorder.record_tick(to_curve_tick(dict(record)))
+    recorder.seal_dataset(target.name or dataset.manifest.dataset, seed_hint=settings.replay.seed)
+    _say(sys.stdout, f"recorded dataset sealed into {target}")
+    return EXIT_OK
+
+
 def _run(args: argparse.Namespace, settings: Settings) -> int:
-    if getattr(args, "record", None) is not None:
+    if getattr(args, "record", None) is not None and getattr(args, "duration", None):
         return _run_record(args, settings)
+    if getattr(args, "record", None) is not None:
+        return _record_dataset(args, settings)
     blocked, wake_mode = _run_start_block(args, settings)
     if blocked is not None:
         return blocked

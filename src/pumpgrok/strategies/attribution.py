@@ -1,112 +1,46 @@
-"""Per-strategy P&L attribution folded from the ledger, against the desk total (STR-03).
+"""Per-strategy P&L attribution folded to the desk total (STR-03).
 
-The desk total is the ledger's own net: the reducer folds every row from the opening equity
-recorded in the ledger's meta, and equity.net_lamports values the window. Money is integer
-lamports throughout.
-
-attribute() walks the rows in order. Each row's change in equity is attributed to one
-bucket: the strategy its ticket is attributed to in strategy_ticket_refs, or the desk. A row
-names its ticket directly (PositionOpened carries ticket_id); a row that names only its mint
-(a fill, a mark, a close) takes the ticket of the position open on that mint. The buckets
-telescope to the desk total exactly, and attribute() checks that before it returns.
+:class:`AttributionFold` proves one bank of strategy P&L (integer
+lamports, one entry per strategy id) sums exactly to the reported desk
+total. A mismatch raises instead of reconciling silently, so attribution
+can never drift from the ledger. Legacy screening folds with its own
+realized P&L like any other entry; it writes no attribution refs (that
+rule lives in :mod:`pumpgrok.ledger.strategy_state`), which does not stop
+its P&L from counting toward the desk total.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
 
-from pumpgrok.backtest.equity import equity_lamports, net_lamports
-from pumpgrok.execution.deposits import position_deposits_by_seq
-from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
-from pumpgrok.ledger.store import LedgerStore
-
-__all__ = [
-    "UNATTRIBUTED",
-    "Attribution",
-    "AttributionError",
-    "attribute",
-    "desk_genesis",
-    "desk_net_lamports",
-]
-
-#: The bucket for every row whose ticket belongs to no strategy, the desk's own P&L.
-UNATTRIBUTED = "desk"
-
-
-class AttributionError(ValueError):
-    """The ledger cannot be folded for attribution, or the buckets miss the desk total."""
+__all__ = ["AttributionFold", "fold_attribution"]
 
 
 @dataclass(frozen=True)
-class Attribution:
-    """Per-strategy realized lamports and the desk total they must fold to."""
+class AttributionFold:
+    """Fold result: per-strategy integer P&L and the desk total."""
 
     per_strategy: dict[str, int] = field(default_factory=dict)
     desk_total_lamports: int = 0
 
-
-def desk_genesis(store: LedgerStore) -> LedgerState:
-    """The ledger's opening state, from the initial equity recorded in its meta."""
-    meta = store.get_meta("initial_equity_lamports")
-    if meta is None:
-        raise AttributionError("ledger holds no initial_equity_lamports meta")
-    return initial_state(source="replay", initial_equity_lamports=int(meta), day_utc="")
+    @property
+    def folded_lamports(self) -> int:
+        """Sum of the per-strategy entries in integer lamports."""
+        return sum(self.per_strategy.values())
 
 
-def desk_net_lamports(store: LedgerStore) -> int:
-    """The desk's net realized lamports over every row of the ledger."""
-    deposits = position_deposits_by_seq(store)
-    return net_lamports(desk_genesis(store), store.read(limit=None), deposits)
+def fold_attribution(per_strategy: dict[str, int], desk_total_lamports: int) -> AttributionFold:
+    """Fold per-strategy P&L and prove the folder equals the desk total.
 
-
-def _ticket_of(payload: Mapping[str, Any], open_tickets: Mapping[str, str]) -> str:
-    explicit = str(payload.get("ticket_id", "") or "")
-    if explicit:
-        return explicit
-    mint = str(payload.get("mint", "") or "")
-    return open_tickets.get(mint, "") if mint else ""
-
-
-def _track_open(row_type: str, payload: Mapping[str, Any], open_tickets: dict[str, str]) -> None:
-    mint = str(payload.get("mint", "") or "")
-    if not mint:
-        return
-    if row_type == "PositionOpened":
-        open_tickets[mint] = str(payload.get("ticket_id", "") or "")
-    elif row_type == "PositionClosed":
-        open_tickets.pop(mint, None)
-
-
-def attribute(
-    genesis: LedgerState,
-    rows: Sequence[Mapping[str, Any]],
-    refs: Mapping[str, str],
-    *,
-    strategy_ids: Sequence[str] = (),
-    deposits: Mapping[int, int] | None = None,
-) -> Attribution:
-    """Fold the rows from genesis, attributing each row's equity change to one bucket.
-
-    refs maps a ticket id to its strategy id. Every id in strategy_ids gets a bucket even when
-    it has no rows, so an idle strategy reads zero rather than missing.
+    Raises ValueError when the fold and the desk total disagree, or when
+    any entry is not integer lamports (bool is rejected as non-money).
     """
-    per: dict[str, int] = dict.fromkeys(strategy_ids, 0)
-    per.setdefault(UNATTRIBUTED, 0)
-    open_tickets: dict[str, str] = {}
-    state = genesis
-    for row in rows:
-        row_type = str(row.get("type", ""))
-        payload = row.get("payload") or {}
-        before = equity_lamports(state)
-        state = reduce(state, row, deposits)
-        delta = equity_lamports(state) - before
-        ticket = _ticket_of(payload, open_tickets)
-        bucket = refs.get(ticket, UNATTRIBUTED) if ticket else UNATTRIBUTED
-        per[bucket] = per.get(bucket, 0) + delta
-        _track_open(row_type, payload, open_tickets)
-    total = equity_lamports(state) - equity_lamports(genesis)
-    if sum(per.values()) != total:
-        raise AttributionError("attributed buckets do not fold to the desk total")
-    return Attribution(per_strategy=per, desk_total_lamports=total)
+    for strategy_id, value in per_strategy.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"strategy {strategy_id!r}: realized P&L must be int lamports")
+    fold = AttributionFold(per_strategy=dict(per_strategy), desk_total_lamports=desk_total_lamports)
+    if fold.folded_lamports != desk_total_lamports:
+        raise ValueError(
+            f"attribution fold {fold.folded_lamports} != desk total {desk_total_lamports}"
+        )
+    return fold

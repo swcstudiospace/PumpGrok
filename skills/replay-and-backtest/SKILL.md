@@ -50,3 +50,7 @@ rule change -> replay fails        -> rule stays out
 - Fixtures: `tests/fixtures/replay/smoke` (smoke dataset plus manifest)
 - Gate G-2: backtested rules still need approval before paper
 - Companion skills: `desk-strategy-lab` (rule experiments), `momentum-signals` and `position-monitoring` (signal and exit rules under test)
+
+## v4 notes
+
+Event mode (`--wake-mode event`) drains the same recorded traffic through the event bus; the nightly soak (`PUMPGROK_REQUIRE_SOAK=1 ... -m slow tests/soak/test_soak_event_mode.py`) pins the drain hash and the zero idle-Grok invariant. The replay profile in compose is the only place the bundled fixture command remains.

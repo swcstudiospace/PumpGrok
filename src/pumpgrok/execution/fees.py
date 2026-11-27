@@ -28,13 +28,16 @@ from dataclasses import dataclass, replace
 from typing import Any, Final, Protocol
 
 __all__ = [
+    "ATA_RENT_LAMPORTS",
     "ATA_RENT_OFFLINE_EPOCH",
     "ATA_RENT_OFFLINE_LAMPORTS",
     "ATA_RENT_OFFLINE_SOURCE",
     "ATA_TOKEN_ACCOUNT_DATA_LEN",
     "BASE_FEE_LAMPORTS",
+    "BUILDER_FEE_BPS",
     "COMPUTE_UNITS",
     "PAPER_DEFAULT_FEE_MODEL",
+    "PRIORITY_FEE_CAP_LAMPORTS",
     "VENUE_FEE_BPS",
     "FeeModel",
     "FeeModelV2",
@@ -48,6 +51,12 @@ VENUE_FEE_BPS = 100
 BASE_FEE_LAMPORTS = 5_000
 #: Compute units per fill (REVIEW).
 COMPUTE_UNITS = 200_000
+#: PumpPortal builder fee in bps when that builder is used (v2 only, REVIEW).
+BUILDER_FEE_BPS = 50
+#: ATA rent lamports on the first buy of a mint (v2 only, REVIEW).
+ATA_RENT_LAMPORTS = 2_039_280
+#: Signer priority-fee cap in lamports (v2 only, REVIEW).
+PRIORITY_FEE_CAP_LAMPORTS = 1_000_000
 
 #: SPL token account data length; the rent-exempt minimum is read for this size.
 ATA_TOKEN_ACCOUNT_DATA_LEN: Final = 165
@@ -189,7 +198,10 @@ async def read_ata_rent(rpc: _RentRpc, *, base: FeeModelV2 = PAPER_DEFAULT_FEE_M
     The RPC result replaces the offline pin. A non-integer or non-positive result is
     refused. Epoch is None because this read does not return one.
     """
-    lamports = await rpc.call("getMinimumBalanceForRentExemption", [ATA_TOKEN_ACCOUNT_DATA_LEN])
+    lamports = await rpc.call(
+        "getMinimumBalanceForRentExemption",  # pragma: allowlist secret
+        [ATA_TOKEN_ACCOUNT_DATA_LEN],
+    )
     if type(lamports) is not int or lamports <= 0:
         raise ValueError("rent read is not a positive integer")
     return replace(

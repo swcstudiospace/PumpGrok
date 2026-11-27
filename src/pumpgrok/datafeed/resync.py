@@ -13,8 +13,9 @@ import math
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
+from pumpgrok.datafeed.mintbook import MintBook
 from pumpgrok.events.sources import SourceSupervisor
 from pumpgrok.replay.clock import Clock
 
@@ -204,3 +205,10 @@ class Recovery:
                 continue
             self._gaps.close()
             return
+
+
+def resync_held(supervisor: Any, book: MintBook) -> tuple[str, ...]:
+    """Seed the supervisor with exactly the held mints; return the seed."""
+    held = tuple(sorted(book.held))
+    supervisor.resync(held)
+    return held

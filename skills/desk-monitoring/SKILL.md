@@ -44,3 +44,7 @@ Active Alerts: ...
 ## References
 - CLI: `pumpgrok state status`, `pumpgrok rug watch`, `pumpgrok killswitch status`
 - Companion skills: `desk-risk-limits` (thresholds), `position-monitoring` (position state)
+
+## v4 notes
+
+Watch the event, strategy, and promotion sections of `var/health.json` and the `pumpgrok_strategy_*` metric families. Alert rules in `docs/observability/alerts.yaml` cover dead letters, stale sources, Grok budget exhaustion, kills, and signer UNKNOWN; every expression names a registry metric.

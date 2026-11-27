@@ -24,7 +24,6 @@ the process environment instead).
 from __future__ import annotations
 
 import os
-import re
 import tomllib
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
@@ -42,6 +41,8 @@ from pydantic_settings import (
 )
 
 from pumpgrok.config.sections.core import (
+    KEY_BEARING_VALUE_RE,
+    ConfigError,
     DataSettings,
     ExecutionSettings,
     GrokSettings,
@@ -77,10 +78,10 @@ from pumpgrok.config.sections.v4 import (
 from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.risk.limits import EngineLimits
 
-# The section classes live in config/sections. They stay importable from this module because the
-# engine, backtest, replay and test modules import them from pumpgrok.config.settings by name.
 __all__ = [
+    "KEY_BEARING_VALUE_RE",
     "BacktestV2Settings",
+    "ConfigError",
     "DataSettings",
     "DatafeedSettings",
     "EventsSettings",
@@ -134,25 +135,6 @@ EXEMPT_ENV_NAMES = frozenset({"PUMPGROK_REPLAY__SEED"})
 # Declared setting paths that must never be set via env: mode flows only
 # through init kwargs (CLI --mode), top-level PUMPGROK_MODE, or TOML.
 REFUSED_ENV_NAMES = frozenset({"PUMPGROK_EXECUTION", "PUMPGROK_EXECUTION__MODE"})
-
-# A value shaped like a URL or argument carrying a secret: api-key=, api_key=,
-# apikey=, secret=, password=, token=, or a bare key= parameter. The bare key=
-# alternative requires a non-identifier char before it so that innocent words
-# containing "key" (e.g. monkey=) do not match.
-KEY_BEARING_VALUE_RE = re.compile(
-    r"(?i)(?:api[-_]?key=|secret=|password=|token=|(?<![A-Za-z_-])key=)"
-)
-
-
-class ConfigError(RuntimeError):
-    """Settings are not fit to start. The list of problems is the argument."""
-
-    def __init__(self, problems: list[str]) -> None:
-        self.problems = list(problems)
-        super().__init__(
-            "settings are not fit to start:\n"
-            + "\n".join(f"- {problem}" for problem in self.problems)
-        )
 
 
 def mask(secret: str) -> str:
@@ -378,7 +360,11 @@ def _nested_model(annotation: Any) -> type[BaseModel] | None:
 # by the live gate (precondition 2; env-only, never a TOML key),
 # PUMPGROK_KILLSWITCH by the kill switch (read once at process start, R22),
 # PUMPGROK_TELEGRAM_TOKEN by the Telegram notify sink (env-only and optional:
-# unset means Telegram is not configured and never blocks startup).
+# unset means Telegram is not configured and never blocks startup),
+# PUMPGROK_PAID_RPC_PROVIDER by the safety provider (env-only and optional:
+# unset or empty means no paid RPC provider is recorded),
+# PUMPGROK_STATE_DIR by the hosted state directory (HOST-01: absolute only),
+# PUMPGROK_LOG_LEVEL by the log config (HOST-08: DEBUG|INFO|WARNING|ERROR).
 NON_SETTING_ENV_NAMES = frozenset(
     {
         "PUMPGROK_PROFILE",
@@ -388,8 +374,37 @@ NON_SETTING_ENV_NAMES = frozenset(
         "PUMPGROK_KILLSWITCH",
         "PUMPGROK_CONFIRMATION_KEY",
         "PUMPGROK_TELEGRAM_TOKEN",  # pragma: allowlist secret: env var name, not a credential
+        "PUMPGROK_PAID_RPC_PROVIDER",
+        "PUMPGROK_STATE_DIR",
+        "PUMPGROK_LOG_LEVEL",
     }
 )
+
+#: Log levels accepted by PUMPGROK_LOG_LEVEL (HOST-08).
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+
+
+def valid_log_level(value: str) -> bool:
+    """HOST-08: only the four named levels are accepted."""
+    return value in LOG_LEVELS
+
+
+def state_root(environ: Mapping[str, str] | None = None) -> Path | None:
+    """Absolute state directory from PUMPGROK_STATE_DIR, or None when unset."""
+    env = os.environ if environ is None else environ
+    raw = env.get("PUMPGROK_STATE_DIR", "").strip()
+    return Path(raw) if raw else None
+
+
+def resolve_state_path(*parts: str, environ: Mapping[str, str] | None = None) -> Path:
+    """Resolve a runtime path under the state root; relative base when unset."""
+    base = state_root(environ)
+    rel = Path(*parts)
+    if base is None:
+        return rel
+    if rel.is_absolute():
+        return rel
+    return base / rel
 
 
 def allowed_env_names() -> set[str]:
@@ -509,6 +524,21 @@ def collect_startup_problems(environ: Mapping[str, str]) -> list[str]:
             problems.append(
                 f"refused environment variable: {present[refused]} "
                 "(mode is set via PUMPGROK_MODE or --mode, never via execution.* env)"
+            )
+
+    if "PUMPGROK_STATE_DIR" in present:
+        raw_state = (environ.get("PUMPGROK_STATE_DIR") or "").strip()
+        if not raw_state or not Path(raw_state).is_absolute():
+            problems.append(
+                "refused environment variable: PUMPGROK_STATE_DIR "
+                "(must be a non-empty absolute path)"
+            )
+    if "PUMPGROK_LOG_LEVEL" in present:
+        raw_level = (environ.get("PUMPGROK_LOG_LEVEL") or "").strip()
+        if not valid_log_level(raw_level):
+            problems.append(
+                "refused environment variable: PUMPGROK_LOG_LEVEL "
+                f"(expected one of: {', '.join(LOG_LEVELS)})"
             )
 
     allowed = allowed_env_names()

@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
 SCENARIO = "tests/events/test_idle_zero_grok.py"
 CANARY_ENV = "PUMPGROK_IDLE_GROK_CANARY"
 INJECTED_MARK = "IDLE_GROK_CALLS="

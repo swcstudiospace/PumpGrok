@@ -40,3 +40,6 @@ MKT-01..MKT-08, MKT-10, REC-01, REC-02: implemented across plans 13-01 to 13-06 
 - Object-identity provenance check in marks can be bypassed by patching an instance method in a test; production cannot.
 - RISK edited execution/__init__.py (SNIPER-owned); owner confirmation pending.
 - Strict-gate tests that pass only because fixture snapshots are refused (tests/datafeed live-labelled desk cases) need a reviewer pass.
+
+## Post-merge record (2026-11-26)
+Code merged to local main 8354ee6666139a7817ca246bef9ca2e5a0b3b4b8 via PRs #64, #65, #66, #67, #68, #69, #70, #73. Verified head was 27cdcd9 (bot-00-chief/v4-phase-13). Local-only: GitHub PRs still OPEN until push. No re-run of gates at post-merge head was recorded; orchestrator gate run follows documentation sync.

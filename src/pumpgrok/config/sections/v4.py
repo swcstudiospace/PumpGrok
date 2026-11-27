@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 #: Supervisor wake modes. `cadence` is the default and stays byte-identical; `event` wakes seats
 #: from the event bus (EVT-10). Selected by `--wake-mode` or `events.wake_mode`.
@@ -44,6 +44,9 @@ class DatafeedSettings(BaseModel):
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
+    watch_cap: int = Field(default=32, ge=1, le=1000)
+    rate_limit_per_10s: int = Field(default=30, ge=1, le=1000)
+    feed_state_dir: str = "var/desk/datafeed"
 
 
 class RecorderSettings(BaseModel):
@@ -51,6 +54,7 @@ class RecorderSettings(BaseModel):
 
     enabled: bool = False
     allowlist: tuple[str, ...] = ()
+    dataset_root: str = "var/desk/datasets"
 
 
 class StrategiesSettings(BaseModel):

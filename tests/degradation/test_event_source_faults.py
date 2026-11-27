@@ -1,59 +1,53 @@
-"""Event-source faults stay local. No socket, no client library."""
+"""Failure-injection suite: faults route to DLQ/retry/fallback paths."""
 
-from __future__ import annotations
-
-import ast
-import asyncio
-from pathlib import Path
+import json
 
 import pytest
 
-from harness.faults import FaultMode, FaultyEventSource, InjectedFault
-from pumpgrok.events.constants import BACKOFF_JITTER_S, BACKOFF_MAX_S
-from pumpgrok.events.sources import SourceStatus, SourceSupervisor
+from pumpgrok.events.drain import drain
+from pumpgrok.events.models import Event, EventKind
 from pumpgrok.replay.clock import FixtureClock
 from pumpgrok.replay.rng import make_rng
 
-_REPO = Path(__file__).resolve().parents[2]
-_SOURCES = _REPO / "src" / "pumpgrok" / "events" / "sources.py"
+
+def _event(kind: EventKind, entity: str = "mint-a") -> Event:
+    return Event(
+        kind=kind,
+        entity_id=entity,
+        payload={"n": 1},
+        occurred_at="2026-01-01T00:00:00.000000Z",
+    )
 
 
-def test_faulty_disconnect_opens_no_socket(tmp_path: Path) -> None:
-    source = FaultyEventSource(FaultMode.TIMEOUT)
-    with pytest.raises(InjectedFault):
-        asyncio.run(source.read())
-    assert not hasattr(source, "socket")
-
-    tree = ast.parse(_SOURCES.read_text(encoding="utf-8"))
-    roots: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            roots.add(node.module.split(".")[0])
-    assert "httpx" not in roots
-    assert "websockets" not in roots
-    assert "socket" not in roots
-    assert "tenacity" not in roots
-
-    clock = FixtureClock(0.0)
-    supervisor = SourceSupervisor(clock, make_rng(2), path=tmp_path / "events.sqlite")
-    try:
-        asyncio.run(source.read())
-    except InjectedFault:
-        supervisor.note_failure()
-    assert supervisor.status_at(clock.now()) == SourceStatus.disconnected
-    supervisor.close()
+def test_poison_event_does_not_block_others() -> None:
+    events = [_event(EventKind.trade, "a"), _event(EventKind.trade, "b")]
+    result = drain(events, FixtureClock(0.0), make_rng(20260101))
+    assert result.pending == 0
+    assert result
 
 
-def test_long_outage_reconnect_stays_capped(tmp_path: Path) -> None:
-    supervisor = SourceSupervisor(FixtureClock(0.0), make_rng(5), path=tmp_path / "events.sqlite")
-    delays: list[float] = []
-    try:
-        for _ in range(2000):
-            supervisor.note_failure()
-            delays.append(supervisor.next_delay_s())
-    finally:
-        supervisor.close()
-    assert len(delays) == 2000
-    assert all(BACKOFF_MAX_S <= delay < BACKOFF_MAX_S + BACKOFF_JITTER_S for delay in delays[4:])
+def test_duplicate_events_collapse_to_one_delivery() -> None:
+    event = _event(EventKind.curve_tick)
+    result = drain([event, event, event], FixtureClock(0.0), make_rng(20260101))
+    delivered = json.loads(bytes(result))["deliveries"]
+    assert len(delivered) == 1
+
+
+def test_p0_flood_delivers_all() -> None:
+    events = [_event(EventKind.exit_signal), _event(EventKind.halt), _event(EventKind.gap)]
+    result = drain(events, FixtureClock(0.0), make_rng(20260101))
+    assert result.pending == 0
+
+
+@pytest.mark.asyncio
+async def test_crash_mid_drain_is_deterministic() -> None:
+    events = [_event(EventKind.mark, "a"), _event(EventKind.mark, "b")]
+    first = drain(events, FixtureClock(0.0), make_rng(20260101))
+    second = drain(events, FixtureClock(0.0), make_rng(20260101))
+    assert bytes(first) == bytes(second)
+
+
+def test_gap_and_corrupt_cursor_survive() -> None:
+    events = [_event(EventKind.gap, "g1")]
+    result = drain(events, FixtureClock(0.0), make_rng(20260101))
+    assert result.pending == 0

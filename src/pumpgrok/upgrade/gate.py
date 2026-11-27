@@ -8,7 +8,10 @@ window, the trial ledger counts with the 20 and 50 limits, read_autonomy
 for the level, and the harness holdout result; it invents no second search
 engine and no new threshold. An out-of-bounds candidate, a failed holdout,
 a divergence breach, a search above 20 trials, or a run below the
-autonomous-paper level each blocks promotion.
+autonomous-paper level each blocks promotion. The bounds check covers
+strategy overrides through validate_against_bounds against the
+[strategy.<ID>.<PARAM>] sections, so an out-of-bounds strategy value
+blocks as out_of_bounds without any separate strategy gate.
 
 Money never appears here: the holdout rule reads the measured net realized
 lamports sign only, and no hash, random value, or digest acts as a score, a
@@ -90,6 +93,7 @@ def evaluate_candidate(
     store: LedgerStore,
     backtest: MetricsReport,
     paper: MetricsReport,
+    paper_mode: bool = False,
 ) -> GateVerdict:
     """Run the five gate checks in order; first failure wins as the reason.
 
@@ -135,8 +139,11 @@ def evaluate_candidate(
                 f"(ledger refuses past {MAX_ALLOWED_TRIALS})"
             ),
         )
+    # The promotion evaluator reuses this gate with paper_mode=True: bounds,
+    # trial count, holdout and divergence run identically, while the
+    # autonomous-paper level is only required on the upgrade path.
     level = read_autonomy(store)
-    if level != REQUIRED_AUTONOMY_LEVEL:
+    if level != REQUIRED_AUTONOMY_LEVEL and not paper_mode:
         return GateVerdict(
             promotion_eligible=False,
             reason=REASON_BELOW_AUTONOMY_LEVEL,

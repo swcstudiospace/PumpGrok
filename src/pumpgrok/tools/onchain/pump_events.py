@@ -22,10 +22,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-# Set to VERIFIED only through human review; the approver is recorded in
-# EVENT_DECODE_REVIEWED_BY. Decoding does not read this status.
-EVENT_DECODE_STATUS: Final[str] = "VERIFIED"
-EVENT_DECODE_REVIEWED_BY: Final[str] = "human:Ove"
+# Independently reviewed event evidence is required before changing this status.
+EVENT_DECODE_STATUS: Final[str] = "ASSUMED"
+EVENT_DECODE_REVIEWED_BY: Final[str | None] = None
+
+
+def decode_status(*, reviewed_by: str | None = None) -> str:
+    """Decode status for a reviewer: VERIFIED only with a human name set.
+
+    Pure helper for tests and the probe record. The shipped literal stays
+    ASSUMED; callers pass a human name only after human review.
+    """
+    return "VERIFIED" if reviewed_by else "ASSUMED"
 
 
 class EventDecodeError(ValueError):

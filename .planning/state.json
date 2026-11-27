@@ -1,0 +1,58 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v4",
+  "phases": [
+    {
+      "number": "11",
+      "name": "Engineering foundation and quality",
+      "status": "complete"
+    },
+    {
+      "number": "12",
+      "name": "Event runtime core",
+      "status": "in_progress"
+    },
+    {
+      "number": "13",
+      "name": "Curve truth, live market data and recorder",
+      "status": "pending"
+    },
+    {
+      "number": "14",
+      "name": "Event-driven desk and Grok gateway",
+      "status": "pending"
+    },
+    {
+      "number": "15",
+      "name": "Strategy framework and multi-strategy paper",
+      "status": "pending"
+    },
+    {
+      "number": "16",
+      "name": "Backtest v2 and autonomous evaluation",
+      "status": "pending"
+    },
+    {
+      "number": "17",
+      "name": "Risk hardening and promotion lifecycle",
+      "status": "pending"
+    },
+    {
+      "number": "18",
+      "name": "Dormant live path, amendment-gated",
+      "status": "pending"
+    },
+    {
+      "number": "19",
+      "name": "Observability, docs, hardening and milestone audit",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd-progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
+  },
+  "updated_at": "2026-11-22T04:42:00.585Z"
+}

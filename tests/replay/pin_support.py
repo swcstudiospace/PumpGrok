@@ -35,6 +35,7 @@ from pumpgrok.cli import main as cli_main
 
 PINS_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "replay" / "pins"
 SMOKE_10M_EVENTS_HASH = "1dffa78448f720b98a7fbb1c5f9a7c0e1959d7f24061c5e255ad56045ee18700"
+CADENCE_GOLDEN_HASH = "b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d"
 TRADING_SMOKE_FIXTURE = "smoke"
 
 _HASH_LINE = re.compile(r"^events\.hash=([0-9a-f]{64})$", re.MULTILINE)

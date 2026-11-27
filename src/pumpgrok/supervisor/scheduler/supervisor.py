@@ -18,8 +18,9 @@ from pumpgrok.core.manifests import EXPECTED_SEAT_IDS
 from pumpgrok.core.risk_budget import RiskBudget, budget_equity_lamports
 from pumpgrok.execution.deposits import position_deposits_by_seq
 from pumpgrok.ledger.autonomy import read_autonomy
-from pumpgrok.ledger.reducer import LedgerState, initial_state, reduce
-from pumpgrok.ledger.store import LedgerInconsistent, LedgerStore
+from pumpgrok.ledger.paths import PAPER_LEDGER_PATH
+from pumpgrok.ledger.reducer import initial_state, reduce
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.ledger.views import equity_lamports
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import utc_day
@@ -28,13 +29,7 @@ from pumpgrok.supervisor.health import (
     build_status,
     write_health_json,
 )
-from pumpgrok.supervisor.scheduler.degraded import (
-    DegradedState,
-    LedgerLatches,
-    fold_latches,
-    kill_switch_engaged,
-)
-from pumpgrok.supervisor.scheduler.wake import EVENT_TIMERS, wake_order
+from pumpgrok.supervisor.scheduler.degraded import DegradedState, kill_switch_engaged
 from pumpgrok.supervisor.seat_relay import relay_tail
 from pumpgrok.supervisor.seat_restart import ObserveOnly
 from pumpgrok.supervisor.seat_task import SeatContext, SeatTask
@@ -98,11 +93,13 @@ def _seat_timing(
     period, which is also its heartbeat grace. An event-only seat has no timer, so it is never
     stale by time; its cadence only sizes the cycle timeout.
     """
+    from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
     overrides = seat_cadences or {}
     if not event_mode:
         return overrides.get(seat, SEAT_CADENCES[seat]), SEAT_CADENCES[seat]
-    if seat in EVENT_TIMERS:
-        return overrides.get(seat, EVENT_TIMERS[seat]), EVENT_TIMERS[seat]
+    if seat in _EVT:
+        return overrides.get(seat, _EVT[seat]), _EVT[seat]
     return overrides.get(seat, SEAT_CADENCES[seat]), math.inf
 
 
@@ -214,16 +211,22 @@ class Supervisor:
         return self._stop.is_set()
 
     def autonomy_level(self) -> str:
-        """Ledger-recorded level; live mode always forces manual-ticket.
+        """Operator-ledger level at PAPER_LEDGER_PATH; live mode always forces manual-ticket.
 
-        An unreadable ledger falls back to manual-ticket and logs why.
+        Read-only and never created: a missing operator ledger reads as manual-ticket, the same
+        rule the promotion path applies. The replay store never carries the human level.
         """
         if self._mode == "live":
             return "manual-ticket"
         try:
-            return read_autonomy(self._store)
-        except (sqlite3.Error, ValueError) as exc:
-            log.warning("autonomy level unreadable; using manual-ticket: %s", exc)
+            if not PAPER_LEDGER_PATH.exists():
+                return "manual-ticket"
+            operator = LedgerStore(str(PAPER_LEDGER_PATH))
+            try:
+                return read_autonomy(operator)
+            finally:
+                operator.close()
+        except Exception:
             return "manual-ticket"
 
     def _seat_context(self, seat: str) -> SeatContext:
@@ -246,14 +249,18 @@ class Supervisor:
 
     def _timer_due(self, seat: str, now: float) -> bool:
         """Timer start: any seat in cadence mode; only EVENT_TIMERS seats in event mode."""
-        if self._event_mode and seat not in EVENT_TIMERS:
+        from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
+        if self._event_mode and seat not in _EVT:
             return False
         return self.tasks[seat].is_due(now)
 
     def _timed_seats(self) -> tuple[str, ...]:
         """Seats with a heartbeat: the roster in cadence mode, EVENT_TIMERS in event mode."""
+        from pumpgrok.supervisor.scheduler import EVENT_TIMERS as _EVT  # noqa: PLC0415
+
         if self._event_mode:
-            return tuple(seat for seat in ROSTER if seat in EVENT_TIMERS)
+            return tuple(seat for seat in ROSTER if seat in _EVT)
         return ROSTER
 
     def _spawn_cycle(self, seat: str, event: Event | None = None) -> asyncio.Task[str]:
@@ -355,7 +362,9 @@ class Supervisor:
             raise RuntimeError("event dispatch requires wake_mode='event'")
         self._emit_rollover(self._clock.now())
         outcomes: dict[str, str] = {}
-        for seat in wake_order(event.kind):
+        from pumpgrok.supervisor.scheduler import wake_order as _wake_order  # noqa: PLC0415
+
+        for seat in _wake_order(event.kind):
             outcomes[seat] = await self._await_cycle(seat, event)
         await self._end_of_tick(heartbeats=False)
         return outcomes

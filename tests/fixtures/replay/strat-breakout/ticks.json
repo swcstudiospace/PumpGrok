@@ -1,0 +1,36 @@
+{
+  "ticks": [
+    {
+      "ts": 1.0,
+      "mint": "BreakMint1111111111111111111111111111111",
+      "price_lamports": 100000,
+      "buyers": 10,
+      "created_ts": 0.0,
+      "curve_progress": 0.2
+    },
+    {
+      "ts": 2.0,
+      "mint": "BreakMint1111111111111111111111111111111",
+      "price_lamports": 109900,
+      "buyers": 11,
+      "created_ts": 0.0,
+      "curve_progress": 0.25
+    },
+    {
+      "ts": 3.0,
+      "mint": "BreakMint1111111111111111111111111111111",
+      "price_lamports": 110000,
+      "buyers": 12,
+      "created_ts": 0.0,
+      "curve_progress": 0.3
+    },
+    {
+      "ts": 4.0,
+      "mint": "BreakMint1111111111111111111111111111111",
+      "price_lamports": 115000,
+      "buyers": 14,
+      "created_ts": 0.0,
+      "curve_progress": 0.35
+    }
+  ]
+}

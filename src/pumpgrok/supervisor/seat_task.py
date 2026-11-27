@@ -24,9 +24,11 @@ from pumpgrok.core.ids import Clock
 from pumpgrok.replay.clock import format_ts_utc
 from pumpgrok.risk.engine import halt_key
 from pumpgrok.supervisor.seat_relay import (
+    _RELAY_KIND,
     KIND_HEARTBEAT_STALE,
     KIND_LEDGER_READ_FAILED,
     KIND_RESTART_EXHAUSTED,
+    RELAY_TYPES,
     append_escalation,
     escalation_severity,
 )
@@ -368,3 +370,48 @@ class SeatTask:
             )
         except Exception as exc:
             log.warning("escalation relay failed for %s: %s", self.seat_id, exc)
+
+
+async def relay_tail(
+    store: LedgerStore,
+    notifier: Notifier | None,
+    clock: Clock,
+    cursor_seq: int,
+) -> int:
+    """Relay new Escalation/HaltSet/KillSwitchSet/BreakerTripped rows.
+
+    Returns the new high-water seq. A None notifier only advances the
+    cursor. A failed send stops the pass: the returned cursor sits before the
+    failed row, so the next pass retries it. Relay failures never raise.
+    """
+    try:
+        events = store.read(since_seq=cursor_seq + 1, limit=None)
+    except Exception as exc:
+        log.debug("tail relay skipped: %s", exc)
+        return cursor_seq
+    high = cursor_seq
+    for event in events:
+        seq = int(event.get("seq", high))
+        event_type = str(event.get("type", ""))
+        if event_type not in RELAY_TYPES or notifier is None:
+            high = max(high, seq)
+            continue
+        payload = event.get("payload")
+        detail = payload.get("detail", "") if isinstance(payload, dict) else ""
+        kind = _RELAY_KIND.get(event_type, "escalation")
+        if event_type == "Escalation" and isinstance(payload, dict):
+            kind = str(payload.get("kind", "escalation"))
+        try:
+            await notifier.send(
+                severity="critical" if event_type != "Escalation" else escalation_severity(kind),
+                kind=kind,
+                text=f"{event_type}: {detail}",
+                fields={"seq": event.get("seq")},
+                idempotency_key=f"relay|{event_type}|{event.get('seq')}",
+            )
+        except Exception as exc:
+            # Stop at the failed row: the cursor stays before it, so the next pass retries it.
+            log.warning("tail relay failed at seq %s; retrying next pass: %s", seq, exc)
+            return high
+        high = max(high, seq)
+    return high

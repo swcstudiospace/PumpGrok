@@ -1,8 +1,11 @@
 """Candidate parameter overrides: the leaf home of CandidateParams (UPG-01, BT-07).
 
 CandidateParams validates filter, exits and strategy override mappings, builds the
-effective FilterSettings and ExitsSettings, and hashes the normalized
-overrides. It lives in this module, not in the evaluator, so the upgrade
+effective FilterSettings and ExitsSettings, and hashes the
+normalized overrides. Strategy overrides are bounded, not settings models:
+their [strategy.<ID>.<PARAM>] sections in upgrade_bounds.toml are the
+contract, enforced by the upgrade bounds check. It lives in this module,
+not in the evaluator, so the upgrade
 parameter sets and the ledger active-set reader can import it without
 reaching the scheduler: the evaluator imports the scheduler, and the
 scheduler's replay runtime reads the active set. The imports here are
@@ -99,6 +102,7 @@ def _normalized_strategy(mapping: Mapping[str, Mapping[str, Any]] | None) -> dic
 
 
 class CandidateParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     """One candidate parameter set: filter, exits and strategy overrides.
 
     Every mapping is optional; absent means desk defaults. Each provided
@@ -107,10 +111,11 @@ class CandidateParams(BaseModel):
     including scoring weights, fails through extra forbidden. Scoring knobs
     wherever they appear, including min_total_score inside filter, fail
     through the explicit blocklist with a typed validation error. Pydantic
-    surfaces validator ValueError subclasses as ValidationError.
+    surfaces validator ValueError subclasses as ValidationError. Strategy
+    overrides carry scalar parameter leaves only; their bounds are the
+    [strategy.<ID>.<PARAM>] sections of upgrade_bounds.toml, enforced by
+    the upgrade bounds check, not here.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     filter: dict[str, Any] | None = None
     exits: dict[str, Any] | None = None
@@ -141,16 +146,19 @@ class CandidateParams(BaseModel):
     def _check_strategy(
         cls, value: dict[str, dict[str, Any]] | None
     ) -> dict[str, dict[str, Any]] | None:
-        """Refuse non-scalar leaves; strategy names are gated by the upgrade bounds."""
+        """Refuse scoring knobs and non-scalar leaves; names are gated by upgrade bounds."""
         if value is None:
             return None
         for strategy_id, overrides in value.items():
             if not strategy_id:
                 raise ValueError("strategy id must be a non-empty string")
-            try:
-                _normalized_mapping(overrides)
-            except TypeError as err:
-                raise ValueError(f"strategy {strategy_id!r}: {err}") from err
+            _reject_scoring_knobs(f"strategy.{strategy_id}", overrides)
+            for key, leaf in overrides.items():
+                if not isinstance(leaf, (bool, int, float, str, Decimal)):
+                    raise ValueError(
+                        f"strategy {strategy_id!r} parameter {key!r} must be a scalar, "
+                        f"not {type(leaf).__name__}"
+                    )
         return value
 
     def filter_settings(self) -> FilterSettings:
@@ -172,6 +180,10 @@ class CandidateParams(BaseModel):
         Identity only: the digest names the exact set and never acts as
         a score, a metric, or a verdict. ParamSet.content_hash, the harness
         trial hashes, and the winner hash all read this one definition.
+        Strategy overrides join the same payload, so one strategy edit
+        flips the identity; the strategy key is present only when the
+        normalized overrides are non-empty, so a legacy filter/exits-only
+        set hashes byte-identically to before strategies existed.
         """
         payload: dict[str, Any] = {
             "exits": _normalized_mapping(self.exits),

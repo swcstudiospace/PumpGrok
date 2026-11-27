@@ -8,10 +8,10 @@ Deliberate divergences from the oracle:
 - The pump.fun ``Bearer`` header is dropped: no settings field carries a
   pump.fun key, so there is nothing to send.
 - Every ``_get`` call records a per-source health flag in
-  ``Analyzer.health``, keyed by endpoint template (``/coins/{mint}``) so the
-  map stays bounded by endpoint count, not by mint; ``True`` on success. No
-  entry decision may rest solely on pump.fun REST (R47); the flag lets the
-  pipeline tell a healthy empty answer from a failed provider.
+  ``Analyzer.health`` (keyed by endpoint path; ``True`` on success,
+  ``False`` on failure). A failed fetch raises ``DataStale`` instead of
+  returning a stand-in, so it can never be read as clean data. No entry
+  decision may rest solely on pump.fun REST (R47).
 - ``_veto_reason`` returns ASCII codes (``creator_share_veto``,
   ``top5_share_veto``) instead of Russian free text.
 - The analyzer takes the ``data`` and ``filter`` settings sections, not the
@@ -33,7 +33,8 @@ from typing import Any
 import httpx
 
 from pumpgrok.config.settings import DataSettings, FilterSettings
-from pumpgrok.core.units import LAMPORTS_PER_SOL, sol_to_lamports
+from pumpgrok.core.errors import DataStale
+from pumpgrok.core.units import sol_to_lamports
 from pumpgrok.engine.models import Holder, Token, TokenMetrics, Trade
 from pumpgrok.engine.monitor import CURVE_COMPLETION_LAMPORTS
 
@@ -102,46 +103,47 @@ class Analyzer:
 
     # -- network -----------------------------------------------------------
 
-    async def _get(self, path: str, *, health_key: str | None = None, **params: Any) -> Any:
-        """GET one endpoint. Its health is recorded under ``health_key``, default the path."""
-        key = health_key or path
-        client = self.client  # a usage error, not a provider outage: raised before the try
+    async def _get(self, path: str, **params: Any) -> Any:
+        """One GET. A failed fetch raises ``DataStale``; it never returns a stand-in."""
+        client = self.client  # used outside `async with` is a usage error, not stale data
         try:
             resp = await client.get(path, params=params)
             resp.raise_for_status()
-            self.health[key] = True
-            return resp.json()
-        except Exception as exc:
+            body = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            self.health[path] = False
             log.warning("request %s failed: %s", path, type(exc).__name__)
-            self.health[key] = False
-            return None
+            raise DataStale(f"analyzer fetch failed: {path}", path=path) from exc
+        self.health[path] = True
+        return body
 
-    def _rows(self, endpoint: str, payload: Any) -> list[Any]:
-        """Rows of a list payload. Any other shape is a failed source: no rows, health False."""
-        if isinstance(payload, list):
-            return payload
-        self.health[endpoint] = False
-        return []
 
     async def fetch(self, mint: str) -> tuple[dict[str, Any], list[Holder], list[Trade]]:
-        """Card, holders, and trades: three parallel requests."""
+        """Card, holders, and trades: three parallel requests.
+
+        Raises ``DataStale`` if any request failed or returned the wrong shape.
+        """
         info, holders_raw, trades_raw = await asyncio.gather(
-            self._get(f"/coins/{mint}", health_key=CARD_ENDPOINT),
-            self._get(f"/coins/{mint}/holders", health_key=HOLDERS_ENDPOINT, limit=HOLDER_LIMIT),
-            self._get(f"/trades/all/{mint}", health_key=TRADES_ENDPOINT, limit=TRADE_LIMIT),
+            self._get(f"/coins/{mint}"),
+            self._get(f"/coins/{mint}/holders", limit=HOLDER_LIMIT),
+            self._get(f"/trades/all/{mint}", limit=TRADE_LIMIT),
         )
         if not isinstance(info, dict):
-            info = {}
+            raise DataStale("analyzer card is not an object", path=f"/coins/{mint}")
+        if not isinstance(holders_raw, list):
+            raise DataStale("analyzer holders is not a list", path=f"/coins/{mint}/holders")
+        if not isinstance(trades_raw, list):
+            raise DataStale("analyzer trades is not a list", path=f"/trades/all/{mint}")
         holders = [
             parsed
-            for h in self._rows(HOLDERS_ENDPOINT, holders_raw)
+            for h in holders_raw
             if isinstance(h, dict)
             for parsed in [_safe_parse(parse_holder, h)]
             if parsed is not None
         ]
         trades = [
             parsed
-            for t in self._rows(TRADES_ENDPOINT, trades_raw)
+            for t in trades_raw
             if isinstance(t, dict)
             for parsed in [_safe_parse(parse_trade, t)]
             if parsed is not None
@@ -149,7 +151,10 @@ class Analyzer:
         return (info, holders, trades)
 
     async def analyze(self, token: Token) -> TokenMetrics:
-        """Full pass: hit the network, then compute metrics."""
+        """Full pass: hit the network, then compute metrics.
+
+        Raises ``DataStale`` on a failed fetch; no metrics are computed from one.
+        """
         info, holders, trades = await self.fetch(token.mint)
         enrich_token(token, info)
         return compute_metrics(token, holders, trades)

@@ -1,0 +1,26 @@
+{
+ "approved_by": "human:SomeRandmGuyy",
+ "bot": "bot-02-risk",
+ "branch": "bot-02-risk/gitleaks-allowlist-138",
+ "claims": [
+  {
+   "claim": "Config-only change to ci/security/gitleaks.toml: six full-literal synthetic fixture values added to the allowlist; work committed as one commit on a bot-02-risk branch.",
+   "evidence_command_index": 0
+  }
+ ],
+ "commands": [
+  {
+   "cmd": "git diff --stat origin/main HEAD",
+   "exit_code": 0,
+   "output_tail": "1 file changed, 8 insertions(+)"
+  }
+ ],
+ "prs": [
+  139
+ ],
+ "task_id": "v4-p17-gitleaks-allowlist",
+ "unverified": [
+  "Scan suppression is verified by CI (Gitleaks job) on this PR.",
+  "Greptile review: skipped per owner instruction (billing)."
+ ]
+}

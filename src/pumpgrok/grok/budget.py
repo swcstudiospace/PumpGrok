@@ -15,12 +15,16 @@ treat that as a refusal to spend, never as a free call.
 from __future__ import annotations
 
 import contextlib
+import json
+import os
 import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
 from pumpgrok.core.budget import utc_day
 from pumpgrok.core.errors import PumpgrokError
+from pumpgrok.core.idempotency import canonical_json
 from pumpgrok.replay.clock import Clock
 
 MINUTE_LIMIT = 6
@@ -30,6 +34,10 @@ RESERVE_PERCENT = 20
 
 # SQLite lock-wait budget between handles. Real-time lock wait, not a clock read.
 _BUSY_TIMEOUT_S = 5.0
+
+
+class BudgetExhausted(RuntimeError):
+    """A debit was refused because a cap would be exceeded."""
 
 
 class BudgetUnavailable(PumpgrokError):
@@ -67,16 +75,106 @@ _SCHEMA = (
 
 
 class LayeredBudget:
-    """Minute, hour and day Grok call caps, persisted and charged atomically."""
+    """Minute, hour and day Grok call caps, persisted and charged atomically.
 
-    def __init__(self, path: str | Path, clock: Clock) -> None:
-        self._path = Path(path)
+    Two construction styles share one class, matching both callers in the
+    tree: ``LayeredBudget(path, clock)`` opens the sidecar SQLite store whose
+    ``try_charge`` / ``usage`` charge the three layers all-or-nothing, while
+    ``LayeredBudget(window_cap=..., agent_cap=..., global_cap=...,
+    path=...)`` keeps per-window, per-agent and global caps in memory under
+    a lock, persisted restart-safe in the sidecar pattern (tmp write plus
+    os.replace) and charged through ``try_debit``.
+    """
+
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        clock: Clock | None = None,
+        *,
+        window_cap: int = 100,
+        agent_cap: int = 40,
+        global_cap: int = 200,
+        reserve_share_num: int = 1,
+        reserve_share_den: int = 4,
+    ) -> None:
+        self._path = Path(path) if path is not None else None
         self._clock = clock
-        con = self._open()
-        con.close()
+        if clock is not None:
+            con = self._open()
+            con.close()
+            return
+        self._window_cap = window_cap
+        self._agent_cap = agent_cap
+        self._global_cap = global_cap
+        self._reserve_share_num = reserve_share_num
+        self._reserve_share_den = reserve_share_den
+        self._lock = threading.Lock()
+        self._window_spent = 0
+        self._global_spent = 0
+        self._agent_spent: dict[str, int] = {}
+        self._load()
+
+    @property
+    def window_spent(self) -> int:
+        return self._window_spent
+
+    @property
+    def global_spent(self) -> int:
+        return self._global_spent
+
+    def spent_for(self, agent: str) -> int:
+        return self._agent_spent.get(agent, 0)
+
+    def _non_reserve_cap(self) -> int:
+        kept = self._window_cap * self._reserve_share_num // self._reserve_share_den
+        return self._window_cap - kept
+
+    def try_debit(self, agent: str, cost: int = 1, *, use_reserve: bool = False) -> bool:
+        """Atomically debit all three layers. Returns False without side effects."""
+        if cost < 1:
+            raise ValueError("cost must be at least 1")
+        with self._lock:
+            window_cap = self._window_cap if use_reserve else self._non_reserve_cap()
+            if self._window_spent + cost > window_cap:
+                return False
+            if self._agent_spent.get(agent, 0) + cost > self._agent_cap:
+                return False
+            if self._global_spent + cost > self._global_cap:
+                return False
+            self._window_spent += cost
+            self._global_spent += cost
+            self._agent_spent[agent] = self._agent_spent.get(agent, 0) + cost
+            self._persist_locked()
+            return True
+
+    def _persist_locked(self) -> None:
+        if self._path is None:
+            return
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        body = {
+            "window_spent": self._window_spent,
+            "global_spent": self._global_spent,
+            "agent_spent": dict(self._agent_spent),
+        }
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_text(canonical_json(body), encoding="utf-8")
+        os.replace(tmp, self._path)
+
+    def _load(self) -> None:
+        if self._path is None or not self._path.exists():
+            return
+        try:
+            body = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        self._window_spent = int(body.get("window_spent", 0))
+        self._global_spent = int(body.get("global_spent", 0))
+        raw = body.get("agent_spent", {})
+        self._agent_spent = {str(k): int(v) for k, v in dict(raw).items()}
 
     def _open(self) -> sqlite3.Connection:
         try:
+            assert self._path is not None
             con = sqlite3.connect(self._path, timeout=_BUSY_TIMEOUT_S, isolation_level=None)
             con.execute(_SCHEMA)
         except sqlite3.Error as exc:
@@ -85,6 +183,7 @@ class LayeredBudget:
 
     def try_charge(self, *, reserve_priority: bool) -> bool:
         """Spend one call on every layer, or none. False means a layer is full."""
+        assert self._clock is not None
         now = self._clock.now()
         con = self._open()
         try:
@@ -118,6 +217,7 @@ class LayeredBudget:
 
     def usage(self) -> dict[str, int]:
         """Calls spent in each layer's current window, for operator reads and tests."""
+        assert self._clock is not None
         now = self._clock.now()
         con = self._open()
         try:

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Measure the Grok calls the admission gateway saves on one replay dataset (GRK-11, EVT-12).
 
 Two counts over the same dataset, both from the real stack:

@@ -5,7 +5,8 @@ and run against the paper adapter (a verified replay, ``p_drop=0.0`` for
 deterministic fills). CLI level: paper buy/sell (simulate then place),
 state halt --clear/autonomy/resume, killswitch clear, ticket next/create/list,
 and verify run end to end with exit 0 and JSON. The remaining exit-5 list is
-pinned to the 04-09 handoff exactly.
+pinned to the 04-09 handoff exactly, minus the replay verbs Phase 16
+implemented (REC-03).
 """
 
 from __future__ import annotations

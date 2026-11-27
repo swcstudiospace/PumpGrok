@@ -61,6 +61,7 @@ One supervisor tick drives ten seats in roster order; risk approves every order
 and paper fills settle against the curve account.
 
 - Ten-seat tick loop lives in `src/pumpgrok/supervisor/scheduler/supervisor.py`; due seats start in roster order each tick (`TICK_S = 1.0`, `src/pumpgrok/supervisor/scheduler/supervisor.py:36-37`).
+- One-shot replay: `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py` calls `open_replay_runtime` in `src/pumpgrok/supervisor/scheduler/replay_runtime.py`, which builds a `PaperAdapter` (`replay_runtime.py:222`).
 - One-shot replay: `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py` calls `open_replay_runtime` in `src/pumpgrok/supervisor/scheduler/replay_runtime.py`, which builds a `PaperAdapter` (inside `open_replay_runtime`).
 - Pre-graduation fills come from bonding-curve reserves via `src/pumpgrok/execution/paper_adapter/adapter.py`, never from a quote.
 - `src/pumpgrok/tools/market/price.py` reads the curve account with `getAccountInfo` and decodes it with `src/pumpgrok/tools/onchain/curve_layout.py`; it has no Jupiter path.
@@ -84,12 +85,18 @@ before inventing a second convention.
 
 Planning state and per-task evidence live outside the product tree.
 
+- Phase plans, context, and summaries live in `.planning/phases/07-documentation-upgrade/` (e.g. `.planning/phases/07-documentation-upgrade/07-CONTEXT.md`).
 - Phase plans, context, and summaries for v3 live in `.planning/milestones/v3-phases/` (e.g. `.planning/milestones/v3-phases/07-documentation-upgrade/07-CONTEXT.md`); active phases go in `.planning/phases/`.
 - Per-task machine receipts live in `.receipts/<bot>/<task>.json` (see the `gates` target in `Makefile`).
 - Prompt sources and generated agent templates are checked by `scripts/assemble-prompts.sh` and `scripts/generate-templates.py`.
 
 ## Safety
 
+Paper-only by default; live mode refuses to start unless every precondition in
+`src/pumpgrok/cli/verbs_state.py` is met.
+
+- `run` accepts `--mode paper --once --replay <dir>` (one cycle) and `--serve --replay <dir>` (loop); `--record`, `--duration` and other combinations exit not-implemented (`src/pumpgrok/cli/verbs_state.py`, `_run`, lines 68-83).
+- `run --mode live` evaluates `LiveGate` in `src/pumpgrok/cli/verbs_state.py` (`_run`, lines 57-67) and refuses with exit code `3` (`EXIT_LIVE` in `src/pumpgrok/cli/codes.py`) when any precondition is unmet.
 Paper-only by default; live mode refuses to start unless every precondition defined in
 `src/pumpgrok/execution/live/live_gate.py` is met (`_run` in `src/pumpgrok/cli/verbs_state.py` enforces it).
 
@@ -105,3 +112,7 @@ Assumptions and path differences the reader must not mistake for verified fact.
 - Curve decoding uses the `[ASSUMED]` layout in `src/pumpgrok/tools/onchain/curve_layout.py` until a live probe confirms it (see `scripts/probe_curve_layout.py`).
 - `run --once --replay` exercises the `PaperAdapter` path via `run_once_replay` in `src/pumpgrok/supervisor/scheduler/serve.py`, while `run_replay` in `src/pumpgrok/replay/runner.py` writes the checkpoint verdict row first and does not run the paper adapter.
 - `run --record` and `live serve` are implemented (`_run_record` in `src/pumpgrok/cli/verbs_state.py`; `_live_serve` in `src/pumpgrok/cli/verbs_ops.py`). Their tests use fixtures and read-only doubles; no live RPC run is recorded in this repository. Phase 16 criterion 1 is deferred to deployment (16-PLANS-INDEX.md row J).
+
+## v4 event mode
+
+The desk runs in cadence mode by default and supports event mode via `--wake-mode event`. `pumpgrok doctor` reports bus depth, source states, Grok budget windows, strategy stages, kills, and signer attestation read-only. `run --mode live` is refused with exit 3 in every mode (paper-only invariant).

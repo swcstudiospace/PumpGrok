@@ -243,14 +243,6 @@ def _add_tail(verbs: _VerbsAction, mode_option: _Parser) -> None:
         "--strategy", default=None, help="clear only the kill of this strategy id"
     )
     killswitch_cmd.add_parser("status", help="report killswitch state")
-    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
-    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
-    promotion_demote = promotion_cmd.add_parser(
-        "demote", help="roll one strategy down one promotion stage (human only)"
-    )
-    promotion_demote.add_argument("--strategy", required=True, help="strategy id to demote")
-    promotion_demote.add_argument("--reason", required=True, help="why the strategy steps down")
-    promotion_demote.add_argument("--by", required=True, help="human demoting the strategy")
     paper = verbs.add_parser("paper", parents=[mode_option], help="paper trade verbs")
     paper_cmd = paper.add_subparsers(dest="cmd", required=True, metavar="PAPER")
     paper_buy = paper_cmd.add_parser("buy", help="paper buy against the paper engine")
@@ -296,36 +288,39 @@ def _positive_int(text: str) -> int:
 def _add_replay(verbs: _VerbsAction, mode_option: _Parser) -> None:
     replay = verbs.add_parser("replay", parents=[mode_option], help="replay dataset verbs")
     replay_cmd = replay.add_subparsers(dest="cmd", required=True, metavar="REPLAY")
-    trim = replay_cmd.add_parser("trim", help="trim a dataset: mints with fills plus 5 percent")
-    trim.add_argument("--dataset", required=True, metavar="NAME", help="dataset under var/datasets")
-    trim.add_argument(
-        "--max-events",
-        required=True,
-        type=_positive_int,
-        dest="max_events",
-        metavar="N",
-        help="keep the last N kept events",
+    replay_trim = replay_cmd.add_parser("trim", help="trim a replay dataset")
+    replay_trim.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_trim.add_argument("--to", dest="to_dir", required=True, help="destination dir")
+    replay_trim.add_argument("--name", required=True, help="sealed dataset name")
+    replay_trim.add_argument("--from-ts", dest="from_ts", required=True, help="window start UTC")
+    replay_trim.add_argument("--to-ts", dest="to_ts", required=True, help="window end UTC")
+    replay_rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
+    replay_rebuild.add_argument("--from", dest="from_dir", required=True, help="source dataset dir")
+    replay_rebuild.add_argument("--to", dest="to_file", required=True, help="ticks file to write")
+    replay_import = replay_cmd.add_parser("import", help="import an external tick file")
+    replay_import.add_argument("--source", required=True, help="external JSONL tick file")
+    replay_import.add_argument("--to", dest="to_dir", required=True, help="dataset dir to write")
+    replay_import.add_argument("--name", required=True, help="sealed dataset name")
+
+
+def _add_ledger(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    ledger = verbs.add_parser("ledger", parents=[mode_option], help="ledger backup and restore")
+    ledger_cmd = ledger.add_subparsers(dest="cmd", required=True, metavar="LEDGER")
+    backup = ledger_cmd.add_parser("backup", help="write a ledger copy under the state directory")
+    backup.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore = ledger_cmd.add_parser(
+        "restore", help="verify then atomically replace the active ledger"
     )
-    trim.add_argument(
-        "--keep-mints-with-fills",
-        required=True,
-        action="store_true",
-        dest="keep_mints_with_fills",
-        help="keep every event of a mint with an order (the only keep rule)",
-    )
-    rebuild = replay_cmd.add_parser("rebuild-ticks", help="rebuild ticks from a recording")
-    rebuild.add_argument(
-        "--dataset", required=True, metavar="NAME", help="dataset under var/datasets"
-    )
-    imported = replay_cmd.add_parser("import", help="import a ledger this desk recorded")
-    imported.add_argument(
-        "--from",
-        required=True,
-        dest="source",
-        metavar="LEDGER",
-        help="ledger.sqlite recorded by this desk (source paper)",
-    )
-    imported.add_argument("--dataset", required=True, metavar="NAME", help="dataset name to write")
+    restore.add_argument("--ledger", default="var/ledger.sqlite", help="active ledger path")
+    restore.add_argument("--from", dest="from_", required=True, help="candidate ledger to verify")
+
+
+def _add_promotion(verbs: _VerbsAction, mode_option: _Parser) -> None:
+    promotion = verbs.add_parser("promotion", parents=[mode_option], help="promotion verbs")
+    promotion_cmd = promotion.add_subparsers(dest="cmd", required=True, metavar="PROMOTION")
+    demote = promotion_cmd.add_parser("demote", help="roll a strategy back one stage")
+    demote.add_argument("--strategy", required=True, help="strategy id to roll back")
+    demote.add_argument("--by", default="human:operator", help="acting human (human:<name>)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -352,6 +347,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_journal_ticket(verbs, mode_option)
     _add_state(verbs, mode_option)
     _add_events(verbs, mode_option)
+    _add_ledger(verbs, mode_option)
+    _add_promotion(verbs, mode_option)
     _add_tail(verbs, mode_option)
     _add_onboarding(verbs, mode_option)
     return parser

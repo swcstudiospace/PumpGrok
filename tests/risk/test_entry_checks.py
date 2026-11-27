@@ -1,4 +1,10 @@
-"""Entry checks reject unsafe mints and fail closed on missing data (RSK-05, S-E1)."""
+"""Entry checks: authority, extension, holder, list and BLIND cases rejected, fail closed.
+
+One test per case class plus the missing-file fail-closed case, each with
+a passing control mint. Mint facts are fabricated structs; no network.
+
+Entry checks reject unsafe mints and fail closed on missing data (RSK-05, S-E1).
+"""
 
 from __future__ import annotations
 
@@ -10,8 +16,12 @@ from typing import Any, cast
 import pytest
 
 from pumpgrok.config.settings import SafetyThresholds
+from pumpgrok.execution.entry_hook import EntryHook, EntryRefusedError
 from pumpgrok.risk.entry_checks import (
+    EntryChecks,
     EntryEvidence,
+    MintFacts,
+    MintListError,
     MintLists,
     default_mint_lists_path,
     evaluate_entry,
@@ -19,9 +29,25 @@ from pumpgrok.risk.entry_checks import (
 )
 from pumpgrok.tools.safety.checks import REQUIRED_IDS, CheckId, CheckResult
 
+MINT_OK = "So11111111111111111111111111111111111111112"
+MINT_BAD = "So99999999999999999999999999999999999999999"
 MINT = "Mint1111111111111111111111111111111111111"
 THRESHOLDS = SafetyThresholds()
 EMPTY_LISTS = MintLists(deny=frozenset(), warn=frozenset())
+
+
+def _checks() -> EntryChecks:
+    return EntryChecks(
+        holder_limit=Decimal("0.30"),
+        allowlist=frozenset({MINT_OK}),
+        blocklist=frozenset({MINT_BAD}),
+    )
+
+
+def _ok(**overrides: object) -> MintFacts:
+    facts: dict[str, object] = {"mint": MINT_OK}
+    facts.update(overrides)
+    return MintFacts(**facts)  # type: ignore[arg-type]
 
 
 def _row(check_id: str, status: str = "pass") -> CheckResult:
@@ -56,6 +82,118 @@ def _verdict(
     holder_blind_advisory: bool = False,
 ) -> Any:
     return evaluate_entry(evidence, lists, THRESHOLDS, holder_blind_advisory=holder_blind_advisory)
+
+
+def test_control_mint_passes() -> None:
+    assert _checks().check(_ok()) is None
+
+
+def test_authority_present_is_rejected() -> None:
+    refusal = _checks().check(_ok(authority_present=True))
+    assert refusal is not None
+    assert refusal.check == "authority"
+
+
+def test_token2022_extension_is_rejected() -> None:
+    refusal = _checks().check(_ok(extensions=("memo",)))
+    assert refusal is not None
+    assert refusal.check == "extension"
+
+
+def test_holder_concentration_above_limit_is_rejected() -> None:
+    refusal = _checks().check(_ok(holder_concentration=Decimal("0.31")))
+    assert refusal is not None
+    assert refusal.check == "holders"
+
+
+def test_holder_concentration_at_limit_passes() -> None:
+    assert _checks().check(_ok(holder_concentration=Decimal("0.30"))) is None
+
+
+def test_blocklisted_mint_is_rejected() -> None:
+    refusal = _checks().check(_ok(mint=MINT_BAD))
+    assert refusal is not None
+    assert refusal.check == "list"
+
+
+def test_unlisted_mint_is_rejected_when_allowlist_present() -> None:
+    refusal = _checks().check(_ok(mint="So22222222222222222222222222222222222"))
+    assert refusal is not None
+    assert refusal.check == "list"
+
+
+def test_blind_is_kill() -> None:
+    refusal = _checks().check(_ok(blind=True))
+    assert refusal is not None
+    assert refusal.check == "blind"
+
+
+def test_blind_safe_class_exempt_without_paid_rpc() -> None:
+    assert _checks().check(_ok(blind=True, safe_class="SAFE-4")) is None
+    assert _checks().check(_ok(blind=True, safe_class="SAFE-8")) is None
+
+
+def test_blind_safe_class_kills_with_paid_rpc() -> None:
+    refusal = _checks().check(_ok(blind=True, safe_class="SAFE-4", paid_rpc_recorded=True))
+    assert refusal is not None
+    assert refusal.check == "blind"
+
+
+def test_first_failure_wins_in_fixed_order() -> None:
+    refusal = _checks().check(_ok(authority_present=True, extensions=("memo",), blind=True))
+    assert refusal is not None
+    assert refusal.check == "authority"
+
+
+def test_missing_mint_list_file_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(MintListError):
+        load_mint_lists(tmp_path / "nope.toml")
+    checks = EntryChecks.from_mint_lists(path=tmp_path / "nope.toml")
+    assert checks.lists_available is False
+    refusal = checks.check(_ok())
+    assert refusal is not None
+    assert refusal.check == "list"
+
+
+def test_unparsable_mint_list_fails_closed(tmp_path: Path) -> None:
+    bad = tmp_path / "mint_lists.toml"
+    bad.write_text("allowlist = [", encoding="utf-8")
+    checks = EntryChecks.from_mint_lists(path=bad)
+    assert checks.lists_available is False
+    assert checks.check(_ok()) is not None
+
+
+def test_mint_lists_toml_parses_as_toml() -> None:
+    path = Path(__file__).resolve().parents[2] / "src" / "pumpgrok" / "config" / "mint_lists.toml"
+    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(raw["deny"], list)
+    assert isinstance(raw["warn"], list)
+
+
+def test_hook_refuses_bad_mint_before_adapter() -> None:
+    hook = EntryHook()
+    with pytest.raises(EntryRefusedError):
+        hook.check_place(
+            side="buy",
+            curve_source="replay",
+            entry_checks=_checks(),
+            mint_facts=_ok(authority_present=True),
+        )
+
+
+def test_hook_passes_sells_through_untouched() -> None:
+    hook = EntryHook()
+    hook.check_place(
+        side="sell",
+        curve_source="replay",
+        entry_checks=_checks(),
+        mint_facts=_ok(authority_present=True),
+    )
+
+
+def test_hook_without_checks_behaves_as_before() -> None:
+    hook = EntryHook()
+    hook.check_place(side="buy", curve_source="replay")
 
 
 def test_clean_mint_passes_without_warnings() -> None:
@@ -262,7 +400,7 @@ def test_shipped_mint_lists_parse_with_tomllib_and_are_empty() -> None:
 
 
 def test_missing_mint_lists_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(MintListError):
         load_mint_lists(tmp_path / "absent.toml")
 
 

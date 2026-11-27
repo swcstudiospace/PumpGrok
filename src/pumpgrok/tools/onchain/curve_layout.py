@@ -1,8 +1,8 @@
 """Bonding-curve account decode over Solana RPC (STRUCT-002, B9, T-03-02-01).
 
-[VERIFIED] The Pump IDL describes an 8-byte discriminator, five token-first
-little-endian u64 counters, and a one-byte completion flag. The 49-byte
-token-first layout was approved by human review (``LAYOUT_REVIEWED_BY``).
+Token-first layout: an 8-byte discriminator, five token-first little-endian u64 counters, and a
+one-byte completion flag (0/1). The 49-byte token-first layout was approved by human review
+(LAYOUT_REVIEWED_BY).
 The 166-byte extended layout has no reviewed source and is refused (fail closed).
 Shared by ``market.price`` and ``onchain.lp_status``.
 
@@ -23,10 +23,21 @@ from pydantic import BaseModel, ConfigDict
 from pumpgrok.core.units import lamports_to_sol, sol_to_lamports
 from pumpgrok.tools._common import UNITS_PER_TOKEN
 
+#: Token-first 49-byte layout: disc, virt_token, virt_sol, real_token,
+#: real_sol, total_supply, completion flag. Token fields precede SOL fields.
 _CURVE_STRUCT = struct.Struct("<8sQQQQQB")
 CURVE_ACCOUNT_SIZE = _CURVE_STRUCT.size
-_EXTENDED_CURVE_ACCOUNT_SIZE = 166
-_BONDING_CURVE_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
+
+#: Token-first 166-byte layout: disc, token_mint, counters (token-first),
+#: completion flag, creator, amm_pool, reserved trailer.
+_CURVE_STRUCT_166 = struct.Struct("<8s32sQQQQQB32s32s21s")
+CURVE_ACCOUNT_SIZE_166 = _CURVE_STRUCT_166.size
+
+#: Verified bonding-curve discriminator accepted by :func:`decode_curve_account`
+#: (the real pump program value); the ASSUMED fixture marker is no longer accepted.
+_REAL_DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
+_BONDING_CURVE_DISCRIMINATOR = _REAL_DISCRIMINATOR
+_EXTENDED_CURVE_ACCOUNT_SIZE = CURVE_ACCOUNT_SIZE_166
 
 #: Bonding-curve layout verification state (R65). VERIFIED for the 49-byte
 #: token-first account only, set by the human reviewer named in
@@ -118,16 +129,33 @@ def encode_curve_fixture(
     real_token_reserves_units: int,
     total_supply_units: int,
     complete: bool,
+    size: int = CURVE_ACCOUNT_SIZE,
+    token_mint: bytes = b"",
 ) -> bytes:
-    """Build [ASSUMED]-layout account bytes for tests. Never used in production."""
+    """Build token-first [ASSUMED]-layout bytes for tests. Never in production."""
+    flag = 1 if complete else 0
+    if size == CURVE_ACCOUNT_SIZE_166:
+        return _CURVE_STRUCT_166.pack(
+            _REAL_DISCRIMINATOR,
+            bytes(token_mint).ljust(32, b"\x00")[:32],
+            virtual_token_reserves_units,
+            virtual_sol_reserves_lamports,
+            real_token_reserves_units,
+            real_sol_reserves_lamports,
+            total_supply_units,
+            flag,
+            b"\x00" * 32,
+            b"\x00" * 32,
+            b"\x00" * 21,
+        )
     return _CURVE_STRUCT.pack(
-        _BONDING_CURVE_DISCRIMINATOR,
+        _REAL_DISCRIMINATOR,
         virtual_token_reserves_units,
         virtual_sol_reserves_lamports,
         real_token_reserves_units,
         real_sol_reserves_lamports,
         total_supply_units,
-        1 if complete else 0,
+        flag,
     )
 
 

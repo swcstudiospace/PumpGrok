@@ -172,3 +172,6 @@ Plan 15-08 (bot-00-chief, bot-09-journal)
 - .planning/phases/15-strategy-framework-and-multi-strategy-paper/15-08-SUMMARY.md: this file.
 
 No code, test, fixture, pin, contract or CHANGELOG file was changed by this closure. Nothing was pushed.
+
+## Post-merge record (2026-11-26)
+Phase 15 code merged to local main 8354ee6666139a7817ca246bef9ca2e5a0b3b4b8 via integration PR #75. Criterion 1 remains deferred to deployment. Local-only: GitHub PR still OPEN until push.

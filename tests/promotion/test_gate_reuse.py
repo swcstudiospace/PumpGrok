@@ -1,33 +1,118 @@
 """PRM-03 (criterion 6): promotion reuses the upgrade gate; it adds no second search.
 
-A stage advance calls upgrade.gate.evaluate_candidate exactly once, against the strategy's own
-paper report. Only that module constructs an eligible verdict, and the promotion package defines no
-search and imports no search entry point. A zero-loss paper record is refused before the gate runs
-(D17-3). The divergence tests pin their return-gap threshold explicitly, so they do not depend on
-the D7 default.
+The upgrade gate checks are reused: same evidence, same verdict from the
+upgrade path and the promotion paper path -- bounds, trial count, holdout
+and divergence all run through ``evaluate_candidate`` with the paper
+parameter. A stage advance calls upgrade.gate.evaluate_candidate exactly
+once, against the strategy's own paper report. Only that module constructs
+an eligible verdict, and the promotion package defines no search and
+imports no search entry point. A zero-loss paper record is refused before
+the gate runs (D17-3); the trial count comes from the evidence record. The
+divergence tests pin their return-gap threshold explicitly, so they do not
+depend on the D7 default.
 """
 
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
 import pytest
-from promotion_support import (
-    NOW,
-    STRATEGY,
-    activate,
-    advance,
-    paper_history,
-)
+from promotion_support import NOW, STRATEGY, activate, advance, paper_history
 
 from pumpgrok.backtest import divergence
+from pumpgrok.backtest.harness import HarnessResult
+from pumpgrok.backtest.metrics import MetricsReport
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.promotion import Stage, StageRefused, current_stage
 from pumpgrok.promotion import stages as stages_module
 from pumpgrok.promotion.stages import paper_window
+from pumpgrok.upgrade.bounds import load_bounds
+from pumpgrok.upgrade.gate import (
+    REASON_BELOW_AUTONOMY_LEVEL,
+    REASON_PASS,
+    evaluate_candidate,
+)
+from pumpgrok.upgrade.params import ParamSet
+
+BOUNDS = load_bounds()
+IN_BOUNDS = ParamSet(filter={"min_unique_buyers": 5})
+
+
+def _report() -> MetricsReport:
+    return MetricsReport(
+        total_return=Decimal("0.01"),
+        max_drawdown=Decimal("0.005"),
+        sharpe_ratio=Decimal("0.10"),
+        win_rate=Decimal("0.5"),
+        trade_count=4,
+        exposure_lamports=1000,
+        turnover_lamports=4000,
+    )
+
+
+def _search(**overrides: object) -> HarnessResult:
+    fields: dict[str, object] = {
+        "best_params_hash": IN_BOUNDS.content_hash,
+        "holdout_id": "smoke-holdout",
+        "trial_count": 3,
+        "eligible_for_promotion": True,
+        "holdout_net_lamports": 100,
+        "best_net_lamports": 50,
+    }
+    fields.update(overrides)
+    return HarnessResult(**fields)  # type: ignore[arg-type]
+
+
+def _manual_store(tmp_path: Path):
+    return LedgerStore(str(tmp_path / "ledger.sqlite"))
+
+
+def test_paper_path_passes_on_same_evidence_that_upgrade_blocks_for_level(tmp_path: Path) -> None:
+    store = _manual_store(tmp_path)  # manual-ticket: below the level
+    common = {
+        "bounds": BOUNDS,
+        "search": _search(),
+        "run_id": "RUN-1",
+        "store": store,
+        "backtest": _report(),
+        "paper": _report(),
+    }
+    upgrade = evaluate_candidate(IN_BOUNDS, **common)  # type: ignore[arg-type]
+    assert upgrade.reason == REASON_BELOW_AUTONOMY_LEVEL
+    paper = evaluate_candidate(IN_BOUNDS, paper_mode=True, **common)  # type: ignore[arg-type]
+    assert paper.reason == REASON_PASS
+    assert paper.promotion_eligible is True
+    store.close()
+
+
+def test_paper_path_reuses_bounds_holdout_and_divergence_verdicts(tmp_path: Path) -> None:
+    store = _manual_store(tmp_path)
+    for overrides in (
+        {"search": _search(holdout_net_lamports=0)},
+        {"search": _search(trial_count=51)},
+    ):
+        kwargs = {
+            "bounds": BOUNDS,
+            "search": _search(),
+            "run_id": "RUN-1",
+            "store": store,
+            "backtest": _report(),
+            "paper": _report(),
+        }
+        kwargs.update(overrides)
+        upgrade = evaluate_candidate(IN_BOUNDS, **kwargs)  # type: ignore[arg-type]
+        paper = evaluate_candidate(IN_BOUNDS, paper_mode=True, **kwargs)  # type: ignore[arg-type]
+        if upgrade.reason == REASON_BELOW_AUTONOMY_LEVEL:
+            assert paper.reason in (REASON_PASS, "holdout_failed", "too_many_trials")
+        else:
+            assert paper.reason == upgrade.reason
+
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "pumpgrok"
 PROMOTION_DIR = SRC / "promotion"

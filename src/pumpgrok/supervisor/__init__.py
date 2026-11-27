@@ -21,6 +21,11 @@ from pumpgrok.supervisor.lifecycle import (
     shutdown,
 )
 from pumpgrok.supervisor.metrics import NINE_FAMILIES, Metrics, build_registry
+from pumpgrok.supervisor.metrics_events import (
+    EVENT_FAMILIES,
+    EventMetrics,
+    build_event_registry,
+)
 from pumpgrok.supervisor.scheduler import (
     SEAT_CADENCES,
     TICK_S,
@@ -49,11 +54,14 @@ from pumpgrok.supervisor.seat_task import (
 
 __all__ = [
     "CLOCK_SKEW_S",
+    "EVENT_FAMILIES",
     "NINE_FAMILIES",
     "SEAT_CADENCES",
+    "SEAT_WAKES",
     "TICK_S",
     "ClockSkew",
     "DegradedState",
+    "EventMetrics",
     "HealthServer",
     "LedgerUnavailable",
     "Metrics",
@@ -63,6 +71,8 @@ __all__ = [
     "SeatTask",
     "Supervisor",
     "append_escalation",
+    "assert_no_skew",
+    "build_event_registry",
     "build_registry",
     "build_serve_replay",
     "cancel_and_wait",

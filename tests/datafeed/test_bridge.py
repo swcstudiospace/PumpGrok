@@ -6,11 +6,25 @@ import json
 import random
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from pumpgrok.datafeed.bridge import ObservationBridge
-from pumpgrok.datafeed.events import CurveObservation
+from pumpgrok.datafeed.bridge import (
+    ObservationBridge,
+    build_observation_bridge,
+    publish,
+    to_bus_event,
+)
+from pumpgrok.datafeed.events import (
+    CurveObservation,
+    CurveTick,
+    GapEvent,
+    MarkMade,
+    Migrated,
+    TokenCreated,
+    TradeSeen,
+)
 from pumpgrok.datafeed.price import LivePriceSource
 from pumpgrok.events.bus import EventBus
 from pumpgrok.events.models import Event, EventKind
@@ -289,3 +303,97 @@ async def test_live_price_source_receives_the_accepted_observation(tmp_path: Pat
     assert (snapshot.s_lamports, snapshot.t_units) == (observation.s_lamports, observation.t_units)
     assert snapshot.source == "rpc"
     health.close()
+
+
+def test_to_bus_event_maps_every_record_kind() -> None:
+
+    tick = CurveTick(
+        mint="Mint11111111111111111111111111111111111111111",
+        ts_utc="2026-01-01T00:00:00Z",
+        virtual_sol_reserves_lamports=1,
+        virtual_token_reserves_units=2,
+        real_sol_reserves_lamports=3,
+        real_token_reserves_units=4,
+        total_supply_units=5,
+        complete=False,
+    )
+    cases = [
+        (tick, EventKind.curve_tick, tick.mint),
+        (
+            GapEvent(
+                ts_utc="2026-01-01T00:00:00Z",
+                reason="no frames",
+                from_ts_utc="2026-01-01T00:00:00Z",
+                to_ts_utc="2026-01-01T00:01:00Z",
+            ),
+            EventKind.gap,
+            "",
+        ),
+        (
+            TokenCreated(mint="MintAAA", ts_utc="2026-01-01T00:00:00Z"),
+            EventKind.token_created,
+            "MintAAA",
+        ),
+        (
+            Migrated(mint="MintBBB", ts_utc="2026-01-01T00:00:00Z"),
+            EventKind.migration,
+            "MintBBB",
+        ),
+        (
+            TradeSeen(
+                mint="MintCCC",
+                ts_utc="2026-01-01T00:00:00Z",
+                signature="sig",
+                sol_amount_lamports=7,
+                token_amount_units=8,
+            ),
+            EventKind.trade,
+            "MintCCC",
+        ),
+        (
+            MarkMade(mint="MintDDD", ts_utc="2026-01-01T00:00:00Z", price_lamports=9),
+            EventKind.mark,
+            "MintDDD",
+        ),
+    ]
+    for record, kind, mint in cases:
+        event = to_bus_event(record)
+        assert event.kind is kind
+        assert event.entity_id == mint
+        assert event.occurred_at == "2026-01-01T00:00:00Z"
+        published: list[Event] = []
+        assert publish(record, published.append) == event
+        assert published == [event]
+
+
+def test_to_bus_event_refuses_unknown_records() -> None:
+
+    with pytest.raises(TypeError):
+        to_bus_event(object())  # type: ignore[arg-type]
+
+
+def test_build_observation_bridge_constructs_real_bus() -> None:
+
+    handled: list[Event] = []
+
+    async def _handler(event: Event) -> None:
+        handled.append(event)
+
+    async def _dlq(event: Event) -> None: ...
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.records: list[Any] = []
+
+        def record(self, observation: Any) -> None:
+            self.records.append(observation)
+
+    recorder = _Recorder()
+    bridge = build_observation_bridge(
+        clock=FixtureClock(),
+        handler=_handler,  # type: ignore[arg-type]
+        dlq=_dlq,  # type: ignore[arg-type]
+        recorder=recorder,  # type: ignore[arg-type]
+    )
+    assert isinstance(bridge, ObservationBridge)
+    assert bridge.recorder is recorder

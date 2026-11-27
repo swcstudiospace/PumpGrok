@@ -85,6 +85,8 @@ def _run(repo: Path, *, packs: bool, templates: bool):
     if templates:
         templates_dir.mkdir(parents=True)
         (templates_dir / ".gitkeep").touch()
+    (repo / "prompts").mkdir(exist_ok=True)
+    (repo / "prompts-assembled").mkdir(exist_ok=True)
     return gate.run(
         repo,
         _rosters(repo),

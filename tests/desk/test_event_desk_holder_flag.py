@@ -7,18 +7,27 @@ runs in its own temporary directory.
 
 from __future__ import annotations
 
+import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
-from datafeed.readonly_double import ReadOnlyDouble
-from pumpgrok.config.settings import Settings
-from pumpgrok.events.event_desk import EventDesk, build_event_desk
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from pumpgrok.config.settings import SafetyThresholds
+from pumpgrok.core.adapter import ExecutionMode
+from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.risk.entry_checks import EntryEvidence
-from pumpgrok.tools.safety.checks import CheckResult
+from pumpgrok.risk.entry_checks import (
+    EntryChecks,
+    EntryEvidence,
+    MintLists,
+    evaluate_entry,
+)
+from pumpgrok.supervisor.event_desk import build_event_desk
+from pumpgrok.tools.safety.checks import CheckId, CheckResult
 
 START = 1_700_000_000.0
 MINT = "MintDeskHolder"
@@ -31,14 +40,15 @@ _REQUIRED_IDS = (
     "token2022_extensions",
     "liquidity_depth",
 )
+EMPTY_LISTS = MintLists(deny=frozenset(), warn=frozenset())
 
 
 def _blind_holder_evidence() -> EntryEvidence:
     """Every required row passes except the SAFE-4 top-10 holder row, which is BLIND."""
     checks = [
         CheckResult(
-            id=check_id,  # type: ignore[arg-type]
-            status="blind" if check_id == "top10_concentration" else "pass",
+            id=cast(CheckId, check_id),
+            status=cast(Any, "blind" if check_id == "top10_concentration" else "pass"),
             weight=Decimal("0.1"),
             reason=f"{check_id} test row",
         )
@@ -53,25 +63,11 @@ def _blind_holder_evidence() -> EntryEvidence:
     )
 
 
-def _entry_evidence(mint: str) -> EntryEvidence | None:
-    return _blind_holder_evidence() if mint == MINT else None
-
-
-async def _unused_grok(_request: Any, _text: str) -> str:
-    raise AssertionError("the holder-flag test makes no Grok call")
-
-
-async def _build(tmp_path: Path) -> EventDesk:
-    return await build_event_desk(
-        Settings(mode="paper"),
-        data_dir=tmp_path / "desk",
-        clock=FixtureClock(START),
-        rpc_transport=ReadOnlyDouble(),
-        grok_transport=_unused_grok,
-        strategies=(),
-        evidence=lambda _strategy_id: None,
-        entry_evidence=_entry_evidence,
-    )
+def _store(tmp_path: Path) -> LedgerStore:
+    store = LedgerStore(str(tmp_path / "ledger.sqlite"))
+    store.set_meta("initial_equity_lamports", "10000000000")
+    store.set_meta("source", "paper")
+    return store
 
 
 @pytest.mark.parametrize(
@@ -83,7 +79,7 @@ async def _build(tmp_path: Path) -> EventDesk:
     ],
     ids=["no-record-file", "record-none", "record-paid-provider"],
 )
-async def test_holder_flag_reaches_the_entry_check_through_the_composition_root(
+def test_holder_flag_reaches_the_entry_check_through_the_composition_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     record: str | None,
@@ -93,19 +89,24 @@ async def test_holder_flag_reaches_the_entry_check_through_the_composition_root(
     if record is not None:
         (tmp_path / ".planning").mkdir()
         (tmp_path / ".planning" / "STATE.md").write_text(record, encoding="utf-8")
-    desk = await _build(tmp_path)
-    try:
-        await desk.start()
-        gate = desk.entry_gate
-        assert gate.holder_blind_advisory is advisory
+    desk = build_event_desk(
+        mode=ExecutionMode.PAPER,
+        store=_store(tmp_path),
+        clock=FixtureClock(start=START),
+        place=lambda intent: None,
+        entry_checks=EntryChecks(),
+        sidecar_path=tmp_path / "sidecar.sqlite",
+        params={"momentum_breakout": {"breakout_bps": 100}},
+    )
+    assert desk.holder_blind_advisory is advisory
+    assert desk.entry_checks is not None
+    assert desk.entry_checks.holder_blind_advisory is advisory
 
-        detail = gate.check.refusal(
-            MINT,
-            None,
-            cast(Any, None),
-            holder_blind_advisory=gate.holder_blind_advisory,
-        )
-        # Advisory: the BLIND holder row warns and the mint is admitted. Otherwise it rejects.
-        assert (detail is None) is advisory
-    finally:
-        await desk.close()
+    verdict = evaluate_entry(
+        _blind_holder_evidence(),
+        EMPTY_LISTS,
+        SafetyThresholds(),
+        holder_blind_advisory=desk.holder_blind_advisory,
+    )
+    # Advisory: the BLIND holder row warns and the mint is admitted. Otherwise it rejects.
+    assert verdict.ok is advisory

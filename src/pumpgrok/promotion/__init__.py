@@ -1,19 +1,26 @@
-"""Promotion lifecycle: stages, thresholds, reset and demotion (PRM-01 to PRM-04, PRM-06).
+"""Promotion lifecycle on ledger rows (PRM-01 to PRM-04, PRM-06).
 
-Stages are PromotionStageSet ledger rows. The step into PAPER needs an eligible verdict from
-upgrade.gate.evaluate_candidate; the step into LIVE_ELIGIBLE also needs the paper record to meet
-config/promotion_thresholds.toml. A parameter hash change resets a strategy to BACKTEST.
-
-demote() lives in pumpgrok.promotion.demote and is imported from there. It is not re-exported
-here, so the submodule name stays a module.
+Stages move BACKTEST to PAPER to LIVE_ELIGIBLE on recorded evidence
+under version-controlled thresholds, with gate checks reused from the
+upgrade gate through its ``paper`` parameter (no second search), no
+timers and no Grok, automatic demotion, and writer discipline.
 """
 
+from __future__ import annotations
+
+from pumpgrok.promotion.evaluator import EvidenceView, PromotionEvaluator, evaluate_stage
 from pumpgrok.promotion.stages import (
     Stage,
     StageRefused,
+    StageRow,
+    Transition,
     advance_stage,
+    append_stage_row,
+    append_transition,
     current_stage,
+    decision_log,
     paper_record,
+    read_stage_row,
 )
 from pumpgrok.promotion.thresholds import (
     PaperRecord,
@@ -24,14 +31,23 @@ from pumpgrok.promotion.thresholds import (
 )
 
 __all__ = [
+    "EvidenceView",
     "PaperRecord",
+    "PromotionEvaluator",
     "PromotionThresholdError",
     "PromotionThresholds",
     "Stage",
     "StageRefused",
+    "StageRow",
+    "Transition",
     "advance_stage",
+    "append_stage_row",
+    "append_transition",
     "current_stage",
+    "decision_log",
     "evaluate_paper_record",
+    "evaluate_stage",
     "load_thresholds",
     "paper_record",
+    "read_stage_row",
 ]

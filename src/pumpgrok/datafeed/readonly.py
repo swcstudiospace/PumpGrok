@@ -1,10 +1,41 @@
-"""Injected transports guarded by a fail-closed, read-only method boundary."""
+"""Read-only method allowlist gate (MKT-09 first half, T-13-06b).
 
+Every outbound feed call passes through here; anything else is refused by
+name before it is sent. No send path is reachable from the feed.
+
+Also provides an injected-transport boundary guarded by fail-closed read-only
+methods and endpoint policy.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
 from itertools import count
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import unquote_plus, urlsplit
 
 from pumpgrok.config.settings import KEY_BEARING_VALUE_RE
+
+ALLOWED_RPC_METHODS = frozenset({"getAccountInfo", "logsSubscribe", "getTransaction"})
+ALLOWED_PORTAL_METHODS = frozenset({"subscribeNewToken", "subscribeMigration"})
+ALLOWED_METHODS = ALLOWED_RPC_METHODS | ALLOWED_PORTAL_METHODS
+
+
+class ReadonlyError(ValueError):
+    """An outbound method outside the allowlist was attempted."""
+
+
+def check_method(method: str) -> None:
+    """Raise ReadonlyError unless ``method`` is allowlisted."""
+    if method not in ALLOWED_METHODS:
+        raise ReadonlyError(f"refused non-allowlisted method: {method}")
+
+
+def guarded_call(method: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Check the method first; only then touch the transport."""
+    check_method(method)
+    return fn(*args, **kwargs)
+
 
 _RPC_METHODS = frozenset({"logsSubscribe", "getAccountInfo", "getTransaction"})
 _PORTAL_METHODS = frozenset({"subscribeNewToken", "subscribeMigration"})

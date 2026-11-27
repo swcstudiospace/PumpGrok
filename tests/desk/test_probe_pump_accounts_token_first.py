@@ -33,7 +33,7 @@ ENDPOINT = "https://rpc.example.test"
 DISCRIMINATOR = bytes.fromhex("17b7f83760d8ac60")
 BASE_ACCOUNT = struct.pack("<8sQQQQQB", DISCRIMINATOR, 101, 202, 303, 404, 505, 1)
 EXPECTED_DECODED = {
-    "virtual_token_reserves_units": 101,
+    "virtual_token_reserves_units": 101,  # pragma: allowlist secret: field name
     "virtual_sol_reserves_lamports": 202,
     "real_token_reserves_units": 303,
     "real_sol_reserves_lamports": 404,

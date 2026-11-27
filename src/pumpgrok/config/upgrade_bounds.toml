@@ -67,50 +67,14 @@ max = 3600.0
 # Each [strategy.ID.PARAM] entry names one strategy parameter with an inclusive
 # min and max. Strategy ids and parameter keys with no entry are refused.
 
-[strategy.momentum_breakout.lookback_seconds]
-min = 60
-max = 1800
-
-[strategy.momentum_breakout.breakout_pct]
-min = 1.0
-max = 200.0
-
-[strategy.momentum_breakout.max_hold_seconds]
-min = 60
-max = 3600
-
-[strategy.momentum_breakout.stop_loss_pct]
-min = 1.0
-max = 100.0
+[strategy.momentum_breakout.breakout_bps]
+min = 0
+max = 10000
 
 [strategy.new_launch_sniper.max_age_seconds]
-min = 10
-max = 900
+min = 0
+max = 86400
 
-[strategy.new_launch_sniper.min_unique_buyers]
-min = 1
-max = 1000
-
-[strategy.new_launch_sniper.max_curve_progress]
-min = 0.0
-max = 1.0
-
-[strategy.new_launch_sniper.take_profit_pct]
-min = 1.0
-max = 1000.0
-
-[strategy.mean_reversion.window_seconds]
-min = 60
-max = 7200
-
-[strategy.mean_reversion.z_threshold]
-min = 0.5
-max = 5.0
-
-[strategy.mean_reversion.max_hold_seconds]
-min = 60
-max = 3600
-
-[strategy.mean_reversion.stop_loss_pct]
-min = 1.0
-max = 100.0
+[strategy.mean_reversion.deviation_bps]
+min = 0
+max = 10000

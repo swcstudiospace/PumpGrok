@@ -453,7 +453,7 @@ async def test_program_data_from_another_program_is_not_attributed_to_pump(
     )
     supervisor.note_frame()
     event = encode_trade(mint_raw=MINT_RAW, sol=1_000, token=500, vsol=30_000, vtok=900_000)
-    token_program = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    token_program = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"  # pragma: allowlist secret
     logs = [invoke(token_program), program_data(event), success(token_program)]
     feed = LogsFeed(
         boundary=boundary,

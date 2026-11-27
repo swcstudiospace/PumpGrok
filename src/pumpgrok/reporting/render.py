@@ -248,6 +248,9 @@ def _daily_body(model: ReportModel) -> str:
     else:
         parts.append(_TRADES_EMPTY)
     parts.append("\n")
+    if model.strategy_section:
+        parts.append(model.strategy_section)
+        parts.append("\n")
     parts.append(_render_positions(model))
     parts.append("\n")
     parts.append(_render_rejected(model))

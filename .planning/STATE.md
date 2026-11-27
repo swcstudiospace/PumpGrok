@@ -1,20 +1,23 @@
 ---
 gsd_state_version: "1.0"
 milestone: v4
-milestone_name: PumpGrok Desk v4
-status: "Phase 13 complete on integration head; PR to main pending (draft)"
-last_updated: "2026-11-13"
-last_activity: 2026-11-13
-last_activity_desc: "Phase 13 gates green (lint, typecheck, test, check.sh, smoke replay, live exit 3, smoke-10m hash unchanged); verification 13-VERIFICATION.md"
-state_head: 8927dab
+status: Phase 17 partial (3 PRs remaining)
+last_updated: "2026-11-26T00:00:00.000Z"
+last_activity: 2026-11-26
+last_activity_desc: Phases 13-16 closed on local main 8354ee6; Phase 17 partial (22/25 stack merged locally, PRs #98-#100 remaining)
+state_head: 8354ee6666139a7817ca246bef9ca2e5a0b3b4b8
 progress:
-  total_phases: 9
-  completed_phases: 3
-  percent: 33
+  total_phases: 14
+  completed_phases: 11
+  total_plans: 114
+  completed_plans: 87
+  percent: 76
   blocked_phases: 0
-current_phase: 14
-stopped_at: "Phase 13 closed 2026-11-13 at 8927dab (verification 13-VERIFICATION.md). Phase 12 merged 2026-11-11 (PRs #61-#63). Phase 14 next. Phase 13 PR to main is a draft; not merged. Phase 13 open items: portal frame fields ASSUMED until live probe; no live-feed provenance; supplied-mark branch dead code."
+milestone_name: PumpGrok Desk v4
+current_phase: 17
+stopped_at: Phase 17 partial at local main 8354ee6. Core code on origin/main and local main via c96e993/cb91cf6 (2026-11-22). Absent on main: test_event_desk_holder_flag, test_exit_sell_guard, test_promotion_cursor_restart, Phase 17 changelog narrative (PRs #98-#100 still OPEN, stale tips d44cf93/cd68a68/71ac14d). Merge those, fix conflict markers, then push and close Phase 17.
 ---
+
 paid_rpc_provider: none
 
 # Project State
@@ -25,10 +28,18 @@ See: .planning/PROJECT.md (v3 section). Core value unchanged: the desk runs auto
 
 ## Current Position
 
-Milestone: v4 (PumpGrok Desk v4). Phase: 11 of 19 closed (merged as PR #55, 2026-11-03). Phase 12 of 19 verified 12/12; ship checkpoint open.
-Plan: 12-01 to 12-05 on bot-02-risk, bot-09-journal and bot-00-chief (phase-12-event-runtime). Draft pull requests, not merged.
-Status: Phase 12 closes when the owner approves its three receipts (G-2) and the PRs merge. Owner answer: the hosting target is deferred to Phase 19.
-Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v4-p12-event-runtime.json on each seat branch. Verification report .planning/phases/12-event-runtime-core/12-VERIFICATION.md.
+Phase: 17 (partial, 3 PRs remaining)
+Plan: 17-07 changelog pending
+Status: Phase 17 partial - 22/25 stack merged to local main 8354ee6
+Last activity: 2026-11-26 - Phases 13-16 closed on local main 8354ee6 (local-only, not pushed); Phase 17 partial
+
+## Local vs Origin (2026-11-26)
+
+- Local main 8354ee6 is 443 ahead of origin/main 7dc5db3 (0 behind).
+- IN-MAIN on local only: #23-26, #64-70, #73, #75, #76-97, #101, #106, #136 (38 PRs, GitHub still lists them OPEN until push).
+- Stale PR tips NOT on main: #98-#100 (d44cf93/cd68a68/71ac14d; core code on main via c96e993/cb91cf6, 3 desk test files and changelog narrative absent) and sweep backlog #102-105, #107-127 (content confirmed absent by git cherry).
+- Phases 13-16 are closed only as local-main records until push.
+- Gates at 8354ee6 (run 2026-11-26): check.sh exit 0; make lint/typecheck/test FAIL. 372 conflict markers remain in 116 files (src/ and tests/) from the local PR merges; proven pre-existing via stash (identical failure without doc changes). Push is blocked until markers are resolved and gates are green.
 
 ## Discovery (2026-10-25)
 
@@ -48,6 +59,11 @@ Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v
   - dependency audit: make audit (pip-audit). Run at milestone close, not per phase.
   - build: defined by Dockerfile and docker-compose.yml; no make target; not run per phase; manual.
   - Absent gates: none. Format, lint, type check and test all exist.
+- TODO source: no tracked TODO file. Zero TODO, FIXME, HACK or XXX markers in src, tests, ci, scripts, services, skills, agents or contracts. TODO and FIXME text in docs/ and the v2 archive is historical design text, not active items. The TODO items are the session tracker, mapped below.
+
+## TODO mapping
+
+| TODO item | Disposition |
 - Backlog source: no tracked backlog file. Zero task-marker words in src, tests, ci, scripts, services, skills, agents or contracts. Those words appear in docs/ and the v2 archive as historical design text, not active items. The open items are the session tracker, mapped below.
 
 ## Backlog mapping
@@ -92,6 +108,7 @@ Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v
   - OVERRIDE-A: the README version is 0.1.0. Plan 07-03's "plugin pack stays 1.0.0" is superseded by criterion 6.
   - OVERRIDE-B: VENDOR_PIN keeps the pin. The vendored snapshot was deleted in Phase 4, so criterion 6's snapshot clause cannot hold literally. The test asserts the pin and the retirement statement instead.
   - OVERRIDE-C: manifest descriptions say ten-seat.
+- Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See 06-VERIFICATION.md.
 - Phase 6 verification correction: criterion 17 is a FAIL, not a PASS. Criteria 1 and 11d were fixed at e770602. See .planning/milestones/v3-phases/06-integrity-closure/06-VERIFICATION.md.
 - Phase 7 gates at HEAD 8e32f14: lint, typecheck, full test, check.sh, verify_doc_commands.sh and the smoke replay exit 0. The smoke-10m events.hash is b69c29593954129b52a8c9ab1cad390441b7b356dd482b8c7a4345bea55ad32d on both runs, identical to Phase 6. Live run exits 3. Criterion 5 is narrowed to the offline subset and recorded as such.
 - Phase 7 execution incidents: four executor runs wrote into the main checkout (07-04 first attempt, 07-03, 07-05, 07-06). Each write was reverted or moved to its worktree, and main was checked clean after every merge. Briefs now require absolute worktree paths and no angle brackets, because angle brackets in task text caused dispatch to fail.
@@ -101,6 +118,10 @@ Last activity: 2026-11-08, Phase 12 ship checkpoint. Receipts .receipts/bot-0N/v
 - Phase 6 routing decision: G-1 showed 170 foreign paths on the 223-commit branch (RISK 128, sniper 13, signal 12, rug 9, journal 3, scout 3, exit 2). The decomposition contributed 26: cli 10 and risk engine 6 owned by bot-02-risk, and paper_adapter 10 owned by bot-04-sniper. Route B as written (re-own all to CHIEF) was declined, because CHIEF never trades. The owner chose Hold, and Phase 6 stays gaps_found. The owner had already accepted the decomposition.
 - Ship readiness format (2026-10-26): ultrathink-ship reads phase completion from the YAML frontmatter status of each *-VERIFICATION.md and ignores body text. The v3 reports for phases 6-10 were re-verified at da6c071 and rewritten with that frontmatter (commit d542c72). The earlier 0/5 count was this format gap, not a verification failure. Assess now reports completedPhases 4 of 5, with Phase 6 as the only gap.
 - Owner closure 2026-10-26: Phase 6 closes with two owner-approved deviations (PROJECT V3-5). approved_by human:SomeRandmGuyy. Criterion 17: CI waiver for the phase PR only. Criterion 16: ready PR merged on green CI and Greptile 5/5. Squash merge (ship default).
+- Owner decision 2026-11-12 (HITL answer): the Phase 6 CI waiver for PR 16 in .github/workflows/gates.yml is approved, so G-1, G-2 and G-5/6 are skipped for that PR only. This records the owner's decision; it does not make the gates pass. The waiver stays PR-bound and must be removed in the same change as the milestone waiver, per the deferred list above. Owner: human (HITL reply, 2026-11-12).
+- Owner decision 2026-11-12 (HITL answers): scope is all milestones on the rerun branch, with blocked phases accepted as deferred (Q1, settled earlier). Milestone completion needs only a zero-gap audit, with no separate owner sign-off (Q3 answer: audit-enough). Cleanup is temp-only (Q2).
+- Owner decision 2026-11-12 (HITL answer, live scope): live-path code MAY be edited with per-change human sign-off. Live stays refused and no live adapter is registered; this does not lift the paper-only constraint of the approved v3 roadmap (Phase 10, precondition 8). Plugin version stays 0.1.0: commit 8a01a67 aligned the manifests to pyproject.toml under DOC-03 (deliberate, not reverted). The marketplace files were restored to origin/main in the follow-up commit that fixed the DOC-03 mismatch.
+- Applied defaults 2026-11-12 (only for questions the owner did not answer): "use the latest version" is read as the gsd-autonomous tooling only, with no project dependency or runtime upgrade; no compliance checklist beyond the stated quality bar applies. The blocked-phase policy is not a default: the owner answered accept-deferred (see line 107).
 
 ## Deferred and backlog (not in v3 requirements)
 
@@ -136,6 +157,12 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 | process | Omega CI runner migration (main 5b5d6a1, 9772655) was merged by another seat and not reviewed in the v2 audit | deferred-beyond-v3 | none (needs a separate review) |
 | process | Planning on main was stale until the v2 closeout merged | resolved | v2 archive on main; this branch starts from it |
 
+## Session Continuity
+
+- Last update: 2026-10-26, after the Phase 6 closure records (receipt, verification, PROJECT V3-5, requirements, roadmap, CHANGELOG).
+- Resume: read this file, then .planning/phases/06-integrity-closure/06-VERIFICATION.md (passed, owner closure). The ship PR is the only remaining step.
+- Next: ultrathink-ship. Open the ready PR into main, add the PR-number waiver to .github/workflows/gates.yml, run the Greptile loop capped at three fix cycles, then merge only through ultrathink-ship. Then verify main and record with ultrathink-sync.
+
 ## Phase 11 close (v4, plan 11-11)
 
 - Close record: .planning/phases/11-engineering-foundation-and-quality/11-VERIFICATION.md (chief-owned). Receipt: .receipts/bot-00-chief/v4-p11-close.json. approved_by human:SomeRandmGuyy recorded 2026-11-03 (approve_55); PR #55 merged the same day.
@@ -168,7 +195,7 @@ v2 audit tech_debt carried forward at v2 close (.planning/milestones/v2-MILESTON
 - Suppression and skip counts (baseline): noqa 33; type: ignore 107; pytest.mark.skip 5; pragma: no cover 10; pragma: allowlist 92; empty except-pass blocks 6.
 - Backlog inventory: .planning/BACKLOG-INVENTORY.md. 28 marker lines, all historical text in docs and planning records; none in source, tests, ci or scripts. Categories: IN_PHASE 0, ACTIONABLE 0, DECISION_NEEDED 0, PARKED 28, STALE 0.
 - Tracker items for this branch: SETUP.md section 8 is verified false (vendor/ absent; scout pipeline not implemented, exit 5). Classified ACTIONABLE and corrected in this run. Readiness visibility: PARKED. Other tracker items belong to other branches or repositories and stay PARKED with their owner decisions listed.
-- Next: correct SETUP.md section 8, run the canonical checks on the final tree, run the milestone audit, complete v3 after a passing audit, clean up run-created scratch, then ultrathink-ship (pr, review, merge at 5/5).
+- Completed 2026-11-19: PR #27 merged as 0ca794d (2026-11-01T19:23:16Z); PR #28 (waiver) merged as 9588bc0 and PR #29 (follow-up receipt) as 41416777. CI check run 41316698165 green on head 85e3e0d. Milestone audit status tech_debt, accepted by the owner. Tag v3 (annotated 223d2ca, peels to 85e3e0d) pushed to origin on owner approval. Scratch worktree v3-closeout removed; local branch bot-02-risk/gate-waiver-pr-27 deleted at 9970524 with backup ref refs/backup/bot-02-risk/gate-waiver-pr-27-pre-delete. The ten foreign G-1 files from PR #27 were reviewed by their owning seats on 2026-11-19: bot-02-risk needs changes (ARCHITECTURE.md), bot-04-sniper accepts with four non-blocking nits, bot-09-journal needs one owner decision on the scout pipeline rule (rules/pumpgrok-team.mdc line 44).
 
 ## Operator Next Steps
 
